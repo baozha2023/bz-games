@@ -1,0 +1,5 @@
+onlyBuiltDependencies:
+  - electron-winstaller
+  - esbuild
+  - electron
+  - vue-demi
