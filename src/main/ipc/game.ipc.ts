@@ -61,4 +61,42 @@ export function registerGameIpc() {
     }
     return null;
   });
+
+  ipcMain.handle(IPC.GAME_GET_ICON, async (_, id: string, version?: string) => {
+    try {
+      const record = await GameLoader.getGameRecord(id);
+      if (!record) return null;
+
+      const targetVersion = version || record.latestVersion;
+      const versionRecord = record.versions.find(v => v.version === targetVersion);
+      
+      if (!versionRecord) return null;
+
+      const jsonPath = path.join(versionRecord.path, 'game.json');
+      if (!fs.existsSync(jsonPath)) return null;
+
+      const raw = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
+      if (!raw.icon) return null;
+
+      const iconPath = path.join(versionRecord.path, raw.icon);
+      if (fs.existsSync(iconPath)) {
+        const b64 = fs.readFileSync(iconPath, 'base64');
+        const ext = path.extname(iconPath).slice(1);
+        return `data:image/${ext};base64,${b64}`;
+      }
+    } catch (e) {
+      logger.error(`[GameIPC] Failed to read icon for ${id} version ${version || 'latest'}`, e);
+    }
+    return null;
+  });
+
+  ipcMain.handle(IPC.GAME_GET_MANIFEST, async (_, id: string, version?: string) => {
+    try {
+      const manifest = await GameLoader.getManifest(id, version);
+      return manifest;
+    } catch (e) {
+      logger.error(`[GameIPC] Failed to get manifest for ${id} version ${version || 'latest'}`, e);
+      return null;
+    }
+  });
 }

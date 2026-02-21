@@ -12,6 +12,7 @@ export default {
     copied: '已复制到剪贴板',
     save: '保存',
     delete: '删除',
+    confirmDelete: '确定要删除这个游戏吗？',
     loading: '加载中...',
     success: '成功',
     error: '错误',
@@ -24,6 +25,16 @@ export default {
     addSuccess: '添加游戏成功！',
     addError: '添加失败',
     userCanceled: '用户取消',
+    importError: {
+      canceled: '已取消选择',
+      notDirectory: '请选择一个文件夹',
+      zipNotSupported: '不支持 ZIP 文件，请解压后导入文件夹',
+      noManifest: '未识别到游戏；',
+      manifestInvalid: 'game.json文件格式不正确；',
+      platformVersionMismatch: '平台版本不兼容 (游戏需求: {required}, 当前: {current})',
+      entryNotFound: '入口文件不存在: {entry}',
+      unknown: '导入失败: {message}'
+    },
   },
   gameDetail: {
     deleteGame: '删除游戏',
@@ -83,6 +94,8 @@ export default {
       gameIdMismatch: '游戏ID不匹配',
       unknown: '未知错误',
     },
+    confirmLeave: '确定要离开房间吗？',
+    confirmDisband: '确定要解散房间吗？',
   },
   chat: {
     title: '聊天',
@@ -118,4 +131,12 @@ export default {
     never: '从未',
     empty: '暂无游玩记录',
   },
+  achievement: {
+    title: '成就',
+    unlocked: '解锁成就',
+    noAchievements: '暂无成就',
+    unlockedAt: '解锁于 {date}',
+    progress: '进度：{current}/{total}',
+    locked: '未解锁'
+  }
 };

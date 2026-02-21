@@ -1,8 +1,7 @@
 import { dialog, app } from 'electron';
 import fs from 'fs';
 import path from 'path';
-import AdmZip from 'adm-zip';
-import crypto from 'crypto';
+import semver from 'semver';
 import { GameManifestSchema, type GameManifest } from '../../shared/game-manifest';
 import { storeService } from './StoreService';
 import type { GameRecord } from '../../shared/types';
@@ -34,52 +33,58 @@ function copyFolderRecursiveSync(source: string, target: string) {
 export class GameLoader {
   private static cache: GameManifest[] | null = null;
 
-  static async loadGameFromDialog(): Promise<{ success: boolean; manifest?: GameManifest; error?: string }> {
+  static async loadGameFromDialog(): Promise<{ success: boolean; manifest?: GameManifest; error?: string; params?: Record<string, any> }> {
     const { canceled, filePaths } = await dialog.showOpenDialog({
-      properties: ['openFile', 'openDirectory', 'dontAddToRecent'],
-      filters: [
-        { name: 'Game Package', extensions: ['zip'] },
-        { name: 'All Files', extensions: ['*'] }
-      ]
+      title: 'Select Game Directory',
+      properties: ['openDirectory'],
+      filters: []
     });
 
     if (canceled || filePaths.length === 0) {
-      return { success: false, error: 'User canceled' };
+      return { success: false, error: 'canceled' };
     }
 
-    let sourcePath = filePaths[0];
+    const sourcePath = filePaths[0];
     let tempDir = '';
 
     try {
-      // 1. Handle ZIP extraction
-      if (fs.statSync(sourcePath).isFile() && sourcePath.endsWith('.zip')) {
-        const result = this.extractZip(sourcePath);
-        sourcePath = result.sourcePath;
-        tempDir = result.tempDir;
+      // 1. Validate Selection
+      if (!this.isValidDirectory(sourcePath)) {
+        return { success: false, error: 'notDirectory' };
       }
 
-      // 2. Find game root
-      sourcePath = this.findGameRoot(sourcePath);
-
-      // 3. Ensure manifest exists (or generate default)
-      const jsonPath = this.ensureManifest(sourcePath);
-      if (!jsonPath) {
-        return { success: false, error: '未找到 game.json 或 game.js，请确认这是一个合法的游戏包' };
+      // 2. Check for Manifest
+      const jsonPath = path.join(sourcePath, 'game.json');
+      if (!fs.existsSync(jsonPath)) {
+        return { success: false, error: 'noManifest' };
       }
 
-      // 4. Parse and validate manifest
-      const manifest = this.parseManifest(jsonPath);
+      // 3. Parse and Validate Manifest
+      const manifest = this.loadManifest(jsonPath);
+      if (!manifest) {
+        return { success: false, error: 'manifestInvalid' };
+      }
 
-      // 5. Verify entry point
+      // 4. Check Platform Version
+      const currentVersion = app.getVersion();
+      if (manifest.platformVersion && !semver.satisfies(currentVersion, manifest.platformVersion)) {
+        return { 
+          success: false, 
+          error: 'platformVersionMismatch',
+          params: { required: manifest.platformVersion, current: currentVersion }
+        };
+      }
+
+      // 5. Verify Entry Point
       const entryPath = path.join(sourcePath, manifest.entry);
       if (!fs.existsSync(entryPath)) {
-        return { success: false, error: `入口文件 ${manifest.entry} 不存在` };
+        return { success: false, error: 'entryNotFound', params: { entry: manifest.entry } };
       }
 
-      // 6. Install game files
+      // 6. Install Game Files
       const targetPath = this.installGameFiles(sourcePath, manifest);
 
-      // 7. Update store
+      // 7. Update Store
       await this.updateGameRecord(manifest, targetPath);
 
       this.cache = null; // Invalidate cache
@@ -87,13 +92,12 @@ export class GameLoader {
 
     } catch (err: any) {
       logger.error('Failed to load game:', err);
-      return { success: false, error: err.message || '加载失败' };
+      return { success: false, error: 'unknown', params: { message: err.message || 'Unknown error' } };
     } finally {
-      // Clean up temp dir
+      // Clean up temp dir if we ever use one (currently not using temp dir for folder import)
       if (tempDir && fs.existsSync(tempDir)) {
         try {
           fs.rmSync(tempDir, { recursive: true, force: true });
-          logger.info(`Cleaned up temp dir: ${tempDir}`);
         } catch (e) {
           logger.warn(`Failed to clean up temp dir: ${tempDir}`, e);
         }
@@ -101,64 +105,22 @@ export class GameLoader {
     }
   }
 
-  private static extractZip(zipPath: string): { sourcePath: string; tempDir: string } {
+  private static isValidDirectory(dirPath: string): boolean {
     try {
-      const zip = new AdmZip(zipPath);
-      const tempDir = path.join(app.getPath('temp'), `bz-game-import-${Date.now()}`);
-      fs.mkdirSync(tempDir, { recursive: true });
-      zip.extractAllTo(tempDir, true);
-      logger.info(`Extracted zip to ${tempDir}`);
-      return { sourcePath: tempDir, tempDir };
-    } catch (e: any) {
-      throw new Error(`Failed to extract zip: ${e.message}`);
+      return fs.lstatSync(dirPath).isDirectory();
+    } catch {
+      return false;
     }
   }
 
-  private static findGameRoot(sourcePath: string): string {
-    const jsonPath = path.join(sourcePath, 'game.json');
-    const jsPath = path.join(sourcePath, 'game.js');
-    
-    // If not in root, check if there is a single subdirectory containing the game
-    if (!fs.existsSync(jsonPath) && !fs.existsSync(jsPath)) {
-      const files = fs.readdirSync(sourcePath);
-      const subDirs = files.filter(f => fs.statSync(path.join(sourcePath, f)).isDirectory());
-      if (subDirs.length === 1) {
-        const subPath = path.join(sourcePath, subDirs[0]);
-        if (fs.existsSync(path.join(subPath, 'game.json')) || fs.existsSync(path.join(subPath, 'game.js'))) {
-          return subPath;
-        }
-      }
+  private static loadManifest(jsonPath: string): GameManifest | null {
+    try {
+      const raw = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
+      return GameManifestSchema.parse(raw);
+    } catch (e) {
+      logger.warn(`Invalid manifest at ${jsonPath}`, e);
+      return null;
     }
-    return sourcePath;
-  }
-
-  private static ensureManifest(sourcePath: string): string | null {
-    const jsonPath = path.join(sourcePath, 'game.json');
-    const jsPath = path.join(sourcePath, 'game.js');
-
-    // If game.json missing but game.js exists, generate one
-    if (!fs.existsSync(jsonPath) && fs.existsSync(jsPath)) {
-      logger.info('game.json not found, but game.js exists. Generating default manifest.');
-      const gameId = `com.imported.${crypto.randomUUID().split('-')[0]}`;
-      const defaultManifest = {
-        id: gameId,
-        name: `Imported Game ${new Date().toLocaleDateString()}`,
-        version: '1.0.0',
-        description: 'Automatically imported from game.js',
-        author: 'Unknown',
-        platformVersion: '>=1.0.0',
-        entry: './game.js',
-        type: 'singleplayer'
-      };
-      fs.writeFileSync(jsonPath, JSON.stringify(defaultManifest, null, 2));
-    }
-
-    return fs.existsSync(jsonPath) ? jsonPath : null;
-  }
-
-  private static parseManifest(jsonPath: string): GameManifest {
-    const raw = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
-    return GameManifestSchema.parse(raw);
   }
 
   private static installGameFiles(sourcePath: string, manifest: GameManifest): string {
@@ -222,6 +184,7 @@ export class GameLoader {
         latestVersion: manifest.version,
         addedAt: Date.now(),
         playtime: 0,
+        unlockedAchievements: []
       };
     }
 
@@ -281,7 +244,8 @@ export class GameLoader {
     if (!fs.existsSync(jsonPath)) return null;
 
     try {
-      return this.parseManifest(jsonPath);
+      const raw = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
+      return GameManifestSchema.parse(raw);
     } catch (e) {
       logger.warn(`Failed to parse manifest for ${gameId} version ${version || 'latest'}`, e);
       return null;

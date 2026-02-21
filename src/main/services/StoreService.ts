@@ -76,6 +76,33 @@ class StoreService {
     store.set('games', games);
   }
 
+  unlockAchievement(gameId: string, achievementId: string): boolean {
+    const store = this.getStore();
+    const games = store.get('games', []) || [];
+    const gameIndex = games.findIndex(g => g.id === gameId);
+    
+    if (gameIndex === -1) return false;
+    
+    const game = games[gameIndex];
+    if (!game.unlockedAchievements) {
+      game.unlockedAchievements = [];
+    }
+    
+    // Check if already unlocked
+    if (game.unlockedAchievements.some(a => a.id === achievementId)) {
+      return false; // Already unlocked
+    }
+    
+    game.unlockedAchievements.push({
+      id: achievementId,
+      unlockedAt: Date.now()
+    });
+    
+    games[gameIndex] = game;
+    store.set('games', games);
+    return true; // Newly unlocked
+  }
+
   async removeGame(id: string): Promise<void> {
     const store = this.getStore();
     const games = store.get('games', []) || [];

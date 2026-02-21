@@ -1,4 +1,5 @@
 import { ChildProcess, spawn } from 'child_process';
+import { BrowserWindow, shell } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { GameLoader } from './GameLoader';
@@ -14,6 +15,7 @@ import type { GameManifest } from '../../shared/game-manifest';
 
 class GameManager {
   private activeProcesses: Map<string, ChildProcess> = new Map();
+  private activeWindows: Map<string, BrowserWindow> = new Map();
   private gameApiServers: Map<string, GameApiServer> = new Map();
   private startTimes: Map<string, number> = new Map();
 
@@ -45,7 +47,11 @@ class GameManager {
       
       this.writeBzConfig(versionPath, port, token, settings);
       
-      return this.spawnGameProcess(id, versionPath, manifest, env);
+      if (manifest.entry.endsWith('.html')) {
+        return this.launchWebGame(id, versionPath, manifest);
+      } else {
+        return this.spawnGameProcess(id, versionPath, manifest, env);
+      }
 
     } catch (error: any) {
       logger.error(`[GameManager] Launch failed for ${id}:`, error);
@@ -67,7 +73,7 @@ class GameManager {
   }
 
   private isGameRunning(id: string): boolean {
-    return this.activeProcesses.has(id);
+    return this.activeProcesses.has(id) || this.activeWindows.has(id);
   }
 
   private async prepareGame(id: string, version?: string): Promise<{ path: string, manifest: GameManifest }> {
@@ -129,6 +135,48 @@ class GameManager {
     } catch (e) {
       logger.warn(`[GameManager] Failed to write config file`, e);
     }
+  }
+
+  private launchWebGame(id: string, versionPath: string, manifest: GameManifest): boolean {
+    const entryPath = path.join(versionPath, manifest.entry);
+    
+    if (!fs.existsSync(entryPath)) {
+      throw new Error(`Entry file not found: ${manifest.entry}`);
+    }
+
+    const win = new BrowserWindow({
+      width: 1280,
+      height: 720,
+      title: manifest.name,
+      icon: manifest.icon ? path.join(versionPath, manifest.icon) : undefined,
+      autoHideMenuBar: true,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        partition: `persist:game_${id}_${manifest.version}`
+      }
+    });
+
+    win.loadFile(entryPath);
+    
+    // Open external links in default browser
+    win.webContents.setWindowOpenHandler(({ url }) => {
+      shell.openExternal(url);
+      return { action: 'deny' };
+    });
+
+    this.activeWindows.set(id, win);
+    this.startTimes.set(id, Date.now());
+    
+    logger.info(`[GameManager] Window started for ${id}`);
+    mainWindow?.webContents.send(IPC.GAME_PROCESS_STARTED, id);
+    
+    win.on('closed', () => {
+      this.handleProcessExit(id, 0);
+      this.activeWindows.delete(id);
+    });
+
+    return true;
   }
 
   private spawnGameProcess(id: string, versionPath: string, manifest: GameManifest, env: any): boolean {
@@ -193,6 +241,14 @@ class GameManager {
     if (cp) {
       cp.kill();
       this.activeProcesses.delete(id);
+    }
+
+    const win = this.activeWindows.get(id);
+    if (win) {
+      if (!win.isDestroyed()) {
+        win.close();
+      }
+      this.activeWindows.delete(id);
     }
 
     const api = this.gameApiServers.get(id);

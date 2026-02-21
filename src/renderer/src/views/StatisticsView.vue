@@ -1,6 +1,6 @@
 <template>
   <div style="padding: 24px;">
-    <n-page-header :title="t('statistics.title')" />
+    <n-page-header :title="t('statistics.title')" @back="$router.push({ name: 'Library' })" />
     <n-divider />
     
     <n-grid x-gap="12" y-gap="12" :cols="1" md="2" lg="3">

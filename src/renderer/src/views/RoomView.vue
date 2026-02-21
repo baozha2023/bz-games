@@ -50,7 +50,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { useMessage } from 'naive-ui'
+import { useMessage, useDialog } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { useRoomStore } from '../stores/useRoomStore'
 import { useSettingsStore } from '../stores/useSettingsStore'
@@ -61,6 +61,7 @@ import RoomChat from '../components/room/RoomChat.vue'
 const { t } = useI18n()
 const router = useRouter()
 const message = useMessage()
+const dialog = useDialog()
 const roomStore = useRoomStore()
 const settingsStore = useSettingsStore()
 const gameStore = useGameStore()
@@ -93,7 +94,7 @@ onMounted(async () => {
         roomStore.room = state;
       }
     } catch (e) {
-      console.error('Failed to sync room state:', e);
+      // Ignore sync error
     }
   }
 
@@ -137,13 +138,22 @@ const handleBack = () => {
 }
 
 const handleLeaveRoom = async () => {
-  const gameId = roomStore.room?.gameId
-  await roomStore.leaveRoom()
-  if (gameId) {
-    router.replace(`/library/${gameId}`)
-  } else {
-    router.replace('/library')
-  }
+  const isHost = roomStore.isHost
+  dialog.warning({
+    title: isHost ? t('room.disbandRoom') : t('room.leaveRoom'),
+    content: isHost ? t('room.confirmDisband') : t('room.confirmLeave'),
+    positiveText: t('common.confirm'),
+    negativeText: t('common.cancel'),
+    onPositiveClick: async () => {
+      const gameId = roomStore.room?.gameId
+      await roomStore.leaveRoom()
+      if (gameId) {
+        router.replace(`/library/${gameId}`)
+      } else {
+        router.replace('/library')
+      }
+    }
+  })
 }
 
 const toggleReady = async () => {

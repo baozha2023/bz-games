@@ -10,6 +10,11 @@ export interface GameVersion {
   addedAt: number;
 }
 
+export interface UnlockedAchievement {
+  id: string;
+  unlockedAt: number;
+}
+
 export interface GameRecord {
   id: string;
   versions: GameVersion[];
@@ -17,6 +22,7 @@ export interface GameRecord {
   addedAt: number;
   lastPlayedAt?: number;
   playtime: number;
+  unlockedAchievements: UnlockedAchievement[];
 }
 
 export interface AppSettings {

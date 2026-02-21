@@ -1,11 +1,18 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import crypto from 'crypto';
+import path from 'path';
+import fs from 'fs';
+import { nativeImage } from 'electron';
 import { findAvailablePort } from '../utils/portUtils';
 import { logger } from '../utils/logger';
 import type { GameApiMessage, GameApiRequest, GameApiEventAction } from '../../shared/types';
 import { storeService } from './StoreService';
 import { roomServer } from './RoomServer';
 import { roomClient } from './RoomClient';
+import { mainWindow } from '../window';
+import { IPC } from '../../shared/ipc-channels';
+import { notificationService } from './NotificationService';
+import { GameLoader } from './GameLoader';
 
 export class GameApiServer {
   private wss: WebSocketServer | null = null;
@@ -142,9 +149,59 @@ export class GameApiServer {
       case 'game.end':
         this.sendResponse(ws, req.id, 'game.end', { success: true });
         break;
+
+      case 'achievement.unlock':
+        {
+          const { achievementId, playerId } = req.payload as { achievementId: string, playerId?: string };
+          const currentSettings = storeService.getSettings();
+          
+          if (playerId && playerId !== currentSettings.playerId) {
+            this.sendResponse(ws, req.id, 'achievement.unlock', { success: false, reason: 'Player mismatch' });
+            return;
+          }
+          
+          const unlocked = storeService.unlockAchievement(this.gameId, achievementId);
+          if (unlocked) {
+            mainWindow?.webContents.send(IPC.GAME_UNLOCK_ACHIEVEMENT, { gameId: this.gameId, achievementId });
+            this.showAchievementNotification(achievementId);
+          }
+          
+          this.sendResponse(ws, req.id, 'achievement.unlock', { success: true, new: unlocked });
+        }
+        break;
          
       default:
         this.sendError(ws, req.id, req.action, 'Unknown action');
+    }
+  }
+
+  private async showAchievementNotification(achievementId: string) {
+    try {
+      const manifest = await GameLoader.getManifest(this.gameId);
+      if (manifest) {
+        const achievement = manifest.achievements?.find(a => a.id === achievementId);
+        if (achievement) {
+          let iconDataUrl = '';
+          if (manifest.icon) {
+            const versionPath = await GameLoader.getVersionPath(this.gameId);
+            if (versionPath) {
+              const iconPath = path.join(versionPath, manifest.icon);
+              if (fs.existsSync(iconPath)) {
+                iconDataUrl = nativeImage.createFromPath(iconPath).toDataURL();
+              }
+            }
+          }
+          
+          notificationService.show(
+            achievement.title, 
+            achievement.description, 
+            manifest.name,
+            iconDataUrl
+          );
+        }
+      }
+    } catch (e) {
+      logger.error('[GameApiServer] Failed to show notification', e);
     }
   }
 

@@ -1,6 +1,6 @@
 <template>
   <div style="padding: 24px; max-width: 600px; margin: 0 auto;">
-    <n-page-header :title="t('settings.title')" />
+    <n-page-header :title="t('settings.title')" @back="$router.push({ name: 'Library' })" />
     <n-divider />
     <n-form ref="formRef" :model="formValue" :rules="rules" v-if="formValue" label-placement="left" label-width="120">
       <n-form-item :label="t('settings.playerName')" path="playerName">
@@ -87,11 +87,9 @@ const handleSave = async () => {
     try {
       // Use JSON.parse(JSON.stringify()) to strip Vue reactivity and ensure a plain object for IPC
       const plainSettings = JSON.parse(JSON.stringify(formValue.value));
-      console.log('Attempting to save settings:', plainSettings);
       await settingsStore.saveSettings(plainSettings);
       message.success(t('settings.saveSuccess'));
     } catch (error: any) {
-      console.error('Failed to save settings:', error);
       message.error(`${t('settings.saveFail')}: ${error.message || error}`);
     }
   }

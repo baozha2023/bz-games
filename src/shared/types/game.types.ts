@@ -5,7 +5,8 @@ export type GameApiAction =
   | 'message.send'
   | 'message.broadcast'
   | 'game.ready'
-  | 'game.end';
+  | 'game.end'
+  | 'achievement.unlock';
 
 export type GameApiEventAction = 
   | 'event.message'

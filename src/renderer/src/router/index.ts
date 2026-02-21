@@ -10,6 +10,8 @@ const router = createRouter({
     { path: '/room/:id', name: 'Room', component: () => import('../views/RoomView.vue') },
     { path: '/settings', name: 'Settings', component: () => import('../views/SettingsView.vue') },
     { path: '/statistics', name: 'Statistics', component: () => import('../views/StatisticsView.vue') },
+    { path: '/achievements', name: 'Achievements', component: () => import('../views/AchievementsView.vue') },
+    { path: '/notification', name: 'Notification', component: () => import('../views/NotificationView.vue') },
   ]
 });
 

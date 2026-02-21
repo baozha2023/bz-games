@@ -21,6 +21,13 @@ export const GameManifestSchema = z.object({
   }).optional(),
   args: z.array(z.string()).optional(),
   env: z.record(z.string()).optional(),
+  achievements: z.array(z.object({
+    id: z.string(),
+    title: z.string(),
+    description: z.string(),
+    icon: z.string().optional(),
+  })).optional(),
 });
 
 export type GameManifest = z.infer<typeof GameManifestSchema>;
+export type Achievement = NonNullable<GameManifest['achievements']>[number];

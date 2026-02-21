@@ -12,6 +12,7 @@ export default {
     copied: 'Copied to clipboard',
     save: 'Save',
     delete: 'Delete',
+    confirmDelete: 'Are you sure you want to delete this game?',
     loading: 'Loading...',
     success: 'Success',
     error: 'Error',
@@ -24,6 +25,16 @@ export default {
     addSuccess: 'Game added successfully!',
     addError: 'Failed to add game',
     userCanceled: 'User canceled',
+    importError: {
+      canceled: 'Selection canceled',
+      notDirectory: 'Please select a directory',
+      zipNotSupported: 'ZIP files are not supported, please unzip and import folder',
+      noManifest: 'Game not recognized (game.json missing)',
+      manifestInvalid: 'Invalid game.json format',
+      platformVersionMismatch: 'Platform version mismatch (Required: {required}, Current: {current})',
+      entryNotFound: 'Entry file not found: {entry}',
+      unknown: 'Import failed: {message}'
+    },
   },
   gameDetail: {
     deleteGame: 'Delete Game',
@@ -80,6 +91,8 @@ export default {
       gameIdMismatch: 'Game ID mismatch',
       unknown: 'Unknown error',
     },
+    confirmLeave: 'Are you sure you want to leave the room?',
+    confirmDisband: 'Are you sure you want to disband the room?',
   },
   chat: {
     title: 'Chat',
@@ -115,4 +128,12 @@ export default {
     never: 'Never',
     empty: 'No play records yet',
   },
+  achievement: {
+    title: 'Achievements',
+    unlocked: 'Achievement Unlocked',
+    noAchievements: 'No achievements yet',
+    unlockedAt: 'Unlocked at {date}',
+    progress: 'Progress: {current}/{total}',
+    locked: 'Locked'
+  }
 };

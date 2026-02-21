@@ -10,7 +10,9 @@ export const electronAPI = {
     getAll:     ()                => ipcRenderer.invoke(IPC.GAME_GET_ALL),
     getAllRecords: ()             => ipcRenderer.invoke(IPC.GAME_GET_RECORDS),
     getVersions:(id: string)      => ipcRenderer.invoke(IPC.GAME_GET_VERSIONS, id),
+    getManifest:(id: string, version?: string) => ipcRenderer.invoke(IPC.GAME_GET_MANIFEST, id, version),
     getCover:   (id: string, version?: string)      => ipcRenderer.invoke(IPC.GAME_GET_COVER, id, version),
+    getIcon:    (id: string, version?: string)      => ipcRenderer.invoke(IPC.GAME_GET_ICON, id, version),
     onProcessEvent: (callback: (type: 'start' | 'end', id: string) => void) => {
       const startHandler = (_: any, id: string) => callback('start', id);
       const endHandler = (_: any, id: string) => callback('end', id);
@@ -26,6 +28,11 @@ export const electronAPI = {
       ipcRenderer.on(IPC.GAME_LAUNCH_FAILED, handler);
       return () => ipcRenderer.removeListener(IPC.GAME_LAUNCH_FAILED, handler);
     },
+    onAchievementUnlocked: (callback: (gameId: string, achievementId: string) => void) => {
+      const handler = (_: any, payload: { gameId: string, achievementId: string }) => callback(payload.gameId, payload.achievementId);
+      ipcRenderer.on(IPC.GAME_UNLOCK_ACHIEVEMENT, handler);
+      return () => ipcRenderer.removeListener(IPC.GAME_UNLOCK_ACHIEVEMENT, handler);
+    }
   },
   room: {
     create:     (gameId: string, version?: string)  => ipcRenderer.invoke(IPC.ROOM_CREATE, gameId, version),

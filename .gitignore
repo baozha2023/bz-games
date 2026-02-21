@@ -24,6 +24,9 @@ games/
 # 示例游戏目录（不提交到 git）
 井字棋/
 俄罗斯方块/
+水果忍者/
+五子棋/
+2048/
 
 # 构建资源
 resources/app.asar
@@ -31,3 +34,4 @@ resources/elevate.exe
 
 # 测试文件
 test-connect.js
+

@@ -6,7 +6,10 @@ export const IPC = {
   GAME_GET_ALL:       'game:getAll',
   GAME_GET_RECORDS:   'game:getRecords',
   GAME_GET_COVER:     'game:getCover',
+  GAME_GET_ICON:      'game:getIcon',
   GAME_GET_VERSIONS:  'game:getVersions',
+  GAME_GET_MANIFEST:  'game:getManifest',
+  GAME_UNLOCK_ACHIEVEMENT: 'game:unlockAchievement',
 
   // ── 房间管理 ──
   ROOM_CREATE:        'room:create',
