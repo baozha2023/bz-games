@@ -14,6 +14,7 @@ declare global {
         getManifest: (id: string, version?: string) => Promise<GameManifest | null>;
         getCover: (id: string, version?: string) => Promise<string | null>; // base64 data URL
         getIcon: (id: string, version?: string) => Promise<string | null>; // base64 data URL
+        reorder: (gameIds: string[]) => Promise<boolean>;
         onProcessEvent: (callback: (type: 'start' | 'end', id: string) => void) => () => void;
         onLaunchFailed: (callback: (id: string, reason: string) => void) => () => void;
         onAchievementUnlocked: (callback: (gameId: string, achievementId: string) => void) => () => void;

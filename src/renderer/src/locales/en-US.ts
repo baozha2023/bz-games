@@ -19,7 +19,7 @@ export default {
   },
   library: {
     title: 'Library',
-    addGameButton: 'Add Game (game.json)',
+    addGameButton: 'Add Game',
     addGameShort: 'Add Game',
     emptyState: 'Your library is empty, add some games!',
     addSuccess: 'Game added successfully!',

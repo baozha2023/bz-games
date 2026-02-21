@@ -309,12 +309,19 @@ interface AppSettings {
 
 ### 6.2 IPC 接口扩展
 - 新增 `game:getManifest(id, version)`：获取指定游戏版本的 Manifest 信息，用于动态展示成就等元数据。
-- 确保所有新增 IPC 均在 `src/shared/ipc-channels.ts` 中定义，并在 `preload/api.ts` 中暴露。
+- 新增 `game:reorder(gameIds)`：更新游戏排序。
+- 确保所有新增 IPC 均在 `src/shared/ipc-channels.ts` 中定义，并在 `preload/api.ts` 中暴露.
 
 ### 6.3 UI 交互规范
 - **返回导航**：所有二级页面（设置、统计、成就等）的 `n-page-header` 必须包含返回按钮，统一导航回 `Library` 页面。
 - **成就展示**：成就列表支持按游戏版本筛选，支持展开/收起，默认展开。若当前版本无成就，显示空列表。
 - **动态元数据**：游戏详情页切换版本时，应优先展示当前选中版本的元数据（如简介、成就），若为空则直接展示为空，不应回退到最新版本数据。
+- **游戏库展示**：
+    - 游戏封面展示区域统一使用 **16:9** 比例，图片模式为 `contain`（完整显示）或 `cover`（填满）。
+    - 支持 **长按** 游戏封面进入编辑模式，此时可拖动调整游戏排序。
+    - 排序结果需持久化存储。
+    - 聊天消息：当前用户发送的消息，名字显示为绿色（#18a058）。
+- **统计界面**：卡片右上角需展示该游戏的所有版本号，使用自动换行布局。
 
 ### 6.4 代码质量与重构
 - **模块化**：复杂逻辑（如 `GameLoader.loadGameFromDialog`）已拆分为独立的小函数（`validateSelection`, `loadManifest`, `installGameFiles` 等），提高可读性与可维护性。

@@ -7,7 +7,9 @@
       <n-grid-item v-for="stat in stats" :key="stat.id">
         <n-card :title="stat.name" hoverable>
           <template #header-extra>
-            <n-tag type="info" size="small">{{ stat.version }}</n-tag>
+            <div style="display: flex; flex-wrap: wrap; gap: 4px; max-width: 200px; justify-content: flex-end;">
+              <n-tag v-for="ver in stat.versions" :key="ver" type="info" size="small">{{ ver }}</n-tag>
+            </div>
           </template>
           <n-statistic :label="t('statistics.playtime')" :value="formatTime(stat.playtime)" />
           <template #footer>
@@ -36,7 +38,7 @@ interface GameStat {
   name: string;
   playtime: number;
   lastPlayedAt?: number;
-  version: string;
+  versions: string[];
 }
 
 const stats = ref<GameStat[]>([])
@@ -54,7 +56,7 @@ onMounted(async () => {
           name: manifest ? manifest.name : record.id,
           playtime: record.playtime || 0,
           lastPlayedAt: record.lastPlayedAt,
-          version: record.latestVersion
+          versions: record.versions ? record.versions.map(v => v.version) : [record.latestVersion]
       };
   }).sort((a, b) => (b.lastPlayedAt || 0) - (a.lastPlayedAt || 0));
 })

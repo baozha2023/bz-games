@@ -76,6 +76,10 @@ class StoreService {
     store.set('games', games);
   }
 
+  saveGames(games: GameRecord[]): void {
+    this.getStore().set('games', games);
+  }
+
   unlockAchievement(gameId: string, achievementId: string): boolean {
     const store = this.getStore();
     const games = store.get('games', []) || [];

@@ -6,29 +6,8 @@ import { GameManifestSchema, type GameManifest } from '../../shared/game-manifes
 import { storeService } from './StoreService';
 import type { GameRecord } from '../../shared/types';
 import { logger } from '../utils/logger';
+import { copyFolderRecursiveSync } from '../utils/fileUtils';
 import { getGamesDir } from '../utils/appPath';
-
-/**
- * Manually copy a folder recursively to avoid fs.cpSync issues with non-ASCII paths or specific file systems.
- */
-function copyFolderRecursiveSync(source: string, target: string) {
-  if (!fs.existsSync(target)) {
-    fs.mkdirSync(target, { recursive: true });
-  }
-
-  if (fs.lstatSync(source).isDirectory()) {
-    const files = fs.readdirSync(source);
-    for (const file of files) {
-      const curSource = path.join(source, file);
-      const curTarget = path.join(target, file);
-      if (fs.lstatSync(curSource).isDirectory()) {
-        copyFolderRecursiveSync(curSource, curTarget);
-      } else {
-        fs.copyFileSync(curSource, curTarget);
-      }
-    }
-  }
-}
 
 export class GameLoader {
   private static cache: GameManifest[] | null = null;

@@ -20,14 +20,12 @@
             <template #header-extra>
                 <n-space align="center">
                     <n-select 
-                        v-if="game.versions.length > 1"
                         v-model:value="selectedVersions[game.id]" 
                         :options="game.versions.map(v => ({ label: v, value: v }))" 
                         size="small" 
                         style="width: 120px;"
                         @update:value="(v) => handleVersionChange(game.id, v)"
                     />
-                    <div v-else style="font-size: 12px; color: #888;">{{ game.latestVersion }}</div>
 
                     <n-button text style="font-size: 20px;" @click="toggleExpand(game.id)">
                         <n-icon>

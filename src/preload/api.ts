@@ -13,6 +13,7 @@ export const electronAPI = {
     getManifest:(id: string, version?: string) => ipcRenderer.invoke(IPC.GAME_GET_MANIFEST, id, version),
     getCover:   (id: string, version?: string)      => ipcRenderer.invoke(IPC.GAME_GET_COVER, id, version),
     getIcon:    (id: string, version?: string)      => ipcRenderer.invoke(IPC.GAME_GET_ICON, id, version),
+    reorder:    (gameIds: string[]) => ipcRenderer.invoke(IPC.GAME_REORDER, gameIds),
     onProcessEvent: (callback: (type: 'start' | 'end', id: string) => void) => {
       const startHandler = (_: any, id: string) => callback('start', id);
       const endHandler = (_: any, id: string) => callback('end', id);

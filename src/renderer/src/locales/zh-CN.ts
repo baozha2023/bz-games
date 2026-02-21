@@ -19,7 +19,7 @@ export default {
   },
   library: {
     title: '游戏库',
-    addGameButton: '添加游戏 (game.json)',
+    addGameButton: '添加游戏',
     addGameShort: '添加游戏',
     emptyState: '你的游戏库空空如也，快添加一些游戏吧',
     addSuccess: '添加游戏成功！',

@@ -11,7 +11,7 @@
           </template>
           <template v-else>
             <div class="message-header">
-              <span class="sender">{{ msg.senderName }}</span>
+              <span class="sender" :class="{ 'is-me': msg.senderId === settingsStore.settings?.playerId }">{{ msg.senderName }}</span>
               <span class="time">{{ formatTime(msg.timestamp) }}</span>
             </div>
             <div class="message-content">{{ msg.content }}</div>
@@ -37,9 +37,11 @@ import { ref, nextTick, watch } from 'vue'
 import { NCard, NInput, NInputGroup, NButton } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { useRoomStore } from '../../stores/useRoomStore'
+import { useSettingsStore } from '../../stores/useSettingsStore'
 
 const { t } = useI18n()
 const roomStore = useRoomStore()
+const settingsStore = useSettingsStore()
 const inputValue = ref('')
 const scrollContainer = ref<HTMLElement | null>(null)
 
@@ -95,6 +97,9 @@ watch(() => roomStore.chatMessages.length, () => {
 .sender {
   font-weight: bold;
   color: #2080f0;
+}
+.sender.is-me {
+  color: #18a058;
 }
 .time {
   color: #999;

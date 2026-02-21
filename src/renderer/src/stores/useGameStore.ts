@@ -39,6 +39,20 @@ export const useGameStore = defineStore('game', () => {
   async function launchGame(id: string, version?: string) {
     await window.electronAPI.game.launch(id, version);
   }
+
+  async function reorderGames(newOrderIds: string[]) {
+    // Optimistic update
+    const sorted = newOrderIds
+      .map(id => games.value.find(g => g.id === id))
+      .filter((g): g is GameManifest => !!g);
+    
+    // Keep any that weren't in the list
+    const remaining = games.value.filter(g => !newOrderIds.includes(g.id));
+    games.value = [...sorted, ...remaining];
+
+    // Persist
+    await window.electronAPI.game.reorder(newOrderIds);
+  }
   
   function getGameRecord(id: string) {
     return records.value.find(r => r.id === id);
@@ -80,6 +94,7 @@ export const useGameStore = defineStore('game', () => {
     addGame, 
     removeGame, 
     launchGame,
+    reorderGames,
     getGameRecord,
     getUnlockedAchievements
   };

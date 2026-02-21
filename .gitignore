@@ -21,7 +21,7 @@ games/
 # TypeScript 构建缓存
 *.tsbuildinfo
 
-# 示例游戏目录（不提交到 git）
+# 示例游戏目录
 井字棋/
 俄罗斯方块/
 水果忍者/
