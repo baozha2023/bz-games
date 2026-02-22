@@ -63,8 +63,19 @@ const handleAddGame = async () => {
   const result = await gameStore.addGame()
   if (result.success) {
     message.success(t('library.addSuccess'))
-  } else if (result.error !== 'User canceled') {
-    message.error(result.error || t('library.addError'))
+  } else {
+    // Ignore specific cancellations or known non-errors if any
+    if (result.error === 'canceled') return;
+
+    const errorKey = `library.importError.${result.error}`;
+    const translated = t(errorKey, result.params || {});
+    
+    // Fallback if translation missing
+    if (translated === errorKey) {
+        message.error(result.error || t('library.addError'));
+    } else {
+        message.error(translated);
+    }
   }
 }
 

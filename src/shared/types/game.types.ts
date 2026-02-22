@@ -6,7 +6,9 @@ export type GameApiAction =
   | 'message.broadcast'
   | 'game.ready'
   | 'game.end'
-  | 'achievement.unlock';
+  | 'achievement.unlock'
+  | 'achievement.list'
+  | 'stats.report';
 
 export type GameApiEventAction = 
   | 'event.message'

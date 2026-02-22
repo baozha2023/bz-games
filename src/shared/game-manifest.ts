@@ -10,11 +10,12 @@ export const GameManifestSchema = z.object({
   description: z.string().max(500).optional(),
   author: z.string().min(1).max(100),
   website: z.string().url().optional(),
-  platformVersion: z.string(),
+  platformVersion: z.union([z.string(), z.tuple([z.string(), z.string()])]),
   entry: z.string(),
   icon: z.string().optional(),
   cover: z.string().optional(),
   type: z.enum(['singleplayer', 'multiplayer']),
+  statistics: z.array(z.union([z.string(), z.record(z.string())])).optional(),
   multiplayer: z.object({
     minPlayers: z.number().int().min(1),
     maxPlayers: z.number().int().min(1),

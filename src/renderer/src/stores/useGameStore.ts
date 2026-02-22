@@ -31,9 +31,18 @@ export const useGameStore = defineStore('game', () => {
     return res;
   }
 
-  async function removeGame(id: string) {
-    await window.electronAPI.game.remove(id);
+  async function removeGame(id: string, versions?: string[]) {
+    await window.electronAPI.game.remove(id, versions);
     await loadGames();
+  }
+
+  async function toggleFavorite(id: string) {
+    const isFav = await window.electronAPI.game.toggleFavorite(id);
+    const record = records.value.find(r => r.id === id);
+    if (record) {
+      record.isFavorite = isFav;
+    }
+    return isFav;
   }
 
   async function launchGame(id: string, version?: string) {
@@ -58,9 +67,12 @@ export const useGameStore = defineStore('game', () => {
     return records.value.find(r => r.id === id);
   }
 
-  function getUnlockedAchievements(gameId: string): UnlockedAchievement[] {
+  function getUnlockedAchievements(gameId: string, version: string): UnlockedAchievement[] {
     const record = getGameRecord(gameId);
-    return record?.unlockedAchievements || [];
+    if (!record) return [];
+    
+    const gameVersion = record.versions.find(v => v.version === version);
+    return gameVersion?.unlockedAchievements || [];
   }
   
   // Listen for process events
@@ -74,13 +86,16 @@ export const useGameStore = defineStore('game', () => {
 
   // Listen for achievement events and update local state
   // Notification is handled in App.vue to avoid using useMessage in store
-  window.electronAPI.game.onAchievementUnlocked((gameId, achievementId) => {
+  window.electronAPI.game.onAchievementUnlocked((gameId, version, achievementId) => {
     // Update local record
     const record = records.value.find(r => r.id === gameId);
     if (record) {
-      if (!record.unlockedAchievements) record.unlockedAchievements = [];
-      if (!record.unlockedAchievements.some(a => a.id === achievementId)) {
-        record.unlockedAchievements.push({ id: achievementId, unlockedAt: Date.now() });
+      const gameVersion = record.versions.find(v => v.version === version);
+      if (gameVersion) {
+        if (!gameVersion.unlockedAchievements) gameVersion.unlockedAchievements = [];
+        if (!gameVersion.unlockedAchievements.some(a => a.id === achievementId)) {
+          gameVersion.unlockedAchievements.push({ id: achievementId, unlockedAt: Date.now() });
+        }
       }
     }
   });
@@ -93,6 +108,7 @@ export const useGameStore = defineStore('game', () => {
     loadGames, 
     addGame, 
     removeGame, 
+    toggleFavorite,
     launchGame,
     reorderGames,
     getGameRecord,

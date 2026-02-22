@@ -16,8 +16,12 @@ export function registerGameIpc() {
         return storeService.getGames();
     });
 
-    ipcMain.handle(IPC.GAME_REMOVE, async (_, id: string) => {
-        await GameLoader.removeGame(id);
+    ipcMain.handle(IPC.GAME_REMOVE, async (_, id: string, versions?: string[]) => {
+        await GameLoader.removeGame(id, versions);
+    });
+
+    ipcMain.handle(IPC.GAME_TOGGLE_FAVORITE, async (_, id: string) => {
+        return storeService.toggleFavorite(id);
     });
 
     ipcMain.handle(IPC.GAME_LAUNCH, async (_, id: string, version?: string) => {

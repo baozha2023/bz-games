@@ -7,10 +7,10 @@
     </div>
 
     <n-list v-else style="margin-top: 24px; background: transparent;">
-      <n-list-item v-for="game in displayGames" :key="game.id">
+      <n-list-item v-for="game in displayGames" :key="game.id" :class="{ 'golden-card': getGameProgress(game.id).percentage === 100 }">
         <n-thing>
             <template #avatar>
-                 <div style="width: 48px; height: 48px; overflow: hidden; border-radius: 4px; background: #333;">
+                 <div class="game-icon-wrapper" style="width: 48px; height: 48px; overflow: hidden; border-radius: 4px; background: #333;">
                     <GameIcon :game-id="game.id" :game-name="game.name" :version="selectedVersions[game.id]" style="width: 100%; height: 100%; object-fit: cover;" />
                  </div>
             </template>
@@ -63,7 +63,7 @@
                                 <div style="font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ ach.title }}</div>
                                 <div style="font-size: 12px; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" :title="ach.description">{{ ach.description }}</div>
                                 <div v-if="ach.unlocked" style="font-size: 10px; color: #f0a020;">
-                                    {{ t('achievement.unlockedAt', { date: new Date(ach.unlockedAt!).toLocaleDateString() }) }}
+                                    {{ t('achievement.unlockedAt', { date: new Date(ach.unlockedAt!).toLocaleString() }) }}
                                 </div>
                                 <div v-else style="font-size: 10px; color: #666;">{{ t('achievement.locked') }}</div>
                             </div>
@@ -103,7 +103,7 @@ onMounted(async () => {
         const latest = g.version;
         
         selectedVersions.value[g.id] = latest;
-        expandedGames.value[g.id] = true;
+        expandedGames.value[g.id] = false;
         
         // Cache initial manifest
         manifestCache.value[`${g.id}@${latest}`] = g;
@@ -150,10 +150,12 @@ function toggleExpand(gameId: string) {
 
 function getGameAchievements(gameId: string) {
     const version = selectedVersions.value[gameId];
+    if (!version) return [];
+    
     const manifest = getManifest(gameId, version);
     if (!manifest || !manifest.achievements) return [];
     
-    const unlocked = gameStore.getUnlockedAchievements(gameId);
+    const unlocked = gameStore.getUnlockedAchievements(gameId, version);
     
     const mapped = manifest.achievements.map(a => {
         const u = unlocked.find(ua => ua.id === a.id);
@@ -180,3 +182,41 @@ function getGameProgress(gameId: string) {
     };
 }
 </script>
+
+<style scoped>
+.golden-card {
+    position: relative;
+    border: 1px solid #ffd700;
+    box-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+    transition: all 0.3s ease;
+    border-radius: 4px;
+    animation: golden-burn 2s ease-in-out infinite alternate;
+}
+
+.golden-card :deep(.n-thing) {
+    z-index: 1;
+    position: relative;
+}
+
+.golden-card .game-icon-wrapper {
+    box-shadow: 0 0 8px rgba(255, 215, 0, 0.6);
+    border: 1px solid rgba(255, 215, 0, 0.5);
+}
+
+@keyframes golden-burn {
+    0% {
+        box-shadow: 
+            0 0 5px #ffd700,
+            0 0 10px rgba(255, 215, 0, 0.5),
+            inset 0 0 5px rgba(255, 215, 0, 0.2);
+        border-color: #ffd700;
+    }
+    100% {
+        box-shadow: 
+            0 0 15px #ffd700,
+            0 0 25px rgba(255, 140, 0, 0.6),
+            inset 0 0 10px rgba(255, 215, 0, 0.4);
+        border-color: #ffaa00;
+    }
+}
+</style>

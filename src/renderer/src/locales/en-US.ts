@@ -30,7 +30,7 @@ export default {
       notDirectory: 'Please select a directory',
       zipNotSupported: 'ZIP files are not supported, please unzip and import folder',
       noManifest: 'Game not recognized (game.json missing)',
-      manifestInvalid: 'Invalid game.json format',
+      manifestInvalid: 'Invalid game.json format: {message}',
       platformVersionMismatch: 'Platform version mismatch (Required: {required}, Current: {current})',
       entryNotFound: 'Entry file not found: {entry}',
       unknown: 'Import failed: {message}'
@@ -44,6 +44,9 @@ export default {
     typeMultiplayer: 'Multiplayer',
     typeSingleplayer: 'Singleplayer',
     description: 'Description',
+    favorite: 'Favorite',
+    deleteAllVersionsWarning: 'Deleting all versions will remove the game record',
+    deleteVersions: 'Select versions to delete',
     gameRunning: 'Running',
     launchGame: 'Launch',
     createRoom: 'Create Room',
@@ -127,6 +130,8 @@ export default {
     lastPlayed: 'Last Played',
     never: 'Never',
     empty: 'No play records yet',
+    noStats: 'No statistics available',
+    time: 'Playtime',
   },
   achievement: {
     title: 'Achievements',

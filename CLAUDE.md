@@ -120,7 +120,8 @@ bz-launcher/
 │   │       │   ├── GameDetailView.vue # 游戏详情页
 │   │       │   ├── RoomView.vue       # 联机房间页
 │   │       │   ├── SettingsView.vue   # 设置页
-│   │       │   └── AchievementsView.vue # 成就列表页
+│   │       │   ├── AchievementsView.vue # 成就列表页
+│   │       │   └── StatisticsView.vue # 统计页面
 │   │       │
 │   │       ├── components/            # 可复用组件
 │   │       │   ├── game/
@@ -162,7 +163,7 @@ bz-launcher/
 | **Room Server**          | 房主平台运行的 WebSocket 服务器，经内网穿透工具对外暴露                             |
 | **Room Client**          | 非房主玩家的平台连接 Room Server 的 WebSocket 客户端                        |
 | **Game API Server**      | 平台在本机运行的本地 WebSocket 服务（`127.0.0.1`），供游戏进程调用平台能力              |
-| **bz-config.js**         | 平台在游戏启动前生成的配置文件（包含端口与Token），解决进程环境变量传递不可靠问题                   |
+| **bz-config.js**         | 平台在游戏启动前生成的配置文件（包含端口、Token、玩家信息与头像），解决进程环境变量传递不可靠问题                   |
 | **内网穿透**                 | 由用户自备（如 SakuraFrp），将 Room Server 本地端口映射到公网地址                  |
 | **平台 SDK**               | 未来提供的 npm 包（`bz-launcher-sdk`），封装 Game API Server 调用，供游戏开发者使用 |
 
@@ -272,7 +273,7 @@ interface GameRecord {
     versions: GameVersion[];        // 游戏版本列表
     latestVersion: string;          // 当前最新版本号
     addedAt: number;                // 首次添加时间（ms）
-    playtime: number;               // 累计游玩时间（秒）
+    stats: Record<string, Record<string, number>>; // 统计数据 { version: { key: value } }
     lastPlayedAt?: number;
     unlockedAchievements: UnlockedAchievement[]; // 已解锁成就
 }
@@ -310,24 +311,33 @@ interface AppSettings {
 ### 6.2 IPC 接口扩展
 - 新增 `game:getManifest(id, version)`：获取指定游戏版本的 Manifest 信息，用于动态展示成就等元数据。
 - 新增 `game:reorder(gameIds)`：更新游戏排序。
+- 新增 `game:toggleFavorite(id)`：切换游戏的特别喜欢状态。
+- 更新 `game:remove(id, versions?)`：支持删除指定版本或整个游戏。
 - 确保所有新增 IPC 均在 `src/shared/ipc-channels.ts` 中定义，并在 `preload/api.ts` 中暴露.
 
 ### 6.3 UI 交互规范
 - **返回导航**：所有二级页面（设置、统计、成就等）的 `n-page-header` 必须包含返回按钮，统一导航回 `Library` 页面。
-- **成就展示**：成就列表支持按游戏版本筛选，支持展开/收起，默认展开。若当前版本无成就，显示空列表。
+- **成就展示**：成就列表支持按游戏版本筛选，支持展开/收起，默认收起。若当前版本无成就，显示空列表。
 - **动态元数据**：游戏详情页切换版本时，应优先展示当前选中版本的元数据（如简介、成就），若为空则直接展示为空，不应回退到最新版本数据。
 - **游戏库展示**：
     - 游戏封面展示区域统一使用 **16:9** 比例，图片模式为 `contain`（完整显示）或 `cover`（填满）。
     - 支持 **长按** 游戏封面进入编辑模式，此时可拖动调整游戏排序。
     - 排序结果需持久化存储。
     - 聊天消息：当前用户发送的消息，名字显示为绿色（#18a058）。
+    - 收藏游戏：特别喜欢的游戏在封面右上角展示爱心图标。
+- **游戏详情页**：
+    - 删除游戏功能升级为模态框，支持多选版本进行删除，默认选中当前版本。
 - **统计界面**：卡片右上角需展示该游戏的所有版本号，使用自动换行布局。
 
 ### 6.4 代码质量与重构
-- **模块化**：复杂逻辑（如 `GameLoader.loadGameFromDialog`）已拆分为独立的小函数（`validateSelection`, `loadManifest`, `installGameFiles` 等），提高可读性与可维护性。
+- **模块化**：复杂逻辑（如 `GameLoader.loadGameFromDialog`）已拆分为独立的小函数（`validateManifestFile`, `checkPlatformVersion`, `checkEntryFile` 等），提高可读性与可维护性。
 - **移除遗留代码**：彻底移除了 `game.js` 自动生成 Manifest 的兼容逻辑，确保项目结构的一致性与规范性。
 - **Web 游戏隔离**：Web 游戏启动时使用 `persist:game_<id>_<version>` 分区，实现版本间的数据隔离（Cookie/LocalStorage）。
 - **高内聚低耦合**：Renderer 进程严禁直接使用 Node.js API，所有文件操作与系统调用必须通过 IPC 委托给 Main Process。
+
+### 6.5 Game Manifest 更新
+- **统计信息国际化**：`statistics` 字段支持键值对格式（`[{ "key": "Display Name" }]`），用于在平台统计界面显示本地化的统计项名称。
+- **时间追踪优化**：平台会自动追踪并记录所有游戏的游玩时长（`time`），无需在 `statistics` 字段中显式定义。若定义了 `time`，平台也会正常处理。
 
 ---
 
@@ -460,6 +470,7 @@ function send(msg) {
 | `game.end` | - | `{ success: true }` | 告知平台游戏结束（通常由 Host 调用）。 |
 | `message.send` | `{ targetPlayerId, ... }` | `{ success: true }` | 发送单播消息给指定玩家（平台中继）。 |
 | `message.broadcast` | `{ ... }` | `{ success: true }` | 广播消息给所有玩家（平台中继）。 |
+| `achievement.list` | - | `[{ id, title, description, unlocked, unlockedAt }]` | 获取当前游戏版本的成就列表及解锁状态。 |
 | `achievement.unlock` | `{ achievementId, playerId }` | `{ success: true, new: boolean }` | 解锁成就。`playerId` 必须为当前玩家 ID。 |
 
 ### 8.3 事件列表 (Event)

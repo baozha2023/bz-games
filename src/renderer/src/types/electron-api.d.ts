@@ -6,7 +6,7 @@ declare global {
     electronAPI: {
       game: {
         load:     () => Promise<{ success: boolean; manifest?: GameManifest; error?: string; params?: Record<string, any> }>;
-        remove:   (id: string) => Promise<void>;
+        remove:   (id: string, versions?: string[]) => Promise<void>;
         launch:   (id: string, version?: string) => Promise<void>;
         getAll:   () => Promise<GameManifest[]>;
         getAllRecords: () => Promise<GameRecord[]>;
@@ -14,10 +14,11 @@ declare global {
         getManifest: (id: string, version?: string) => Promise<GameManifest | null>;
         getCover: (id: string, version?: string) => Promise<string | null>; // base64 data URL
         getIcon: (id: string, version?: string) => Promise<string | null>; // base64 data URL
+        toggleFavorite: (id: string) => Promise<boolean>;
         reorder: (gameIds: string[]) => Promise<boolean>;
         onProcessEvent: (callback: (type: 'start' | 'end', id: string) => void) => () => void;
         onLaunchFailed: (callback: (id: string, reason: string) => void) => () => void;
-        onAchievementUnlocked: (callback: (gameId: string, achievementId: string) => void) => () => void;
+        onAchievementUnlocked: (callback: (gameId: string, version: string, achievementId: string) => void) => () => void;
       };
       room: {
         create:     (gameId: string, version?: string) => Promise<{ port: number }>;

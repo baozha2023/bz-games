@@ -10,6 +10,7 @@ export const IPC = {
   GAME_GET_VERSIONS:  'game:getVersions',
   GAME_GET_MANIFEST:  'game:getManifest',
   GAME_UNLOCK_ACHIEVEMENT: 'game:unlockAchievement',
+  GAME_TOGGLE_FAVORITE: 'game:toggleFavorite',
   GAME_REORDER:       'game:reorder',
 
   // ── 房间管理 ──

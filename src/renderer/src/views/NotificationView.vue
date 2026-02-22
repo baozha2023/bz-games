@@ -1,14 +1,15 @@
 <template>
-  <div class="notification-container" :class="theme" @click="close">
-    <div class="icon-area">
-      <img v-if="iconUrl" :src="iconUrl" class="game-icon" />
-      <div v-else class="game-icon-placeholder">{{ gameName?.charAt(0) || '?' }}</div>
+  <transition name="notification" appear>
+    <div v-if="visible" class="notification-container" :class="theme" @click="close">
+      <div class="icon-area">
+        <img v-if="iconUrl" :src="iconUrl" class="game-icon" />
+        <div v-else class="game-icon-placeholder">{{ gameName?.charAt(0) || '?' }}</div>
+      </div>
+      <div class="content-area">
+        <div class="title">{{ title }}</div>
+      </div>
     </div>
-    <div class="content-area">
-      <div class="title">{{ title }}</div>
-      <!-- Removed description and game name as per user request -->
-    </div>
-  </div>
+  </transition>
 </template>
 
 <script setup lang="ts">
@@ -21,6 +22,7 @@ const title = ref('');
 const gameName = ref('');
 const iconUrl = ref('');
 const theme = ref('dark');
+const visible = ref(false);
 
 onMounted(() => {
   // Get data from query params
@@ -31,10 +33,21 @@ onMounted(() => {
   
   // Play sound
   playAchievementSound();
+  
+  // Trigger enter animation
+  visible.value = true;
+  
+  // Trigger exit animation before window closes
+  setTimeout(() => {
+    visible.value = false;
+  }, 4500);
 });
 
 const close = () => {
-  window.close();
+  visible.value = false;
+  setTimeout(() => {
+      window.close();
+  }, 300); // Wait for animation
 };
 </script>
 
@@ -52,6 +65,25 @@ const close = () => {
   overflow: hidden;
   user-select: none;
   border: 1px solid transparent;
+  transform-origin: bottom;
+}
+
+.notification-enter-active {
+  animation: grow-in 0.3s ease-in-out;
+}
+
+.notification-leave-active {
+  animation: shrink-out 0.3s ease-in-out;
+}
+
+@keyframes grow-in {
+  0% { transform: translateY(100%); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes shrink-out {
+  0% { transform: translateY(0); opacity: 1; }
+  100% { transform: translateY(100%); opacity: 0; }
 }
 
 /* Dark Theme (Default) */

@@ -1,266 +1,243 @@
-import { ChildProcess, spawn } from 'child_process';
-import { BrowserWindow, shell } from 'electron';
+import {ChildProcess, spawn} from 'child_process';
+import {BrowserWindow, shell} from 'electron';
 import path from 'path';
 import fs from 'fs';
-import { GameLoader } from './GameLoader';
-import { GameApiServer } from './GameApiServer';
-import { storeService } from './StoreService';
-import { logger } from '../utils/logger';
-import type { RoomMessage } from '../../shared/types';
-import { roomClient } from './RoomClient';
-import { roomServer } from './RoomServer';
-import { mainWindow } from '../window';
-import { IPC } from '../../shared/ipc-channels';
-import type { GameManifest } from '../../shared/game-manifest';
+import {GameLoader} from './GameLoader';
+import {GameApiServer} from './GameApiServer';
+import {storeService} from './StoreService';
+import {GameEnvironment} from './GameEnvironment';
+import {logger} from '../utils/logger';
+import type {RoomMessage} from '../../shared/types';
+import {roomClient} from './RoomClient';
+import {roomServer} from './RoomServer';
+import {mainWindow} from '../window';
+import {IPC} from '../../shared/ipc-channels';
+import type {GameManifest} from '../../shared/game-manifest';
 
 class GameManager {
-  private activeProcesses: Map<string, ChildProcess> = new Map();
-  private activeWindows: Map<string, BrowserWindow> = new Map();
-  private gameApiServers: Map<string, GameApiServer> = new Map();
-  private startTimes: Map<string, number> = new Map();
+    private activeProcesses: Map<string, ChildProcess> = new Map();
+    private activeWindows: Map<string, BrowserWindow> = new Map();
+    private gameApiServers: Map<string, GameApiServer> = new Map();
+    private startTimes: Map<string, { start: number, version: string }> = new Map();
 
-  constructor() {
-    this.initializeHandlers();
-  }
-
-  private initializeHandlers() {
-    roomClient.setMsgHandler((gameId, msg) => this.relayToGame(gameId, msg));
-    roomClient.setStartGameHandler((gameId, version) => this.launch(gameId, version));
-    roomClient.setStopGameHandler((gameId) => this.stop(gameId));
-  }
-
-  async launch(id: string, version?: string): Promise<boolean> {
-    logger.info(`[GameManager] Launching game: ${id} (version: ${version || 'latest'})`);
-
-    if (this.isGameRunning(id)) {
-      logger.info(`[GameManager] Game ${id} is already running`);
-      return false;
+    constructor() {
+        this.initializeHandlers();
     }
 
-    try {
-      const { path: versionPath, manifest } = await this.prepareGame(id, version);
-      
-      const { port, token } = await this.startApiServer(id);
-      
-      const settings = storeService.getSettings();
-      const env = this.prepareEnvironment(id, manifest, port, token, settings);
-      
-      this.writeBzConfig(versionPath, port, token, settings);
-      
-      if (manifest.entry.endsWith('.html')) {
-        return this.launchWebGame(id, versionPath, manifest);
-      } else {
-        return this.spawnGameProcess(id, versionPath, manifest, env);
-      }
-
-    } catch (error: any) {
-      logger.error(`[GameManager] Launch failed for ${id}:`, error);
-      this.notifyLaunchFailure(id, error.message || 'Unknown error');
-      this.cleanup(id);
-      return false;
-    }
-  }
-
-  stop(id: string): void {
-    this.cleanup(id);
-  }
-
-  relayToGame(gameId: string, msg: RoomMessage) {
-    const api = this.gameApiServers.get(gameId);
-    if (api) {
-      api.sendEvent('event.message', msg.payload);
-    }
-  }
-
-  private isGameRunning(id: string): boolean {
-    return this.activeProcesses.has(id) || this.activeWindows.has(id);
-  }
-
-  private async prepareGame(id: string, version?: string): Promise<{ path: string, manifest: GameManifest }> {
-    const versionPath = await GameLoader.getVersionPath(id, version);
-    if (!versionPath) {
-      throw new Error(`Game version not found: ${id} @ ${version || 'latest'}`);
+    private initializeHandlers() {
+        roomClient.setMsgHandler((gameId, msg) => this.relayToGame(gameId, msg));
+        roomClient.setStartGameHandler((gameId, version) => this.launch(gameId, version));
+        roomClient.setStopGameHandler((gameId) => this.stop(gameId));
     }
 
-    const manifest = await GameLoader.getManifest(id, version);
-    if (!manifest) {
-      throw new Error(`Manifest missing or invalid for ${id}`);
+    async launch(id: string, version?: string): Promise<boolean> {
+        logger.info(`[GameManager] Launching game: ${id} (version: ${version || 'latest'})`);
+
+        if (this.isGameRunning(id)) {
+            logger.info(`[GameManager] Game ${id} is already running`);
+            return false;
+        }
+
+        try {
+            const {path: versionPath, manifest} = await this.prepareGame(id, version);
+
+            const {port, token} = await this.startApiServer(id, manifest.version);
+
+            const settings = storeService.getSettings();
+            const env = GameEnvironment.prepare(id, manifest, port, token, settings);
+
+            GameEnvironment.writeConfig(versionPath, port, token, settings);
+
+            if (manifest.entry.endsWith('.html')) {
+                return this.launchWebGame(id, versionPath, manifest);
+            } else {
+                return this.spawnGameProcess(id, versionPath, manifest, env);
+            }
+
+        } catch (error: any) {
+            logger.error(`[GameManager] Launch failed for ${id}:`, error);
+            this.notifyLaunchFailure(id, error.message || 'Unknown error');
+            this.cleanup(id);
+            return false;
+        }
     }
 
-    return { path: versionPath, manifest };
-  }
-
-  private async startApiServer(id: string): Promise<{ port: number, token: string }> {
-    const apiServer = new GameApiServer();
-    
-    apiServer.setOnStop(() => {
-      logger.info(`[GameManager] API Server stopped for ${id}`);
-      this.stop(id);
-      mainWindow?.webContents.send(IPC.GAME_PROCESS_ENDED, id);
-    });
-
-    const { port, token } = await apiServer.start();
-    apiServer.gameId = id;
-    this.gameApiServers.set(id, apiServer);
-    
-    return { port, token };
-  }
-
-  private prepareEnvironment(id: string, manifest: GameManifest, port: number, token: string, settings: any) {
-    const isHost = roomClient.room && roomClient.room.hostId === settings.playerId;
-    
-    return Object.assign({}, process.env, manifest.env || {}, {
-      BZ_PLATFORM: '1',
-      BZ_PLATFORM_VERSION: '1.0.0',
-      BZ_API_PORT: port.toString(),
-      BZ_API_TOKEN: token,
-      BZ_PLAYER_ID: settings.playerId,
-      BZ_PLAYER_NAME: settings.playerName,
-      BZ_GAME_ID: id,
-      BZ_ROOM_ID: roomClient.room ? roomClient.room.id : '',
-      BZ_IS_HOST: isHost ? '1' : '0',
-    });
-  }
-
-  private writeBzConfig(versionPath: string, port: number, token: string, settings: any) {
-    try {
-      const configPath = path.join(versionPath, 'bz-config.js');
-      const configContent = `window.BZ_CONFIG = { 
-        apiPort: '${port}', 
-        token: '${token}',
-        playerId: '${settings.playerId}',
-        playerName: ${JSON.stringify(settings.playerName)}
-      };`;
-      fs.writeFileSync(configPath, configContent);
-    } catch (e) {
-      logger.warn(`[GameManager] Failed to write config file`, e);
-    }
-  }
-
-  private launchWebGame(id: string, versionPath: string, manifest: GameManifest): boolean {
-    const entryPath = path.join(versionPath, manifest.entry);
-    
-    if (!fs.existsSync(entryPath)) {
-      throw new Error(`Entry file not found: ${manifest.entry}`);
+    stop(id: string): void {
+        this.cleanup(id);
     }
 
-    const win = new BrowserWindow({
-      width: 1280,
-      height: 720,
-      title: manifest.name,
-      icon: manifest.icon ? path.join(versionPath, manifest.icon) : undefined,
-      autoHideMenuBar: true,
-      webPreferences: {
-        nodeIntegration: false,
-        contextIsolation: true,
-        partition: `persist:game_${id}_${manifest.version}`
-      }
-    });
-
-    win.loadFile(entryPath);
-    
-    // Open external links in default browser
-    win.webContents.setWindowOpenHandler(({ url }) => {
-      shell.openExternal(url);
-      return { action: 'deny' };
-    });
-
-    this.activeWindows.set(id, win);
-    this.startTimes.set(id, Date.now());
-    
-    logger.info(`[GameManager] Window started for ${id}`);
-    mainWindow?.webContents.send(IPC.GAME_PROCESS_STARTED, id);
-    
-    win.on('closed', () => {
-      this.handleProcessExit(id, 0);
-      this.activeWindows.delete(id);
-    });
-
-    return true;
-  }
-
-  private spawnGameProcess(id: string, versionPath: string, manifest: GameManifest, env: any): boolean {
-    const entryPath = path.join(versionPath, manifest.entry);
-    
-    if (!fs.existsSync(entryPath)) {
-      throw new Error(`Entry file not found: ${manifest.entry}`);
+    relayToGame(gameId: string, msg: RoomMessage) {
+        const api = this.gameApiServers.get(gameId);
+        if (api) {
+            api.sendEvent('event.message', msg.payload);
+        }
     }
 
-    const isWindows = process.platform === 'win32';
-    const isBatch = entryPath.endsWith('.bat') || entryPath.endsWith('.cmd');
-    
-    const cp = spawn(entryPath, manifest.args || [], {
-      cwd: versionPath,
-      env: env,
-      detached: true,
-      stdio: 'ignore',
-      shell: isWindows && isBatch,
-      windowsHide: false
-    });
-    
-    cp.unref(); 
-    this.activeProcesses.set(id, cp);
-    this.startTimes.set(id, Date.now());
-    
-    logger.info(`[GameManager] Process started for ${id}`);
-    mainWindow?.webContents.send(IPC.GAME_PROCESS_STARTED, id);
-    
-    cp.on('exit', (code) => this.handleProcessExit(id, code));
-
-    return true;
-  }
-
-  private handleProcessExit(id: string, code: number | null) {
-    logger.info(`[GameManager] Game ${id} exited with code ${code}`);
-    
-    this.recordPlaytime(id);
-    this.notifyRoomGameEnd(id);
-    this.stop(id); // Ensure cleanup
-    mainWindow?.webContents.send(IPC.GAME_PROCESS_ENDED, id);
-  }
-
-  private recordPlaytime(id: string) {
-    const startTime = this.startTimes.get(id);
-    if (startTime) {
-      const duration = Math.round((Date.now() - startTime) / 1000);
-      storeService.updateGameStats(id, duration);
-      this.startTimes.delete(id);
-    }
-  }
-
-  private notifyRoomGameEnd(id: string) {
-    if (roomServer.room && roomServer.room.gameId === id && roomServer.room.state === 'playing') {
-      roomServer.room.state = 'waiting';
-      roomServer.broadcast({ type: 'room:game:end', payload: {} });
-      roomServer.broadcastState();
-    }
-  }
-
-  private cleanup(id: string) {
-    const cp = this.activeProcesses.get(id);
-    if (cp) {
-      cp.kill();
-      this.activeProcesses.delete(id);
+    private isGameRunning(id: string): boolean {
+        return this.activeProcesses.has(id) || this.activeWindows.has(id);
     }
 
-    const win = this.activeWindows.get(id);
-    if (win) {
-      if (!win.isDestroyed()) {
-        win.close();
-      }
-      this.activeWindows.delete(id);
+    private async prepareGame(id: string, version?: string): Promise<{ path: string, manifest: GameManifest }> {
+        const versionPath = await GameLoader.getVersionPath(id, version);
+        if (!versionPath) {
+            throw new Error(`Game version not found: ${id} @ ${version || 'latest'}`);
+        }
+
+        const manifest = await GameLoader.getManifest(id, version);
+        if (!manifest) {
+            throw new Error(`Manifest missing or invalid for ${id}`);
+        }
+
+        return {path: versionPath, manifest};
     }
 
-    const api = this.gameApiServers.get(id);
-    if (api) {
-      api.stop();
-      this.gameApiServers.delete(id);
-    }
-  }
+    private async startApiServer(id: string, version: string): Promise<{ port: number, token: string }> {
+        const apiServer = new GameApiServer();
 
-  private notifyLaunchFailure(id: string, reason: string) {
-    mainWindow?.webContents.send(IPC.GAME_LAUNCH_FAILED, { id, reason });
-  }
+        apiServer.setOnStop(() => {
+            logger.info(`[GameManager] API Server stopped for ${id}`);
+            this.stop(id);
+            mainWindow?.webContents.send(IPC.GAME_PROCESS_ENDED, id);
+        });
+
+        const {port, token} = await apiServer.start();
+        apiServer.gameId = id;
+        apiServer.gameVersion = version;
+        this.gameApiServers.set(id, apiServer);
+
+        return {port, token};
+    }
+
+    private launchWebGame(id: string, versionPath: string, manifest: GameManifest): boolean {
+        const entryPath = path.join(versionPath, manifest.entry);
+
+        if (!fs.existsSync(entryPath)) {
+            throw new Error(`Entry file not found: ${manifest.entry}`);
+        }
+
+        const win = new BrowserWindow({
+            width: 1280,
+            height: 720,
+            title: manifest.name,
+            icon: manifest.icon ? path.join(versionPath, manifest.icon) : undefined,
+            autoHideMenuBar: true,
+            webPreferences: {
+                nodeIntegration: false,
+                contextIsolation: true,
+                partition: `persist:game_${id}_${manifest.version}`
+            }
+        });
+
+        win.loadFile(entryPath);
+
+        // Open external links in default browser
+        win.webContents.setWindowOpenHandler(({url}) => {
+            shell.openExternal(url);
+            return {action: 'deny'};
+        });
+
+        this.activeWindows.set(id, win);
+        this.startTimes.set(id, { 
+            start: Date.now(), 
+            version: manifest.version
+        });
+
+        logger.info(`[GameManager] Window started for ${id}`);
+        mainWindow?.webContents.send(IPC.GAME_PROCESS_STARTED, id);
+
+        win.on('closed', () => {
+            this.handleProcessExit(id, 0);
+            this.activeWindows.delete(id);
+        });
+
+        return true;
+    }
+
+    private spawnGameProcess(id: string, versionPath: string, manifest: GameManifest, env: any): boolean {
+        const entryPath = path.join(versionPath, manifest.entry);
+
+        if (!fs.existsSync(entryPath)) {
+            throw new Error(`Entry file not found: ${manifest.entry}`);
+        }
+
+        const isWindows = process.platform === 'win32';
+        const isBatch = entryPath.endsWith('.bat') || entryPath.endsWith('.cmd');
+
+        const cp = spawn(entryPath, manifest.args || [], {
+            cwd: versionPath,
+            env: env,
+            detached: true,
+            stdio: 'ignore',
+            shell: isWindows && isBatch,
+            windowsHide: false
+        });
+
+        cp.unref();
+        this.activeProcesses.set(id, cp);
+        this.startTimes.set(id, { 
+            start: Date.now(), 
+            version: manifest.version
+        });
+
+        logger.info(`[GameManager] Process started for ${id}`);
+        mainWindow?.webContents.send(IPC.GAME_PROCESS_STARTED, id);
+
+        cp.on('exit', (code) => this.handleProcessExit(id, code));
+
+        return true;
+    }
+
+    private handleProcessExit(id: string, code: number | null) {
+        logger.info(`[GameManager] Game ${id} exited with code ${code}`);
+
+        this.recordPlaytime(id);
+        this.notifyRoomGameEnd(id);
+        this.stop(id); // Ensure cleanup
+        mainWindow?.webContents.send(IPC.GAME_PROCESS_ENDED, id);
+    }
+
+    private recordPlaytime(id: string) {
+        const startTimeData = this.startTimes.get(id);
+        if (startTimeData) {
+            const durationMs = Date.now() - startTimeData.start;
+            storeService.updatePlaytime(id, startTimeData.version, durationMs);
+        }
+        this.startTimes.delete(id);
+    }
+
+    private notifyRoomGameEnd(id: string) {
+        if (roomServer.room && roomServer.room.gameId === id && roomServer.room.state === 'playing') {
+            roomServer.room.state = 'waiting';
+            roomServer.broadcast({type: 'room:game:end', payload: {}});
+            roomServer.broadcastState();
+        }
+    }
+
+    private cleanup(id: string) {
+        const cp = this.activeProcesses.get(id);
+        if (cp) {
+            cp.kill();
+            this.activeProcesses.delete(id);
+        }
+
+        const win = this.activeWindows.get(id);
+        if (win) {
+            if (!win.isDestroyed()) {
+                win.close();
+            }
+            this.activeWindows.delete(id);
+        }
+
+        const api = this.gameApiServers.get(id);
+        if (api) {
+            api.stop();
+            this.gameApiServers.delete(id);
+        }
+    }
+
+    private notifyLaunchFailure(id: string, reason: string) {
+        mainWindow?.webContents.send(IPC.GAME_LAUNCH_FAILED, {id, reason});
+    }
 }
 
 export const gameManager = new GameManager();

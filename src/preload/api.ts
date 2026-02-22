@@ -5,7 +5,7 @@ import type { AppSettings, RoomEvent } from '../shared/types';
 export const electronAPI = {
   game: {
     load:       ()                => ipcRenderer.invoke(IPC.GAME_LOAD),
-    remove:     (id: string)      => ipcRenderer.invoke(IPC.GAME_REMOVE, id),
+    remove:     (id: string, versions?: string[])      => ipcRenderer.invoke(IPC.GAME_REMOVE, id, versions),
     launch:     (id: string, version?: string)      => ipcRenderer.invoke(IPC.GAME_LAUNCH, id, version),
     getAll:     ()                => ipcRenderer.invoke(IPC.GAME_GET_ALL),
     getAllRecords: ()             => ipcRenderer.invoke(IPC.GAME_GET_RECORDS),
@@ -13,6 +13,7 @@ export const electronAPI = {
     getManifest:(id: string, version?: string) => ipcRenderer.invoke(IPC.GAME_GET_MANIFEST, id, version),
     getCover:   (id: string, version?: string)      => ipcRenderer.invoke(IPC.GAME_GET_COVER, id, version),
     getIcon:    (id: string, version?: string)      => ipcRenderer.invoke(IPC.GAME_GET_ICON, id, version),
+    toggleFavorite: (id: string) => ipcRenderer.invoke(IPC.GAME_TOGGLE_FAVORITE, id),
     reorder:    (gameIds: string[]) => ipcRenderer.invoke(IPC.GAME_REORDER, gameIds),
     onProcessEvent: (callback: (type: 'start' | 'end', id: string) => void) => {
       const startHandler = (_: any, id: string) => callback('start', id);
@@ -29,8 +30,8 @@ export const electronAPI = {
       ipcRenderer.on(IPC.GAME_LAUNCH_FAILED, handler);
       return () => ipcRenderer.removeListener(IPC.GAME_LAUNCH_FAILED, handler);
     },
-    onAchievementUnlocked: (callback: (gameId: string, achievementId: string) => void) => {
-      const handler = (_: any, payload: { gameId: string, achievementId: string }) => callback(payload.gameId, payload.achievementId);
+    onAchievementUnlocked: (callback: (gameId: string, version: string, achievementId: string) => void) => {
+      const handler = (_: any, payload: { gameId: string, version: string, achievementId: string }) => callback(payload.gameId, payload.version, payload.achievementId);
       ipcRenderer.on(IPC.GAME_UNLOCK_ACHIEVEMENT, handler);
       return () => ipcRenderer.removeListener(IPC.GAME_UNLOCK_ACHIEVEMENT, handler);
     }

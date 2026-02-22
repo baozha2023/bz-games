@@ -4,15 +4,18 @@ export interface AppStore {
   recentPlayed: string[];
 }
 
+export interface UnlockedAchievement {
+  id: string;
+  unlockedAt: number;
+}
+
 export interface GameVersion {
   version: string;
   path: string;
   addedAt: number;
-}
-
-export interface UnlockedAchievement {
-  id: string;
-  unlockedAt: number;
+  stats: Record<string, number>;
+  unlockedAchievements: UnlockedAchievement[];
+  playtime: number;
 }
 
 export interface GameRecord {
@@ -21,8 +24,7 @@ export interface GameRecord {
   latestVersion: string;
   addedAt: number;
   lastPlayedAt?: number;
-  playtime: number;
-  unlockedAchievements: UnlockedAchievement[];
+  isFavorite?: boolean;
 }
 
 export interface AppSettings {

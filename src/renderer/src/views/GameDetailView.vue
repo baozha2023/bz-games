@@ -3,6 +3,15 @@
     <n-page-header :title="game.name" @back="$router.back()">
       <template #extra>
         <n-space>
+          <n-button @click="handleToggleFavorite">
+             <template #icon>
+                <n-icon :color="isFavorite ? '#d03050' : undefined">
+                    <Heart v-if="isFavorite" />
+                    <HeartOutline v-else />
+                </n-icon>
+             </template>
+             {{ t('gameDetail.favorite') }}
+          </n-button>
           <n-button @click="showAchievements = true">{{ t('achievement.title') }}</n-button>
           <n-button type="error" @click="handleRemove" :disabled="roomStore.room !== null || isRunning">{{ t('gameDetail.deleteGame') }}</n-button>
         </n-space>
@@ -47,44 +56,38 @@
       <n-input v-model:value="joinAddress" :placeholder="t('gameDetail.joinAddressPlaceholder')" />
     </n-modal>
 
-    <n-modal v-model:show="showAchievements" preset="card" :title="t('achievement.title')" style="width: 600px;">
-        <n-empty v-if="gameAchievements.length === 0" :description="t('achievement.noAchievements')" />
-        <n-list v-else>
-            <n-list-item v-for="ach in gameAchievements" :key="ach.id">
-                <n-thing>
-                    <template #avatar>
-                        <n-icon size="24" :color="ach.unlocked ? '#f0a020' : '#ccc'">
-                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M20.2 2H3.8C2.8 2 2 2.8 2 3.8v4.4c0 1 .8 1.8 1.8 1.8h.4c.5 2.8 3 4.9 6 5v.5c0 .8.7 1.5 1.5 1.5h.6v2h-2c-1.1 0-2 .9-2 2s.9 2 2 2h7.4c1.1 0 2-.9 2-2s-.9-2-2-2h-2v-2h.6c.8 0 1.5-.7 1.5-1.5v-.5c3-.1 5.5-2.2 6-5h.4c1 0 1.8-.8 1.8-1.8V3.8C22 2.8 21.2 2 20.2 2M5.8 8h-2V4h2zm14.4 0h-2V4h2z"/></svg>
-                        </n-icon>
-                    </template>
-                    <template #header>{{ ach.title }}</template>
-                    <template #description>{{ ach.description }}</template>
-                    <template #header-extra>
-                        <n-tag type="success" v-if="ach.unlocked">{{ t('achievement.unlocked') }}</n-tag>
-                        <n-tag type="default" v-else>{{ t('achievement.locked') }}</n-tag>
-                    </template>
-                </n-thing>
-            </n-list-item>
-        </n-list>
-    </n-modal>
+    <GameDeleteModal 
+        v-model:show="showDeleteModal" 
+        :versions="versions" 
+        :initial-selected="[selectedVersion]" 
+        :loading="isDeleting"
+        @confirm="confirmDelete" 
+    />
+
+    <GameAchievementsModal 
+        v-model:show="showAchievements" 
+        :achievements="gameAchievements" 
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useMessage, useDialog } from 'naive-ui'
+import { useMessage } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
+import { Heart, HeartOutline } from '@vicons/ionicons5'
 import { useGameStore } from '../stores/useGameStore'
 import { useRoomStore } from '../stores/useRoomStore'
 import GameCover from '../components/game/GameCover.vue'
+import GameAchievementsModal from '../components/game/GameAchievementsModal.vue'
+import GameDeleteModal from '../components/game/GameDeleteModal.vue'
 import type { GameManifest } from '../../../shared/game-manifest'
 
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const message = useMessage()
-const dialog = useDialog()
 const gameStore = useGameStore()
 const roomStore = useRoomStore()
 
@@ -116,7 +119,7 @@ const gameAchievements = computed(() => {
     
     if (!achievements || achievements.length === 0) return [];
 
-    const unlocked = gameStore.getUnlockedAchievements(gameId);
+    const unlocked = gameStore.getUnlockedAchievements(gameId, selectedVersion.value);
     return achievements.map(a => {
         const u = unlocked.find(ua => ua.id === a.id);
         return {
@@ -170,18 +173,106 @@ const handleLaunch = () => {
   message.success(t('gameDetail.launchSuccess'))
 }
 
-const handleRemove = async () => {
-  dialog.warning({
-    title: t('gameDetail.deleteGame'),
-    content: t('common.confirmDelete') || 'Are you sure you want to delete this game?',
-    positiveText: t('common.confirm'),
-    negativeText: t('common.cancel'),
-    onPositiveClick: async () => {
-      await gameStore.removeGame(gameId)
-      router.push('/library')
-      message.success(t('gameDetail.deleteSuccess'))
+const showDeleteModal = ref(false)
+const isDeleting = ref(false)
+
+const isFavorite = computed(() => {
+    const record = gameStore.getGameRecord(gameId);
+    return record?.isFavorite || false;
+})
+
+const handleToggleFavorite = async (e: MouseEvent) => {
+    try {
+        const newState = await gameStore.toggleFavorite(gameId);
+        if (newState) {
+            spawnHeartParticles(e.clientX, e.clientY);
+        }
+    } catch (e) {
+        message.error(t('common.error'));
     }
-  })
+}
+
+const handleRemove = () => {
+  showDeleteModal.value = true;
+}
+
+const confirmDelete = async (versionsToDelete: string[]) => {
+  if (isDeleting.value) return;
+  isDeleting.value = true;
+  try {
+    // Clone array to ensure clean IPC serialization
+    await gameStore.removeGame(gameId, [...versionsToDelete])
+    message.success(t('gameDetail.deleteSuccess'))
+    
+    if (!game.value) {
+      router.push({ name: 'Library' })
+    } else {
+      // Refresh versions
+      const v = await window.electronAPI.game.getVersions(gameId)
+      if (v) {
+        versions.value = v
+        versions.value.sort((a, b) => b.localeCompare(a, undefined, { numeric: true, sensitivity: 'base' }))
+
+        // If current selected version was deleted, switch to the first available one
+        if (!versions.value.includes(selectedVersion.value)) {
+          if (versions.value.length > 0) {
+            selectedVersion.value = versions.value[0]
+            await handleVersionChange(selectedVersion.value)
+          } else {
+            // Should not happen if game.value exists, but safety check
+            router.push({ name: 'Library' })
+          }
+        }
+      }
+    }
+  } catch (e) {
+    message.error(t('common.error'))
+  } finally {
+    isDeleting.value = false;
+    showDeleteModal.value = false;
+  }
+}
+
+function spawnHeartParticles(x: number, y: number) {
+    const container = document.createElement('div');
+    container.style.position = 'fixed';
+    container.style.left = '0';
+    container.style.top = '0';
+    container.style.width = '100%';
+    container.style.height = '100%';
+    container.style.pointerEvents = 'none';
+    container.style.zIndex = '9999';
+    document.body.appendChild(container);
+
+    const count = 10;
+    for (let i = 0; i < count; i++) {
+        const heart = document.createElement('div');
+        heart.innerHTML = '❤️';
+        heart.style.position = 'absolute';
+        heart.style.left = `${x}px`;
+        heart.style.top = `${y}px`;
+        heart.style.fontSize = `${20 + Math.random() * 20}px`;
+        heart.style.userSelect = 'none';
+        
+        // Random velocity
+        const vx = (Math.random() - 0.5) * 100;
+        const vy = -100 - Math.random() * 100;
+        
+        heart.animate([
+            { transform: `translate(0, 0) scale(1)`, opacity: 1 },
+            { transform: `translate(${vx}px, ${vy}px) scale(0)`, opacity: 0 }
+        ], {
+            duration: 800 + Math.random() * 400,
+            easing: 'ease-out'
+        }).onfinish = () => {
+            heart.remove();
+            if (container.childNodes.length === 0) {
+                container.remove();
+            }
+        };
+        
+        container.appendChild(heart);
+    }
 }
 
 const createRoom = async () => {

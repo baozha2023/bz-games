@@ -30,7 +30,7 @@ export default {
       notDirectory: '请选择一个文件夹',
       zipNotSupported: '不支持 ZIP 文件，请解压后导入文件夹',
       noManifest: '未识别到游戏；',
-      manifestInvalid: 'game.json文件格式不正确；',
+      manifestInvalid: 'game.json文件格式不正确: {message}',
       platformVersionMismatch: '平台版本不兼容 (游戏需求: {required}, 当前: {current})',
       entryNotFound: '入口文件不存在: {entry}',
       unknown: '导入失败: {message}'
@@ -44,6 +44,9 @@ export default {
     typeMultiplayer: '多人联机',
     typeSingleplayer: '单人游戏',
     description: '简介',
+    favorite: '特别喜欢',
+    deleteAllVersionsWarning: '删除所有版本将移除游戏记录',
+    deleteVersions: '选择要删除的版本',
     gameRunning: '游戏运行中',
     launchGame: '启动游戏',
     createRoom: '创建房间',
@@ -130,6 +133,8 @@ export default {
     lastPlayed: '上次游玩',
     never: '从未',
     empty: '暂无游玩记录',
+    noStats: '暂无统计数据',
+    time: '游玩时长'
   },
   achievement: {
     title: '成就',

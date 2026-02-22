@@ -75,13 +75,14 @@ my-game/
 | `version` | string | 是 | 游戏版本号 (SemVer 格式，如 `1.0.0`) |
 | `description` | string | 否 | 游戏描述 |
 | `author` | string | 否 | 作者名称 |
-| `platformVersion`| string | 是 | 兼容的平台版本范围 (如 `>=1.0.0`) |
+| `platformVersion`| string/array | 是 | 兼容的平台版本范围 (如 `">=1.0.0"` 或 `["1.0.0", "2.0.0"]`) |
 | `entry` | string | 是 | 启动入口文件路径 (相对于根目录) |
 | `type` | string | 是 | `"singleplayer"` (单机) 或 `"multiplayer"` (联机) |
 | `multiplayer` | object | 联机必填 | 包含 `minPlayers` 和 `maxPlayers` (整数) |
 | `icon` | string | 否 | 图标路径 |
 | `cover` | string | 否 | 封面路径 |
 | `achievements` | array | 否 | 成就列表定义 |
+| `statistics` | array | 否 | 统计指标列表 (如 `[{"score": "得分"}]`)。`time` (游玩时长) 由平台自动统计，无需在此定义。 |
 | `args` | array | 否 | 启动参数列表 (仅 Native 游戏有效) |
 | `env` | object | 否 | 注入的环境变量 (仅 Native 游戏有效) |
 
@@ -106,12 +107,13 @@ window.BZ_CONFIG = {
   apiPort: 12345,           // 本地 WebSocket 端口
   token: "auth-token-...",  // 认证 Token
   playerId: "uuid-...",     // 当前玩家 ID
-  playerName: "PlayerName"  // 当前玩家昵称
+  playerName: "PlayerName", // 当前玩家昵称
+  playerAvatar: "data:image/png;base64,..." // [可选] 玩家头像 (Base64)
 };
 ```
 
 **备选方案**：如果 `bz-config.js` 不存在（例如调试模式），游戏应尝试从 URL 参数获取配置：
-`index.html?apiPort=12345&token=...&playerId=...`
+`index.html?apiPort=12345&token=...&playerId=...&playerAvatar=...`
 
 ### 3.2 Native 游戏 (Exe/Executable)
 
@@ -123,6 +125,7 @@ window.BZ_CONFIG = {
 | `BZ_API_TOKEN` | 认证 Token |
 | `BZ_PLAYER_ID` | 当前玩家 ID |
 | `BZ_PLAYER_NAME` | 当前玩家昵称 |
+| `BZ_PLAYER_AVATAR` | 当前玩家头像 (Base64) |
 | `BZ_ROOM_ID` | 当前房间 ID (仅联机模式) |
 | `BZ_IS_HOST` | 是否为房主 (`"1"` 或 `"0"`) |
 
@@ -265,6 +268,26 @@ window.BZ_CONFIG = {
     {
       "success": true,
       "new": true // 如果是首次解锁则为 true
+    }
+    ```
+
+### 5.4 统计系统
+
+#### `stats.report` (上报统计数据)
+上报游戏内的统计数据（如得分、击杀数等）。需在 `game.json` 的 `statistics` 字段中预先定义。
+注意：`time` (游戏时长) 由平台自动统计，无需上报。
+
+*   **Request Payload**:
+    ```json
+    {
+      "kills": 5,  // 对应 statistics 中的字段，值为增量（累加值）
+      "score": 100
+    }
+    ```
+*   **Response Payload**:
+    ```json
+    {
+      "success": true
     }
     ```
 
