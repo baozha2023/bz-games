@@ -19,6 +19,16 @@ export interface RoomMessage<T = unknown> {
   payload: T;
 }
 
+export interface ChatPayload {
+  id: string;
+  senderId: string;
+  senderName: string;
+  content: string;
+  contentType?: 'text' | 'audio';
+  timestamp: number;
+  isSystem?: boolean;
+}
+
 export interface RoomInfo {
   id: string;
   gameId: string;

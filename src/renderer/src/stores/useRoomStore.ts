@@ -1,24 +1,15 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
-import type { RoomInfo, RoomEvent, PlayerInRoom } from '../../../shared/types';
+import type { RoomInfo, RoomEvent, PlayerInRoom, ChatPayload } from '../../../shared/types';
 import { useSettingsStore } from './useSettingsStore';
-
-export interface ChatMessage {
-  id: string;
-  senderId: string;
-  senderName: string;
-  content: string;
-  timestamp: number;
-  isSystem?: boolean;
-}
 
 export const useRoomStore = defineStore('room', () => {
   const { t } = useI18n();
   const settingsStore = useSettingsStore()
   const room = ref<RoomInfo | null>(null);
   const isConnecting = ref(false);
-  const chatMessages = ref<ChatMessage[]>([]);
+  const chatMessages = ref<ChatPayload[]>([]);
 
   const localPlayerId = computed(() => settingsStore.settings?.playerId || '');
   const isHost = computed(() => room.value?.hostId === localPlayerId.value);
@@ -68,16 +59,17 @@ export const useRoomStore = defineStore('room', () => {
     await window.electronAPI.room.start();
   }
   
-  async function sendChatMessage(content: string) {
-    if (!content.trim() || !room.value) return;
-    await window.electronAPI.room.sendChat(content);
+  async function sendChatMessage(content: string, type: 'text' | 'audio' = 'text') {
+    if (!content.trim() && type === 'text') return;
+    if (!room.value) return;
+    await window.electronAPI.room.sendChat(content, type);
   }
 
   function handleRoomEvent(event: RoomEvent) {
     if (event.type === 'room:state:sync') {
       room.value = event.payload as RoomInfo;
     } else if (event.type === 'room:chat') {
-      chatMessages.value.push(event.payload as ChatMessage);
+      chatMessages.value.push(event.payload as ChatPayload);
     } else if (event.type === 'room:player:joined') {
       const payload = event.payload as PlayerInRoom;
       chatMessages.value.push({

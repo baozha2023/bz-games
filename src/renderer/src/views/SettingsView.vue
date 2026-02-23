@@ -72,7 +72,8 @@ const themeOptions = computed(() => [
 
 const languageOptions = computed(() => [
   { label: t('settings.langZhCN'), value: 'zh-CN' },
-  { label: t('settings.langEnUS'), value: 'en-US' }
+  { label: t('settings.langEnUS'), value: 'en-US' },
+  { label: t('settings.langJaJP'), value: 'ja-JP' }
 ])
 
 onMounted(async () => {

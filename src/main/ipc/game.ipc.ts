@@ -54,21 +54,16 @@ export function registerGameIpc() {
 
     ipcMain.handle(IPC.GAME_GET_COVER, async (_, id: string, version?: string) => {
         try {
-            const record = await GameLoader.getGameRecord(id);
-            if (!record) return null;
+            const versionPath = await GameLoader.getVersionPath(id, version);
+            if (!versionPath) return null;
 
-            const targetVersion = version || record.latestVersion;
-            const versionRecord = record.versions.find(v => v.version === targetVersion);
-
-            if (!versionRecord) return null;
-
-            const jsonPath = path.join(versionRecord.path, 'game.json');
+            const jsonPath = path.join(versionPath, 'game.json');
             if (!fs.existsSync(jsonPath)) return null;
 
             const raw = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
             if (!raw.cover) return null;
 
-            const coverPath = path.join(versionRecord.path, raw.cover);
+            const coverPath = path.join(versionPath, raw.cover);
             if (fs.existsSync(coverPath)) {
                 const b64 = fs.readFileSync(coverPath, 'base64');
                 const ext = path.extname(coverPath).slice(1);
@@ -82,21 +77,16 @@ export function registerGameIpc() {
 
     ipcMain.handle(IPC.GAME_GET_ICON, async (_, id: string, version?: string) => {
         try {
-            const record = await GameLoader.getGameRecord(id);
-            if (!record) return null;
+            const versionPath = await GameLoader.getVersionPath(id, version);
+            if (!versionPath) return null;
 
-            const targetVersion = version || record.latestVersion;
-            const versionRecord = record.versions.find(v => v.version === targetVersion);
-
-            if (!versionRecord) return null;
-
-            const jsonPath = path.join(versionRecord.path, 'game.json');
+            const jsonPath = path.join(versionPath, 'game.json');
             if (!fs.existsSync(jsonPath)) return null;
 
             const raw = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
             if (!raw.icon) return null;
 
-            const iconPath = path.join(versionRecord.path, raw.icon);
+            const iconPath = path.join(versionPath, raw.icon);
             if (fs.existsSync(iconPath)) {
                 const b64 = fs.readFileSync(iconPath, 'base64');
                 const ext = path.extname(iconPath).slice(1);

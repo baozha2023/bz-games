@@ -36,4 +36,10 @@ export const IPC = {
   SYSTEM_GET_SETTINGS:  'system:getSettings',
   SYSTEM_SAVE_SETTINGS: 'system:saveSettings',
   SYSTEM_UPLOAD_AVATAR: 'system:uploadAvatar',
+
+  // ── 游戏数据存储 (Preload → Main) ──
+  GAME_STORAGE_INIT:    'game:storage:init',
+  GAME_STORAGE_SAVE:    'game:storage:save',
+  GAME_STORAGE_REMOVE:  'game:storage:remove',
+  GAME_STORAGE_CLEAR:   'game:storage:clear',
 } as const;

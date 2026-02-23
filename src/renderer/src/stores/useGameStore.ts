@@ -7,8 +7,9 @@ export const useGameStore = defineStore('game', () => {
   const games = ref<GameManifest[]>([]);
   const records = ref<GameRecord[]>([]);
   const runningGameIds = ref<Set<string>>(new Set());
+  const newAchievements = ref<Set<string>>(new Set()); // key: gameId@version@achievementId
   const isLoading = ref(false);
-
+  
   async function loadGames() {
     isLoading.value = true;
     try {
@@ -74,6 +75,10 @@ export const useGameStore = defineStore('game', () => {
     const gameVersion = record.versions.find(v => v.version === version);
     return gameVersion?.unlockedAchievements || [];
   }
+
+  function markAchievementsAsSeen() {
+    newAchievements.value.clear();
+  }
   
   // Listen for process events
   window.electronAPI.game.onProcessEvent((type, id) => {
@@ -95,6 +100,7 @@ export const useGameStore = defineStore('game', () => {
         if (!gameVersion.unlockedAchievements) gameVersion.unlockedAchievements = [];
         if (!gameVersion.unlockedAchievements.some(a => a.id === achievementId)) {
           gameVersion.unlockedAchievements.push({ id: achievementId, unlockedAt: Date.now() });
+          newAchievements.value.add(`${gameId}@${version}@${achievementId}`);
         }
       }
     }
@@ -104,6 +110,7 @@ export const useGameStore = defineStore('game', () => {
     games, 
     records, 
     runningGameIds, 
+    newAchievements,
     isLoading, 
     loadGames, 
     addGame, 
@@ -112,6 +119,7 @@ export const useGameStore = defineStore('game', () => {
     launchGame,
     reorderGames,
     getGameRecord,
-    getUnlockedAchievements
+    getUnlockedAchievements,
+    markAchievementsAsSeen
   };
 });

@@ -45,7 +45,7 @@ export const electronAPI = {
     start:      ()                                  => ipcRenderer.invoke(IPC.ROOM_START),
     setAddress: (address: string)                   => ipcRenderer.invoke(IPC.ROOM_SET_ADDRESS, address),
     getState:   ()                                  => ipcRenderer.invoke(IPC.ROOM_GET_STATE),
-    sendChat:   (content: string)                   => ipcRenderer.invoke(IPC.ROOM_SEND_CHAT, content),
+    sendChat:   (content: string, type?: 'text' | 'audio') => ipcRenderer.invoke(IPC.ROOM_SEND_CHAT, content, type),
     onEvent: (callback: (event: RoomEvent) => void) => {
       const handler = (_: any, event: RoomEvent) => callback(event);
       ipcRenderer.on(IPC.ROOM_EVENT, handler);

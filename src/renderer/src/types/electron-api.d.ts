@@ -29,7 +29,7 @@ declare global {
         start:      () => Promise<void>;
         setAddress: (address: string) => Promise<void>;
         getState:   () => Promise<RoomInfo | null>;
-        sendChat:   (content: string) => Promise<void>;
+        sendChat:   (content: string, type?: 'text' | 'audio') => Promise<void>;
         onEvent:    (callback: (event: RoomEvent) => void) => () => void;
       };
       settings: {

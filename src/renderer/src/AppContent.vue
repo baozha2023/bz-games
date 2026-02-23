@@ -30,7 +30,9 @@
           </n-button>
           <n-button @click="router.push('/library')">{{ t('nav.myGames') }}</n-button>
           <n-button @click="router.push('/statistics')">{{ t('statistics.title') }}</n-button>
-          <n-button @click="router.push('/achievements')">{{ t('achievement.title') }}</n-button>
+          <n-badge :dot="gameStore.newAchievements.size > 0">
+            <n-button @click="router.push('/achievements')">{{ t('achievement.title') }}</n-button>
+          </n-badge>
           <n-button @click="router.push('/settings')">{{ t('nav.settings') }}</n-button>
         </n-space>
       </n-space>
@@ -44,7 +46,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { NAvatar, NSpace } from 'naive-ui'
+import { NAvatar, NSpace, NBadge } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { useSettingsStore } from './stores/useSettingsStore'
 import { useRoomStore } from './stores/useRoomStore'

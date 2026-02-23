@@ -28,9 +28,11 @@
 - 游戏库管理（载入、删除、分类、封面/图标展示）
 - 游戏启动与进程生命周期管理
 - 联机房间系统（创建、加入、准备、开始、离开、聊天）
-- 成就系统（查看、统计、游戏内解锁、系统级弹窗通知）
-- Game API Server（向游戏进程提供联机与通讯能力的本地 WebSocket 服务）
-- 系统设置（玩家昵称、主题、默认端口等）
+- **国际化 (i18n)**：支持中文、英文和日文（ja-JP）。成就描述等元数据支持多语言配置（待实现）。
+- **语音聊天**：房间内支持发送语音消息（WebM 格式，Base64 编码传输），界面支持播放。
+- **成就系统**：查看、统计、游戏内解锁、系统级弹窗通知（红点提醒、进度统计）。
+- **Game API Server**：向游戏进程提供联机与通讯能力的本地 WebSocket 服务。
+- **系统设置**：玩家昵称、主题、默认端口、语言切换等。
 
 ---
 
@@ -77,15 +79,17 @@ bz-launcher/
 │   │   ├── window.ts                  # BrowserWindow 管理
 │   │   │
 │   │   ├── ipc/                       # IPC 处理器（按模块拆分）
-│   │   │   ├── index.ts               # 统一注册所有 IPC Handler
-│   │   │   ├── game.ipc.ts            # 游戏管理相关 IPC
-│   │   │   ├── room.ipc.ts            # 房间管理相关 IPC
-│   │   │   └── system.ipc.ts          # 系统/设置相关 IPC
-│   │   │
-│   │   ├── services/                  # 主进程核心服务
-│   │   │   ├── GameLoader.ts          # 游戏载入、校验与文件复制
-│   │   │   ├── GameManager.ts         # 游戏进程启动/管理/终止
-│   │   │   ├── RoomServer.ts          # 联机 Room Server（Host 端 WebSocket 服务）
+          │   │   ├── index.ts               # 统一注册所有 IPC Handler
+          │   │   ├── game.ipc.ts            # 游戏管理相关 IPC
+          │   │   ├── room.ipc.ts            # 房间管理相关 IPC
+          │   │   ├── system.ipc.ts          # 系统/设置相关 IPC
+          │   │   └── storage.ipc.ts         # 游戏数据存储 IPC
+          │   │
+          │   ├── services/                  # 主进程核心服务
+          │   ├── GameLoader.ts          # 游戏载入、校验与文件复制
+          │   ├── GameEnvironment.ts     # 游戏环境配置与 bz-config.js 生成
+          │   ├── GameManager.ts         # 游戏进程启动/管理/终止
+          │   ├── RoomServer.ts          # 联机 Room Server（Host 端 WebSocket 服务）
 │   │   │   ├── RoomClient.ts          # 联机 Room Client（Client 端 WebSocket 客户端）
 │   │   │   ├── GameApiServer.ts       # Game API Server（本地 WebSocket 服务，供游戏进程使用）
 │   │   │   ├── StoreService.ts        # electron-store 封装
@@ -333,7 +337,9 @@ interface AppSettings {
 - **模块化**：复杂逻辑（如 `GameLoader.loadGameFromDialog`）已拆分为独立的小函数（`validateManifestFile`, `checkPlatformVersion`, `checkEntryFile` 等），提高可读性与可维护性。
 - **移除遗留代码**：彻底移除了 `game.js` 自动生成 Manifest 的兼容逻辑，确保项目结构的一致性与规范性。
 - **Web 游戏隔离**：Web 游戏启动时使用 `persist:game_<id>_<version>` 分区，实现版本间的数据隔离（Cookie/LocalStorage）。
+- **Web 游戏存储接管**：通过 Preload 脚本接管 `localStorage`，将数据重定向存储至 `games/<id>/<version>/gamedata.json`，实现跨启动模式（File/Serve）的数据互通与版本隔离。
 - **高内聚低耦合**：Renderer 进程严禁直接使用 Node.js API，所有文件操作与系统调用必须通过 IPC 委托给 Main Process。
+- **环境配置抽离**：将游戏环境变量准备与 `bz-config.js` 生成逻辑抽离至 `GameEnvironment` 类，提高 `GameManager` 的内聚性。
 
 ### 6.5 Game Manifest 更新
 - **统计信息国际化**：`statistics` 字段支持键值对格式（`[{ "key": "Display Name" }]`），用于在平台统计界面显示本地化的统计项名称。

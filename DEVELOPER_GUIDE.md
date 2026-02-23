@@ -100,6 +100,7 @@ my-game/
 <script src="bz-config.js"></script>
 ```
 
+
 `bz-config.js` 会向全局作用域注入 `window.BZ_CONFIG` 对象：
 
 ```javascript
@@ -128,6 +129,17 @@ window.BZ_CONFIG = {
 | `BZ_PLAYER_AVATAR` | 当前玩家头像 (Base64) |
 | `BZ_ROOM_ID` | 当前房间 ID (仅联机模式) |
 | `BZ_IS_HOST` | 是否为房主 (`"1"` 或 `"0"`) |
+
+### 3.3 数据持久化注意事项 (Web 游戏)
+
+Web 游戏通常使用 `localStorage` 或 `IndexedDB` 存储本地数据（如存档、设置）。
+
+*   **平台接管机制**：平台通过预加载脚本 (`preload/game.js`) 自动接管并覆盖了游戏的 `localStorage` 接口。
+*   **统一存储路径**：所有 `localStorage` 数据会被重定向存储到 `games/<id>/<version>/gamedata.json` 文件中。
+*   **版本隔离**：不同版本的游戏拥有独立的 `gamedata.json`，确保存档互不干扰。
+*   **启动模式互通**：无论使用 `index.html` 还是 `serve` 模式启动，只要是同一游戏同一版本，都将读取同一个 `gamedata.json`，彻底解决了浏览器同源策略导致的存档隔离问题。
+    *   **开发者提示**：你无需修改游戏代码，只需像往常一样使用 `localStorage.getItem()` 和 `setItem()` 即可。
+
 
 ---
 
@@ -229,24 +241,26 @@ window.BZ_CONFIG = {
     ```
 
 #### `message.broadcast` (广播消息)
-向房间内**除自己以外**的所有玩家发送消息。
+向房间内**除自己以外**的所有玩家发送消息。支持发送文本或语音（音频数据）。
 
 *   **Request Payload**:
     ```json
     {
-      "data": { "type": "move", "x": 1, "y": 2 } // 任意 JSON 对象
+      "data": { "type": "move", "x": 1, "y": 2 }, // 任意 JSON 对象
+      "contentType": "text" // 可选: 'text' | 'audio' (默认 'text')
     }
     ```
 *   **Response Payload**: `{ "success": true }`
 
 #### `message.send` (单播消息)
-向指定玩家发送消息。
+向指定玩家发送消息。支持发送文本或语音。
 
 *   **Request Payload**:
     ```json
     {
       "to": "target-player-id",
-      "data": { "content": "Hello secret" }
+      "data": { "content": "Hello secret" },
+      "contentType": "text" // 可选: 'text' | 'audio' (默认 'text')
     }
     ```
 *   **Response Payload**: `{ "success": true }`

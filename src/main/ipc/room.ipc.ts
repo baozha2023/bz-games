@@ -2,10 +2,10 @@ import {ipcMain} from 'electron';
 import {IPC} from '../../shared/ipc-channels';
 import {roomServer} from '../services/RoomServer';
 import {roomClient} from '../services/RoomClient';
-import {gameManager} from '../services/GameManager';
 import {storeService} from '../services/StoreService';
+import {gameManager} from '../services/GameManager';
 import crypto from 'crypto';
-import type {RoomMessage} from '../../shared/types';
+import type {RoomMessage, ChatPayload} from '../../shared/types';
 
 export function registerRoomIpc() {
     ipcMain.handle(IPC.ROOM_CREATE, async (_, gameId: string, version?: string) => {
@@ -36,7 +36,7 @@ export function registerRoomIpc() {
             roomServer.room.state = 'playing';
             roomServer.broadcast({type: 'room:game:start', payload: {}});
             roomServer.broadcast({type: 'room:state:sync', payload: roomServer.room});
-            gameManager.launch(roomServer.room.gameId, roomServer.room.gameVersion);
+            await gameManager.launch(roomServer.room.gameId, roomServer.room.gameVersion);
         }
     });
 
@@ -58,15 +58,16 @@ export function registerRoomIpc() {
         return null;
     });
 
-    ipcMain.handle(IPC.ROOM_SEND_CHAT, async (_, content: string) => {
+    ipcMain.handle(IPC.ROOM_SEND_CHAT, async (_, content: string, type: 'text' | 'audio' = 'text') => {
         const settings = storeService.getSettings();
-        const msg: RoomMessage = {
+        const msg: RoomMessage<ChatPayload> = {
             type: 'room:chat',
             payload: {
                 id: crypto.randomUUID(),
                 senderId: settings.playerId,
                 senderName: settings.playerName,
                 content,
+                contentType: type,
                 timestamp: Date.now()
             }
         };

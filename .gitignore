@@ -28,6 +28,8 @@ games/
 五子棋/
 2048/
 斗地主/
+扫雷/
+推箱子/
 
 # 构建资源
 resources/app.asar
@@ -35,5 +37,7 @@ resources/elevate.exe
 
 # 测试文件
 test-connect.js
+
+
 
 

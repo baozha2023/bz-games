@@ -55,10 +55,13 @@
             <n-grid :cols="1" md="2" lg="4" x-gap="12" y-gap="12" style="margin-top: 16px;">
                 <n-grid-item v-for="ach in getGameAchievements(game.id)" :key="ach.id">
                     <n-card size="small" :style="{ opacity: ach.unlocked ? 1 : 0.6, borderColor: ach.unlocked ? '#f0a020' : undefined }">
-                        <n-space align="center" :wrap="false">
-                            <n-icon size="24" :color="ach.unlocked ? '#f0a020' : '#666'">
-                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M20.2 2H3.8C2.8 2 2 2.8 2 3.8v4.4c0 1 .8 1.8 1.8 1.8h.4c.5 2.8 3 4.9 6 5v.5c0 .8.7 1.5 1.5 1.5h.6v2h-2c-1.1 0-2 .9-2 2s.9 2 2 2h7.4c1.1 0 2-.9 2-2s-.9-2-2-2h-2v-2h.6c.8 0 1.5-.7 1.5-1.5v-.5c3-.1 5.5-2.2 6-5h.4c1 0 1.8-.8 1.8-1.8V3.8C22 2.8 21.2 2 20.2 2M5.8 8h-2V4h2zm14.4 0h-2V4h2z"/></svg>
-                            </n-icon>
+                        <div v-if="ach.isNew" class="new-dot"></div>
+                        <n-space align="center" :wrap="false" :size="24">
+                            <div style="width: 56px; height: 56px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                <n-icon size="48" :color="ach.unlocked ? '#f0a020' : '#666'">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M20.2 2H3.8C2.8 2 2 2.8 2 3.8v4.4c0 1 .8 1.8 1.8 1.8h.4c.5 2.8 3 4.9 6 5v.5c0 .8.7 1.5 1.5 1.5h.6v2h-2c-1.1 0-2 .9-2 2s.9 2 2 2h7.4c1.1 0 2-.9 2-2s-.9-2-2-2h-2v-2h.6c.8 0 1.5-.7 1.5-1.5v-.5c3-.1 5.5-2.2 6-5h.4c1 0 1.8-.8 1.8-1.8V3.8C22 2.8 21.2 2 20.2 2M5.8 8h-2V4h2zm14.4 0h-2V4h2z"/></svg>
+                                </n-icon>
+                            </div>
                             <div style="flex: 1; min-width: 0;">
                                 <div style="font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ ach.title }}</div>
                                 <div style="font-size: 12px; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" :title="ach.description">{{ ach.description }}</div>
@@ -71,7 +74,7 @@
                     </n-card>
                 </n-grid-item>
                 <n-grid-item v-if="getGameAchievements(game.id).length === 0">
-                    <n-empty description="No achievements for this version" />
+                    <n-empty :description="t('achievement.noAchievementsVersion')" />
                 </n-grid-item>
             </n-grid>
         </n-collapse-transition>
@@ -81,7 +84,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { ChevronDown, ChevronUp } from '@vicons/ionicons5';
 import { useGameStore } from '../stores/useGameStore';
@@ -108,6 +111,10 @@ onMounted(async () => {
         // Cache initial manifest
         manifestCache.value[`${g.id}@${latest}`] = g;
     });
+});
+
+onUnmounted(() => {
+    gameStore.markAchievementsAsSeen();
 });
 
 const displayGames = computed(() => {
@@ -159,10 +166,12 @@ function getGameAchievements(gameId: string) {
     
     const mapped = manifest.achievements.map(a => {
         const u = unlocked.find(ua => ua.id === a.id);
+        const isNew = gameStore.newAchievements.has(`${gameId}@${version}@${a.id}`);
         return {
             ...a,
             unlocked: !!u,
-            unlockedAt: u?.unlockedAt
+            unlockedAt: u?.unlockedAt,
+            isNew
         };
     });
     
@@ -218,5 +227,16 @@ function getGameProgress(gameId: string) {
             inset 0 0 10px rgba(255, 215, 0, 0.4);
         border-color: #ffaa00;
     }
+}
+
+.new-dot {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 8px;
+    height: 8px;
+    background-color: #d03050;
+    border-radius: 50%;
+    box-shadow: 0 0 4px rgba(208, 48, 80, 0.4);
 }
 </style>

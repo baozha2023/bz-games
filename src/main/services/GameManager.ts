@@ -2,6 +2,9 @@ import {ChildProcess, spawn} from 'child_process';
 import {BrowserWindow, shell} from 'electron';
 import path from 'path';
 import fs from 'fs';
+import { createServer, Server } from 'http';
+import handler from 'serve-handler';
+import { findAvailablePort } from '../utils/portUtils';
 import {GameLoader} from './GameLoader';
 import {GameApiServer} from './GameApiServer';
 import {storeService} from './StoreService';
@@ -17,6 +20,7 @@ import type {GameManifest} from '../../shared/game-manifest';
 class GameManager {
     private activeProcesses: Map<string, ChildProcess> = new Map();
     private activeWindows: Map<string, BrowserWindow> = new Map();
+    private activeServers: Map<string, Server> = new Map();
     private gameApiServers: Map<string, GameApiServer> = new Map();
     private startTimes: Map<string, { start: number, version: string }> = new Map();
 
@@ -48,7 +52,9 @@ class GameManager {
 
             GameEnvironment.writeConfig(versionPath, port, token, settings);
 
-            if (manifest.entry.endsWith('.html')) {
+            if (manifest.entry === 'serve') {
+                return this.launchServeGame(id, versionPath, manifest);
+            } else if (manifest.entry.endsWith('.html')) {
                 return this.launchWebGame(id, versionPath, manifest);
             } else {
                 return this.spawnGameProcess(id, versionPath, manifest, env);
@@ -108,6 +114,63 @@ class GameManager {
         return {port, token};
     }
 
+    private async launchServeGame(id: string, versionPath: string, manifest: GameManifest): Promise<boolean> {
+        const port = await findAvailablePort();
+        
+        const server = createServer((request, response) => {
+            return handler(request, response, {
+                public: versionPath,
+                headers: [
+                    { source: '**', headers: [{ key: 'Access-Control-Allow-Origin', value: '*' }] }
+                ]
+            });
+        });
+
+        server.listen(port, () => {
+            logger.info(`[GameManager] Static server running at http://localhost:${port}`);
+        });
+
+        this.activeServers.set(id, server);
+
+        const win = new BrowserWindow({
+            width: 1280,
+            height: 720,
+            title: manifest.name,
+            icon: manifest.icon ? path.join(versionPath, manifest.icon) : undefined,
+            autoHideMenuBar: true,
+            webPreferences: {
+                nodeIntegration: false,
+                contextIsolation: false, // Allow localStorage override
+                preload: path.join(__dirname, '../preload/game.js'),
+                // partition: `persist:game_${id}_${manifest.version}` // Removed partition to rely on our own storage
+            }
+        });
+
+        win.loadURL(`http://localhost:${port}?gameId=${id}&version=${manifest.version}`);
+
+        // Open external links in default browser
+        win.webContents.setWindowOpenHandler(({url}) => {
+            shell.openExternal(url);
+            return {action: 'deny'};
+        });
+
+        this.activeWindows.set(id, win);
+        this.startTimes.set(id, { 
+            start: Date.now(), 
+            version: manifest.version
+        });
+
+        logger.info(`[GameManager] Window started for ${id} (serve mode)`);
+        mainWindow?.webContents.send(IPC.GAME_PROCESS_STARTED, id);
+
+        win.on('closed', () => {
+            this.handleProcessExit(id, 0);
+            this.activeWindows.delete(id);
+        });
+
+        return true;
+    }
+
     private launchWebGame(id: string, versionPath: string, manifest: GameManifest): boolean {
         const entryPath = path.join(versionPath, manifest.entry);
 
@@ -123,12 +186,13 @@ class GameManager {
             autoHideMenuBar: true,
             webPreferences: {
                 nodeIntegration: false,
-                contextIsolation: true,
-                partition: `persist:game_${id}_${manifest.version}`
+                contextIsolation: false, // Allow localStorage override
+                preload: path.join(__dirname, '../preload/game.js'),
+                // partition: `persist:game_${id}_${manifest.version}` // Removed partition to rely on our own storage
             }
         });
 
-        win.loadFile(entryPath);
+        win.loadFile(entryPath, { search: `gameId=${id}&version=${manifest.version}` });
 
         // Open external links in default browser
         win.webContents.setWindowOpenHandler(({url}) => {
@@ -226,6 +290,12 @@ class GameManager {
                 win.close();
             }
             this.activeWindows.delete(id);
+        }
+
+        const server = this.activeServers.get(id);
+        if (server) {
+            server.close();
+            this.activeServers.delete(id);
         }
 
         const api = this.gameApiServers.get(id);

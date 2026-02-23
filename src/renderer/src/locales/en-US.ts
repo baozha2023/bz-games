@@ -102,6 +102,12 @@ export default {
     noMessage: 'No messages',
     placeholder: 'Send a message...',
     send: 'Send',
+    audioMsg: 'Audio Message',
+    recording: 'Recording...',
+    tooShort: 'Recording too short',
+    recordingTooLong: 'Recording limited to 10s',
+    micError: 'Cannot access microphone',
+    playError: 'Failed to play',
   },
   settings: {
     title: 'Settings',
@@ -115,6 +121,7 @@ export default {
     language: 'Language',
     langZhCN: '简体中文',
     langEnUS: 'English',
+    langJaJP: '日本語',
     idHint: '(Auto-generated, immutable)',
     save: 'Save Settings',
     enterName: 'Please enter nickname',
@@ -137,6 +144,7 @@ export default {
     title: 'Achievements',
     unlocked: 'Achievement Unlocked',
     noAchievements: 'No achievements yet',
+    noAchievementsVersion: 'No achievements for this version',
     unlockedAt: 'Unlocked at {date}',
     progress: 'Progress: {current}/{total}',
     locked: 'Locked'

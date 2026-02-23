@@ -105,6 +105,12 @@ export default {
     noMessage: '暂无消息',
     placeholder: '发送消息...',
     send: '发送',
+    audioMsg: '语音消息',
+    recording: '正在录音...',
+    tooShort: '录音时间太短',
+    recordingTooLong: '录音最长支持10秒',
+    micError: '无法访问麦克风',
+    playError: '播放失败',
   },
   settings: {
     title: '设置',
@@ -118,6 +124,7 @@ export default {
     language: '语言',
     langZhCN: '简体中文',
     langEnUS: 'English',
+    langJaJP: '日本語',
     idHint: '(自动生成，不可修改)',
     save: '保存设置',
     enterName: '请输入昵称',
@@ -140,6 +147,7 @@ export default {
     title: '成就',
     unlocked: '解锁成就',
     noAchievements: '暂无成就',
+    noAchievementsVersion: '当前版本暂无成就',
     unlockedAt: '解锁于 {date}',
     progress: '进度：{current}/{total}',
     locked: '未解锁'

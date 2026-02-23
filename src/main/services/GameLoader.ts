@@ -178,6 +178,9 @@ export class GameLoader {
     }
 
     static async getAllGames(): Promise<GameManifest[]> {
+        // Always scan and sync with disk to ensure paths are correct (portability)
+        await this.scanAndSyncGames();
+
         if (this.cache) return this.cache;
 
         const records = await storeService.getGames();
@@ -202,6 +205,116 @@ export class GameLoader {
         return manifests;
     }
 
+    private static async scanAndSyncGames(): Promise<void> {
+        const gamesDir = getGamesDir();
+        const records = await storeService.getGames();
+        const diskGames = new Map<string, Set<string>>(); // gameId -> Set<version>
+
+        // 1. Scan disk
+        if (fs.existsSync(gamesDir)) {
+            try {
+                const gameDirs = fs.readdirSync(gamesDir);
+                for (const gameId of gameDirs) {
+                    const gameRoot = path.join(gamesDir, gameId);
+                    if (!fs.statSync(gameRoot).isDirectory()) continue;
+
+                    const versions = fs.readdirSync(gameRoot);
+                    for (const version of versions) {
+                        const versionPath = path.join(gameRoot, version);
+                        if (!fs.statSync(versionPath).isDirectory()) continue;
+                        
+                        // Check if it looks like a game
+                        if (fs.existsSync(path.join(versionPath, 'game.json'))) {
+                            if (!diskGames.has(gameId)) diskGames.set(gameId, new Set());
+                            diskGames.get(gameId)!.add(version);
+                        }
+                    }
+                }
+            } catch (e) {
+                logger.error('Failed to scan games directory', e);
+            }
+        }
+
+        // 2. Reconcile records
+        const newRecords: GameRecord[] = [];
+        
+        // Process existing records
+        for (const record of records) {
+            const diskVersions = diskGames.get(record.id);
+            if (!diskVersions) {
+                // Game not found on disk, skip (remove)
+                continue; 
+            }
+
+            // Keep only versions that exist on disk
+            const validVersions = record.versions.filter(v => diskVersions.has(v.version));
+            
+            // Update paths for valid versions to current absolute path
+            for (const v of validVersions) {
+                v.path = path.join(gamesDir, record.id, v.version);
+                diskVersions.delete(v.version); // Mark as handled
+            }
+
+            // Add any new versions found on disk
+            for (const ver of diskVersions) {
+                 const versionPath = path.join(gamesDir, record.id, ver);
+                 validVersions.push({
+                     version: ver,
+                     path: versionPath,
+                     addedAt: Date.now(),
+                     stats: {},
+                     unlockedAchievements: [],
+                     playtime: 0
+                 });
+            }
+
+            if (validVersions.length > 0) {
+                // Sort versions descending
+                validVersions.sort((a, b) => 
+                    b.version.localeCompare(a.version, undefined, {numeric: true, sensitivity: 'base'})
+                );
+                
+                record.versions = validVersions;
+                record.latestVersion = validVersions[0].version;
+                newRecords.push(record);
+            }
+            
+            diskGames.delete(record.id); // Mark game as handled
+        }
+
+        // 3. Add completely new games found on disk
+        for (const [gameId, versions] of diskGames) {
+            const versionList = Array.from(versions);
+            const gameVersions = versionList.map(ver => ({
+                 version: ver,
+                 path: path.join(gamesDir, gameId, ver),
+                 addedAt: Date.now(),
+                 stats: {},
+                 unlockedAchievements: [],
+                 playtime: 0
+            }));
+
+            // Sort versions
+            gameVersions.sort((a, b) => 
+                b.version.localeCompare(a.version, undefined, {numeric: true, sensitivity: 'base'})
+            );
+
+            newRecords.push({
+                id: gameId,
+                versions: gameVersions,
+                latestVersion: gameVersions[0].version,
+                addedAt: Date.now(),
+            });
+        }
+
+        // Save if changed (simple comparison or just save)
+        // For simplicity and robustness, just save.
+        // But we need to be careful not to overwrite if StoreService.saveGames is not available or behaves differently.
+        // Assuming saveGames overwrites the 'games' array.
+        await storeService.saveGames(newRecords);
+        this.cache = null; // Invalidate cache
+    }
+
     static async removeGame(id: string, versions?: string[]): Promise<void> {
         await storeService.removeGame(id, versions);
         this.cache = null;
@@ -219,7 +332,20 @@ export class GameLoader {
         const targetVersion = version || record.latestVersion;
         const versionRecord = record.versions.find(v => v.version === targetVersion);
 
-        return versionRecord ? versionRecord.path : null;
+        if (!versionRecord) return null;
+
+        // Check if stored path exists
+        if (fs.existsSync(versionRecord.path)) {
+            return versionRecord.path;
+        }
+
+        // Fallback: Try standard path in games directory (fixes moved folders issue)
+        const standardPath = path.join(getGamesDir(), gameId, targetVersion);
+        if (fs.existsSync(standardPath)) {
+            return standardPath;
+        }
+
+        return null;
     }
 
     static async getManifest(gameId: string, version?: string): Promise<GameManifest | null> {
