@@ -18,6 +18,7 @@ import AppContent from './AppContent.vue'
 
 const settingsStore = useSettingsStore()
 settingsStore.loadSettings()
+settingsStore.loadUserData()
 
 const theme = computed(() => {
   return settingsStore.settings?.theme === 'dark' ? darkTheme : null

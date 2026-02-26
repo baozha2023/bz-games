@@ -62,7 +62,16 @@ onMounted(() => {
 const handleAddGame = async () => {
   const result = await gameStore.addGame()
   if (result.success) {
-    message.success(t('library.addSuccess'))
+    if (result.manifest?.name && result.manifest?.version) {
+      message.success(
+        t('library.addSuccessWithVersion', {
+          name: result.manifest.name,
+          version: result.manifest.version
+        })
+      )
+    } else {
+      message.success(t('library.addSuccess'))
+    }
   } else {
     // Ignore specific cancellations or known non-errors if any
     if (result.error === 'canceled') return;

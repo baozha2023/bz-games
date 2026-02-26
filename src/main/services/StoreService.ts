@@ -1,22 +1,38 @@
-import crypto from 'crypto';
-import ElectronStore from 'electron-store';
-import fs from 'fs/promises';
-import path from 'path';
-import type { AppStore, AppSettings, GameRecord, GameVersion } from '../../shared/types';
-import { getAppRoot } from '../utils/appPath';
-import { logger } from '../utils/logger';
+import crypto from "crypto";
+import ElectronStore from "electron-store";
+import fs from "fs/promises";
+import path from "path";
+import type {
+  AppStore,
+  AppSettings,
+  GameRecord,
+  GameVersion,
+  UserData,
+} from "../../shared/types";
+import { getAppRoot } from "../utils/appPath";
+import { logger } from "../utils/logger";
 
 const defaultSettings: AppSettings = {
-  playerName: '玩家',
-  playerId: '', // Will be generated on first run
-  language: 'zh-CN',
-  theme: 'dark',
+  playerName: "玩家",
+  playerId: "", // Will be generated on first run
+  language: "zh-CN",
+  theme: "dark",
   defaultRoomPort: 38080,
+};
+
+const defaultUserData: UserData = {
+  bzCoins: 0,
+  cumulativePlayTime: 0,
+  checkIn: {
+    lastCheckInDate: "",
+    consecutiveDays: 0,
+  },
 };
 
 const defaultStore: AppStore = {
   games: [],
   settings: defaultSettings,
+  userData: defaultUserData,
   recentPlayed: [],
 };
 
@@ -35,15 +51,15 @@ class StoreService {
 
     this._initPromise = (async () => {
       try {
-        const Store = (await import('electron-store')).default;
+        const Store = (await import("electron-store")).default;
         this.store = new Store<AppStore>({
-          name: 'config',
+          name: "config",
           defaults: defaultStore,
           cwd: getAppRoot(),
         });
         logger.info(`[StoreService] Store initialized at: ${this.store.path}`);
       } catch (error) {
-        logger.error('[StoreService] Failed to initialize store:', error);
+        logger.error("[StoreService] Failed to initialize store:", error);
         throw error;
       }
     })();
@@ -53,224 +69,361 @@ class StoreService {
 
   private getStore(): ElectronStore<AppStore> {
     if (!this.store) {
-      throw new Error('StoreService not initialized! Call init() first.');
+      throw new Error("StoreService not initialized! Call init() first.");
     }
     return this.store;
   }
 
+  private getGamesList(): GameRecord[] {
+    return this.getStore().get("games", []) || [];
+  }
+
+  private findGameById(
+    games: GameRecord[],
+    id: string,
+  ): { game: GameRecord; index: number } | null {
+    const index = games.findIndex((g) => g.id === id);
+    if (index === -1) return null;
+    return { game: games[index], index };
+  }
+
   getGames(): GameRecord[] {
-    return this.getStore().get('games', []);
+    return this.getGamesList();
+  }
+
+  getUserData(): UserData {
+    return this.getStore().get("userData") || defaultUserData;
+  }
+
+  addBzCoins(amount: number): number {
+    const store = this.getStore();
+    const userData = store.get("userData") || defaultUserData;
+    userData.bzCoins = (userData.bzCoins || 0) + amount;
+    store.set("userData", userData);
+    return userData.bzCoins;
+  }
+
+  addPlayTime(durationMs: number): number {
+    const store = this.getStore();
+    const userData = store.get("userData") || defaultUserData;
+
+    const oldTime = userData.cumulativePlayTime || 0;
+    const newTime = oldTime + durationMs;
+
+    // 10 minutes = 600,000 ms
+    const REWARD_INTERVAL = 10 * 60 * 1000;
+    const REWARD_AMOUNT = 10;
+
+    const oldIntervals = Math.floor(oldTime / REWARD_INTERVAL);
+    const newIntervals = Math.floor(newTime / REWARD_INTERVAL);
+
+    const rewardCount = newIntervals - oldIntervals;
+    if (rewardCount > 0) {
+      const reward = rewardCount * REWARD_AMOUNT;
+      userData.bzCoins = (userData.bzCoins || 0) + reward;
+      logger.info(`[StoreService] Awarded ${reward} coins for playtime.`);
+    }
+
+    userData.cumulativePlayTime = newTime;
+    store.set("userData", userData);
+    return rewardCount * REWARD_AMOUNT;
+  }
+
+  private formatBeijingDate(date: Date): string {
+    const formatter = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Shanghai",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+    return formatter.format(date);
+  }
+
+  private shiftBeijingDate(dateStr: string, deltaDays: number): string {
+    const base = new Date(`${dateStr}T00:00:00+08:00`);
+    const shifted = new Date(base.getTime() + deltaDays * 86400000);
+    return this.formatBeijingDate(shifted);
+  }
+
+  async getBeijingDate(): Promise<string | null> {
+    return this.formatBeijingDate(new Date());
+  }
+
+  async performCheckIn(): Promise<{
+    success: boolean;
+    coins: number;
+    days: number;
+    code?: string;
+  }> {
+    const store = this.getStore();
+    const userData = store.get("userData") || defaultUserData;
+
+    const todayStr = this.formatBeijingDate(new Date());
+
+    if (userData.checkIn.lastCheckInDate === todayStr) {
+      return {
+        success: false,
+        coins: 0,
+        days: userData.checkIn.consecutiveDays,
+      };
+    }
+
+    const yesterdayStr = this.shiftBeijingDate(todayStr, -1);
+
+    if (userData.checkIn.lastCheckInDate === yesterdayStr) {
+      userData.checkIn.consecutiveDays += 1;
+    } else {
+      userData.checkIn.consecutiveDays = 1;
+    }
+
+    if (userData.checkIn.consecutiveDays > 7) {
+      userData.checkIn.consecutiveDays = 1;
+    }
+
+    let reward = userData.checkIn.consecutiveDays * 10;
+    if (userData.checkIn.consecutiveDays === 7) {
+      reward = 100;
+    }
+
+    userData.checkIn.lastCheckInDate = todayStr;
+    userData.bzCoins = (userData.bzCoins || 0) + reward;
+
+    store.set("userData", userData);
+    return {
+      success: true,
+      coins: reward,
+      days: userData.checkIn.consecutiveDays,
+    };
   }
 
   addGame(game: GameRecord): void {
     const store = this.getStore();
-    const games = store.get('games', []) || [];
-    const index = games.findIndex(g => g.id === game.id);
-    
+    const games = store.get("games", []) || [];
+    const index = games.findIndex((g) => g.id === game.id);
+
     if (index !== -1) {
       games[index] = game;
     } else {
       games.push(game);
     }
-    
-    store.set('games', games);
+
+    store.set("games", games);
   }
 
   saveGames(games: GameRecord[]): void {
-    this.getStore().set('games', games);
+    this.getStore().set("games", games);
   }
 
-  unlockAchievement(gameId: string, version: string, achievementId: string): boolean {
+  unlockAchievement(
+    gameId: string,
+    version: string,
+    achievementId: string,
+  ): boolean {
     const store = this.getStore();
-    const games = store.get('games', []) || [];
-    const gameIndex = games.findIndex(g => g.id === gameId);
-    
-    if (gameIndex === -1) return false;
-    
-    const game = games[gameIndex];
-    const gameVersion = game.versions.find(v => v.version === version);
+    const games = this.getGamesList();
+    const entry = this.findGameById(games, gameId);
+    if (!entry) return false;
+
+    const game = entry.game;
+    const gameVersion = game.versions.find((v) => v.version === version);
 
     if (!gameVersion) return false;
 
     if (!gameVersion.unlockedAchievements) {
       gameVersion.unlockedAchievements = [];
     }
-    
+
     // Check if already unlocked
-    if (gameVersion.unlockedAchievements.some(a => a.id === achievementId)) {
+    if (gameVersion.unlockedAchievements.some((a) => a.id === achievementId)) {
       return false; // Already unlocked
     }
-    
+
     gameVersion.unlockedAchievements.push({
       id: achievementId,
-      unlockedAt: Date.now()
+      unlockedAt: Date.now(),
     });
-    
-    games[gameIndex] = game;
-    store.set('games', games);
+
+    games[entry.index] = game;
+    store.set("games", games);
     return true; // Newly unlocked
   }
 
   toggleFavorite(id: string): boolean {
     const store = this.getStore();
-    const games = store.get('games', []) || [];
-    const index = games.findIndex(g => g.id === id);
+    const games = this.getGamesList();
+    const entry = this.findGameById(games, id);
+    if (!entry) return false;
 
-    if (index === -1) return false;
+    entry.game.isFavorite = !entry.game.isFavorite;
+    games[entry.index] = entry.game;
+    store.set("games", games);
+    return entry.game.isFavorite || false;
+  }
 
-    games[index].isFavorite = !games[index].isFavorite;
-    store.set('games', games);
-    return games[index].isFavorite || false;
+  private partitionVersions(
+    versions: GameVersion[],
+    versionsToDelete: Set<string>,
+  ): { remaining: GameVersion[]; removing: GameVersion[] } {
+    const remaining: GameVersion[] = [];
+    const removing: GameVersion[] = [];
+
+    for (const v of versions) {
+      if (versionsToDelete.has(v.version)) {
+        removing.push(v);
+      } else {
+        remaining.push(v);
+      }
+    }
+
+    return { remaining, removing };
+  }
+
+  private async removeVersionDirectories(
+    id: string,
+    versions: GameVersion[],
+  ): Promise<void> {
+    for (const v of versions) {
+      try {
+        await fs.rm(v.path, { recursive: true, force: true });
+        logger.info(`[StoreService] Removed game version directory: ${v.path}`);
+      } catch (e) {
+        logger.error(
+          `[StoreService] Failed to remove game version directory for ${id} ${v.version}`,
+          e,
+        );
+      }
+    }
+  }
+
+  private async removeGameRootByVersionPath(
+    versionPath: string | undefined,
+    level: "warn" | "error",
+  ): Promise<void> {
+    if (!versionPath) return;
+    const parentDir = path.dirname(versionPath);
+
+    try {
+      await fs.rm(parentDir, { recursive: true, force: true });
+      logger.info(`[StoreService] Removed game root directory: ${parentDir}`);
+    } catch (e) {
+      const log = level === "error" ? logger.error : logger.warn;
+      log(`[StoreService] Failed to remove game root directory`, e);
+    }
+  }
+
+  private ensureLatestVersion(game: GameRecord): void {
+    if (game.versions.length === 0) return;
+    game.latestVersion = game.versions
+      .slice()
+      .sort((a, b) =>
+        b.version.localeCompare(a.version, undefined, {
+          numeric: true,
+          sensitivity: "base",
+        }),
+      )[0].version;
   }
 
   async removeGame(id: string, versions?: string[]): Promise<void> {
     const store = this.getStore();
-    const games = store.get('games', []) || [];
-    const gameIndex = games.findIndex(g => g.id === id);
-    const game = games[gameIndex];
-    
-    if (!game) return;
+    const games = this.getGamesList();
+    const entry = this.findGameById(games, id);
+    if (!entry) return;
 
-    // If versions are specified, delete only those versions
-    if (versions !== undefined) {
-      if (versions.length === 0) return; // Nothing to delete
-      
-      const remainingVersions: GameVersion[] = [];
-      const versionsToDelete: GameVersion[] = [];
+    const game = entry.game;
 
-      for (const v of game.versions) {
-        if (versions.includes(v.version)) {
-          versionsToDelete.push(v);
-        } else {
-          remainingVersions.push(v);
-        }
-      }
+    const requestedVersions =
+      versions === undefined ? game.versions.map((v) => v.version) : versions;
+    if (requestedVersions.length === 0) return;
 
-      for (const v of versionsToDelete) {
-        try {
-          await fs.rm(v.path, { recursive: true, force: true });
-          logger.info(`[StoreService] Removed game version directory: ${v.path}`);
-        } catch (e) {
-          logger.error(`[StoreService] Failed to remove game version directory for ${id} ${v.version}`, e);
-        }
-      }
+    const { remaining, removing } = this.partitionVersions(
+      game.versions,
+      new Set(requestedVersions),
+    );
+    await this.removeVersionDirectories(id, removing);
 
-      // If no versions left, remove the whole game record and parent folder
-      if (remainingVersions.length === 0) {
-        if (game.versions.length > 0) {
-          // Try to remove the parent directory (game root)
-          const parentDir = path.dirname(game.versions[0].path);
-          try {
-            await fs.rm(parentDir, { recursive: true, force: true });
-            logger.info(`[StoreService] Removed game root directory: ${parentDir}`);
-          } catch (e) {
-            logger.warn(`[StoreService] Failed to remove game root directory`, e);
-          }
-        }
-        const newGames = games.filter(g => g.id !== id);
-        store.set('games', newGames);
-      } else {
-          // Update the game record with remaining versions
-          game.versions = remainingVersions;
-          
-          // Update latestVersion if needed
-          if (!remainingVersions.find(v => v.version === game.latestVersion)) {
-              // Fallback to the first available version
-              game.latestVersion = remainingVersions[0].version;
-          }
-          
-          games[gameIndex] = game;
-          store.set('games', games);
-      }
-    } else {
-      // Remove entire game (legacy behavior or "select all")
-      if (game.versions?.length > 0) {
-        try {
-          const versionPath = game.versions[0].path;
-          const gameRoot = path.dirname(versionPath);
-          
-          await fs.rm(gameRoot, { recursive: true, force: true });
-          logger.info(`[StoreService] Removed game directory: ${gameRoot}`);
-        } catch (e) {
-          logger.error(`[StoreService] Failed to remove game directory for ${id}`, e);
-        }
-      }
-      
-      const newGames = games.filter(g => g.id !== id);
-      store.set('games', newGames);
+    if (remaining.length === 0) {
+      await this.removeGameRootByVersionPath(
+        game.versions[0]?.path,
+        versions === undefined ? "error" : "warn",
+      );
+      const newGames = games.filter((g) => g.id !== id);
+      store.set("games", newGames);
+      return;
     }
+
+    game.versions = remaining;
+    this.ensureLatestVersion(game);
+    games[entry.index] = game;
+    store.set("games", games);
   }
 
   getSettings(): AppSettings {
     const store = this.getStore();
-    const settings = store.get('settings', defaultSettings);
-    
+    const settings = store.get("settings", defaultSettings);
+
     const merged = { ...defaultSettings, ...settings };
-    
+
     if (!merged.playerId) {
       merged.playerId = crypto.randomUUID();
       logger.info(`[StoreService] Generated new playerId: ${merged.playerId}`);
-      store.set('settings', merged);
+      store.set("settings", merged);
     }
-    
+
     return merged;
   }
 
   saveSettings(settings: Partial<AppSettings>): void {
     const store = this.getStore();
     const current = this.getSettings();
-    
+
     logger.info(`[StoreService] Updating settings`);
-    store.set('settings', { ...current, ...settings });
+    store.set("settings", { ...current, ...settings });
   }
 
-  updateGameStats(id: string, version: string, stats: Record<string, number>): void {
+  updateGameStats(
+    id: string,
+    version: string,
+    stats: Record<string, number>,
+  ): void {
     const store = this.getStore();
-    const games = store.get('games', []) || [];
-    const index = games.findIndex(g => g.id === id);
-    
-    if (index !== -1) {
-      const game = games[index];
-      game.lastPlayedAt = Date.now();
-      
-      const gameVersion = game.versions.find(v => v.version === version);
-      if (gameVersion) {
-        if (!gameVersion.stats) gameVersion.stats = {};
-        
-        for (const [key, value] of Object.entries(stats)) {
-          // If the value is a number, we accumulate it.
-          // If the user wants to set a specific value (like "high score"),
-          // the current logic accumulates.
-          // However, for "high score", usually the game logic handles "is this higher?" and sends the new high score?
-          // OR the game sends "score: 100" and platform accumulates "total_score".
-          // The platform usually accumulates stats like "kills", "deaths", "time".
-          // For "high score", it's usually a state, not a cumulative stat.
-          // The current implementation accumulates. I'll stick to accumulation for "stats".
-          // If the game wants to store high score, it might be better to use a different mechanism or just let the game handle it internally (which Fruit Ninja does).
-          // But platform might want to show "Total Fruits Cut".
-          gameVersion.stats[key] = (gameVersion.stats[key] || 0) + value;
-        }
-      }
+    const games = this.getGamesList();
+    const entry = this.findGameById(games, id);
+    if (!entry) return;
 
-      store.set('games', games);
+    const game = entry.game;
+    game.lastPlayedAt = Date.now();
+
+    const gameVersion = game.versions.find((v) => v.version === version);
+    if (gameVersion) {
+      if (!gameVersion.stats) gameVersion.stats = {};
+
+      for (const [key, value] of Object.entries(stats)) {
+        gameVersion.stats[key] = (gameVersion.stats[key] || 0) + value;
+      }
     }
+
+    games[entry.index] = game;
+    store.set("games", games);
   }
 
   updatePlaytime(id: string, version: string, durationMs: number): void {
-    const store = this.getStore();
-    const games = store.get('games', []) || [];
-    const index = games.findIndex(g => g.id === id);
+    this.addPlayTime(durationMs);
 
-    if (index !== -1) {
-        const game = games[index];
-        const gameVersion = game.versions.find(v => v.version === version);
-        
-        if (gameVersion) {
-            gameVersion.playtime = (gameVersion.playtime || 0) + durationMs;
-        }
-        
-        store.set('games', games);
+    const store = this.getStore();
+    const games = this.getGamesList();
+    const entry = this.findGameById(games, id);
+    if (!entry) return;
+
+    const game = entry.game;
+    game.lastPlayedAt = Date.now();
+
+    const gameVersion = game.versions.find((v) => v.version === version);
+    if (gameVersion) {
+      gameVersion.playtime = (gameVersion.playtime || 0) + durationMs;
     }
+
+    games[entry.index] = game;
+    store.set("games", games);
   }
 }
 

@@ -59,6 +59,14 @@ my-game/
       "description": "赢得一场比赛"
     }
   ],
+   "statistics": [
+    {
+      "total_score": "总分数",
+    },
+    {
+      "gamesPlayed": "游戏局数"
+    },
+  ],
   "args": ["--fullscreen"],
   "env": {
     "MY_VAR": "custom_value"
@@ -109,7 +117,7 @@ window.BZ_CONFIG = {
   token: "auth-token-...",  // 认证 Token
   playerId: "uuid-...",     // 当前玩家 ID
   playerName: "PlayerName", // 当前玩家昵称
-  playerAvatar: "data:image/png;base64,..." // [可选] 玩家头像 (Base64)
+  playerAvatar: "data:image/png;base64,..." // 玩家头像 (Base64)
 };
 ```
 

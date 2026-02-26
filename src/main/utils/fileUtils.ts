@@ -1,5 +1,5 @@
-import fs from 'fs';
-import path from 'path';
+import fs from "fs";
+import path from "path";
 
 /**
  * Manually copy a folder recursively to avoid fs.cpSync issues with non-ASCII paths or specific file systems.

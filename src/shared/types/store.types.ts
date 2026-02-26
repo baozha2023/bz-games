@@ -1,6 +1,16 @@
+export interface UserData {
+  bzCoins: number;
+  cumulativePlayTime: number; // in milliseconds
+  checkIn: {
+    lastCheckInDate: string; // YYYY-MM-DD
+    consecutiveDays: number;
+  };
+}
+
 export interface AppStore {
   games: GameRecord[];
   settings: AppSettings;
+  userData: UserData;
   recentPlayed: string[];
 }
 
@@ -31,7 +41,7 @@ export interface AppSettings {
   playerName: string;
   playerId: string;
   avatar?: string; // 玩家头像路径
-  language: 'zh-CN' | 'en-US';
-  theme: 'dark' | 'light';
+  language: "zh-CN" | "en-US" | "ja-JP";
+  theme: "dark" | "light";
   defaultRoomPort: number;
 }

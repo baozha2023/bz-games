@@ -1,21 +1,22 @@
-import { defineStore } from 'pinia';
-import { ref } from 'vue';
-import type { GameManifest } from '../../../shared/game-manifest';
-import type { GameRecord, UnlockedAchievement } from '../../../shared/types';
+import { defineStore } from "pinia";
+import { ref } from "vue";
+import type { GameManifest } from "../../../shared/game-manifest";
+import type { GameRecord, UnlockedAchievement } from "../../../shared/types";
 
-export const useGameStore = defineStore('game', () => {
+export const useGameStore = defineStore("game", () => {
   const games = ref<GameManifest[]>([]);
   const records = ref<GameRecord[]>([]);
   const runningGameIds = ref<Set<string>>(new Set());
   const newAchievements = ref<Set<string>>(new Set()); // key: gameId@version@achievementId
   const isLoading = ref(false);
-  
+  const pendingStopTimers = new Map<string, number>();
+
   async function loadGames() {
     isLoading.value = true;
     try {
       const [manifests, recs] = await Promise.all([
         window.electronAPI.game.getAll(),
-        window.electronAPI.game.getAllRecords()
+        window.electronAPI.game.getAllRecords(),
       ]);
       games.value = manifests;
       records.value = recs;
@@ -39,7 +40,7 @@ export const useGameStore = defineStore('game', () => {
 
   async function toggleFavorite(id: string) {
     const isFav = await window.electronAPI.game.toggleFavorite(id);
-    const record = records.value.find(r => r.id === id);
+    const record = records.value.find((r) => r.id === id);
     if (record) {
       record.isFavorite = isFav;
     }
@@ -53,73 +54,101 @@ export const useGameStore = defineStore('game', () => {
   async function reorderGames(newOrderIds: string[]) {
     // Optimistic update
     const sorted = newOrderIds
-      .map(id => games.value.find(g => g.id === id))
+      .map((id) => games.value.find((g) => g.id === id))
       .filter((g): g is GameManifest => !!g);
-    
+
     // Keep any that weren't in the list
-    const remaining = games.value.filter(g => !newOrderIds.includes(g.id));
+    const remaining = games.value.filter((g) => !newOrderIds.includes(g.id));
     games.value = [...sorted, ...remaining];
 
     // Persist
     await window.electronAPI.game.reorder(newOrderIds);
   }
-  
+
   function getGameRecord(id: string) {
-    return records.value.find(r => r.id === id);
+    return records.value.find((r) => r.id === id);
   }
 
-  function getUnlockedAchievements(gameId: string, version: string): UnlockedAchievement[] {
+  function getUnlockedAchievements(
+    gameId: string,
+    version: string,
+  ): UnlockedAchievement[] {
     const record = getGameRecord(gameId);
     if (!record) return [];
-    
-    const gameVersion = record.versions.find(v => v.version === version);
+
+    const gameVersion = record.versions.find((v) => v.version === version);
     return gameVersion?.unlockedAchievements || [];
   }
 
   function markAchievementsAsSeen() {
     newAchievements.value.clear();
   }
-  
+
   // Listen for process events
   window.electronAPI.game.onProcessEvent((type, id) => {
-    if (type === 'start') {
+    if (type === "start") {
+      const pending = pendingStopTimers.get(id);
+      if (pending) {
+        window.clearTimeout(pending);
+        pendingStopTimers.delete(id);
+      }
       runningGameIds.value.add(id);
-    } else if (type === 'end') {
-      runningGameIds.value.delete(id);
+    } else if (type === "end") {
+      const pending = pendingStopTimers.get(id);
+      if (pending) {
+        window.clearTimeout(pending);
+        pendingStopTimers.delete(id);
+      }
+      const timer = window.setTimeout(() => {
+        runningGameIds.value.delete(id);
+        pendingStopTimers.delete(id);
+      }, 5000);
+      pendingStopTimers.set(id, timer);
+      loadGames();
     }
   });
 
   // Listen for achievement events and update local state
   // Notification is handled in App.vue to avoid using useMessage in store
-  window.electronAPI.game.onAchievementUnlocked((gameId, version, achievementId) => {
-    // Update local record
-    const record = records.value.find(r => r.id === gameId);
-    if (record) {
-      const gameVersion = record.versions.find(v => v.version === version);
-      if (gameVersion) {
-        if (!gameVersion.unlockedAchievements) gameVersion.unlockedAchievements = [];
-        if (!gameVersion.unlockedAchievements.some(a => a.id === achievementId)) {
-          gameVersion.unlockedAchievements.push({ id: achievementId, unlockedAt: Date.now() });
-          newAchievements.value.add(`${gameId}@${version}@${achievementId}`);
+  window.electronAPI.game.onAchievementUnlocked(
+    (gameId, version, achievementId) => {
+      // Update local record
+      const record = records.value.find((r) => r.id === gameId);
+      if (record) {
+        const gameVersion = record.versions.find((v) => v.version === version);
+        if (gameVersion) {
+          if (!gameVersion.unlockedAchievements)
+            gameVersion.unlockedAchievements = [];
+          if (
+            !gameVersion.unlockedAchievements.some(
+              (a) => a.id === achievementId,
+            )
+          ) {
+            gameVersion.unlockedAchievements.push({
+              id: achievementId,
+              unlockedAt: Date.now(),
+            });
+            newAchievements.value.add(`${gameId}@${version}@${achievementId}`);
+          }
         }
       }
-    }
-  });
+    },
+  );
 
-  return { 
-    games, 
-    records, 
-    runningGameIds, 
+  return {
+    games,
+    records,
+    runningGameIds,
     newAchievements,
-    isLoading, 
-    loadGames, 
-    addGame, 
-    removeGame, 
+    isLoading,
+    loadGames,
+    addGame,
+    removeGame,
     toggleFavorite,
     launchGame,
     reorderGames,
     getGameRecord,
     getUnlockedAchievements,
-    markAchievementsAsSeen
+    markAchievementsAsSeen,
   };
 });

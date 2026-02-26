@@ -1,4 +1,4 @@
-import path from 'path';
+import path from "path";
 
 export function isSafePath(base: string, target: string): boolean {
   const resolved = path.resolve(base, target);

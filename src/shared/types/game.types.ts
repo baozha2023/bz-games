@@ -1,31 +1,31 @@
-export type GameApiAction = 
-  | 'auth'
-  | 'player.getInfo'
-  | 'room.getInfo'
-  | 'message.send'
-  | 'message.broadcast'
-  | 'game.ready'
-  | 'game.end'
-  | 'achievement.unlock'
-  | 'achievement.list'
-  | 'stats.report';
+export type GameApiAction =
+  | "auth"
+  | "player.getInfo"
+  | "room.getInfo"
+  | "message.send"
+  | "message.broadcast"
+  | "game.ready"
+  | "game.end"
+  | "achievement.unlock"
+  | "achievement.list"
+  | "stats.report";
 
-export type GameApiEventAction = 
-  | 'event.message'
-  | 'event.playerJoined'
-  | 'event.playerLeft'
-  | 'event.gameEnd';
+export type GameApiEventAction =
+  | "event.message"
+  | "event.playerJoined"
+  | "event.playerLeft"
+  | "event.gameEnd";
 
 export interface GameApiRequest {
   id: string;
-  type: 'request';
+  type: "request";
   action: GameApiAction;
   payload?: unknown;
 }
 
 export interface GameApiResponse {
   id: string;
-  type: 'response';
+  type: "response";
   action: GameApiAction;
   payload?: unknown;
   error?: string;
@@ -33,7 +33,7 @@ export interface GameApiResponse {
 
 export interface GameApiEvent {
   id: string;
-  type: 'event';
+  type: "event";
   action: GameApiEventAction;
   payload: unknown;
 }

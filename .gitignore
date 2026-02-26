@@ -30,6 +30,9 @@ games/
 斗地主/
 扫雷/
 推箱子/
+消消乐/
+五子棋单机版/
+黄金矿工/
 
 # 构建资源
 resources/app.asar
@@ -37,6 +40,9 @@ resources/elevate.exe
 
 # 测试文件
 test-connect.js
+
+
+
 
 
 

@@ -15,7 +15,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
-import { playAchievementSound } from '../utils/sound';
 
 const route = useRoute();
 const title = ref('');
@@ -30,9 +29,6 @@ onMounted(() => {
   gameName.value = (route.query.gameName as string) || '';
   iconUrl.value = (route.query.icon as string) || '';
   theme.value = (route.query.theme as string) || 'dark';
-  
-  // Play sound
-  playAchievementSound();
   
   // Trigger enter animation
   visible.value = true;
