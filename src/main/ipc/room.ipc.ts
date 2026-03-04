@@ -26,7 +26,7 @@ export function registerRoomIpc() {
 
   ipcMain.handle(IPC.ROOM_LEAVE, async () => {
     roomClient.disconnect();
-    roomServer.stop();
+    await roomServer.stop();
   });
 
   ipcMain.handle(IPC.ROOM_READY, async () => {
@@ -63,13 +63,8 @@ export function registerRoomIpc() {
   });
 
   ipcMain.handle(IPC.ROOM_GET_STATE, async () => {
-    // If host, return directly
     if (roomServer.room) return roomServer.room;
-
-    // If client, we rely on event syncing.
-    // Ideally we could ask server via RoomClient request/response,
-    // but protocol is async.
-    // For now return null, UI waits for sync event.
+    if (roomClient.room) return roomClient.room;
     return null;
   });
 

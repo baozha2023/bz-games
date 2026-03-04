@@ -21,7 +21,7 @@
     <n-grid x-gap="24" :cols="1" md="2" style="margin-top: 24px;">
       <n-grid-item>
         <div style="width: 100%; display: flex; justify-content: center; background: rgba(0,0,0,0.1); border-radius: 8px; overflow: hidden;">
-          <GameCover :game-id="game.id" :version="selectedVersion" style="width: 100%; height: auto; max-height: 400px; object-fit: contain;" />
+          <GameCover :game-id="game.id" :version="selectedVersion" :autoplay-video="true" style="width: 100%; height: auto; max-height: 400px; object-fit: contain;" />
         </div>
       </n-grid-item>
       
@@ -106,8 +106,6 @@ const joinAddress = ref('')
 const showAchievements = ref(false)
 
 const gameAchievements = computed(() => {
-    // If currentManifest is loaded, use it exclusively (even if empty)
-    // If not loaded, fallback to game.value ONLY if it is the latest version
     let achievements;
     if (currentManifest.value) {
         achievements = currentManifest.value.achievements;
@@ -133,25 +131,17 @@ const gameAchievements = computed(() => {
 onMounted(async () => {
   if (game.value) {
     selectedVersion.value = game.value.version
-    // Fetch available versions
     try {
       const v = await window.electronAPI.game.getVersions(gameId);
       if (v && v.length > 0) {
         versions.value = v;
-        // If current version is not in list (maybe new import?), default to it or first available
         if (!selectedVersion.value || !versions.value.includes(selectedVersion.value)) {
-            // Sort versions descending semver-ish (simple string sort for now, better to be consistent with backend)
              versions.value.sort((a, b) => b.localeCompare(a, undefined, { numeric: true, sensitivity: 'base' }));
              selectedVersion.value = versions.value[0];
         }
       }
-      
-      // Load manifest for selected version
       await handleVersionChange(selectedVersion.value);
-
-    } catch (e) {
-      // Ignore
-    }
+    } catch {}
   }
 })
 
@@ -200,20 +190,17 @@ const confirmDelete = async (versionsToDelete: string[]) => {
   if (isDeleting.value) return;
   isDeleting.value = true;
   try {
-    // Clone array to ensure clean IPC serialization
     await gameStore.removeGame(gameId, [...versionsToDelete])
     message.success(t('gameDetail.deleteSuccess'))
     
     if (!game.value) {
       router.push({ name: 'Library' })
     } else {
-      // Refresh versions
       const v = await window.electronAPI.game.getVersions(gameId)
       if (v) {
         versions.value = v
         versions.value.sort((a, b) => b.localeCompare(a, undefined, { numeric: true, sensitivity: 'base' }))
 
-        // If current selected version was deleted, switch to the first available one
         if (!versions.value.includes(selectedVersion.value)) {
           if (versions.value.length > 0) {
             selectedVersion.value = versions.value[0]

@@ -6,6 +6,7 @@ export const IPC = {
   GAME_GET_ALL: "game:getAll",
   GAME_GET_RECORDS: "game:getRecords",
   GAME_GET_COVER: "game:getCover",
+  GAME_GET_VIDEO: "game:getVideo",
   GAME_GET_ICON: "game:getIcon",
   GAME_GET_VERSIONS: "game:getVersions",
   GAME_GET_MANIFEST: "game:getManifest",
@@ -38,7 +39,6 @@ export const IPC = {
   SYSTEM_UPLOAD_AVATAR: "system:uploadAvatar",
   SYSTEM_GET_USER_DATA: "system:getUserData",
   SYSTEM_CHECK_IN: "system:checkIn",
-  SYSTEM_GET_BEIJING_DATE: "system:getBeijingDate",
 
   // ── 游戏数据存储 (Preload → Main) ──
   GAME_STORAGE_INIT: "game:storage:init",

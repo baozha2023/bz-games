@@ -19,6 +19,12 @@ export class RoomClient {
   public room: RoomInfo | null = null;
   private gameId = "";
   private gameVersion = "";
+  private reconnectAttempts = 0;
+  private reconnectTimer: NodeJS.Timeout | null = null;
+  private shouldReconnect = false;
+  private manuallyDisconnected = false;
+  private hasJoinedRoom = false;
+  private readonly maxReconnectAttempts = 5;
 
   private connectionResolver: ((result: ConnectResult) => void) | null = null;
   private msgHandler: ((gameId: string, msg: RoomMessage) => void) | null =
@@ -32,6 +38,8 @@ export class RoomClient {
     gameId: string,
     gameVersion?: string,
   ): Promise<ConnectResult> {
+    this.manuallyDisconnected = true;
+    this.shouldReconnect = false;
     this.cleanup();
 
     let url = address.trim();
@@ -42,29 +50,33 @@ export class RoomClient {
     this.address = url;
     this.gameId = gameId;
     this.gameVersion = gameVersion || "";
+    this.reconnectAttempts = 0;
+    this.manuallyDisconnected = false;
+    this.shouldReconnect = true;
+    this.hasJoinedRoom = false;
 
     return new Promise((resolve) => {
       this.connectionResolver = resolve;
-
-      try {
-        const options = { rejectUnauthorized: false };
-        this.ws = new WebSocket(this.address, options);
-
-        this.setupWebSocketListeners();
-
-        setTimeout(() => {
-          if (this.connectionResolver) {
-            logger.error(
-              `[RoomClient] Connection timed out to ${this.address}`,
-            );
-            this.resolveConnection({ success: false, error: "连接超时 (15s)" });
-          }
-        }, 15000);
-      } catch (e) {
-        logger.error(`[RoomClient] Failed to connect`, e);
-        this.resolveConnection({ success: false, error: "连接异常" });
-      }
+      this.openSocket();
+      setTimeout(() => {
+        if (this.connectionResolver) {
+          logger.error(`[RoomClient] Connection timed out to ${this.address}`);
+          this.resolveConnection({ success: false, error: "连接超时 (15s)" });
+        }
+      }, 15000);
     });
+  }
+
+  private openSocket() {
+    try {
+      const options = { rejectUnauthorized: false };
+      this.ws = new WebSocket(this.address, options);
+      this.setupWebSocketListeners();
+    } catch (e) {
+      logger.error(`[RoomClient] Failed to connect`, e);
+      this.resolveConnection({ success: false, error: "连接异常" });
+      this.scheduleReconnect();
+    }
   }
 
   private setupWebSocketListeners() {
@@ -77,6 +89,7 @@ export class RoomClient {
   }
 
   private handleOpen() {
+    this.clearReconnectTimer();
     logger.info(
       `[RoomClient] Connected to ${this.address}, sending join request...`,
     );
@@ -103,9 +116,17 @@ export class RoomClient {
 
   private handleClose() {
     logger.info(`[RoomClient] Disconnected`);
-    this.room = null;
+    const shouldReconnect =
+      !this.manuallyDisconnected && this.shouldReconnect && this.hasJoinedRoom;
+
     if (this.connectionResolver) {
       this.resolveConnection({ success: false, error: "Closed before join" });
+    }
+    if (shouldReconnect) {
+      this.scheduleReconnect();
+    } else {
+      this.room = null;
+      this.hasJoinedRoom = false;
     }
     mainWindow?.webContents.send(IPC.ROOM_EVENT, {
       type: "room:disconnected",
@@ -145,6 +166,8 @@ export class RoomClient {
       logger.info("[RoomClient] Join accepted");
       const ack = msg.payload as RoomJoinAckPayload;
       this.room = ack.room;
+      this.hasJoinedRoom = true;
+      this.reconnectAttempts = 0;
       this.resolveConnection({ success: true });
       mainWindow?.webContents.send(IPC.ROOM_EVENT, {
         type: "room:state:sync",
@@ -153,6 +176,8 @@ export class RoomClient {
     } else if (msg.type === "room:join:refused") {
       const payload = msg.payload as RoomJoinRefusedPayload;
       logger.warn("[RoomClient] Join refused:", payload.reason);
+      this.shouldReconnect = false;
+      this.hasJoinedRoom = false;
       this.resolveConnection({
         success: false,
         error: payload.reason,
@@ -190,17 +215,52 @@ export class RoomClient {
   }
 
   disconnect() {
+    this.manuallyDisconnected = true;
+    this.shouldReconnect = false;
+    this.hasJoinedRoom = false;
     this.cleanup();
     this.room = null;
   }
 
   private cleanup() {
+    this.clearReconnectTimer();
     if (this.ws) {
       this.ws.removeAllListeners();
       this.ws.close();
       this.ws = null;
     }
     this.connectionResolver = null;
+  }
+
+  private scheduleReconnect() {
+    if (!this.shouldReconnect || !this.hasJoinedRoom) return;
+    if (this.connectionResolver) return;
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      logger.warn(
+        `[RoomClient] Reconnect failed after ${this.maxReconnectAttempts} attempts`,
+      );
+      this.shouldReconnect = false;
+      this.hasJoinedRoom = false;
+      this.room = null;
+      return;
+    }
+    this.clearReconnectTimer();
+    this.reconnectAttempts += 1;
+    const delay = Math.min(this.reconnectAttempts * 2000, 10000);
+    logger.info(
+      `[RoomClient] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`,
+    );
+    this.reconnectTimer = setTimeout(() => {
+      if (!this.shouldReconnect || this.manuallyDisconnected) return;
+      this.openSocket();
+    }, delay);
+  }
+
+  private clearReconnectTimer() {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
   }
 
   setMsgHandler(handler: (gameId: string, msg: RoomMessage) => void) {

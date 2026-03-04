@@ -14,8 +14,23 @@ export const GameManifestSchema = z.object({
   entry: z.string(),
   icon: z.string().optional(),
   cover: z.string().optional(),
+  video: z.string().optional(),
+  encryptLocalStorage: z.boolean().optional(),
   type: z.enum(["singleplayer", "multiplayer"]),
-  statistics: z.array(z.union([z.string(), z.record(z.string())])).optional(),
+  statistics: z
+    .array(
+      z.union([
+        z.string(),
+        z.record(z.string()),
+        z.record(
+          z.object({
+            label: z.string(),
+            mode: z.enum(["increment", "full"]).optional(),
+          }),
+        ),
+      ]),
+    )
+    .optional(),
   multiplayer: z
     .object({
       minPlayers: z.number().int().min(1),

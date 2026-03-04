@@ -147,6 +147,12 @@ export default {
     saveFail: "Failed to save settings",
     avatar: "Avatar",
     uploadAvatar: "Upload Avatar",
+    closeBehavior: "Main Window Close",
+    closeToTray: "Minimize to tray",
+    exitDirectly: "Exit immediately",
+    autoLaunch: "Auto Launch",
+    autoLaunchOn: "On",
+    autoLaunchOff: "Off",
   },
   statistics: {
     title: "Statistics",

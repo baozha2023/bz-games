@@ -44,4 +44,6 @@ export interface AppSettings {
   language: "zh-CN" | "en-US" | "ja-JP";
   theme: "dark" | "light";
   defaultRoomPort: number;
+  closeBehavior: "tray" | "exit";
+  autoLaunch: boolean;
 }

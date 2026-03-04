@@ -7,6 +7,45 @@ import { gameManager } from "../services/GameManager";
 import { storeService } from "../services/StoreService";
 import { logger } from "../utils/logger";
 
+const VIDEO_MIME_BY_EXT: Record<string, string> = {
+  mp4: "video/mp4",
+  webm: "video/webm",
+  ogv: "video/ogg",
+  mov: "video/quicktime",
+  m4v: "video/x-m4v",
+};
+
+async function readManifestAssetDataUrl(
+  id: string,
+  version: string | undefined,
+  field: "cover" | "icon" | "video",
+): Promise<string | null> {
+  const versionPath = await GameLoader.getVersionPath(id, version);
+  if (!versionPath) {
+    return null;
+  }
+  const jsonPath = path.join(versionPath, "game.json");
+  if (!fs.existsSync(jsonPath)) {
+    return null;
+  }
+  const raw = JSON.parse(fs.readFileSync(jsonPath, "utf8"));
+  const relativePath = raw[field];
+  if (!relativePath) {
+    return null;
+  }
+  const absolutePath = path.join(versionPath, relativePath);
+  if (!fs.existsSync(absolutePath)) {
+    return null;
+  }
+  const b64 = fs.readFileSync(absolutePath, "base64");
+  const ext = path.extname(absolutePath).slice(1).toLowerCase();
+  if (field === "video") {
+    const mime = VIDEO_MIME_BY_EXT[ext] || "video/mp4";
+    return `data:${mime};base64,${b64}`;
+  }
+  return `data:image/${ext};base64,${b64}`;
+}
+
 export function registerGameIpc() {
   ipcMain.handle(IPC.GAME_LOAD, async () => {
     return await GameLoader.loadGameFromDialog();
@@ -37,19 +76,14 @@ export function registerGameIpc() {
 
   ipcMain.handle(IPC.GAME_REORDER, async (_, gameIds: string[]) => {
     const games = await storeService.getGames();
-    // Sort games based on the provided ID list
     const sortedGames = gameIds
       .map((id) => games.find((g) => g.id === id))
       .filter((g): g is any => !!g);
-
-    // Append any games not in the list (just in case)
     const remainingGames = games.filter((g) => !gameIds.includes(g.id));
-
     storeService.saveGames([...sortedGames, ...remainingGames]);
     return true;
   });
 
-  // Not in IPC enum but used? Or maybe it should be added to IPC enum
   ipcMain.handle(IPC.GAME_GET_VERSIONS, async (_, id: string) => {
     const record = await GameLoader.getGameRecord(id);
     return record ? record.versions.map((v) => v.version) : [];
@@ -59,21 +93,7 @@ export function registerGameIpc() {
     IPC.GAME_GET_COVER,
     async (_, id: string, version?: string) => {
       try {
-        const versionPath = await GameLoader.getVersionPath(id, version);
-        if (!versionPath) return null;
-
-        const jsonPath = path.join(versionPath, "game.json");
-        if (!fs.existsSync(jsonPath)) return null;
-
-        const raw = JSON.parse(fs.readFileSync(jsonPath, "utf8"));
-        if (!raw.cover) return null;
-
-        const coverPath = path.join(versionPath, raw.cover);
-        if (fs.existsSync(coverPath)) {
-          const b64 = fs.readFileSync(coverPath, "base64");
-          const ext = path.extname(coverPath).slice(1);
-          return `data:image/${ext};base64,${b64}`;
-        }
+        return await readManifestAssetDataUrl(id, version, "cover");
       } catch (e) {
         logger.error(
           `[GameIPC] Failed to read cover for ${id} version ${version || "latest"}`,
@@ -84,23 +104,24 @@ export function registerGameIpc() {
     },
   );
 
+  ipcMain.handle(
+    IPC.GAME_GET_VIDEO,
+    async (_, id: string, version?: string) => {
+      try {
+        return await readManifestAssetDataUrl(id, version, "video");
+      } catch (e) {
+        logger.error(
+          `[GameIPC] Failed to read video for ${id} version ${version || "latest"}`,
+          e,
+        );
+      }
+      return null;
+    },
+  );
+
   ipcMain.handle(IPC.GAME_GET_ICON, async (_, id: string, version?: string) => {
     try {
-      const versionPath = await GameLoader.getVersionPath(id, version);
-      if (!versionPath) return null;
-
-      const jsonPath = path.join(versionPath, "game.json");
-      if (!fs.existsSync(jsonPath)) return null;
-
-      const raw = JSON.parse(fs.readFileSync(jsonPath, "utf8"));
-      if (!raw.icon) return null;
-
-      const iconPath = path.join(versionPath, raw.icon);
-      if (fs.existsSync(iconPath)) {
-        const b64 = fs.readFileSync(iconPath, "base64");
-        const ext = path.extname(iconPath).slice(1);
-        return `data:image/${ext};base64,${b64}`;
-      }
+      return await readManifestAssetDataUrl(id, version, "icon");
     } catch (e) {
       logger.error(
         `[GameIPC] Failed to read icon for ${id} version ${version || "latest"}`,

@@ -24,16 +24,13 @@ const theme = ref('dark');
 const visible = ref(false);
 
 onMounted(() => {
-  // Get data from query params
   title.value = (route.query.title as string) || 'Achievement Unlocked';
   gameName.value = (route.query.gameName as string) || '';
   iconUrl.value = (route.query.icon as string) || '';
   theme.value = (route.query.theme as string) || 'dark';
-  
-  // Trigger enter animation
+
   visible.value = true;
-  
-  // Trigger exit animation before window closes
+
   setTimeout(() => {
     visible.value = false;
   }, 4500);
@@ -43,7 +40,7 @@ const close = () => {
   visible.value = false;
   setTimeout(() => {
       window.close();
-  }, 300); // Wait for animation
+  }, 300);
 };
 </script>
 
@@ -52,7 +49,7 @@ const close = () => {
   display: flex;
   align-items: center;
   width: 100%;
-  height: 100vh; /* Fill the window */
+  height: 100vh;
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
   padding: 8px 12px;
@@ -82,7 +79,6 @@ const close = () => {
   100% { transform: translateY(100%); opacity: 0; }
 }
 
-/* Dark Theme (Default) */
 .notification-container.dark {
   background: rgba(28, 28, 30, 0.95);
   color: white;
@@ -90,7 +86,6 @@ const close = () => {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
 }
 
-/* Light Theme */
 .notification-container.light {
   background: rgba(255, 255, 255, 0.95);
   color: #333;
@@ -144,11 +139,9 @@ const close = () => {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* Achievement gold color for dark theme */
 .dark .title {
   color: #fbbf24; 
 }
-/* Slightly darker gold/orange for light theme to ensure contrast */
 .light .title {
   color: #d97706; 
 }

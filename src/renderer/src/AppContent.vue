@@ -25,7 +25,7 @@
           >
              <img :src="bzCoinIcon" style="width: 18px; height: 18px; margin-right: 4px;" />
              <span style="color: #FFD700; font-weight: bold; margin-right: 8px; font-size: 14px;">{{ settingsStore.userData?.bzCoins || 0 }}</span>
-             <n-icon :component="Calendar" color="#fff" size="16" />
+             <n-icon :component="Calendar" :color="calendarIconColor" size="16" />
           </div>
         </h2>
         <n-space>
@@ -74,12 +74,13 @@ const settingsStore = useSettingsStore()
 const roomStore = useRoomStore()
 const gameStore = useGameStore()
 const showCheckIn = ref(false)
+const calendarIconColor = computed(() => {
+  return settingsStore.settings?.theme === 'light' ? '#1f2937' : '#fff'
+})
 
 const isNotificationWindow = computed(() => {
   return route.name === 'Notification' || route.path.startsWith('/notification');
 })
-
-// Settings are loaded in App.vue, but accessing them here is fine as store is reactive
 
 const handleBackToRoom = () => {
   if (roomStore.room && roomStore.room.gameId) {
@@ -103,7 +104,6 @@ onMounted(() => {
     })
   }
   
-  // Handle achievement notifications
   if (window.electronAPI?.game?.onAchievementUnlocked) {
     cleanupAchievements = window.electronAPI.game.onAchievementUnlocked(
       (gameId, version, achievementId) => {

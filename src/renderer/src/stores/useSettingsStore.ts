@@ -6,7 +6,6 @@ import { setLocale } from "../i18n";
 export const useSettingsStore = defineStore("settings", () => {
   const settings = ref<AppSettings | null>(null);
   const userData = ref<UserData | null>(null);
-  const beijingDate = ref<string | null>(null);
 
   async function loadSettings() {
     settings.value = await window.electronAPI.settings.get();
@@ -17,11 +16,6 @@ export const useSettingsStore = defineStore("settings", () => {
 
   async function loadUserData() {
     userData.value = await window.electronAPI.user.getData();
-  }
-
-  async function loadBeijingDate() {
-    beijingDate.value = await window.electronAPI.user.getBeijingDate();
-    return beijingDate.value;
   }
 
   async function checkIn() {
@@ -43,11 +37,9 @@ export const useSettingsStore = defineStore("settings", () => {
   return {
     settings,
     userData,
-    beijingDate,
     loadSettings,
     saveSettings,
     loadUserData,
-    loadBeijingDate,
     checkIn,
   };
 });

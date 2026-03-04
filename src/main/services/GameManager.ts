@@ -162,7 +162,7 @@ class GameManager {
 
     this.activeServers.set(id, server);
 
-    const url = `http://localhost:${port}?gameId=${id}&version=${manifest.version}`;
+    const url = `http://localhost:${port}/index.html?gameId=${id}&version=${manifest.version}`;
     this.createGameWindow(id, manifest, versionPath, url, false);
     return true;
   }
@@ -200,9 +200,14 @@ class GameManager {
       autoHideMenuBar: true,
       webPreferences: {
         nodeIntegration: false,
-        contextIsolation: false, // Allow localStorage override
+        contextIsolation: false,
+        sandbox: false,
         preload: path.join(__dirname, "../preload/game.js"),
         partition: `persist:game_${id}_${manifest.version}`,
+        additionalArguments: [
+          `--bz-game-id=${id}`,
+          `--bz-game-version=${manifest.version}`,
+        ],
       },
     });
 
@@ -214,7 +219,6 @@ class GameManager {
       win.loadURL(urlOrPath);
     }
 
-    // Open external links in default browser
     win.webContents.setWindowOpenHandler(({ url }) => {
       shell.openExternal(url);
       return { action: "deny" };
@@ -301,7 +305,7 @@ class GameManager {
 
     this.recordPlaytime(id);
     this.notifyRoomGameEnd(id);
-    this.stop(id); // Ensure cleanup
+    this.stop(id);
     mainWindow?.webContents.send(IPC.GAME_PROCESS_ENDED, id);
   }
 

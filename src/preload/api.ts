@@ -16,6 +16,8 @@ export const electronAPI = {
       ipcRenderer.invoke(IPC.GAME_GET_MANIFEST, id, version),
     getCover: (id: string, version?: string) =>
       ipcRenderer.invoke(IPC.GAME_GET_COVER, id, version),
+    getVideo: (id: string, version?: string) =>
+      ipcRenderer.invoke(IPC.GAME_GET_VIDEO, id, version),
     getIcon: (id: string, version?: string) =>
       ipcRenderer.invoke(IPC.GAME_GET_ICON, id, version),
     toggleFavorite: (id: string) =>
@@ -83,7 +85,6 @@ export const electronAPI = {
   user: {
     getData: () => ipcRenderer.invoke(IPC.SYSTEM_GET_USER_DATA),
     checkIn: () => ipcRenderer.invoke(IPC.SYSTEM_CHECK_IN),
-    getBeijingDate: () => ipcRenderer.invoke(IPC.SYSTEM_GET_BEIJING_DATE),
   },
 };
 

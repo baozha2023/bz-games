@@ -214,8 +214,16 @@ export class RoomServer {
         this.broadcast(msg);
         break;
       case "game:message:relay":
+        this.relayMessage(
+          this.getPlayerIdByWs(ws),
+          msg.payload as Record<string, unknown>,
+        );
+        break;
       case "game:broadcast:relay":
-        this.broadcast(msg, ws);
+        this.relayBroadcast(
+          this.getPlayerIdByWs(ws),
+          msg.payload as Record<string, unknown>,
+        );
         break;
     }
   }
@@ -266,6 +274,7 @@ export class RoomServer {
       },
       ws,
     );
+    this.broadcastState();
   }
 
   private validateJoin(
@@ -273,7 +282,8 @@ export class RoomServer {
   ): RoomJoinRefusedPayload | null {
     if (!this.room) return { reason: "room_closed", message: "Room closed" };
 
-    if (this.room.players.length >= this.room.maxPlayers) {
+    const isRejoin = this.room.players.some((p) => p.id === payload.playerId);
+    if (!isRejoin && this.room.players.length >= this.room.maxPlayers) {
       return { reason: "room_full", message: "Room is full" };
     }
 
@@ -343,6 +353,82 @@ export class RoomServer {
       if (socket === ws) return id;
     }
     return undefined;
+  }
+
+  private getSocketByPlayerId(playerId?: string): WebSocket | undefined {
+    if (!playerId) return undefined;
+    return this.playerConnections.get(playerId);
+  }
+
+  private normalizeRelayPayload(
+    senderId: string | undefined,
+    payload: Record<string, unknown>,
+  ) {
+    const senderIdFromPayload =
+      typeof payload.senderId === "string" ? payload.senderId : undefined;
+    const finalSenderId = senderId || senderIdFromPayload || "";
+    return {
+      ...payload,
+      senderId: finalSenderId,
+    };
+  }
+
+  private resolveTargetPlayerId(payload: Record<string, unknown>) {
+    const to = payload.to;
+    const targetPlayerId = payload.targetPlayerId;
+    if (typeof to === "string" && to.length > 0) return to;
+    if (typeof targetPlayerId === "string" && targetPlayerId.length > 0) {
+      return targetPlayerId;
+    }
+    return undefined;
+  }
+
+  private relayMessage(
+    senderId: string | undefined,
+    payload: Record<string, unknown>,
+  ) {
+    const normalizedPayload = this.normalizeRelayPayload(senderId, payload);
+    const targetPlayerId = this.resolveTargetPlayerId(normalizedPayload);
+    if (!targetPlayerId) {
+      this.relayBroadcast(senderId, normalizedPayload);
+      return;
+    }
+    if (senderId && targetPlayerId === senderId) return;
+    const targetSocket = this.getSocketByPlayerId(targetPlayerId);
+    if (!targetSocket) return;
+    this.send(targetSocket, {
+      type: "game:message:relay",
+      payload: normalizedPayload,
+    });
+  }
+
+  private relayBroadcast(
+    senderId: string | undefined,
+    payload: Record<string, unknown>,
+  ) {
+    const normalizedPayload = this.normalizeRelayPayload(senderId, payload);
+    const senderSocket = this.getSocketByPlayerId(senderId);
+    this.broadcast(
+      {
+        type: "game:broadcast:relay",
+        payload: normalizedPayload,
+      },
+      senderSocket,
+    );
+  }
+
+  public relayMessageFromLocal(
+    senderId: string,
+    payload: Record<string, unknown>,
+  ) {
+    this.relayMessage(senderId, payload);
+  }
+
+  public relayBroadcastFromLocal(
+    senderId: string,
+    payload: Record<string, unknown>,
+  ) {
+    this.relayBroadcast(senderId, payload);
   }
 
   public broadcastState() {

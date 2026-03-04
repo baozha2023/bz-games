@@ -147,6 +147,12 @@ export default {
     saveFail: "设置保存失败",
     avatar: "头像",
     uploadAvatar: "上传头像",
+    closeBehavior: "关闭主窗口",
+    closeToTray: "最小化托盘",
+    exitDirectly: "直接退出",
+    autoLaunch: "开机自启",
+    autoLaunchOn: "开启",
+    autoLaunchOff: "关闭",
   },
   statistics: {
     title: "游戏统计",

@@ -160,7 +160,9 @@ function getLabel(gameId: string, key: string): string {
     if (manifest?.statistics) {
         for (const stat of manifest.statistics) {
             if (typeof stat === 'object' && Object.keys(stat)[0] === key) {
-                return Object.values(stat)[0] as string;
+                const value = Object.values(stat)[0] as any;
+                if (typeof value === 'string') return value;
+                if (value && typeof value === 'object' && value.label) return value.label;
             }
         }
     }

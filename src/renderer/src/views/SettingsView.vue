@@ -34,6 +34,20 @@
       <n-form-item :label="t('settings.language')" path="language">
         <n-select v-model:value="formValue.language" :options="languageOptions" />
       </n-form-item>
+
+      <n-form-item :label="t('settings.closeBehavior')" path="closeBehavior">
+        <n-radio-group v-model:value="formValue.closeBehavior">
+          <n-radio value="tray">{{ t('settings.closeToTray') }}</n-radio>
+          <n-radio value="exit">{{ t('settings.exitDirectly') }}</n-radio>
+        </n-radio-group>
+      </n-form-item>
+
+      <n-form-item :label="t('settings.autoLaunch')" path="autoLaunch">
+        <n-radio-group v-model:value="formValue.autoLaunch">
+          <n-radio :value="true">{{ t('settings.autoLaunchOn') }}</n-radio>
+          <n-radio :value="false">{{ t('settings.autoLaunchOff') }}</n-radio>
+        </n-radio-group>
+      </n-form-item>
       
       <n-form-item label="Player ID">
         <n-text depth="3">{{ formValue.playerId }} {{ t('settings.idHint') }}</n-text>
@@ -86,7 +100,6 @@ onMounted(async () => {
 const handleSave = async () => {
   if (formValue.value) {
     try {
-      // Use JSON.parse(JSON.stringify()) to strip Vue reactivity and ensure a plain object for IPC
       const plainSettings = JSON.parse(JSON.stringify(formValue.value));
       await settingsStore.saveSettings(plainSettings);
       message.success(t('settings.saveSuccess'));
@@ -100,7 +113,6 @@ const handleUploadAvatar = async () => {
   const avatarUrl = await window.electronAPI.settings.uploadAvatar();
   if (avatarUrl && formValue.value) {
     formValue.value.avatar = avatarUrl;
-    // Auto-save settings after avatar upload
     await handleSave();
   }
 }

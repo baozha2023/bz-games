@@ -5,8 +5,8 @@ import enUS from "./locales/en-US";
 import jaJP from "./locales/ja-JP";
 
 const i18n = createI18n({
-  legacy: false, // use Composition API
-  locale: "zh-CN", // default locale
+  legacy: false,
+  locale: "zh-CN",
   fallbackLocale: "en-US",
   messages: {
     "zh-CN": zhCN,

@@ -51,7 +51,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useSettingsStore } from '../stores/useSettingsStore';
 import { CheckmarkCircle } from '@vicons/ionicons5';
@@ -68,7 +68,7 @@ const emit = defineEmits(['update:show']);
 
 const { t } = useI18n();
 const settingsStore = useSettingsStore();
-const { userData, beijingDate } = storeToRefs(settingsStore);
+const { userData } = storeToRefs(settingsStore);
 const message = useMessage();
 const loading = ref(false);
 
@@ -77,9 +77,8 @@ const show = computed({
   set: (val) => emit('update:show', val)
 });
 
-const formatBeijingDate = (date: Date) => {
+const formatDate = (date: Date) => {
   return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Shanghai',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit'
@@ -87,14 +86,13 @@ const formatBeijingDate = (date: Date) => {
 };
 
 const getTodayStr = () => {
-  if (beijingDate.value) return beijingDate.value;
-  return formatBeijingDate(new Date());
+  return formatDate(new Date());
 };
 
 const getYesterdayStr = (base: string) => {
   const baseDate = new Date(`${base}T00:00:00+08:00`);
   const yesterday = new Date(baseDate.getTime() - 86400000);
-  return formatBeijingDate(yesterday);
+  return formatDate(yesterday);
 };
 
 const checkedToday = computed(() => {
@@ -152,15 +150,6 @@ const isDayActive = (day: number) => {
 const getReward = (day: number) => {
     return day === 7 ? 100 : day * 10;
 };
-
-watch(
-  () => props.show,
-  (val) => {
-    if (val) {
-      settingsStore.loadBeijingDate();
-    }
-  }
-);
 
 const handleCheckIn = async () => {
     loading.value = true;

@@ -14,10 +14,12 @@ import { logger } from "../utils/logger";
 
 const defaultSettings: AppSettings = {
   playerName: "玩家",
-  playerId: "", // Will be generated on first run
+  playerId: "",
   language: "zh-CN",
   theme: "dark",
   defaultRoomPort: 38080,
+  closeBehavior: "tray",
+  autoLaunch: false,
 };
 
 const defaultUserData: UserData = {
@@ -129,24 +131,18 @@ class StoreService {
     return rewardCount * REWARD_AMOUNT;
   }
 
-  private formatBeijingDate(date: Date): string {
-    const formatter = new Intl.DateTimeFormat("en-CA", {
-      timeZone: "Asia/Shanghai",
+  private formatDate(date: Date): string {
+    return new Intl.DateTimeFormat("en-CA", {
       year: "numeric",
       month: "2-digit",
       day: "2-digit",
-    });
-    return formatter.format(date);
+    }).format(date);
   }
 
-  private shiftBeijingDate(dateStr: string, deltaDays: number): string {
-    const base = new Date(`${dateStr}T00:00:00+08:00`);
+  private shiftDate(dateStr: string, deltaDays: number): string {
+    const base = new Date(`${dateStr}T00:00:00`);
     const shifted = new Date(base.getTime() + deltaDays * 86400000);
-    return this.formatBeijingDate(shifted);
-  }
-
-  async getBeijingDate(): Promise<string | null> {
-    return this.formatBeijingDate(new Date());
+    return this.formatDate(shifted);
   }
 
   async performCheckIn(): Promise<{
@@ -158,7 +154,7 @@ class StoreService {
     const store = this.getStore();
     const userData = store.get("userData") || defaultUserData;
 
-    const todayStr = this.formatBeijingDate(new Date());
+    const todayStr = this.formatDate(new Date());
 
     if (userData.checkIn.lastCheckInDate === todayStr) {
       return {
@@ -168,7 +164,7 @@ class StoreService {
       };
     }
 
-    const yesterdayStr = this.shiftBeijingDate(todayStr, -1);
+    const yesterdayStr = this.shiftDate(todayStr, -1);
 
     if (userData.checkIn.lastCheckInDate === yesterdayStr) {
       userData.checkIn.consecutiveDays += 1;
@@ -384,6 +380,7 @@ class StoreService {
     id: string,
     version: string,
     stats: Record<string, number>,
+    modes: Record<string, "increment" | "full"> = {},
   ): void {
     const store = this.getStore();
     const games = this.getGamesList();
@@ -398,7 +395,12 @@ class StoreService {
       if (!gameVersion.stats) gameVersion.stats = {};
 
       for (const [key, value] of Object.entries(stats)) {
-        gameVersion.stats[key] = (gameVersion.stats[key] || 0) + value;
+        const mode = modes[key] || "increment";
+        if (mode === "full") {
+          gameVersion.stats[key] = value;
+        } else {
+          gameVersion.stats[key] = (gameVersion.stats[key] || 0) + value;
+        }
       }
     }
 

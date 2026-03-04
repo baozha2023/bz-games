@@ -1,4 +1,4 @@
-import { ipcMain, dialog, nativeImage } from "electron";
+import { app, ipcMain, dialog, nativeImage } from "electron";
 import fs from "fs";
 import { IPC } from "../../shared/ipc-channels";
 import { storeService } from "../services/StoreService";
@@ -14,6 +14,9 @@ export function registerSystemIpc() {
     logger.info("[SystemIPC] Saving settings:", settings);
     try {
       storeService.saveSettings(settings);
+      app.setLoginItemSettings({
+        openAtLogin: settings.autoLaunch,
+      });
       return true;
     } catch (error) {
       logger.error("[SystemIPC] Failed to save settings:", error);
@@ -61,7 +64,4 @@ export function registerSystemIpc() {
     return storeService.performCheckIn();
   });
 
-  ipcMain.handle(IPC.SYSTEM_GET_BEIJING_DATE, async () => {
-    return storeService.getBeijingDate();
-  });
 }

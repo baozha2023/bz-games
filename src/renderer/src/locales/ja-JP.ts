@@ -147,6 +147,12 @@ export default {
     saveFail: "設定の保存に失敗しました",
     avatar: "アバター",
     uploadAvatar: "アバターをアップロード",
+    closeBehavior: "メインウィンドウを閉じる",
+    closeToTray: "トレイに最小化",
+    exitDirectly: "すぐ終了",
+    autoLaunch: "自動起動",
+    autoLaunchOn: "オン",
+    autoLaunchOff: "オフ",
   },
   statistics: {
     title: "統計",

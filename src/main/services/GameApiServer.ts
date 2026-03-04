@@ -154,7 +154,7 @@ export class GameApiServer {
           await this.handleAchievementUnlock(ws, req);
           break;
         case "stats.report":
-          this.handleStatsReport(ws, req);
+          await this.handleStatsReport(ws, req);
           break;
         default:
           this.sendError(ws, req.id, req.action, "Unknown action");
@@ -186,18 +186,72 @@ export class GameApiServer {
   private handleMessage(ws: WebSocket, req: GameApiRequest) {
     const settings = storeService.getSettings();
     const isHost = roomServer.room?.hostId === settings.playerId;
+    const room = isHost ? roomServer.room : roomClient.room;
+    if (!room) {
+      this.sendError(ws, req.id, req.action, "Not in room");
+      return;
+    }
     const relayType =
       req.action === "message.broadcast"
         ? "game:broadcast:relay"
         : "game:message:relay";
-    const payload = req.payload;
+    const relayPayload = this.normalizeRelayPayload(req.payload, settings.playerId);
+    if (req.action === "message.send") {
+      const targetPlayerId = this.resolveTargetPlayerId(relayPayload);
+      if (!targetPlayerId) {
+        this.sendError(
+          ws,
+          req.id,
+          req.action,
+          "Missing target player id (to/targetPlayerId)",
+        );
+        return;
+      }
+      if (targetPlayerId === settings.playerId) {
+        this.sendError(ws, req.id, req.action, "Cannot send to self");
+        return;
+      }
+    }
 
     if (isHost) {
-      roomServer.broadcast({ type: relayType, payload });
+      if (relayType === "game:broadcast:relay") {
+        roomServer.relayBroadcastFromLocal(settings.playerId, relayPayload);
+      } else {
+        roomServer.relayMessageFromLocal(settings.playerId, relayPayload);
+      }
     } else {
-      roomClient.send({ type: relayType, payload });
+      roomClient.send({ type: relayType, payload: relayPayload });
     }
     this.sendResponse(ws, req.id, req.action, { success: true });
+  }
+
+  private normalizeRelayPayload(payload: unknown, senderId: string) {
+    const rawPayload =
+      payload && typeof payload === "object"
+        ? (payload as Record<string, unknown>)
+        : {};
+    const messageId =
+      typeof rawPayload.messageId === "string"
+        ? rawPayload.messageId
+        : crypto.randomUUID();
+    const sentAt =
+      typeof rawPayload.sentAt === "number" ? rawPayload.sentAt : Date.now();
+    return {
+      ...rawPayload,
+      senderId,
+      messageId,
+      sentAt,
+    };
+  }
+
+  private resolveTargetPlayerId(payload: Record<string, unknown>) {
+    const to = payload.to;
+    const targetPlayerId = payload.targetPlayerId;
+    if (typeof to === "string" && to.length > 0) return to;
+    if (typeof targetPlayerId === "string" && targetPlayerId.length > 0) {
+      return targetPlayerId;
+    }
+    return undefined;
   }
 
   private handleGameEnd(ws: WebSocket, req: GameApiRequest) {
@@ -265,10 +319,25 @@ export class GameApiServer {
     });
   }
 
-  private handleStatsReport(ws: WebSocket, req: GameApiRequest) {
+  private async handleStatsReport(ws: WebSocket, req: GameApiRequest) {
     const stats = req.payload as Record<string, number>;
     if (stats && typeof stats === "object") {
-      storeService.updateGameStats(this.gameId, this.gameVersion, stats);
+      const manifest = await GameLoader.getManifest(
+        this.gameId,
+        this.gameVersion,
+      );
+      const modes: Record<string, "increment" | "full"> = {};
+      if (manifest?.statistics) {
+        manifest.statistics.forEach((stat) => {
+          if (typeof stat === "string") return;
+          const key = Object.keys(stat)[0];
+          const value = (stat as any)[key];
+          if (value && typeof value === "object" && value.mode) {
+            modes[key] = value.mode === "full" ? "full" : "increment";
+          }
+        });
+      }
+      storeService.updateGameStats(this.gameId, this.gameVersion, stats, modes);
       this.sendResponse(ws, req.id, "stats.report", { success: true });
     } else {
       this.sendError(ws, req.id, "stats.report", "Invalid payload");

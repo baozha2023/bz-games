@@ -12,7 +12,6 @@ declare global {
     electronAPI: {
       user: {
         getData: () => Promise<UserData>;
-        getBeijingDate: () => Promise<string | null>;
         checkIn: () => Promise<{
           success: boolean;
           coins: number;
@@ -38,6 +37,7 @@ declare global {
           version?: string,
         ) => Promise<GameManifest | null>;
         getCover: (id: string, version?: string) => Promise<string | null>; // base64 data URL
+        getVideo: (id: string, version?: string) => Promise<string | null>;
         getIcon: (id: string, version?: string) => Promise<string | null>; // base64 data URL
         toggleFavorite: (id: string) => Promise<boolean>;
         reorder: (gameIds: string[]) => Promise<boolean>;
