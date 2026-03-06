@@ -202,6 +202,7 @@ class GameManager {
         nodeIntegration: false,
         contextIsolation: false,
         sandbox: false,
+        backgroundThrottling: false,
         preload: path.join(__dirname, "../preload/game.js"),
         partition: `persist:game_${id}_${manifest.version}`,
         additionalArguments: [

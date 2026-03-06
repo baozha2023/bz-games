@@ -1,10 +1,31 @@
 <template>
   <div style="padding: 24px;">
-    <n-page-header :title="t('statistics.title')" @back="$router.push({ name: 'Library' })" />
+    <n-page-header :title="t('statistics.title')" @back="$router.push({ name: 'Library' })">
+      <template #extra>
+        <n-space align="center" :size="8">
+          <n-input
+            v-if="isSearchExpanded"
+            v-model:value="searchKeyword"
+            clearable
+            autofocus
+            :placeholder="t('common.searchGame')"
+            style="width: 260px;"
+            @blur="handleSearchBlur"
+          />
+          <n-button quaternary circle @click="toggleSearch">
+            <template #icon>
+              <n-icon>
+                <SearchOutline />
+              </n-icon>
+            </template>
+          </n-button>
+        </n-space>
+      </template>
+    </n-page-header>
     <n-divider />
     
     <n-grid x-gap="12" y-gap="12" :cols="1" md="2" lg="3">
-      <n-grid-item v-for="game in games" :key="game.id">
+      <n-grid-item v-for="game in filteredGames" :key="game.id">
         <n-card :title="game.name" hoverable>
           <template #header-extra>
             <n-select 
@@ -34,13 +55,14 @@
       </n-grid-item>
     </n-grid>
     
-    <n-empty v-if="games.length === 0" :description="t('statistics.empty')" style="margin-top: 100px;" />
+    <n-empty v-if="filteredGames.length === 0" :description="t('statistics.empty')" style="margin-top: 100px;" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { SearchOutline } from '@vicons/ionicons5'
 import { useGameStore } from '../stores/useGameStore'
 import type { GameManifest } from '../../../shared/game-manifest'
 
@@ -49,8 +71,27 @@ const gameStore = useGameStore()
 
 const selectedVersions = ref<Record<string, string>>({})
 const manifestCache = ref<Record<string, GameManifest>>({})
+const searchKeyword = ref('')
+const isSearchExpanded = ref(false)
 
 const games = computed(() => gameStore.games)
+const filteredGames = computed(() => {
+  const keyword = searchKeyword.value.trim().toLowerCase()
+  if (!keyword) return games.value
+  return games.value.filter((game) => {
+    return game.name.toLowerCase().includes(keyword) || game.id.toLowerCase().includes(keyword)
+  })
+})
+
+function toggleSearch() {
+  isSearchExpanded.value = true
+}
+
+function handleSearchBlur() {
+  if (!searchKeyword.value.trim()) {
+    isSearchExpanded.value = false
+  }
+}
 
 onMounted(async () => {
   await gameStore.loadGames()

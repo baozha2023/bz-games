@@ -2,8 +2,10 @@ import { defineStore } from "pinia";
 import { ref } from "vue";
 import type { GameManifest } from "../../../shared/game-manifest";
 import type { GameRecord, UnlockedAchievement } from "../../../shared/types";
+import { useSettingsStore } from "./useSettingsStore";
 
 export const useGameStore = defineStore("game", () => {
+  const settingsStore = useSettingsStore();
   const games = ref<GameManifest[]>([]);
   const records = ref<GameRecord[]>([]);
   const runningGameIds = ref<Set<string>>(new Set());
@@ -25,8 +27,8 @@ export const useGameStore = defineStore("game", () => {
     }
   }
 
-  async function addGame() {
-    const res = await window.electronAPI.game.load();
+  async function addGame(sourcePath?: string) {
+    const res = await window.electronAPI.game.load(sourcePath);
     if (res.success && res.manifest) {
       await loadGames();
     }
@@ -105,6 +107,7 @@ export const useGameStore = defineStore("game", () => {
       }, 5000);
       pendingStopTimers.set(id, timer);
       loadGames();
+      settingsStore.loadUserData();
     }
   });
 

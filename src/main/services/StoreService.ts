@@ -15,6 +15,7 @@ import { logger } from "../utils/logger";
 const defaultSettings: AppSettings = {
   playerName: "玩家",
   playerId: "",
+  lastJoinRoomAddress: "",
   language: "zh-CN",
   theme: "dark",
   defaultRoomPort: 38080,

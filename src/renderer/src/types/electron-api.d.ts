@@ -7,6 +7,22 @@ import type {
 } from "../../../shared/types";
 import type { GameManifest } from "../../../shared/game-manifest";
 
+type UpdateState = {
+  status:
+    | "idle"
+    | "checking"
+    | "available"
+    | "up_to_date"
+    | "downloading"
+    | "downloaded"
+    | "error"
+    | "unsupported";
+  currentVersion: string;
+  latestVersion?: string;
+  progress?: number;
+  message?: string;
+};
+
 declare global {
   interface Window {
     electronAPI: {
@@ -21,12 +37,13 @@ declare global {
         }>;
       };
       game: {
-        load: () => Promise<{
+        load: (sourcePath?: string) => Promise<{
           success: boolean;
           manifest?: GameManifest;
           error?: string;
           params?: Record<string, any>;
         }>;
+        getPathForFile: (file: File) => string;
         remove: (id: string, versions?: string[]) => Promise<void>;
         launch: (id: string, version?: string) => Promise<void>;
         getAll: () => Promise<GameManifest[]>;
@@ -75,6 +92,11 @@ declare global {
         get: () => Promise<AppSettings>;
         save: (settings: AppSettings) => Promise<void>;
         uploadAvatar: () => Promise<string | null>;
+        getUpdateStatus: () => Promise<UpdateState>;
+        checkUpdate: () => Promise<UpdateState>;
+        downloadUpdate: () => Promise<UpdateState>;
+        installUpdate: () => Promise<boolean>;
+        onUpdateEvent: (callback: (payload: UpdateState) => void) => () => void;
       };
     };
   }

@@ -48,6 +48,13 @@
           <n-radio :value="false">{{ t('settings.autoLaunchOff') }}</n-radio>
         </n-radio-group>
       </n-form-item>
+
+      <n-form-item :label="t('settings.update')">
+        <n-space>
+          <n-button @click="handleCheckUpdate">{{ t('settings.checkUpdate') }}</n-button>
+          <n-text depth="3">{{ t('settings.currentVersion', { version: updateState.currentVersion }) }}</n-text>
+        </n-space>
+      </n-form-item>
       
       <n-form-item label="Player ID">
         <n-text depth="3">{{ formValue.playerId }} {{ t('settings.idHint') }}</n-text>
@@ -57,15 +64,48 @@
         <n-button type="primary" @click="handleSave">{{ t('settings.save') }}</n-button>
       </div>
     </n-form>
+
+    <n-modal v-model:show="showUpdateModal" preset="card" :title="t('settings.updateTitle')" style="width: 520px;">
+      <n-space vertical>
+        <n-text>{{ updateStatusText }}</n-text>
+        <n-progress
+          v-if="showProgress"
+          type="line"
+          :percentage="progressPercent"
+          :indicator-placement="'inside'"
+        />
+        <n-text v-if="updateState.message" depth="3">{{ updateState.message }}</n-text>
+      </n-space>
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="showUpdateModal = false">{{ t('common.cancel') }}</n-button>
+          <n-button
+            v-if="updateState.status === 'downloaded'"
+            type="primary"
+            @click="handleInstallUpdate"
+          >
+            {{ t('settings.installNow') }}
+          </n-button>
+        </n-space>
+      </template>
+    </n-modal>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useMessage } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { useSettingsStore } from '../stores/useSettingsStore'
 import type { AppSettings } from '../../../shared/types'
+
+type UpdateState = {
+  status: 'idle' | 'checking' | 'available' | 'up_to_date' | 'downloading' | 'downloaded' | 'error' | 'unsupported'
+  currentVersion: string
+  latestVersion?: string
+  progress?: number
+  message?: string
+}
 
 const { t } = useI18n()
 const settingsStore = useSettingsStore()
@@ -73,6 +113,13 @@ const message = useMessage()
 
 const formRef = ref(null)
 const formValue = ref<AppSettings | null>(null)
+const showUpdateModal = ref(false)
+const updateState = ref<UpdateState>({
+  status: 'idle',
+  currentVersion: '0.0.0',
+  progress: 0
+})
+let cleanupUpdateEvent: (() => void) | undefined
 
 const rules = {
   playerName: { required: true, message: () => t('settings.enterName'), trigger: 'blur' },
@@ -95,6 +142,20 @@ onMounted(async () => {
   if (settingsStore.settings) {
     formValue.value = JSON.parse(JSON.stringify(settingsStore.settings))
   }
+  updateState.value = await window.electronAPI.settings.getUpdateStatus()
+  cleanupUpdateEvent = window.electronAPI.settings.onUpdateEvent((payload) => {
+    updateState.value = {
+      ...updateState.value,
+      ...payload
+    }
+    if (['checking', 'available', 'downloading', 'downloaded', 'error'].includes(payload.status)) {
+      showUpdateModal.value = true
+    }
+  })
+})
+
+onUnmounted(() => {
+  if (cleanupUpdateEvent) cleanupUpdateEvent()
 })
 
 const handleSave = async () => {
@@ -115,5 +176,48 @@ const handleUploadAvatar = async () => {
     formValue.value.avatar = avatarUrl;
     await handleSave();
   }
+}
+
+const progressPercent = computed(() => {
+  return Math.max(0, Math.min(100, Math.round(updateState.value.progress || 0)))
+})
+
+const showProgress = computed(() => {
+  return ['downloading', 'downloaded', 'up_to_date'].includes(updateState.value.status)
+})
+
+const updateStatusText = computed(() => {
+  const map: Record<string, string> = {
+    idle: t('settings.updateIdle'),
+    checking: t('settings.updateChecking'),
+    available: t('settings.updateAvailable', { version: updateState.value.latestVersion || '' }),
+    up_to_date: t('settings.updateLatest'),
+    downloading: t('settings.updateDownloading', { progress: progressPercent.value }),
+    downloaded: t('settings.updateDownloaded'),
+    error: t('settings.updateError', { message: updateState.value.message || '' }),
+    unsupported: t('settings.updateUnsupported')
+  }
+  return map[updateState.value.status] || t('settings.updateIdle')
+})
+
+const handleCheckUpdate = async () => {
+  showUpdateModal.value = true
+  const state = await window.electronAPI.settings.checkUpdate()
+  updateState.value = state
+  if (state.status === 'available') {
+    await window.electronAPI.settings.downloadUpdate()
+    return
+  }
+  if (state.status === 'up_to_date') {
+    message.success(t('settings.updateLatest'))
+  } else if (state.status === 'unsupported') {
+    message.warning(t('settings.updateUnsupported'))
+  } else if (state.status === 'error') {
+    message.error(t('settings.updateFailed'))
+  }
+}
+
+const handleInstallUpdate = async () => {
+  await window.electronAPI.settings.installUpdate()
 }
 </script>

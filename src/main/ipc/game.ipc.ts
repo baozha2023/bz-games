@@ -47,7 +47,10 @@ async function readManifestAssetDataUrl(
 }
 
 export function registerGameIpc() {
-  ipcMain.handle(IPC.GAME_LOAD, async () => {
+  ipcMain.handle(IPC.GAME_LOAD, async (_, sourcePath?: string) => {
+    if (sourcePath) {
+      return await GameLoader.loadGameFromPath(sourcePath);
+    }
     return await GameLoader.loadGameFromDialog();
   });
 

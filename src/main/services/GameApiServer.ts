@@ -346,7 +346,7 @@ export class GameApiServer {
 
   private async showAchievementNotification(achievementId: string) {
     try {
-      const manifest = await GameLoader.getManifest(this.gameId);
+      const manifest = await GameLoader.getManifest(this.gameId, this.gameVersion);
       if (manifest) {
         const achievement = manifest.achievements?.find(
           (a) => a.id === achievementId,
@@ -354,7 +354,10 @@ export class GameApiServer {
         if (achievement) {
           let iconDataUrl = "";
           if (manifest.icon) {
-            const versionPath = await GameLoader.getVersionPath(this.gameId);
+            const versionPath = await GameLoader.getVersionPath(
+              this.gameId,
+              this.gameVersion,
+            );
             if (versionPath) {
               const iconPath = path.join(versionPath, manifest.icon);
               if (fs.existsSync(iconPath)) {

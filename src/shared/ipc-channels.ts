@@ -39,6 +39,11 @@ export const IPC = {
   SYSTEM_UPLOAD_AVATAR: "system:uploadAvatar",
   SYSTEM_GET_USER_DATA: "system:getUserData",
   SYSTEM_CHECK_IN: "system:checkIn",
+  SYSTEM_CHECK_UPDATE: "system:checkUpdate",
+  SYSTEM_DOWNLOAD_UPDATE: "system:downloadUpdate",
+  SYSTEM_INSTALL_UPDATE: "system:installUpdate",
+  SYSTEM_GET_UPDATE_STATUS: "system:getUpdateStatus",
+  SYSTEM_UPDATE_EVENT: "system:update:event",
 
   // ── 游戏数据存储 (Preload → Main) ──
   GAME_STORAGE_INIT: "game:storage:init",

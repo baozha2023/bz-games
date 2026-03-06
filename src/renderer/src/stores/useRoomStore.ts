@@ -15,6 +15,8 @@ export const useRoomStore = defineStore("room", () => {
   const room = ref<RoomInfo | null>(null);
   const isConnecting = ref(false);
   const chatMessages = ref<ChatPayload[]>([]);
+  const isStartCooldown = ref(false);
+  let startCooldownTimer: number | null = null;
 
   const localPlayerId = computed(() => settingsStore.settings?.playerId || "");
   const isHost = computed(() => room.value?.hostId === localPlayerId.value);
@@ -57,6 +59,11 @@ export const useRoomStore = defineStore("room", () => {
     await window.electronAPI.room.leave();
     room.value = null;
     chatMessages.value = [];
+    isStartCooldown.value = false;
+    if (startCooldownTimer) {
+      window.clearTimeout(startCooldownTimer);
+      startCooldownTimer = null;
+    }
   }
 
   async function setReady(ready: boolean) {
@@ -65,6 +72,9 @@ export const useRoomStore = defineStore("room", () => {
   }
 
   async function startGame() {
+    if (isStartCooldown.value) {
+      throw new Error("START_COOLDOWN");
+    }
     await window.electronAPI.room.start();
   }
 
@@ -139,6 +149,14 @@ export const useRoomStore = defineStore("room", () => {
         timestamp: Date.now(),
         isSystem: true,
       });
+      isStartCooldown.value = true;
+      if (startCooldownTimer) {
+        window.clearTimeout(startCooldownTimer);
+      }
+      startCooldownTimer = window.setTimeout(() => {
+        isStartCooldown.value = false;
+        startCooldownTimer = null;
+      }, 5000);
     }
   }
 
@@ -147,6 +165,7 @@ export const useRoomStore = defineStore("room", () => {
     isConnecting,
     localPlayerId,
     isHost,
+    isStartCooldown,
     localPlayer,
     allReady,
     chatMessages,

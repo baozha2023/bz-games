@@ -2,10 +2,13 @@ import { app, ipcMain, dialog, nativeImage } from "electron";
 import fs from "fs";
 import { IPC } from "../../shared/ipc-channels";
 import { storeService } from "../services/StoreService";
+import { updateService } from "../services/UpdateService";
 import { logger } from "../utils/logger";
 import type { AppSettings } from "../../shared/types";
 
 export function registerSystemIpc() {
+  updateService.init();
+
   ipcMain.handle(IPC.SYSTEM_GET_SETTINGS, async () => {
     return storeService.getSettings();
   });
@@ -64,4 +67,20 @@ export function registerSystemIpc() {
     return storeService.performCheckIn();
   });
 
+  ipcMain.handle(IPC.SYSTEM_GET_UPDATE_STATUS, async () => {
+    return updateService.getState();
+  });
+
+  ipcMain.handle(IPC.SYSTEM_CHECK_UPDATE, async () => {
+    return await updateService.checkForUpdates();
+  });
+
+  ipcMain.handle(IPC.SYSTEM_DOWNLOAD_UPDATE, async () => {
+    return await updateService.downloadUpdate();
+  });
+
+  ipcMain.handle(IPC.SYSTEM_INSTALL_UPDATE, async () => {
+    updateService.installUpdate();
+    return true;
+  });
 }

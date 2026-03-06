@@ -1,13 +1,34 @@
 <template>
   <div style="padding: 24px;">
-    <n-page-header :title="t('achievement.title')" @back="$router.push({ name: 'Library' })" />
+    <n-page-header :title="t('achievement.title')" @back="$router.push({ name: 'Library' })">
+      <template #extra>
+        <n-space align="center" :size="8">
+          <n-input
+            v-if="isSearchExpanded"
+            v-model:value="searchKeyword"
+            clearable
+            autofocus
+            :placeholder="t('common.searchGame')"
+            style="width: 260px;"
+            @blur="handleSearchBlur"
+          />
+          <n-button quaternary circle @click="toggleSearch">
+            <template #icon>
+              <n-icon>
+                <SearchOutline />
+              </n-icon>
+            </template>
+          </n-button>
+        </n-space>
+      </template>
+    </n-page-header>
     
-    <div v-if="displayGames.length === 0" style="margin-top: 24px;">
+    <div v-if="filteredDisplayGames.length === 0" style="margin-top: 24px;">
        <n-empty :description="t('achievement.noAchievements')" />
     </div>
 
     <n-list v-else style="margin-top: 24px; background: transparent;">
-      <n-list-item v-for="game in displayGames" :key="game.id" :class="{ 'golden-card': getGameProgress(game.id).percentage === 100 }">
+      <n-list-item v-for="game in filteredDisplayGames" :key="game.id" :class="{ 'golden-card': getGameProgress(game.id).percentage === 100 }">
         <n-thing>
             <template #avatar>
                  <div class="game-icon-wrapper" style="width: 48px; height: 48px; overflow: hidden; border-radius: 4px; background: #333;">
@@ -86,7 +107,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { ChevronDown, ChevronUp } from '@vicons/ionicons5';
+import { ChevronDown, ChevronUp, SearchOutline } from '@vicons/ionicons5';
 import { useGameStore } from '../stores/useGameStore';
 import GameIcon from '../components/game/GameIcon.vue';
 import type { GameManifest } from '../../../shared/game-manifest';
@@ -97,6 +118,8 @@ const gameStore = useGameStore();
 const expandedGames = ref<Record<string, boolean>>({});
 const selectedVersions = ref<Record<string, string>>({});
 const manifestCache = ref<Record<string, GameManifest>>({}); // Key: gameId@version
+const searchKeyword = ref('');
+const isSearchExpanded = ref(false);
 
 onMounted(async () => {
     await gameStore.loadGames();
@@ -131,6 +154,24 @@ const displayGames = computed(() => {
             };
         });
 });
+
+const filteredDisplayGames = computed(() => {
+    const keyword = searchKeyword.value.trim().toLowerCase();
+    if (!keyword) return displayGames.value;
+    return displayGames.value.filter((game) => {
+        return game.name.toLowerCase().includes(keyword) || game.id.toLowerCase().includes(keyword);
+    });
+});
+
+function toggleSearch() {
+    isSearchExpanded.value = true;
+}
+
+function handleSearchBlur() {
+    if (!searchKeyword.value.trim()) {
+        isSearchExpanded.value = false;
+    }
+}
 
 function getManifest(gameId: string, version?: string): GameManifest | undefined {
     if (!version) return undefined;

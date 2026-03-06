@@ -1,10 +1,14 @@
 {
   "name": "bz-launcher",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "BZ-Games game platform",
   "main": "./out/main/index.js",
   "author": "BZ-Games",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/baozha2023/bz-games.git"
+  },
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint . --ext .js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix",
@@ -25,6 +29,7 @@
     "@electron-toolkit/utils": "^3.0.0",
     "@types/semver": "^7.7.1",
     "@vicons/ionicons5": "^0.13.0",
+    "electron-updater": "^6.6.2",
     "electron-store": "^11.0.2",
     "naive-ui": "^2.40.1",
     "pinia": "^2.2.4",
@@ -66,6 +71,13 @@
     "files": [
       "out/**/*",
       "resources/**/*"
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "baozha2023",
+        "repo": "bz-games"
+      }
     ],
     "win": {
       "icon": "resources/icon.png",

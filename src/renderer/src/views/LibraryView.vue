@@ -1,5 +1,13 @@
 <template>
-  <div style="padding: 24px;" @click="handleBackgroundClick">
+  <div
+    class="library-root"
+    style="padding: 24px;"
+    @click="handleBackgroundClick"
+    @dragenter.prevent="handleExternalDragEnter"
+    @dragover.prevent="handleExternalDragOver"
+    @dragleave.prevent="handleExternalDragLeave"
+    @drop.prevent="handleExternalDrop"
+  >
     <n-space justify="space-between" align="center" style="margin-bottom: 24px;">
       <h1 style="margin: 0;">{{ t('library.title') }}</h1>
       <n-space>
@@ -35,6 +43,10 @@
         <n-button @click="handleAddGame">{{ t('library.addGameShort') }}</n-button>
       </template>
     </n-empty>
+
+    <div v-if="isDragActive && !isReorderMode" class="drop-overlay">
+      <div class="drop-panel">{{ t('library.dropHint') }}</div>
+    </div>
   </div>
 </template>
 
@@ -53,14 +65,15 @@ const message = useMessage()
 
 const isReorderMode = ref(false)
 const draggedIndex = ref<number | null>(null)
+const isDragActive = ref(false)
+let externalDragDepth = 0
 let longPressTimer: NodeJS.Timeout | null = null
 
 onMounted(() => {
   gameStore.loadGames()
 })
 
-const handleAddGame = async () => {
-  const result = await gameStore.addGame()
+const showAddGameResult = (result: Awaited<ReturnType<typeof gameStore.addGame>>) => {
   if (result.success) {
     if (result.manifest?.name && result.manifest?.version) {
       message.success(
@@ -86,6 +99,11 @@ const handleAddGame = async () => {
         message.error(translated);
     }
   }
+}
+
+const handleAddGame = async () => {
+  const result = await gameStore.addGame()
+  showAddGameResult(result)
 }
 
 const goToDetail = (id: string) => {
@@ -148,12 +166,85 @@ const handleDrop = async (_: DragEvent, index: number) => {
   
   draggedIndex.value = null;
 }
+
+const handleExternalDragOver = (e: DragEvent) => {
+  if (isReorderMode.value) return
+  if (e.dataTransfer) {
+    e.dataTransfer.dropEffect = 'copy'
+  }
+}
+
+const handleExternalDragEnter = (e: DragEvent) => {
+  if (isReorderMode.value) return
+  const hasFile = Array.from(e.dataTransfer?.items || []).some((item) => item.kind === 'file')
+  if (!hasFile) return
+  externalDragDepth += 1
+  isDragActive.value = true
+}
+
+const handleExternalDragLeave = (e: DragEvent) => {
+  if (isReorderMode.value) return
+  const hasFile = Array.from(e.dataTransfer?.items || []).some((item) => item.kind === 'file')
+  if (!hasFile) return
+  externalDragDepth = Math.max(0, externalDragDepth - 1)
+  if (externalDragDepth === 0) {
+    isDragActive.value = false
+  }
+}
+
+const getDroppedFilePath = (file: File | null): string => {
+  if (!file) return ''
+  const bridgedPath = window.electronAPI.game.getPathForFile(file)
+  if (bridgedPath) return bridgedPath
+  return (file as unknown as { path?: string }).path || ''
+}
+
+const handleExternalDrop = async (e: DragEvent) => {
+  externalDragDepth = 0
+  isDragActive.value = false
+  if (isReorderMode.value) return
+  const files = Array.from(e.dataTransfer?.files || [])
+  const droppedPath = files
+    .map(file => getDroppedFilePath(file))
+    .find(path => Boolean(path?.trim())) || ''
+
+  if (!droppedPath) {
+    message.error(t('library.importError.notDirectory'))
+    return
+  }
+
+  const result = await gameStore.addGame(droppedPath)
+  showAddGameResult(result)
+}
 </script>
 
 <style scoped>
+.library-root {
+  position: relative;
+}
 .game-card-wrapper {
   position: relative;
   transition: transform 0.2s;
+}
+.drop-overlay {
+  position: absolute;
+  inset: 0;
+  border: 2px dashed #18a058;
+  border-radius: 8px;
+  background: rgba(24, 160, 88, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 100;
+}
+.drop-panel {
+  background: rgba(24, 160, 88, 0.95);
+  color: #fff;
+  padding: 10px 18px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 600;
 }
 .reorder-overlay {
   position: absolute;

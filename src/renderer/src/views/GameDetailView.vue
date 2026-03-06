@@ -72,13 +72,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { Heart, HeartOutline } from '@vicons/ionicons5'
 import { useGameStore } from '../stores/useGameStore'
 import { useRoomStore } from '../stores/useRoomStore'
+import { useSettingsStore } from '../stores/useSettingsStore'
 import GameCover from '../components/game/GameCover.vue'
 import GameAchievementsModal from '../components/game/GameAchievementsModal.vue'
 import GameDeleteModal from '../components/game/GameDeleteModal.vue'
@@ -90,6 +91,7 @@ const router = useRouter()
 const message = useMessage()
 const gameStore = useGameStore()
 const roomStore = useRoomStore()
+const settingsStore = useSettingsStore()
 
 const gameId = route.params.id as string
 const game = computed(() => gameStore.games.find(g => g.id === gameId))
@@ -129,6 +131,9 @@ const gameAchievements = computed(() => {
 });
 
 onMounted(async () => {
+  if (settingsStore.settings?.lastJoinRoomAddress) {
+    joinAddress.value = settingsStore.settings.lastJoinRoomAddress
+  }
   if (game.value) {
     selectedVersion.value = game.value.version
     try {
@@ -144,6 +149,15 @@ onMounted(async () => {
     } catch {}
   }
 })
+
+watch(
+  () => settingsStore.settings?.lastJoinRoomAddress,
+  (address) => {
+    if (address && !joinAddress.value) {
+      joinAddress.value = address
+    }
+  }
+)
 
 const handleVersionChange = async (version: string) => {
     selectedVersion.value = version;
@@ -288,6 +302,12 @@ const handleJoin = async () => {
   
   const res = await roomStore.joinRoom(gameId, address, selectedVersion.value)
   if (res.success) {
+    if (settingsStore.settings) {
+      await settingsStore.saveSettings({
+        ...settingsStore.settings,
+        lastJoinRoomAddress: address
+      })
+    }
     showJoinModal.value = false;
     router.push(`/room/${gameId}`)
     return true;

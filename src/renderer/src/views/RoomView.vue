@@ -36,6 +36,9 @@
           <span v-else-if="!roomStore.allReady">
             {{ t('room.waitingForReady') }}
           </span>
+          <span v-else-if="roomStore.isStartCooldown">
+            {{ t('room.startCooldown') }}
+          </span>
         </n-tooltip>
       </template>
       <template v-else>
@@ -78,7 +81,7 @@ const minPlayers = computed(() => {
 const canStart = computed(() => {
   if (!roomStore.room) return false
   const playerCount = roomStore.room.players.length
-  return roomStore.allReady && playerCount >= minPlayers.value
+  return roomStore.allReady && playerCount >= minPlayers.value && !roomStore.isStartCooldown
 })
 
 onMounted(async () => {
@@ -169,6 +172,10 @@ const handleStartGame = async () => {
     await roomStore.startGame();
     message.success(t('room.gameStarted'));
   } catch (e) {
+    if ((e as Error).message === 'START_COOLDOWN') {
+      message.warning(t('room.startCooldown'))
+      return
+    }
     message.error(t('room.startFailed'));
   }
 }

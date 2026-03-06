@@ -54,6 +54,7 @@
 | 包管理器         | pnpm                        |                            |
 | 进程间通信        | Electron IPC（contextBridge） |                            |
 | 本地数据存储       | electron-store              | v10+ (ESM)，需在构建中配置 include |
+| 客户端更新        | electron-updater            | GitHub Releases 作为更新源         |
 | WebSocket 服务 | ws                          |                            |
 | 版本比较         | semver                      | 用于平台版本与游戏版本兼容性检查           |
 | 目标平台         | Windows 10/11 x64           |                            |
@@ -301,9 +302,12 @@ interface AppSettings {
     playerName: string;             // 玩家昵称，默认 "玩家"
     playerId: string;               // 本机唯一玩家 ID（UUID，首次启动生成，持久化）
     avatar?: string;                // 玩家头像（Base64 字符串）
-    language: 'zh-CN' | 'en-US';
+    lastJoinRoomAddress?: string;   // 最近一次成功加入房间地址
+    language: 'zh-CN' | 'en-US' | 'ja-JP';
     theme: 'dark' | 'light';
     defaultRoomPort: number;        // Room Server 监听端口，默认 38080
+    closeBehavior: 'tray' | 'exit';
+    autoLaunch: boolean;
 }
 ```
 
@@ -317,11 +321,14 @@ interface AppSettings {
 - **版本检查**：导入时会检查 `game.json` 中的 `platformVersion` 字段，若当前平台版本不满足要求（使用 `semver` 比较），将拒绝导入并提示用户。
 
 ### 6.2 IPC 接口扩展
+- 更新 `game:load(sourcePath?)`：支持无参弹窗导入，也支持传入目录绝对路径进行导入（用于拖拽导入）。
 - 新增 `game:getManifest(id, version)`：获取指定游戏版本的 Manifest 信息，用于动态展示成就等元数据。
 - 新增 `game:getVideo(id, version)`：获取指定版本的详情页预览视频（Data URL）。
 - 新增 `game:reorder(gameIds)`：更新游戏排序。
 - 新增 `game:toggleFavorite(id)`：切换游戏的特别喜欢状态。
 - 更新 `game:remove(id, versions?)`：支持删除指定版本或整个游戏。
+- 新增更新相关 IPC：`system:getUpdateStatus`、`system:checkUpdate`、`system:downloadUpdate`、`system:installUpdate`。
+- 新增主进程到渲染进程的更新事件：`system:update:event`（推送检查/下载/完成/错误状态）。
 - 确保所有新增 IPC 均在 `src/shared/ipc-channels.ts` 中定义，并在 `preload/api.ts` 中暴露.
 
 ### 6.3 UI 交互规范
@@ -331,13 +338,18 @@ interface AppSettings {
 - **游戏库展示**：
     - 游戏封面展示区域统一使用 **16:9** 比例，图片模式为 `contain`（完整显示）或 `cover`（填满）。
     - 支持 **长按** 游戏封面进入编辑模式，此时可拖动调整游戏排序。
+    - 支持将游戏文件夹直接拖拽到游戏库窗口导入（仍要求目录包含 `game.json`）。
     - 排序结果需持久化存储。
     - 聊天消息：当前用户发送的消息，名字显示为绿色（#18a058）。
     - 收藏游戏：特别喜欢的游戏在封面右上角展示爱心图标。
 - **游戏详情页**：
     - 删除游戏功能升级为模态框，支持多选版本进行删除，默认选中当前版本。
     - 若 Manifest 配置了 `video` 字段，详情页进入后自动播放预览视频；视频结束后自动回退显示封面。
+- **加入房间地址**：加入房间输入框需要回填最近一次成功地址（持久化于设置），减少重复输入。
+- **统计/成就搜索**：右上角默认展示搜索图标，点击后展开输入框并支持按游戏名或游戏 ID 模糊搜索。
+- **房间开始按钮冷却**：房间内收到 `room:game:end` 后，Host 的「开始游戏」按钮需禁用 5 秒。
 - **统计界面**：卡片右上角需展示该游戏的所有版本号，使用自动换行布局。
+- **设置页更新入口**：设置页需提供「检查更新」按钮，点击后弹出更新状态弹层，显示下载进度与安装按钮。
 
 ### 6.4 代码质量与重构
 - **模块化**：复杂逻辑（如 `GameLoader.loadGameFromDialog`）已拆分为独立的小函数（`validateManifestFile`, `checkPlatformVersion`, `checkEntryFile` 等），提高可读性与可维护性。
@@ -347,12 +359,22 @@ interface AppSettings {
 - **Web 存储可选加密**：支持通过 Manifest 字段 `encryptLocalStorage` 控制 `gamedata.json` 是否加密存储（默认关闭）。
 - **高内聚低耦合**：Renderer 进程严禁直接使用 Node.js API，所有文件操作与系统调用必须通过 IPC 委托给 Main Process。
 - **环境配置抽离**：将游戏环境变量准备与 `bz-config.js` 生成逻辑抽离至 `GameEnvironment` 类，提高 `GameManager` 的内聚性。
+- **成就弹窗版本一致性**：成就弹窗读取 Manifest 时必须使用当前运行版本，避免出现“有音效但无弹窗”。
+- **经济系统前端同步**：游戏结束事件后需刷新用户数据，确保每 10 分钟时长奖励的 BZ 币能即时反映在 UI。
+- **拖拽路径解析统一**：游戏库拖拽导入路径统一使用 `webUtils.getPathForFile(file)` 获取，移除旧的文本/URI 多分支回退逻辑。
+- **更新能力主进程收敛**：更新检查、下载、安装必须由主进程 `UpdateService` 统一处理，渲染进程仅通过 IPC 订阅状态。
 
 ### 6.5 Game Manifest 更新
 - **统计信息国际化**：`statistics` 字段支持键值对格式（`[{ "key": "Display Name" }]`），用于在平台统计界面显示本地化的统计项名称。
 - **时间追踪优化**：平台会自动追踪并记录所有游戏的游玩时长（`time`），无需在 `statistics` 字段中显式定义。若定义了 `time`，平台也会正常处理。
 - **详情媒体扩展**：`video` 字段为可选项，指向游戏目录内预览视频（`mp4/webm/ogv/mov/m4v`），仅用于详情页展示。
 - **本地存储加密开关**：`encryptLocalStorage` 为可选布尔字段，仅作用于 Web 游戏 `localStorage` 对应的 `gamedata.json` 持久化。
+
+### 6.6 客户端更新发布规范
+- **更新源**：使用 GitHub Releases（仓库：`baozha2023/bz-games`）作为 `electron-updater` 的发布源。
+- **发布资产**：每个版本 Release 必须单独上传 `BZ-Games Setup x.x.x.exe`、`latest.yml`、`*.blockmap`，不可打包成 ZIP。
+- **版本策略**：发布前需先提升 `package.json` 版本号，并使用对应 Tag 创建 Release。
+- **生效条件**：自动更新仅在打包后的生产环境可用；开发模式（`pnpm dev`）下应提示不支持。
 
 ---
 

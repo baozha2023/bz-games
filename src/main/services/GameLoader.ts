@@ -15,6 +15,35 @@ import { getGamesDir } from "../utils/appPath";
 export class GameLoader {
   private static cache: GameManifest[] | null = null;
 
+  private static resolveImportDirectory(sourcePath: string): string | null {
+    if (!sourcePath || typeof sourcePath !== "string") {
+      return null;
+    }
+
+    const normalized = sourcePath.trim().replace(/^"(.*)"$/, "$1");
+    if (!normalized || !fs.existsSync(normalized)) {
+      return null;
+    }
+
+    const stat = fs.statSync(normalized);
+    if (stat.isDirectory()) {
+      return normalized;
+    }
+
+    let currentDir = path.dirname(normalized);
+    while (true) {
+      const manifestPath = path.join(currentDir, "game.json");
+      if (fs.existsSync(manifestPath)) {
+        return currentDir;
+      }
+      const parent = path.dirname(currentDir);
+      if (parent === currentDir) {
+        return null;
+      }
+      currentDir = parent;
+    }
+  }
+
   static async loadGameFromDialog(): Promise<{
     success: boolean;
     manifest?: GameManifest;
@@ -31,14 +60,26 @@ export class GameLoader {
       return { success: false, error: "canceled" };
     }
 
-    const sourcePath = filePaths[0];
+    return this.loadGameFromPath(filePaths[0]);
+  }
+
+  static async loadGameFromPath(sourcePath: string): Promise<{
+    success: boolean;
+    manifest?: GameManifest;
+    error?: string;
+    params?: Record<string, any>;
+  }> {
+    const resolvedSourcePath = this.resolveImportDirectory(sourcePath);
+    if (!resolvedSourcePath) {
+      return { success: false, error: "notDirectory" };
+    }
 
     try {
-      const manifest = await this.validateManifestFile(sourcePath);
+      const manifest = await this.validateManifestFile(resolvedSourcePath);
       this.checkPlatformVersion(manifest);
-      this.checkEntryFile(sourcePath, manifest);
+      this.checkEntryFile(resolvedSourcePath, manifest);
 
-      const targetPath = this.installGameFiles(sourcePath, manifest);
+      const targetPath = this.installGameFiles(resolvedSourcePath, manifest);
       await this.updateGameRecord(manifest, targetPath);
 
       this.cache = null;
