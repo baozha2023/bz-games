@@ -38,6 +38,7 @@ export default {
       platformVersionMismatch:
         "プラットフォームのバージョンが一致しません（必須: {required}, 現在: {current}）",
       entryNotFound: "エントリーファイルが見つかりません: {entry}",
+      versionExists: "このバージョンは既に存在します。削除してから再度取り込んでください",
       unknown: "インポート失敗: {message}",
     },
   },
@@ -171,6 +172,10 @@ export default {
     updateUnsupported: "開発モードでは自動更新を利用できません",
     updateFailed: "更新に失敗しました",
     updateError: "更新失敗: {message}",
+    updatePromptTitle: "新しいバージョンがあります",
+    updatePromptMessage: "新しいバージョン {version} を検出しました。今すぐ更新しますか？",
+    updateNow: "今すぐ更新",
+    updateLater: "後で",
   },
   statistics: {
     title: "統計",

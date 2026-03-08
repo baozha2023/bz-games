@@ -47,4 +47,5 @@ export interface AppSettings {
   defaultRoomPort: number;
   closeBehavior: "tray" | "exit";
   autoLaunch: boolean;
+  ignoredUpdateVersion?: string;
 }

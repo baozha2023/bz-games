@@ -102,11 +102,15 @@ const checkedToday = computed(() => {
 });
 
 const currentStreak = computed(() => userData.value?.checkIn?.consecutiveDays || 0);
+const getCycleDay = (streak: number) => {
+  if (streak <= 0) return 0;
+  return ((streak - 1) % 7) + 1;
+};
+const currentCycleDay = computed(() => getCycleDay(currentStreak.value));
 
-// Helper to determine if a grid item (1-7) is completed
 const isDayCompleted = (day: number) => {
     if (checkedToday.value) {
-        return day <= currentStreak.value;
+        return day <= currentCycleDay.value;
     } else {
         const lastDate = userData.value?.checkIn?.lastCheckInDate;
         if (!lastDate) return false;
@@ -115,7 +119,7 @@ const isDayCompleted = (day: number) => {
         const yesterdayStr = getYesterdayStr(today);
         
         if (lastDate === yesterdayStr || lastDate === today) {
-             return day <= currentStreak.value;
+             return day <= currentCycleDay.value;
         } else {
              return false;
         }
@@ -137,10 +141,8 @@ const isToday = (day: number) => {
     } else {
         predictedStreak = 1;
     }
-    
-    if (predictedStreak > 7) predictedStreak = 1;
-    
-    return day === predictedStreak;
+    const predictedCycleDay = getCycleDay(predictedStreak);
+    return day === predictedCycleDay;
 };
 
 const isDayActive = (day: number) => {

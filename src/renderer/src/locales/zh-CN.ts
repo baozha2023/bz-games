@@ -37,6 +37,7 @@ export default {
       platformVersionMismatch:
         "平台版本不兼容 (游戏需求: {required}, 当前: {current})",
       entryNotFound: "入口文件不存在: {entry}",
+      versionExists: "该版本已存在，请先删除后再导入",
       unknown: "导入失败: {message}",
     },
   },
@@ -170,6 +171,10 @@ export default {
     updateUnsupported: "开发模式不支持自动更新，请打包后测试",
     updateFailed: "更新失败",
     updateError: "更新失败：{message}",
+    updatePromptTitle: "发现新版本",
+    updatePromptMessage: "检测到新版本 {version}，是否立即更新？",
+    updateNow: "立即更新",
+    updateLater: "以后再说",
   },
   statistics: {
     title: "游戏统计",

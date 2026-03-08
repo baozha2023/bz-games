@@ -78,6 +78,18 @@ export class GameLoader {
       const manifest = await this.validateManifestFile(resolvedSourcePath);
       this.checkPlatformVersion(manifest);
       this.checkEntryFile(resolvedSourcePath, manifest);
+      const games = await storeService.getGames();
+      const existingRecord = games.find((g) => g.id === manifest.id);
+      const versionExists = existingRecord?.versions.some(
+        (v) => v.version === manifest.version,
+      );
+      if (versionExists) {
+        return {
+          success: false,
+          error: "versionExists",
+          params: { version: manifest.version },
+        };
+      }
 
       const targetPath = this.installGameFiles(resolvedSourcePath, manifest);
       await this.updateGameRecord(manifest, targetPath);

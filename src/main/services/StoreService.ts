@@ -21,6 +21,7 @@ const defaultSettings: AppSettings = {
   defaultRoomPort: 38080,
   closeBehavior: "tray",
   autoLaunch: false,
+  ignoredUpdateVersion: "",
 };
 
 const defaultUserData: UserData = {
@@ -39,6 +40,84 @@ const defaultStore: AppStore = {
   recentPlayed: [],
 };
 
+const CONFIG_ENCRYPTION_SEED = "bz-games-config:v1";
+
+function createConfigCipherKey(): Buffer {
+  return crypto.createHash("sha256").update(CONFIG_ENCRYPTION_SEED).digest();
+}
+
+function encryptConfigPayload(data: AppStore): string {
+  const key = createConfigCipherKey();
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+  const plaintext = JSON.stringify(data);
+  const encrypted = Buffer.concat([
+    cipher.update(plaintext, "utf8"),
+    cipher.final(),
+  ]);
+  const tag = cipher.getAuthTag();
+
+  return JSON.stringify({
+    __encrypted: true,
+    algorithm: "aes-256-gcm",
+    iv: iv.toString("base64"),
+    tag: tag.toString("base64"),
+    payload: encrypted.toString("base64"),
+  });
+}
+
+function tryDecryptConfigPayload(raw: any): AppStore | null {
+  if (!raw || raw.__encrypted !== true) {
+    return null;
+  }
+
+  try {
+    const key = createConfigCipherKey();
+    const iv = Buffer.from(raw.iv, "base64");
+    const tag = Buffer.from(raw.tag, "base64");
+    const payload = Buffer.from(raw.payload, "base64");
+    const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
+    decipher.setAuthTag(tag);
+    const decrypted = Buffer.concat([
+      decipher.update(payload),
+      decipher.final(),
+    ]).toString("utf8");
+    const parsed = JSON.parse(decrypted);
+    return typeof parsed === "object" && parsed ? (parsed as AppStore) : null;
+  } catch {
+    return null;
+  }
+}
+
+function deserializeConfig(content: string): AppStore {
+  try {
+    const parsed = JSON.parse(content);
+    const decrypted = tryDecryptConfigPayload(parsed);
+    if (decrypted) return decrypted;
+    if (typeof parsed === "object" && parsed) {
+      return parsed as AppStore;
+    }
+  } catch {}
+  return defaultStore;
+}
+
+function mergeStoreWithDefaults(raw: Partial<AppStore>): AppStore {
+  return {
+    ...defaultStore,
+    ...raw,
+    games: raw.games || [],
+    recentPlayed: raw.recentPlayed || [],
+    settings: {
+      ...defaultSettings,
+      ...(raw.settings || {}),
+    },
+    userData: {
+      ...defaultUserData,
+      ...(raw.userData || {}),
+    },
+  };
+}
+
 class StoreService {
   private store: ElectronStore<AppStore> | null = null;
   private _initPromise: Promise<void> | null = null;
@@ -54,13 +133,33 @@ class StoreService {
 
     this._initPromise = (async () => {
       try {
+        const configPath = path.join(getAppRoot(), "config.json");
+        let legacyData: AppStore | null = null;
+        try {
+          const rawText = await fs.readFile(configPath, "utf-8");
+          const raw = JSON.parse(rawText);
+          if (!raw || raw.__encrypted !== true) {
+            if (typeof raw === "object" && raw) {
+              legacyData = raw as AppStore;
+            }
+          }
+        } catch {}
+
         const Store = (await import("electron-store")).default;
         this.store = new Store<AppStore>({
           name: "config",
           defaults: defaultStore,
           cwd: getAppRoot(),
+          serialize: (data) => encryptConfigPayload(data),
+          deserialize: (content) => deserializeConfig(content),
         });
         logger.info(`[StoreService] Store initialized at: ${this.store.path}`);
+
+        if (legacyData) {
+          const merged = mergeStoreWithDefaults(legacyData);
+          this.store.store = merged;
+          logger.info("[StoreService] Migrated legacy config.json to encrypted");
+        }
       } catch (error) {
         logger.error("[StoreService] Failed to initialize store:", error);
         throw error;
@@ -173,12 +272,9 @@ class StoreService {
       userData.checkIn.consecutiveDays = 1;
     }
 
-    if (userData.checkIn.consecutiveDays > 7) {
-      userData.checkIn.consecutiveDays = 1;
-    }
-
-    let reward = userData.checkIn.consecutiveDays * 10;
-    if (userData.checkIn.consecutiveDays === 7) {
+    const cycleDay = ((userData.checkIn.consecutiveDays - 1) % 7) + 1;
+    let reward = cycleDay * 10;
+    if (cycleDay === 7) {
       reward = 100;
     }
 

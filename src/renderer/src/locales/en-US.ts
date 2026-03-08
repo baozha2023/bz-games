@@ -38,6 +38,7 @@ export default {
       platformVersionMismatch:
         "Platform version mismatch (Required: {required}, Current: {current})",
       entryNotFound: "Entry file not found: {entry}",
+      versionExists: "This version already exists. Remove it before importing",
       unknown: "Import failed: {message}",
     },
   },
@@ -171,6 +172,10 @@ export default {
     updateUnsupported: "Auto update is unavailable in dev mode",
     updateFailed: "Update failed",
     updateError: "Update failed: {message}",
+    updatePromptTitle: "Update Available",
+    updatePromptMessage: "New version {version} is available. Update now?",
+    updateNow: "Update Now",
+    updateLater: "Later",
   },
   statistics: {
     title: "Statistics",

@@ -44,7 +44,12 @@
       </template>
     </n-empty>
 
-    <div v-if="isDragActive && !isReorderMode" class="drop-overlay">
+    <div
+      v-if="isDragActive && !isReorderMode"
+      class="drop-overlay"
+      @dragover.stop.prevent="handleExternalDragOver"
+      @drop.stop.prevent="handleExternalDrop"
+    >
       <div class="drop-panel">{{ t('library.dropHint') }}</div>
     </div>
   </div>
@@ -155,6 +160,7 @@ const handleDragOver = (_: DragEvent, index: number) => {
 }
 
 const handleDrop = async (_: DragEvent, index: number) => {
+  if (!isReorderMode.value) return
   if (draggedIndex.value === null || draggedIndex.value === index) return;
   
   const games = [...gameStore.games];
@@ -235,7 +241,7 @@ const handleExternalDrop = async (e: DragEvent) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  pointer-events: none;
+  pointer-events: auto;
   z-index: 100;
 }
 .drop-panel {
