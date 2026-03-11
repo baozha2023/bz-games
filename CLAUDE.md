@@ -1,3 +1,8 @@
+---
+description: 
+alwaysApply: true
+---
+
 # CLAUDE.md — BZ-Games 游戏平台开发文档
 
 > 本文档为 AI 辅助开发的上下文文件，描述项目的完整架构、规范与约定。
@@ -172,7 +177,7 @@ bz-launcher/
 | **Room Server**          | 房主平台运行的 WebSocket 服务器，经内网穿透工具对外暴露                                 |
 | **Room Client**          | 非房主玩家的平台连接 Room Server 的 WebSocket 客户端                            |
 | **Game API Server**      | 平台在本机运行的本地 WebSocket 服务（`127.0.0.1`），供游戏进程调用平台能力                  |
-| **bz-config.js**         | 平台在游戏启动前生成的配置文件（包含端口、Token、玩家信息、房间 ID 与 `isHost`），解决进程环境变量传递不可靠问题 |
+| **bz-config.js**         | 平台在游戏启动前生成的配置文件（包含端口、Token、玩家信息、房间 ID、`isHost` 与 `isMultiple`），解决进程环境变量传递不可靠问题 |
 | **内网穿透**                 | 由用户自备（如 SakuraFrp），将 Room Server 本地端口映射到公网地址                      |
 | **平台 SDK**               | 未来提供的 npm 包（`bz-launcher-sdk`），封装 Game API Server 调用，供游戏开发者使用     |
 
@@ -182,6 +187,7 @@ bz-launcher/
 - **时间追踪优化**：平台会自动追踪并记录所有游戏的游玩时长（`time`），无需在 `statistics` 字段中显式定义。若定义了 `time`，平台也会正常处理。
 - **详情媒体扩展**：`video` 字段为可选项，指向游戏目录内预览视频（`mp4/webm/ogv/mov/m4v`），仅用于详情页展示。
 - **本地存储加密开关**：`encryptLocalStorage` 为可选布尔字段，仅作用于 Web 游戏 `localStorage` 对应的 `gamedata.json` 持久化。
+- **游戏类型扩展**：`type` 支持 `singleplayer`、`multiplayer`、`singlemultiple`，其中 `singlemultiple` 代表同时支持单人与联机。
 
 ***
 
@@ -325,6 +331,7 @@ interface AppSettings {
 - **Web 游戏隔离**：Web 游戏启动时使用 `persist:game_<id>_<version>` 分区，实现版本间的数据隔离（Cookie/LocalStorage）。
 - **Web 游戏存储接管**：通过 Preload 脚本接管 `localStorage`，将数据重定向存储至 `games/<id>/<version>/gamedata.json`，实现跨启动模式（File/Serve）的数据互通与版本隔离。
 - **Web 存储可选加密**：支持通过 Manifest 字段 `encryptLocalStorage` 控制 `gamedata.json` 是否加密存储（默认关闭）。
+- **Web 联机模式标记**：平台生成的 `bz-config.js` 提供 `isMultiple` 字段，便于 `singlemultiple` 游戏在运行时区分单人模式与联机模式。
 
 ### 5.5 代码组织与内聚性
 

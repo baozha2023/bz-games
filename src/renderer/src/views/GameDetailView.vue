@@ -32,18 +32,27 @@
              <span v-else>{{ game.version }}</span>
           </n-descriptions-item>
           <n-descriptions-item :label="t('gameDetail.author')">{{ (currentManifest?.author) || (isLatestVersion ? game.author : '') }}</n-descriptions-item>
-          <n-descriptions-item :label="t('gameDetail.type')">{{ ((currentManifest?.type) || (isLatestVersion ? game.type : '')) === 'multiplayer' ? t('gameDetail.typeMultiplayer') : t('gameDetail.typeSingleplayer') }}</n-descriptions-item>
+          <n-descriptions-item :label="t('gameDetail.type')">{{ typeLabel }}</n-descriptions-item>
           <n-descriptions-item :label="t('gameDetail.description')" v-if="(currentManifest?.description) || (isLatestVersion ? game.description : '')">{{ (currentManifest?.description) || (isLatestVersion ? game.description : '') }}</n-descriptions-item>
         </n-descriptions>
         
         <div style="margin-top: 24px;">
-          <template v-if="((currentManifest?.type) || (isLatestVersion ? game.type : '')) === 'singleplayer'">
+          <template v-if="resolvedType === 'singleplayer'">
             <n-button type="primary" size="large" @click="handleLaunch" :disabled="isRunning">
               {{ isRunning ? t('gameDetail.gameRunning') : t('gameDetail.launchGame') }}
             </n-button>
           </template>
+          <template v-else-if="resolvedType === 'multiplayer'">
+            <n-space>
+              <n-button type="primary" size="large" @click="createRoom">{{ t('gameDetail.createRoom') }}</n-button>
+              <n-button size="large" @click="showJoinModal = true">{{ t('gameDetail.joinRoom') }}</n-button>
+            </n-space>
+          </template>
           <template v-else>
             <n-space>
+              <n-button type="primary" size="large" @click="handleLaunch" :disabled="isRunning">
+                {{ isRunning ? t('gameDetail.gameRunning') : t('gameDetail.launchGame') }}
+              </n-button>
               <n-button type="primary" size="large" @click="createRoom">{{ t('gameDetail.createRoom') }}</n-button>
               <n-button size="large" @click="showJoinModal = true">{{ t('gameDetail.joinRoom') }}</n-button>
             </n-space>
@@ -102,6 +111,12 @@ const selectedVersion = ref('')
 const currentManifest = ref<GameManifest | null>(null)
 const versionOptions = computed(() => versions.value.map(v => ({ label: v, value: v })))
 const isLatestVersion = computed(() => !game.value || selectedVersion.value === game.value.version)
+const resolvedType = computed(() => (currentManifest.value?.type) || (isLatestVersion.value ? game.value?.type : '') || 'singleplayer')
+const typeLabel = computed(() => {
+    if (resolvedType.value === 'multiplayer') return t('gameDetail.typeMultiplayer')
+    if (resolvedType.value === 'singlemultiple') return t('gameDetail.typeSingleMultiple')
+    return t('gameDetail.typeSingleplayer')
+})
 
 const showJoinModal = ref(false)
 const joinAddress = ref('')

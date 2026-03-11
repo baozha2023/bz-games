@@ -1,4 +1,5 @@
 import { app } from "electron";
+import fs from "fs";
 import path from "path";
 
 /**
@@ -6,18 +7,27 @@ import path from "path";
  * - Development: The project root directory (where package.json is).
  * - Production: The directory containing the executable.
  */
-export function getAppRoot(): string {
+export function getExecutableDir(): string {
   if (app.isPackaged) {
     return path.dirname(app.getPath("exe"));
-  } else {
-    // In dev mode (electron-vite), process.cwd() is the project root
-    return process.cwd();
   }
+  return process.cwd();
 }
 
-/**
- * Get the directory where game files should be stored.
- */
+export function isPortableMode(): boolean {
+  if (!app.isPackaged) return true;
+  const exeDir = getExecutableDir();
+  return fs.existsSync(path.join(exeDir, "portable.flag"));
+}
+
+export function getAppRoot(): string {
+  if (app.isPackaged) {
+    if (isPortableMode()) return getExecutableDir();
+    return app.getPath("userData");
+  }
+  return process.cwd();
+}
+
 export function getGamesDir(): string {
   return path.join(getAppRoot(), "games");
 }

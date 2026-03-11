@@ -39,6 +39,7 @@ export class GameEnvironment {
     try {
       const room = roomClient.room;
       const isHost = !!room && room.hostId === settings.playerId;
+      const isMultiple = !!room;
       const configPath = path.join(versionPath, "bz-config.js");
       const configContent = `window.BZ_CONFIG = { 
         apiPort: '${port}', 
@@ -47,7 +48,8 @@ export class GameEnvironment {
         playerName: ${JSON.stringify(settings.playerName)},
         playerAvatar: ${JSON.stringify(settings.avatar || "")},
         roomId: ${JSON.stringify(room ? room.id : "")},
-        isHost: ${JSON.stringify(isHost)}
+        isHost: ${JSON.stringify(isHost)},
+        isMultiple: ${JSON.stringify(isMultiple)}
       };`;
       fs.writeFileSync(configPath, configContent);
     } catch (e) {

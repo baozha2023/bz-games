@@ -48,6 +48,7 @@ export default {
     type: "类型",
     typeMultiplayer: "多人联机",
     typeSingleplayer: "单人游戏",
+    typeSingleMultiple: "单人+多人",
     description: "简介",
     favorite: "特别喜欢",
     deleteAllVersionsWarning: "删除所有版本将移除游戏记录",

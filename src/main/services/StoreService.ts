@@ -9,7 +9,7 @@ import type {
   GameVersion,
   UserData,
 } from "../../shared/types";
-import { getAppRoot } from "../utils/appPath";
+import { getAppRoot, getExecutableDir, isPortableMode } from "../utils/appPath";
 import { logger } from "../utils/logger";
 
 const defaultSettings: AppSettings = {
@@ -118,6 +118,81 @@ function mergeStoreWithDefaults(raw: Partial<AppStore>): AppStore {
   };
 }
 
+async function pathExists(filePath: string): Promise<boolean> {
+  try {
+    await fs.stat(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function copyIfMissing(sourcePath: string, targetPath: string) {
+  if (await pathExists(targetPath)) return;
+  await fs.mkdir(path.dirname(targetPath), { recursive: true });
+  await fs.copyFile(sourcePath, targetPath);
+}
+
+async function moveOrCopyDirectory(
+  sourcePath: string,
+  targetPath: string,
+): Promise<void> {
+  try {
+    await fs.rename(sourcePath, targetPath);
+  } catch (error: any) {
+    if (error?.code === "EXDEV" || error?.code === "EACCES" || error?.code === "EPERM") {
+      await fs.cp(sourcePath, targetPath, { recursive: true });
+    } else {
+      throw error;
+    }
+  }
+}
+
+async function mergeLegacyDirectory(
+  sourcePath: string,
+  targetPath: string,
+): Promise<void> {
+  await fs.mkdir(targetPath, { recursive: true });
+  const entries = await fs.readdir(sourcePath, { withFileTypes: true });
+  for (const entry of entries) {
+    const src = path.join(sourcePath, entry.name);
+    const dst = path.join(targetPath, entry.name);
+    if (entry.isDirectory()) {
+      if (await pathExists(dst)) {
+        await mergeLegacyDirectory(src, dst);
+      } else {
+        await moveOrCopyDirectory(src, dst);
+      }
+    } else {
+      if (!(await pathExists(dst))) {
+        await fs.copyFile(src, dst);
+      }
+    }
+  }
+}
+
+async function migrateLegacyData(
+  legacyRoot: string,
+  dataRoot: string,
+): Promise<void> {
+  if (legacyRoot === dataRoot) return;
+  const legacyConfigPath = path.join(legacyRoot, "config.json");
+  const dataConfigPath = path.join(dataRoot, "config.json");
+  if (await pathExists(legacyConfigPath)) {
+    await copyIfMissing(legacyConfigPath, dataConfigPath);
+  }
+
+  const legacyGamesDir = path.join(legacyRoot, "games");
+  const dataGamesDir = path.join(dataRoot, "games");
+  if (await pathExists(legacyGamesDir)) {
+    if (await pathExists(dataGamesDir)) {
+      await mergeLegacyDirectory(legacyGamesDir, dataGamesDir);
+    } else {
+      await moveOrCopyDirectory(legacyGamesDir, dataGamesDir);
+    }
+  }
+}
+
 class StoreService {
   private store: ElectronStore<AppStore> | null = null;
   private _initPromise: Promise<void> | null = null;
@@ -133,7 +208,13 @@ class StoreService {
 
     this._initPromise = (async () => {
       try {
-        const configPath = path.join(getAppRoot(), "config.json");
+        const dataRoot = getAppRoot();
+        const legacyRoot = getExecutableDir();
+        if (!isPortableMode()) {
+          await migrateLegacyData(legacyRoot, dataRoot);
+        }
+
+        const configPath = path.join(dataRoot, "config.json");
         let legacyData: AppStore | null = null;
         try {
           const rawText = await fs.readFile(configPath, "utf-8");
@@ -149,7 +230,7 @@ class StoreService {
         this.store = new Store<AppStore>({
           name: "config",
           defaults: defaultStore,
-          cwd: getAppRoot(),
+          cwd: dataRoot,
           serialize: (data) => encryptConfigPayload(data),
           deserialize: (content) => deserializeConfig(content),
         });

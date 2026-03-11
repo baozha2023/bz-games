@@ -49,6 +49,7 @@ export default {
     type: "Type",
     typeMultiplayer: "Multiplayer",
     typeSingleplayer: "Singleplayer",
+    typeSingleMultiple: "Single & Multiplayer",
     description: "Description",
     favorite: "Favorite",
     deleteAllVersionsWarning:

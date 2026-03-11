@@ -50,7 +50,7 @@ my-game/
   "icon": "icon.png",
   "cover": "cover.png",
   "video": "preview.mp4",
-  "type": "multiplayer",
+  "type": "singlemultiple",
   "multiplayer": {
     "minPlayers": 2,
     "maxPlayers": 4
@@ -93,8 +93,8 @@ my-game/
 | `author` | string | 否 | 作者名称 |
 | `platformVersion`| string/array | 是 | 兼容的平台版本范围 (如 `">=1.0.0"` 或 `["1.0.0", "2.0.0"]`) |
 | `entry` | string | 是 | 启动入口文件路径 (相对于根目录) |
-| `type` | string | 是 | `"singleplayer"` (单机) 或 `"multiplayer"` (联机) |
-| `multiplayer` | object | 联机必填 | 包含 `minPlayers` 和 `maxPlayers` (整数) |
+| `type` | string | 是 | `"singleplayer"` (单机) / `"multiplayer"` (联机) / `"singlemultiple"` (单人+联机) |
+| `multiplayer` | object | 联机必填 | 包含 `minPlayers` 和 `maxPlayers` (整数)，`type` 为 `multiplayer` 或 `singlemultiple` 时必填 |
 | `icon` | string | 否 | 图标路径 |
 | `cover` | string | 否 | 封面路径 |
 | `video` | string | 否 | 详情页预览视频路径，支持 `mp4/webm/ogv/mov/m4v`，自动播放一次后回到封面 |
@@ -129,7 +129,8 @@ window.BZ_CONFIG = {
     playerName: "PlayerName", // 当前玩家昵称
     playerAvatar: "data:image/png;base64,...", // 玩家头像 (Base64)
     roomId: "room-uuid",      // 当前房间 ID，单机为空字符串
-    isHost: true              // 当前玩家是否为房主
+    isHost: true,             // 当前玩家是否为房主
+    isMultiple: true          // 当前是否为联机模式
 };
 ```
 
@@ -140,7 +141,7 @@ window.BZ_CONFIG = {
 3. URL 参数
 
 **备选方案**：如果上述配置都不存在（例如调试模式），游戏应尝试从 URL 参数获取配置：
-`index.html?apiPort=12345&token=...&playerId=...&playerAvatar=...&roomId=...&isHost=1`
+`index.html?apiPort=12345&token=...&playerId=...&playerAvatar=...&roomId=...&isHost=1&isMultiple=1`
 **注意**：entry 为 `serve` 模式时，游戏平台会使用 npm 的 `serve` 命令启动游戏并托管静态资源。
 
 ### 3.2 Native 游戏 (Exe/Executable)
@@ -446,7 +447,8 @@ function getConfig() {
         apiPort: params.get('apiPort'),
         token: params.get('token'),
         playerId: params.get('playerId'),
-        playerName: 'Unknown'
+        playerName: 'Unknown',
+        isMultiple: params.get('isMultiple') === '1'
     };
 }
 

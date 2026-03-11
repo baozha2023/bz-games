@@ -16,7 +16,7 @@ export const GameManifestSchema = z.object({
   cover: z.string().optional(),
   video: z.string().optional(),
   encryptLocalStorage: z.boolean().optional(),
-  type: z.enum(["singleplayer", "multiplayer"]),
+  type: z.enum(["singleplayer", "multiplayer", "singlemultiple"]),
   statistics: z
     .array(
       z.union([

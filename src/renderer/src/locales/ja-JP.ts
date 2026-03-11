@@ -49,6 +49,7 @@ export default {
     type: "タイプ",
     typeMultiplayer: "マルチプレイヤー",
     typeSingleplayer: "シングルプレイヤー",
+    typeSingleMultiple: "シングル+マルチ",
     description: "説明",
     favorite: "お気に入り",
     deleteAllVersionsWarning:
