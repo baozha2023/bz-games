@@ -1,8 +1,3 @@
----
-description: 
-alwaysApply: true
----
-
 # CLAUDE.md — BZ-Games 游戏平台开发文档
 
 > 本文档为 AI 辅助开发的上下文文件，描述项目的完整架构、规范与约定。
@@ -167,19 +162,19 @@ bz-launcher/
 
 ## 四、核心概念与术语
 
-| 术语                       | 说明                                                                |
-| ------------------------ | ----------------------------------------------------------------- |
-| **游戏清单 (Game Manifest)** | `game.json` 文件，描述游戏元信息与平台集成配置                                     |
-| **游戏库 (Library)**        | 用户已载入平台的所有游戏集合，存于本地 `games/` 目录                                   |
-| **房间 (Room)**            | 一次联机会话，包含房主与所有玩家的状态                                               |
-| **房主 (Host)**            | 创建房间的玩家，其平台负责运行 Room Server                                       |
-| **玩家 (Player)**          | 加入房间的用户（含房主自身）                                                    |
-| **Room Server**          | 房主平台运行的 WebSocket 服务器，经内网穿透工具对外暴露                                 |
-| **Room Client**          | 非房主玩家的平台连接 Room Server 的 WebSocket 客户端                            |
-| **Game API Server**      | 平台在本机运行的本地 WebSocket 服务（`127.0.0.1`），供游戏进程调用平台能力                  |
+| 术语                       | 说明                                                                             |
+| ------------------------ | ------------------------------------------------------------------------------ |
+| **游戏清单 (Game Manifest)** | `game.json` 文件，描述游戏元信息与平台集成配置                                                  |
+| **游戏库 (Library)**        | 用户已载入平台的所有游戏集合，存于本地 `games/` 目录                                                |
+| **房间 (Room)**            | 一次联机会话，包含房主与所有玩家的状态                                                            |
+| **房主 (Host)**            | 创建房间的玩家，其平台负责运行 Room Server                                                    |
+| **玩家 (Player)**          | 加入房间的用户（含房主自身）                                                                 |
+| **Room Server**          | 房主平台运行的 WebSocket 服务器，经内网穿透工具对外暴露                                              |
+| **Room Client**          | 非房主玩家的平台连接 Room Server 的 WebSocket 客户端                                         |
+| **Game API Server**      | 平台在本机运行的本地 WebSocket 服务（`127.0.0.1`），供游戏进程调用平台能力                               |
 | **bz-config.js**         | 平台在游戏启动前生成的配置文件（包含端口、Token、玩家信息、房间 ID、`isHost` 与 `isMultiple`），解决进程环境变量传递不可靠问题 |
-| **内网穿透**                 | 由用户自备（如 SakuraFrp），将 Room Server 本地端口映射到公网地址                      |
-| **平台 SDK**               | 未来提供的 npm 包（`bz-launcher-sdk`），封装 Game API Server 调用，供游戏开发者使用     |
+| **内网穿透**                 | 由用户自备（如 SakuraFrp），将 Room Server 本地端口映射到公网地址                                   |
+| **平台 SDK**               | 未来提供的 npm 包（`bz-launcher-sdk`），封装 Game API Server 调用，供游戏开发者使用                  |
 
 ### 4.1 Game Manifest 规范
 
@@ -281,6 +276,7 @@ bz-launcher/
 ### 5.3 本地数据存储结构
 
 使用 `electron-store`，数据存储于应用根目录下的`config.json`（便携模式）：
+
 - **配置加密存储**：`config.json` 以加密格式持久化，启动时识别旧版明文配置并自动迁移为加密格式。
 
 ```typescript
@@ -414,9 +410,8 @@ interface AppSettings {
    - 主进程 `RoomServer` 启动，监听 `settings.defaultRoomPort` (默认 38080)。
    - 房主平台内部 `RoomClient` 连接本地 `RoomServer`。
 2. **内网穿透与地址分享**：
-   - 界面提示房主使用内网穿透工具将本地端口映射到公网。
-   - 房主获取公网地址（如 `60.26.220.79:39337`）并填入平台。
-   - 平台通过 `room:setAddress` 更新房间信息。
+   - 房主使用内网穿透工具将本地端口映射到公网。
+   - 房主获取公网地址（如 `60.26.220.79:39337`）发送给好友。
 3. **玩家加入**：
    - 房主等待玩家连接。
    - 玩家列表实时更新（通过 `room:player:joined` / `room:state:sync`）。
@@ -536,3 +531,4 @@ function send(msg) {
 - `event.playerJoined`: 有新玩家加入房间
 - `event.playerLeft`: 有玩家离开房间
 - `event.gameEnd`: 游戏被强制结束（如房间解散）
+

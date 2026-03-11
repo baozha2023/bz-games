@@ -2,6 +2,7 @@ import crypto from "crypto";
 import ElectronStore from "electron-store";
 import fs from "fs/promises";
 import path from "path";
+import { app } from "electron";
 import type {
   AppStore,
   AppSettings,
@@ -9,7 +10,7 @@ import type {
   GameVersion,
   UserData,
 } from "../../shared/types";
-import { getAppRoot, getExecutableDir, isPortableMode } from "../utils/appPath";
+import { getAppRoot, getExecutableDir } from "../utils/appPath";
 import { logger } from "../utils/logger";
 
 const defaultSettings: AppSettings = {
@@ -209,8 +210,11 @@ class StoreService {
     this._initPromise = (async () => {
       try {
         const dataRoot = getAppRoot();
-        const legacyRoot = getExecutableDir();
-        if (!isPortableMode()) {
+        const legacyRoots = [
+          getExecutableDir(),
+          app.isPackaged ? app.getPath("userData") : "",
+        ].filter((root, index, roots) => !!root && roots.indexOf(root) === index);
+        for (const legacyRoot of legacyRoots) {
           await migrateLegacyData(legacyRoot, dataRoot);
         }
 
