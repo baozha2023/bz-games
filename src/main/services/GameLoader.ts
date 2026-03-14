@@ -12,6 +12,30 @@ import { logger } from "../utils/logger";
 import { copyFolderRecursiveSync } from "../utils/fileUtils";
 import { getGamesDir } from "../utils/appPath";
 
+export interface ImportPreparationResult {
+  sourcePath: string;
+  hasManifest: boolean;
+  currentPlatformVersion: string;
+  suggestedId: string;
+  suggestedName: string;
+  suggestedEntry: string;
+}
+
+export interface ManualManifestDraft {
+  id: string;
+  name: string;
+  version: string;
+  description?: string;
+  author: string;
+  entry?: string;
+  platformVersion?: string;
+  icon?: string;
+  cover?: string;
+  type: "singleplayer" | "multiplayer" | "singlemultiple";
+  minPlayers?: number;
+  maxPlayers?: number;
+}
+
 export class GameLoader {
   private static cache: GameManifest[] | null = null;
 
@@ -29,19 +53,7 @@ export class GameLoader {
     if (stat.isDirectory()) {
       return normalized;
     }
-
-    let currentDir = path.dirname(normalized);
-    while (true) {
-      const manifestPath = path.join(currentDir, "game.json");
-      if (fs.existsSync(manifestPath)) {
-        return currentDir;
-      }
-      const parent = path.dirname(currentDir);
-      if (parent === currentDir) {
-        return null;
-      }
-      currentDir = parent;
-    }
+    return path.dirname(normalized);
   }
 
   static async loadGameFromDialog(): Promise<{
@@ -76,21 +88,10 @@ export class GameLoader {
 
     try {
       const manifest = await this.validateManifestFile(resolvedSourcePath);
+      this.verifyManifestVersion(manifest.version);
       this.checkPlatformVersion(manifest);
       this.checkEntryFile(resolvedSourcePath, manifest);
-      const games = await storeService.getGames();
-      const existingRecord = games.find((g) => g.id === manifest.id);
-      const versionExists = existingRecord?.versions.some(
-        (v) => v.version === manifest.version,
-      );
-      if (versionExists) {
-        return {
-          success: false,
-          error: "versionExists",
-          params: { version: manifest.version },
-        };
-      }
-
+      await this.ensureVersionNotExists(manifest.id, manifest.version);
       const targetPath = this.installGameFiles(resolvedSourcePath, manifest);
       await this.updateGameRecord(manifest, targetPath);
 
@@ -109,12 +110,93 @@ export class GameLoader {
     }
   }
 
+  static async prepareImportFromPath(
+    sourcePath: string,
+  ): Promise<ImportPreparationResult | null> {
+    const resolvedSourcePath = this.resolveImportDirectory(sourcePath);
+    if (!resolvedSourcePath) {
+      return null;
+    }
+
+    const folderName = path.basename(resolvedSourcePath);
+    const hasManifest = fs.existsSync(path.join(resolvedSourcePath, "game.json"));
+    const suggestedEntry = (() => {
+      try {
+        return this.detectEntryFile(resolvedSourcePath);
+      } catch {
+        return "";
+      }
+    })();
+    return {
+      sourcePath: resolvedSourcePath,
+      hasManifest,
+      currentPlatformVersion: app.getVersion(),
+      suggestedId: this.normalizeSuggestedId(folderName),
+      suggestedName: folderName,
+      suggestedEntry,
+    };
+  }
+
+  static async loadGameFromPathWithManifest(
+    sourcePath: string,
+    draft: ManualManifestDraft,
+  ): Promise<{
+    success: boolean;
+    manifest?: GameManifest;
+    error?: string;
+    params?: Record<string, any>;
+  }> {
+    const resolvedSourcePath = this.resolveImportDirectory(sourcePath);
+    if (!resolvedSourcePath) {
+      return { success: false, error: "notDirectory" };
+    }
+
+    try {
+      const manifest = this.buildManualManifestDraft(draft);
+      this.verifyManifestVersion(manifest.version);
+      this.checkPlatformVersion(manifest);
+      this.checkEntryFile(resolvedSourcePath, manifest);
+      this.checkOptionalFile(resolvedSourcePath, manifest.icon, "iconNotFound");
+      this.checkOptionalFile(resolvedSourcePath, manifest.cover, "coverNotFound");
+      await this.ensureGameIdNotExists(manifest.id);
+      await this.ensureVersionNotExists(manifest.id, manifest.version);
+
+      const targetPath = this.installGameFiles(resolvedSourcePath, manifest);
+      fs.writeFileSync(
+        path.join(targetPath, "game.json"),
+        JSON.stringify(manifest, null, 2),
+        "utf8",
+      );
+      await this.updateGameRecord(manifest, targetPath);
+
+      this.cache = null;
+      return { success: true, manifest };
+    } catch (err: any) {
+      if (err.code) {
+        return { success: false, error: err.code, params: err.params };
+      }
+      logger.error("Failed to load game with draft manifest:", err);
+      return {
+        success: false,
+        error: "unknown",
+        params: { message: err.message || "Unknown error" },
+      };
+    }
+  }
+
+  static async checkGameIdExists(gameId: string): Promise<boolean> {
+    const id = gameId.trim();
+    if (!id) return false;
+    const games = await storeService.getGames();
+    return games.some((g) => g.id === id);
+  }
+
   private static async validateManifestFile(
     sourcePath: string,
   ): Promise<GameManifest> {
     const jsonPath = path.join(sourcePath, "game.json");
     if (!fs.existsSync(jsonPath)) {
-      throw { code: "noManifest" };
+      throw { code: "noManifest", params: { sourcePath } };
     }
 
     try {
@@ -134,6 +216,123 @@ export class GameLoader {
         code: "manifestInvalid",
         params: { message: msg },
       };
+    }
+  }
+
+  private static normalizeSuggestedId(name: string): string {
+    const segment = name
+      .toLowerCase()
+      .replace(/[^a-z0-9\-\.]/g, "-")
+      .replace(/^\.+|\.+$/g, "")
+      .replace(/\.+/g, ".")
+      .replace(/-+/g, "-");
+    if (!segment) {
+      return "local.game.untitled";
+    }
+    if (segment.includes(".")) {
+      return segment;
+    }
+    return `local.game.${segment}`;
+  }
+
+  private static detectEntryFile(sourcePath: string): string {
+    const preferred = [
+      "index.html",
+      "main.html",
+      "game.html",
+      "game.exe",
+      "main.exe",
+      "start.bat",
+      "start.cmd",
+    ];
+    for (const candidate of preferred) {
+      if (fs.existsSync(path.join(sourcePath, candidate))) {
+        return candidate;
+      }
+    }
+    const files = fs.readdirSync(sourcePath);
+    const exe = files.find((f) => f.toLowerCase().endsWith(".exe"));
+    if (exe) return exe;
+    const html = files.find((f) => f.toLowerCase().endsWith(".html"));
+    if (html) return html;
+    throw { code: "entryNotFound", params: { entry: "index.html | *.exe" } };
+  }
+
+  private static buildManualManifestDraft(draft: ManualManifestDraft): GameManifest {
+    const entry = draft.entry?.trim();
+    if (!entry || path.isAbsolute(entry) || entry.includes("..")) {
+      throw { code: "entryNotFound", params: { entry: entry || "" } };
+    }
+    const minPlayers = draft.minPlayers || 2;
+    const maxPlayers = draft.maxPlayers || Math.max(minPlayers, 4);
+    if (
+      draft.type !== "singleplayer" &&
+      (!Number.isInteger(minPlayers) ||
+        !Number.isInteger(maxPlayers) ||
+        minPlayers < 2 ||
+        maxPlayers < minPlayers)
+    ) {
+      throw { code: "playersInvalid" };
+    }
+    const parsed = GameManifestSchema.parse({
+      id: draft.id.trim(),
+      name: draft.name.trim(),
+      version: draft.version.trim(),
+      description: draft.description?.trim() || "",
+      author: draft.author.trim(),
+      platformVersion: app.getVersion(),
+      entry,
+      icon: draft.icon?.trim() || undefined,
+      cover: draft.cover?.trim() || undefined,
+      type: draft.type,
+      multiplayer:
+        draft.type === "singleplayer"
+          ? undefined
+          : {
+              minPlayers,
+              maxPlayers,
+            },
+    });
+    return parsed;
+  }
+
+  private static verifyManifestVersion(version: string): void {
+    if (!semver.valid(version)) {
+      throw { code: "versionInvalid" };
+    }
+  }
+
+  private static checkOptionalFile(
+    sourcePath: string,
+    filePath: string | undefined,
+    code: string,
+  ): void {
+    if (!filePath) return;
+    if (path.isAbsolute(filePath) || filePath.includes("..")) {
+      throw { code };
+    }
+    const absolute = path.join(sourcePath, filePath);
+    if (!fs.existsSync(absolute)) {
+      throw { code, params: { file: filePath } };
+    }
+  }
+
+  private static async ensureVersionNotExists(
+    id: string,
+    version: string,
+  ): Promise<void> {
+    const games = await storeService.getGames();
+    const existingRecord = games.find((g) => g.id === id);
+    const versionExists = existingRecord?.versions.some((v) => v.version === version);
+    if (versionExists) {
+      throw { code: "versionExists", params: { version } };
+    }
+  }
+
+  private static async ensureGameIdNotExists(id: string): Promise<void> {
+    const exists = await this.checkGameIdExists(id);
+    if (exists) {
+      throw { code: "idExists", params: { id } };
     }
   }
 
@@ -288,32 +487,33 @@ export class GameLoader {
   }
 
   private static async scanAndSyncGames(): Promise<void> {
-    const gamesDir = getGamesDir();
+    const scanRoots = storeService.getGameStorageRoots();
     const records = await storeService.getGames();
-    const diskGames = new Map<string, Set<string>>(); // gameId -> Set<version>
+    const diskGames = new Map<string, Map<string, string>>();
 
-    // 1. Scan disk
-    if (fs.existsSync(gamesDir)) {
+    for (const root of scanRoots) {
+      if (!fs.existsSync(root)) continue;
       try {
-        const gameDirs = fs.readdirSync(gamesDir);
+        const gameDirs = fs.readdirSync(root);
         for (const gameId of gameDirs) {
-          const gameRoot = path.join(gamesDir, gameId);
+          const gameRoot = path.join(root, gameId);
           if (!fs.statSync(gameRoot).isDirectory()) continue;
-
           const versions = fs.readdirSync(gameRoot);
           for (const version of versions) {
             const versionPath = path.join(gameRoot, version);
             if (!fs.statSync(versionPath).isDirectory()) continue;
-
-            // Check if it looks like a game
-            if (fs.existsSync(path.join(versionPath, "game.json"))) {
-              if (!diskGames.has(gameId)) diskGames.set(gameId, new Set());
-              diskGames.get(gameId)!.add(version);
+            if (!fs.existsSync(path.join(versionPath, "game.json"))) continue;
+            if (!diskGames.has(gameId)) {
+              diskGames.set(gameId, new Map());
+            }
+            const versionMap = diskGames.get(gameId)!;
+            if (!versionMap.has(version)) {
+              versionMap.set(version, versionPath);
             }
           }
         }
       } catch (e) {
-        logger.error("Failed to scan games directory", e);
+        logger.error(`Failed to scan games directory: ${root}`, e);
       }
     }
 
@@ -329,19 +529,19 @@ export class GameLoader {
       }
 
       // Keep only versions that exist on disk
-      const validVersions = record.versions.filter((v) =>
-        diskVersions.has(v.version),
-      );
+      const validVersions = record.versions
+        .filter((v) => diskVersions.has(v.version))
+        .map((v) => ({
+          ...v,
+          path: diskVersions.get(v.version)!,
+        }));
 
-      // Update paths for valid versions to current absolute path
       for (const v of validVersions) {
-        v.path = path.join(gamesDir, record.id, v.version);
-        diskVersions.delete(v.version); // Mark as handled
+        diskVersions.delete(v.version);
       }
 
       // Add any new versions found on disk
-      for (const ver of diskVersions) {
-        const versionPath = path.join(gamesDir, record.id, ver);
+      for (const [ver, versionPath] of diskVersions.entries()) {
         validVersions.push({
           version: ver,
           path: versionPath,
@@ -370,16 +570,17 @@ export class GameLoader {
     }
 
     // 3. Add completely new games found on disk
-    for (const [gameId, versions] of diskGames) {
-      const versionList = Array.from(versions);
-      const gameVersions = versionList.map((ver) => ({
-        version: ver,
-        path: path.join(gamesDir, gameId, ver),
-        addedAt: Date.now(),
-        stats: {},
-        unlockedAchievements: [],
-        playtime: 0,
-      }));
+    for (const [gameId, versions] of diskGames.entries()) {
+      const gameVersions = Array.from(versions.entries()).map(
+        ([version, versionPath]) => ({
+          version,
+          path: versionPath,
+          addedAt: Date.now(),
+          stats: {},
+          unlockedAchievements: [],
+          playtime: 0,
+        }),
+      );
 
       // Sort versions
       gameVersions.sort((a, b) =>
@@ -434,10 +635,12 @@ export class GameLoader {
       return versionRecord.path;
     }
 
-    // Fallback: Try standard path in games directory (fixes moved folders issue)
-    const standardPath = path.join(getGamesDir(), gameId, targetVersion);
-    if (fs.existsSync(standardPath)) {
-      return standardPath;
+    const fallbackRoots = storeService.getGameStorageRoots();
+    for (const root of fallbackRoots) {
+      const standardPath = path.join(root, gameId, targetVersion);
+      if (fs.existsSync(standardPath)) {
+        return standardPath;
+      }
     }
 
     return null;

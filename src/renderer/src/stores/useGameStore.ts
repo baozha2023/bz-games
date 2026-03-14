@@ -35,6 +35,30 @@ export const useGameStore = defineStore("game", () => {
     return res;
   }
 
+  async function addGameWithManifest(
+    sourcePath: string,
+    draft: {
+      id: string;
+      name: string;
+      version: string;
+      description?: string;
+      author: string;
+      entry?: string;
+      platformVersion?: string;
+      icon?: string;
+      cover?: string;
+      type: "singleplayer" | "multiplayer" | "singlemultiple";
+      minPlayers?: number;
+      maxPlayers?: number;
+    },
+  ) {
+    const res = await window.electronAPI.game.loadWithManifest(sourcePath, draft);
+    if (res.success && res.manifest) {
+      await loadGames();
+    }
+    return res;
+  }
+
   async function removeGame(id: string, versions?: string[]) {
     await window.electronAPI.game.remove(id, versions);
     await loadGames();
@@ -146,6 +170,7 @@ export const useGameStore = defineStore("game", () => {
     isLoading,
     loadGames,
     addGame,
+    addGameWithManifest,
     removeGame,
     toggleFavorite,
     launchGame,

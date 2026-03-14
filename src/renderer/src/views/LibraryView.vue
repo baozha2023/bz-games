@@ -52,11 +52,130 @@
     >
       <div class="drop-panel">{{ t('library.dropHint') }}</div>
     </div>
+
+    <n-modal
+      v-model:show="showImportDraftModal"
+      preset="card"
+      :title="t('library.importDraftTitle')"
+      style="width: 760px;"
+    >
+      <n-space vertical size="large">
+        <n-form :model="draftForm" label-placement="top" class="import-draft-form">
+          <n-grid :cols="2" :x-gap="16" :y-gap="4">
+            <n-form-item-gi :label="t('library.importDraftFields.id')" path="id" required>
+              <n-space vertical size="small" style="width: 100%;">
+                <n-input
+                  v-model:value="draftForm.id"
+                  :placeholder="t('library.importDraftPlaceholders.id')"
+                />
+                <n-space align="center" size="small">
+                  <n-tag
+                    v-if="idCheckState !== 'idle'"
+                    size="small"
+                    :type="idCheckState === 'exists' ? 'error' : idCheckState === 'available' ? 'success' : 'warning'"
+                    :bordered="false"
+                  >
+                    {{
+                      idCheckState === 'checking'
+                        ? t('library.importDraftIdCheckLoading')
+                        : idCheckState === 'exists'
+                          ? t('library.importDraftIdExists')
+                          : t('library.importDraftIdAvailable')
+                    }}
+                  </n-tag>
+                  <n-text depth="3">{{ t('library.importDraftIdFormatHint') }}</n-text>
+                </n-space>
+              </n-space>
+            </n-form-item-gi>
+            <n-form-item-gi :label="t('library.importDraftFields.name')" path="name" required>
+              <n-input
+                v-model:value="draftForm.name"
+                :placeholder="t('library.importDraftPlaceholders.name')"
+              />
+            </n-form-item-gi>
+            <n-form-item-gi :label="t('library.importDraftFields.version')" path="version" required>
+              <n-input
+                v-model:value="draftForm.version"
+                :placeholder="t('library.importDraftPlaceholders.version')"
+              />
+            </n-form-item-gi>
+            <n-form-item-gi :label="t('library.importDraftFields.author')" path="author" required>
+              <n-input
+                v-model:value="draftForm.author"
+                :placeholder="t('library.importDraftPlaceholders.author')"
+              />
+            </n-form-item-gi>
+            <n-form-item-gi :label="t('library.importDraftFields.platformVersion')" required>
+              <n-input :value="draftForm.platformVersion" disabled />
+            </n-form-item-gi>
+            <n-form-item-gi :label="t('library.importDraftFields.type')" required>
+              <n-select v-model:value="draftForm.type" :options="draftTypeOptions" />
+            </n-form-item-gi>
+            <n-form-item-gi
+              :span="2"
+              :label="t('library.importDraftFields.entry')"
+              path="entry"
+              required
+            >
+              <n-space vertical size="small" style="width: 100%;">
+                <n-input
+                  v-model:value="draftForm.entry"
+                  :placeholder="t('library.importDraftPlaceholders.entry')"
+                />
+                <n-text depth="3">{{ t('library.importDraftEntryHint') }}</n-text>
+              </n-space>
+            </n-form-item-gi>
+            <n-form-item-gi :span="2" :label="t('library.importDraftFields.description')">
+              <n-input
+                v-model:value="draftForm.description"
+                type="textarea"
+                :autosize="{ minRows: 3, maxRows: 5 }"
+                :placeholder="t('library.importDraftPlaceholders.description')"
+              />
+            </n-form-item-gi>
+            <n-form-item-gi :label="t('library.importDraftFields.icon')">
+              <n-input
+                v-model:value="draftForm.icon"
+                :placeholder="t('library.importDraftPlaceholders.icon')"
+              />
+            </n-form-item-gi>
+            <n-form-item-gi :label="t('library.importDraftFields.cover')">
+              <n-input
+                v-model:value="draftForm.cover"
+                :placeholder="t('library.importDraftPlaceholders.cover')"
+              />
+            </n-form-item-gi>
+            <n-form-item-gi
+              v-if="draftForm.type !== 'singleplayer'"
+              :label="t('library.importDraftFields.minPlayers')"
+              required
+            >
+              <n-input-number v-model:value="draftForm.minPlayers" :min="2" :max="64" style="width: 100%;" />
+            </n-form-item-gi>
+            <n-form-item-gi
+              v-if="draftForm.type !== 'singleplayer'"
+              :label="t('library.importDraftFields.maxPlayers')"
+              required
+            >
+              <n-input-number v-model:value="draftForm.maxPlayers" :min="2" :max="64" style="width: 100%;" />
+            </n-form-item-gi>
+          </n-grid>
+        </n-form>
+      </n-space>
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="showImportDraftModal = false">{{ t('common.cancel') }}</n-button>
+          <n-button type="primary" :loading="isDraftSubmitting" @click="handleConfirmDraftImport">
+            {{ t('library.importDraftSubmit') }}
+          </n-button>
+        </n-space>
+      </template>
+    </n-modal>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
@@ -73,6 +192,31 @@ const draggedIndex = ref<number | null>(null)
 const isDragActive = ref(false)
 let externalDragDepth = 0
 let longPressTimer: NodeJS.Timeout | null = null
+let idCheckTimer: number | null = null
+const showImportDraftModal = ref(false)
+const isDraftSubmitting = ref(false)
+const pendingImportSourcePath = ref('')
+const idCheckState = ref<'idle' | 'checking' | 'exists' | 'available'>('idle')
+const draftForm = ref({
+  id: '',
+  name: '',
+  version: '1.0.0',
+  description: '',
+  author: '',
+  platformVersion: '',
+  entry: '',
+  icon: '',
+  cover: '',
+  type: 'singleplayer' as 'singleplayer' | 'multiplayer' | 'singlemultiple',
+  minPlayers: 2,
+  maxPlayers: 4
+})
+
+const draftTypeOptions = computed(() => [
+  { label: t('gameDetail.typeSingleplayer'), value: 'singleplayer' },
+  { label: t('gameDetail.typeMultiplayer'), value: 'multiplayer' },
+  { label: t('gameDetail.typeSingleMultiple'), value: 'singlemultiple' }
+])
 
 onMounted(() => {
   gameStore.loadGames()
@@ -108,6 +252,11 @@ const showAddGameResult = (result: Awaited<ReturnType<typeof gameStore.addGame>>
 
 const handleAddGame = async () => {
   const result = await gameStore.addGame()
+  if (result.error === 'noManifest' && result.params?.sourcePath) {
+    message.info(t('library.importError.noManifest'))
+    await openImportDraftModal(result.params.sourcePath as string)
+    return
+  }
   showAddGameResult(result)
 }
 
@@ -220,7 +369,111 @@ const handleExternalDrop = async (e: DragEvent) => {
   }
 
   const result = await gameStore.addGame(droppedPath)
+  if (result.error === 'noManifest' && result.params?.sourcePath) {
+    message.info(t('library.importError.noManifest'))
+    await openImportDraftModal(result.params.sourcePath as string)
+    return
+  }
   showAddGameResult(result)
+}
+
+const openImportDraftModal = async (sourcePath: string) => {
+  const prep = await window.electronAPI.game.prepareImport(sourcePath)
+  if (!prep) {
+    message.error(t('library.importError.notDirectory'))
+    return
+  }
+  pendingImportSourcePath.value = prep.sourcePath
+  draftForm.value = {
+    id: prep.suggestedId,
+    name: prep.suggestedName,
+    version: '1.0.0',
+    description: '',
+    author: '',
+    platformVersion: prep.currentPlatformVersion,
+    entry: prep.suggestedEntry,
+    icon: '',
+    cover: '',
+    type: 'singleplayer',
+    minPlayers: 2,
+    maxPlayers: 4
+  }
+  showImportDraftModal.value = true
+}
+
+watch(
+  () => draftForm.value.id,
+  (next) => {
+    if (idCheckTimer) {
+      window.clearTimeout(idCheckTimer)
+    }
+    const normalized = next.trim()
+    if (!normalized) {
+      idCheckState.value = 'idle'
+      return
+    }
+    idCheckState.value = 'checking'
+    idCheckTimer = window.setTimeout(async () => {
+      const exists = await window.electronAPI.game.checkIdExists(normalized)
+      idCheckState.value = exists ? 'exists' : 'available'
+      idCheckTimer = null
+    }, 250)
+  }
+)
+
+const handleConfirmDraftImport = async () => {
+  const id = draftForm.value.id.trim()
+  const name = draftForm.value.name.trim()
+  const version = draftForm.value.version.trim()
+  const author = draftForm.value.author.trim()
+  const entry = draftForm.value.entry.trim()
+  if (!id || !name || !version || !author || !entry) {
+    message.error(t('library.importDraftRequired'))
+    return
+  }
+  if (!/^[a-z0-9]+(\.[a-z0-9\-]+)+$/.test(id)) {
+    message.error(t('library.importDraftIdFormatHint'))
+    return
+  }
+  if (!/^\d+\.\d+\.\d+$/.test(version)) {
+    message.error(t('library.importError.versionInvalid'))
+    return
+  }
+  if (idCheckState.value === 'exists') {
+    message.error(t('library.importError.idExists'))
+    return
+  }
+  if (
+    draftForm.value.type !== 'singleplayer' &&
+    draftForm.value.minPlayers > draftForm.value.maxPlayers
+  ) {
+    message.error(t('library.importError.playersInvalid'))
+    return
+  }
+
+  isDraftSubmitting.value = true
+  try {
+    const result = await gameStore.addGameWithManifest(pendingImportSourcePath.value, {
+      id,
+      name,
+      version,
+      description: draftForm.value.description.trim(),
+      author,
+      entry,
+      platformVersion: draftForm.value.platformVersion,
+      icon: draftForm.value.icon.trim(),
+      cover: draftForm.value.cover.trim(),
+      type: draftForm.value.type,
+      minPlayers: draftForm.value.type === 'singleplayer' ? undefined : draftForm.value.minPlayers,
+      maxPlayers: draftForm.value.type === 'singleplayer' ? undefined : draftForm.value.maxPlayers
+    })
+    if (result.success) {
+      showImportDraftModal.value = false
+    }
+    showAddGameResult(result)
+  } finally {
+    isDraftSubmitting.value = false
+  }
 }
 </script>
 
@@ -275,5 +528,9 @@ const handleExternalDrop = async (e: DragEvent) => {
 
 .shake {
   animation: shake 0.3s infinite;
+}
+
+.import-draft-form :deep(.n-form-item-label__text) {
+  font-weight: 600;
 }
 </style>

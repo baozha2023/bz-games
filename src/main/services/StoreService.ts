@@ -2,7 +2,6 @@ import crypto from "crypto";
 import ElectronStore from "electron-store";
 import fs from "fs/promises";
 import path from "path";
-import { app } from "electron";
 import type {
   AppStore,
   AppSettings,
@@ -10,7 +9,7 @@ import type {
   GameVersion,
   UserData,
 } from "../../shared/types";
-import { getAppRoot, getExecutableDir } from "../utils/appPath";
+import { getAppRoot } from "../utils/appPath";
 import { logger } from "../utils/logger";
 
 const defaultSettings: AppSettings = {
@@ -23,6 +22,8 @@ const defaultSettings: AppSettings = {
   closeBehavior: "tray",
   autoLaunch: false,
   ignoredUpdateVersion: "",
+  gameStoragePath: "",
+  gameStorageHistory: [],
 };
 
 const defaultUserData: UserData = {
@@ -119,89 +120,13 @@ function mergeStoreWithDefaults(raw: Partial<AppStore>): AppStore {
   };
 }
 
-async function pathExists(filePath: string): Promise<boolean> {
-  try {
-    await fs.stat(filePath);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function copyIfMissing(sourcePath: string, targetPath: string) {
-  if (await pathExists(targetPath)) return;
-  await fs.mkdir(path.dirname(targetPath), { recursive: true });
-  await fs.copyFile(sourcePath, targetPath);
-}
-
-async function moveOrCopyDirectory(
-  sourcePath: string,
-  targetPath: string,
-): Promise<void> {
-  try {
-    await fs.rename(sourcePath, targetPath);
-  } catch (error: any) {
-    if (error?.code === "EXDEV" || error?.code === "EACCES" || error?.code === "EPERM") {
-      await fs.cp(sourcePath, targetPath, { recursive: true });
-    } else {
-      throw error;
-    }
-  }
-}
-
-async function mergeLegacyDirectory(
-  sourcePath: string,
-  targetPath: string,
-): Promise<void> {
-  await fs.mkdir(targetPath, { recursive: true });
-  const entries = await fs.readdir(sourcePath, { withFileTypes: true });
-  for (const entry of entries) {
-    const src = path.join(sourcePath, entry.name);
-    const dst = path.join(targetPath, entry.name);
-    if (entry.isDirectory()) {
-      if (await pathExists(dst)) {
-        await mergeLegacyDirectory(src, dst);
-      } else {
-        await moveOrCopyDirectory(src, dst);
-      }
-    } else {
-      if (!(await pathExists(dst))) {
-        await fs.copyFile(src, dst);
-      }
-    }
-  }
-}
-
-async function migrateLegacyData(
-  legacyRoot: string,
-  dataRoot: string,
-): Promise<void> {
-  if (legacyRoot === dataRoot) return;
-  const legacyConfigPath = path.join(legacyRoot, "config.json");
-  const dataConfigPath = path.join(dataRoot, "config.json");
-  if (await pathExists(legacyConfigPath)) {
-    await copyIfMissing(legacyConfigPath, dataConfigPath);
-  }
-
-  const legacyGamesDir = path.join(legacyRoot, "games");
-  const dataGamesDir = path.join(dataRoot, "games");
-  if (await pathExists(legacyGamesDir)) {
-    if (await pathExists(dataGamesDir)) {
-      await mergeLegacyDirectory(legacyGamesDir, dataGamesDir);
-    } else {
-      await moveOrCopyDirectory(legacyGamesDir, dataGamesDir);
-    }
-  }
-}
-
 class StoreService {
   private store: ElectronStore<AppStore> | null = null;
   private _initPromise: Promise<void> | null = null;
 
   /**
    * Initialize the store.
-   * This must be called after app.whenReady() because electron-store
-   * requires access to app.getPath('userData').
+   * This must be called after app.whenReady().
    */
   async init(): Promise<void> {
     if (this.store) return;
@@ -210,14 +135,6 @@ class StoreService {
     this._initPromise = (async () => {
       try {
         const dataRoot = getAppRoot();
-        const legacyRoots = [
-          getExecutableDir(),
-          app.isPackaged ? app.getPath("userData") : "",
-        ].filter((root, index, roots) => !!root && roots.indexOf(root) === index);
-        for (const legacyRoot of legacyRoots) {
-          await migrateLegacyData(legacyRoot, dataRoot);
-        }
-
         const configPath = path.join(dataRoot, "config.json");
         let legacyData: AppStore | null = null;
         try {
@@ -540,6 +457,14 @@ class StoreService {
     const settings = store.get("settings", defaultSettings);
 
     const merged = { ...defaultSettings, ...settings };
+    const defaultGamesPath = path.join(getAppRoot(), "games");
+    if (!merged.gameStoragePath?.trim()) {
+      merged.gameStoragePath = defaultGamesPath;
+    }
+    merged.gameStorageHistory = this.toStorageHistory(
+      merged.gameStorageHistory,
+      merged.gameStoragePath,
+    );
 
     if (!merged.playerId) {
       merged.playerId = crypto.randomUUID();
@@ -550,12 +475,154 @@ class StoreService {
     return merged;
   }
 
+  getGameStoragePath(): string {
+    const configured = this.getSettings().gameStoragePath?.trim();
+    if (configured) {
+      return configured;
+    }
+    return path.join(getAppRoot(), "games");
+  }
+
+  getGameStorageRoots(): string[] {
+    const settings = this.getSettings();
+    const roots = new Set<string>();
+    const defaultRoot = path.join(getAppRoot(), "games");
+    roots.add(defaultRoot);
+    if (settings.gameStoragePath?.trim()) {
+      roots.add(settings.gameStoragePath.trim());
+    }
+    for (const p of settings.gameStorageHistory || []) {
+      if (typeof p === "string" && p.trim()) {
+        roots.add(p.trim());
+      }
+    }
+    for (const game of this.getGamesList()) {
+      for (const version of game.versions) {
+        if (typeof version.path !== "string" || !version.path.trim()) continue;
+        roots.add(path.dirname(path.dirname(version.path)));
+      }
+    }
+    return Array.from(roots);
+  }
+
+  getAllGameStoragePaths(): string[] {
+    return this.getGameStorageRoots();
+  }
+
+  private normalizeStoragePath(input: string): string {
+    const normalized = path.resolve(input.trim());
+    if (!normalized || normalized === path.parse(normalized).root) {
+      throw new Error("invalid_storage_path");
+    }
+    return normalized;
+  }
+
+  private toStorageHistory(
+    currentHistory: string[] | undefined,
+    nextPath: string,
+  ): string[] {
+    const history = new Set<string>();
+    history.add(nextPath);
+    for (const p of currentHistory || []) {
+      if (typeof p === "string" && p.trim()) {
+        history.add(p.trim());
+      }
+      if (history.size >= 20) break;
+    }
+    return Array.from(history).slice(0, 20);
+  }
+
   saveSettings(settings: Partial<AppSettings>): void {
     const store = this.getStore();
     const current = this.getSettings();
+    const nextStoragePath = settings.gameStoragePath?.trim();
+    const finalStoragePath = nextStoragePath || current.gameStoragePath || "";
+    const nextHistory = finalStoragePath
+      ? this.toStorageHistory(current.gameStorageHistory, finalStoragePath)
+      : current.gameStorageHistory || [];
 
     logger.info(`[StoreService] Updating settings`);
-    store.set("settings", { ...current, ...settings });
+    store.set("settings", {
+      ...current,
+      ...settings,
+      gameStoragePath: finalStoragePath,
+      gameStorageHistory: nextHistory,
+    });
+  }
+
+  async removeGameStoragePath(storagePath: string): Promise<{
+    removedGames: number;
+    removedVersions: number;
+    nextStoragePath: string;
+  }> {
+    const normalizedTarget = this.normalizeStoragePath(storagePath);
+    const store = this.getStore();
+    const games = this.getGamesList();
+    const nextGames: GameRecord[] = [];
+    let removedGames = 0;
+    let removedVersions = 0;
+
+    for (const game of games) {
+      const versionsInPath = game.versions.filter((version) => {
+        const versionRoot = path.dirname(path.dirname(version.path));
+        return path.resolve(versionRoot) === normalizedTarget;
+      });
+      if (versionsInPath.length === 0) {
+        nextGames.push(game);
+        continue;
+      }
+
+      removedVersions += versionsInPath.length;
+      await this.removeVersionDirectories(game.id, versionsInPath);
+      const remaining = game.versions.filter(
+        (version) => !versionsInPath.some((v) => v.version === version.version),
+      );
+
+      if (remaining.length === 0) {
+        removedGames += 1;
+        continue;
+      }
+
+      game.versions = remaining;
+      this.ensureLatestVersion(game);
+      nextGames.push(game);
+    }
+
+    try {
+      await fs.rm(normalizedTarget, { recursive: true, force: true });
+      logger.info(`[StoreService] Removed game storage path: ${normalizedTarget}`);
+    } catch (e) {
+      logger.warn(
+        `[StoreService] Failed to remove storage path directory: ${normalizedTarget}`,
+        e,
+      );
+    }
+
+    const currentSettings = this.getSettings();
+    const filteredHistory = (currentSettings.gameStorageHistory || [])
+      .map((item) => item.trim())
+      .filter((item) => item && path.resolve(item) !== normalizedTarget);
+
+    const defaultRoot = path.join(getAppRoot(), "games");
+    const currentPath = currentSettings.gameStoragePath?.trim() || defaultRoot;
+    const nextStoragePath =
+      path.resolve(currentPath) === normalizedTarget
+        ? filteredHistory[0] || defaultRoot
+        : currentPath;
+    const nextHistory = this.toStorageHistory(filteredHistory, nextStoragePath);
+
+    store.set("games", nextGames);
+    store.set("settings", {
+      ...currentSettings,
+      gameStoragePath: nextStoragePath,
+      gameStorageHistory: nextHistory,
+    });
+
+    return {
+      removedGames,
+      removedVersions,
+      nextStoragePath,
+    };
   }
 
   updateGameStats(

@@ -87,6 +87,10 @@ export const useRoomStore = defineStore("room", () => {
     await window.electronAPI.room.sendChat(content, type);
   }
 
+  async function kickPlayer(playerId: string) {
+    return await window.electronAPI.room.kickPlayer(playerId);
+  }
+
   function handleRoomEvent(event: RoomEvent) {
     if (event.type === "room:state:sync") {
       room.value = event.payload as RoomInfo;
@@ -122,15 +126,24 @@ export const useRoomStore = defineStore("room", () => {
         isSystem: true,
       });
 
-      // Update local state manually since server didn't sync?
-      if (room.value) {
-        room.value.players = room.value.players.filter(
-          (p) => p.id !== payload.playerId,
-        );
-      }
     } else if (event.type === "room:disbanded") {
       room.value = null;
       chatMessages.value = [];
+      isStartCooldown.value = false;
+    } else if (event.type === "room:kicked") {
+      room.value = null;
+      chatMessages.value = [];
+      isStartCooldown.value = false;
+    } else if (event.type === "room:player:kicked") {
+      const payload = event.payload as { playerId: string; name?: string };
+      chatMessages.value.push({
+        id: window.crypto.randomUUID(),
+        senderId: "system",
+        senderName: "System",
+        content: t("room.playerKicked", { name: payload.name || payload.playerId }),
+        timestamp: Date.now(),
+        isSystem: true,
+      });
     } else if (event.type === "room:game:start") {
       chatMessages.value.push({
         id: window.crypto.randomUUID(),
@@ -174,6 +187,7 @@ export const useRoomStore = defineStore("room", () => {
     leaveRoom,
     setReady,
     startGame,
+    kickPlayer,
     handleRoomEvent,
     sendChatMessage,
   };

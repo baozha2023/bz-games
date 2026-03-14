@@ -7,6 +7,8 @@
         :key="player.id" 
         :player="player"
         :is-local-player="player.id === localPlayerId"
+        :show-kick-button="isHost && player.id !== localPlayerId"
+        @kick="emit('kick', player.id)"
       />
     </n-list>
   </div>
@@ -24,5 +26,10 @@ defineProps<{
   players: PlayerInRoom[]
   maxPlayers: number
   localPlayerId: string
+  isHost: boolean
+}>()
+
+const emit = defineEmits<{
+  kick: [playerId: string]
 }>()
 </script>

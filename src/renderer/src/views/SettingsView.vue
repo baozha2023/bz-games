@@ -49,6 +49,39 @@
         </n-radio-group>
       </n-form-item>
 
+      <n-form-item :label="t('settings.gameStoragePath')" path="gameStoragePath">
+        <n-space vertical style="width: 100%;">
+          <n-input-group>
+            <n-input v-model:value="formValue.gameStoragePath" :placeholder="t('settings.gameStoragePathPlaceholder')" />
+            <n-button @click="handlePickGameStoragePath">{{ t('settings.browsePath') }}</n-button>
+          </n-input-group>
+        </n-space>
+      </n-form-item>
+
+      <n-form-item :label="t('settings.storagePathList')">
+        <n-space vertical style="width: 100%;">
+          <n-empty v-if="allStoragePaths.length === 0" :description="t('settings.storagePathEmpty')" />
+          <div v-for="item in allStoragePaths" :key="item" class="storage-path-item">
+            <n-button
+              quaternary
+              style="justify-content: flex-start; flex: 1;"
+              @click="handleOpenPath(item)"
+            >
+              {{ item }}
+            </n-button>
+            <n-button
+              tertiary
+              type="error"
+              size="small"
+              :loading="removingPath === item"
+              @click="handleRemovePath(item)"
+            >
+              ×
+            </n-button>
+          </div>
+        </n-space>
+      </n-form-item>
+
     <n-form-item :label="t('settings.update')">
         <n-space>
         <n-button :loading="isCheckingUpdate" @click="handleCheckUpdate">
@@ -86,10 +119,22 @@ const formRef = ref(null)
 const formValue = ref<AppSettings | null>(null)
 const updateState = computed(() => settingsStore.updateState)
 const isCheckingUpdate = ref(false)
+const removingPath = ref('')
+const allStoragePaths = computed(() => {
+  const current = formValue.value?.gameStoragePath?.trim()
+  const history = formValue.value?.gameStorageHistory || []
+  const set = new Set<string>()
+  if (current) set.add(current)
+  history.forEach(path => {
+    if (path?.trim()) set.add(path.trim())
+  })
+  return Array.from(set)
+})
 
 const rules = {
   playerName: { required: true, message: () => t('settings.enterName'), trigger: 'blur' },
-  defaultRoomPort: { required: true, type: 'number', message: () => t('settings.enterPort'), trigger: ['blur', 'change'] }
+  defaultRoomPort: { required: true, type: 'number', message: () => t('settings.enterPort'), trigger: ['blur', 'change'] },
+  gameStoragePath: { required: true, message: () => t('settings.enterStoragePath'), trigger: ['blur', 'change'] }
 }
 
 const themeOptions = computed(() => [
@@ -133,6 +178,48 @@ const handleUploadAvatar = async () => {
   }
 }
 
+const handlePickGameStoragePath = async () => {
+  const selected = await window.electronAPI.settings.selectGameStoragePath()
+  if (!selected || !formValue.value) return
+  formValue.value.gameStoragePath = selected
+}
+
+const handleOpenPath = async (targetPath: string) => {
+  const ok = await window.electronAPI.settings.openPath(targetPath)
+  if (!ok) {
+    message.error(t('settings.openPathFailed'))
+  }
+}
+
+const handleRemovePath = async (targetPath: string) => {
+  dialog.warning({
+    title: t('settings.removeStoragePathTitle'),
+    content: t('settings.removeStoragePathConfirm', { path: targetPath }),
+    positiveText: t('common.confirm'),
+    negativeText: t('common.cancel'),
+    onPositiveClick: async () => {
+      try {
+        removingPath.value = targetPath
+        const result = await window.electronAPI.settings.removeGameStoragePath(targetPath)
+        await settingsStore.loadSettings()
+        if (settingsStore.settings) {
+          formValue.value = JSON.parse(JSON.stringify(settingsStore.settings))
+        }
+        message.success(
+          t('settings.removeStoragePathSuccess', {
+            gameCount: result.removedGames,
+            versionCount: result.removedVersions
+          })
+        )
+      } catch (error: any) {
+        message.error(`${t('settings.removeStoragePathFailed')}: ${error?.message || error}`)
+      } finally {
+        removingPath.value = ''
+      }
+    }
+  })
+}
+
 const handleCheckUpdate = async () => {
   if (isCheckingUpdate.value) return
   isCheckingUpdate.value = true
@@ -171,3 +258,11 @@ const handleCheckUpdate = async () => {
 }
 
 </script>
+
+<style scoped>
+.storage-path-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+</style>

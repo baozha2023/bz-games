@@ -13,6 +13,9 @@ export const IPC = {
   GAME_UNLOCK_ACHIEVEMENT: "game:unlockAchievement",
   GAME_TOGGLE_FAVORITE: "game:toggleFavorite",
   GAME_REORDER: "game:reorder",
+  GAME_PREPARE_IMPORT: "game:prepareImport",
+  GAME_LOAD_WITH_MANIFEST: "game:loadWithManifest",
+  GAME_CHECK_ID_EXISTS: "game:checkIdExists",
 
   // ── 房间管理 ──
   ROOM_CREATE: "room:create",
@@ -24,6 +27,7 @@ export const IPC = {
   ROOM_SET_ADDRESS: "room:setAddress",
   ROOM_GET_STATE: "room:getState",
   ROOM_SEND_CHAT: "room:sendChat",
+  ROOM_KICK_PLAYER: "room:kickPlayer",
 
   // ── 房间事件推送（主→渲染，使用 ipcRenderer.on）──
   ROOM_EVENT: "room:event",
@@ -37,6 +41,9 @@ export const IPC = {
   SYSTEM_GET_SETTINGS: "system:getSettings",
   SYSTEM_SAVE_SETTINGS: "system:saveSettings",
   SYSTEM_UPLOAD_AVATAR: "system:uploadAvatar",
+  SYSTEM_SELECT_GAME_STORAGE_PATH: "system:selectGameStoragePath",
+  SYSTEM_OPEN_PATH: "system:openPath",
+  SYSTEM_REMOVE_GAME_STORAGE_PATH: "system:removeGameStoragePath",
   SYSTEM_GET_USER_DATA: "system:getUserData",
   SYSTEM_CHECK_IN: "system:checkIn",
   SYSTEM_CHECK_UPDATE: "system:checkUpdate",

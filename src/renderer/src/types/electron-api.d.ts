@@ -43,6 +43,37 @@ declare global {
           error?: string;
           params?: Record<string, any>;
         }>;
+        prepareImport: (sourcePath: string) => Promise<{
+          sourcePath: string;
+          hasManifest: boolean;
+          currentPlatformVersion: string;
+          suggestedId: string;
+          suggestedName: string;
+          suggestedEntry: string;
+        } | null>;
+        loadWithManifest: (
+          sourcePath: string,
+          draft: {
+            id: string;
+            name: string;
+            version: string;
+            description?: string;
+            author: string;
+            entry?: string;
+            platformVersion?: string;
+            icon?: string;
+            cover?: string;
+            type: "singleplayer" | "multiplayer" | "singlemultiple";
+            minPlayers?: number;
+            maxPlayers?: number;
+          },
+        ) => Promise<{
+          success: boolean;
+          manifest?: GameManifest;
+          error?: string;
+          params?: Record<string, any>;
+        }>;
+        checkIdExists: (id: string) => Promise<boolean>;
         getPathForFile: (file: File) => string;
         remove: (id: string, versions?: string[]) => Promise<void>;
         launch: (id: string, version?: string) => Promise<void>;
@@ -86,12 +117,20 @@ declare global {
         setAddress: (address: string) => Promise<void>;
         getState: () => Promise<RoomInfo | null>;
         sendChat: (content: string, type?: "text" | "audio") => Promise<void>;
+        kickPlayer: (playerId: string) => Promise<boolean>;
         onEvent: (callback: (event: RoomEvent) => void) => () => void;
       };
       settings: {
         get: () => Promise<AppSettings>;
         save: (settings: AppSettings) => Promise<void>;
         uploadAvatar: () => Promise<string | null>;
+        selectGameStoragePath: () => Promise<string | null>;
+        openPath: (targetPath: string) => Promise<boolean>;
+        removeGameStoragePath: (targetPath: string) => Promise<{
+          removedGames: number;
+          removedVersions: number;
+          nextStoragePath: string;
+        }>;
         getUpdateStatus: () => Promise<UpdateState>;
         checkUpdate: () => Promise<UpdateState>;
         downloadUpdate: () => Promise<UpdateState>;

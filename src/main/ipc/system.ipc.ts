@@ -1,10 +1,11 @@
-import { app, ipcMain, dialog, nativeImage } from "electron";
+import { app, ipcMain, dialog, nativeImage, shell } from "electron";
 import fs from "fs";
 import { IPC } from "../../shared/ipc-channels";
 import { storeService } from "../services/StoreService";
 import { updateService } from "../services/UpdateService";
 import { logger } from "../utils/logger";
 import type { AppSettings } from "../../shared/types";
+import { setCustomGamesDir } from "../utils/appPath";
 
 export function registerSystemIpc() {
   updateService.init();
@@ -17,6 +18,7 @@ export function registerSystemIpc() {
     logger.info("[SystemIPC] Saving settings:", settings);
     try {
       storeService.saveSettings(settings);
+      setCustomGamesDir(settings.gameStoragePath || null);
       app.setLoginItemSettings({
         openAtLogin: settings.autoLaunch,
       });
@@ -58,6 +60,34 @@ export function registerSystemIpc() {
       return null;
     }
   });
+
+  ipcMain.handle(IPC.SYSTEM_SELECT_GAME_STORAGE_PATH, async () => {
+    const { canceled, filePaths } = await dialog.showOpenDialog({
+      title: "Select Game Storage Directory",
+      properties: ["openDirectory", "createDirectory"],
+    });
+    if (canceled || filePaths.length === 0) {
+      return null;
+    }
+    return filePaths[0];
+  });
+
+  ipcMain.handle(IPC.SYSTEM_OPEN_PATH, async (_, targetPath: string) => {
+    if (!targetPath || typeof targetPath !== "string") {
+      return false;
+    }
+    const result = await shell.openPath(targetPath);
+    return result === "";
+  });
+
+  ipcMain.handle(
+    IPC.SYSTEM_REMOVE_GAME_STORAGE_PATH,
+    async (_, targetPath: string) => {
+      const result = await storeService.removeGameStoragePath(targetPath);
+      setCustomGamesDir(result.nextStoragePath || null);
+      return result;
+    },
+  );
 
   ipcMain.handle(IPC.SYSTEM_GET_USER_DATA, async () => {
     return storeService.getUserData();

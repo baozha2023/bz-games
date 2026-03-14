@@ -14,6 +14,8 @@
           :players="roomStore.room.players" 
           :max-players="roomStore.room.maxPlayers"
           :local-player-id="settingsStore.settings?.playerId || ''"
+          :is-host="roomStore.isHost"
+          @kick="handleKickPlayer"
         />
         <n-divider />
         <RoomChat />
@@ -120,6 +122,15 @@ onMounted(async () => {
         message.warning(t('room.roomDisbanded'));
         // Clear room state logic is handled in store, but we need to navigate
         router.replace('/library');
+      } else if (event.type === 'room:kicked') {
+        dialog.error({
+          title: t('common.error'),
+          content: t('room.youWereKicked'),
+          positiveText: t('common.confirm'),
+          onPositiveClick: () => {
+            router.replace('/library')
+          }
+        })
       }
     });
   }
@@ -178,5 +189,22 @@ const handleStartGame = async () => {
     }
     message.error(t('room.startFailed'));
   }
+}
+
+const handleKickPlayer = async (playerId: string) => {
+  const target = roomStore.room?.players.find(p => p.id === playerId)
+  if (!target) return
+  dialog.warning({
+    title: t('room.kickPlayer'),
+    content: t('room.confirmKick', { name: target.name }),
+    positiveText: t('common.confirm'),
+    negativeText: t('common.cancel'),
+    onPositiveClick: async () => {
+      const ok = await roomStore.kickPlayer(playerId)
+      if (!ok) {
+        message.error(t('common.error'))
+      }
+    }
+  })
 }
 </script>

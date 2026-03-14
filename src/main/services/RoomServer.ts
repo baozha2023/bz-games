@@ -8,6 +8,7 @@ import type {
   RoomJoinAckPayload,
   RoomJoinRefusedPayload,
   PlayerInRoom,
+  RoomKickedPayload,
 } from "../../shared/types";
 import { storeService } from "./StoreService";
 import { logger } from "../utils/logger";
@@ -17,6 +18,7 @@ export class RoomServer {
   private wss: WebSocketServer | null = null;
   public room: RoomInfo | null = null;
   private playerConnections: Map<string, WebSocket> = new Map();
+  private kickedPlayers: Set<string> = new Set();
   private heartbeatInterval: NodeJS.Timeout | null = null;
 
   async start(gameId: string, version?: string): Promise<number> {
@@ -25,6 +27,7 @@ export class RoomServer {
     const gameVersion = await this.getGameVersion(gameId, version);
 
     this.initializeRoom(gameId, gameVersion, maxPlayers);
+    this.kickedPlayers.clear();
 
     const startedPort = await this.startWebSocketServer(port);
     this.startHeartbeat();
@@ -41,6 +44,7 @@ export class RoomServer {
       if (this.room) {
         this.broadcast({ type: "room:disbanded", payload: {} });
       }
+      await new Promise((resolve) => setTimeout(resolve, 120));
 
       await new Promise<void>((resolve) => {
         this.wss?.close(() => {
@@ -281,6 +285,12 @@ export class RoomServer {
     payload: RoomJoinPayload,
   ): RoomJoinRefusedPayload | null {
     if (!this.room) return { reason: "room_closed", message: "Room closed" };
+    if (this.kickedPlayers.has(payload.playerId)) {
+      return {
+        reason: "kicked",
+        message: "You have been removed from this room by host",
+      };
+    }
 
     const isRejoin = this.room.players.some((p) => p.id === payload.playerId);
     if (!isRejoin && this.room.players.length >= this.room.maxPlayers) {
@@ -338,14 +348,49 @@ export class RoomServer {
     if (!this.room) return;
     const playerId = this.getPlayerIdByWs(ws);
     if (playerId) {
+      const isHost = this.room.hostId === playerId;
       this.playerConnections.delete(playerId);
       this.room.players = this.room.players.filter((p) => p.id !== playerId);
       this.broadcast({
         type: "room:player:left",
         payload: { playerId },
       });
+      if (isHost) {
+        this.broadcast({ type: "room:disbanded", payload: {} });
+        this.stop();
+        return;
+      }
       this.broadcastState();
     }
+  }
+
+  kickPlayer(byPlayerId: string, targetPlayerId: string): boolean {
+    if (!this.room) return false;
+    if (byPlayerId !== this.room.hostId) return false;
+    if (targetPlayerId === this.room.hostId) return false;
+    const targetPlayer = this.room.players.find((p) => p.id === targetPlayerId);
+    if (!targetPlayer) return false;
+
+    this.kickedPlayers.add(targetPlayerId);
+    this.room.players = this.room.players.filter((p) => p.id !== targetPlayerId);
+    const targetSocket = this.playerConnections.get(targetPlayerId);
+    this.playerConnections.delete(targetPlayerId);
+
+    const kickedPayload: RoomKickedPayload = {
+      roomId: this.room.id,
+      byPlayerId,
+    };
+    if (targetSocket && targetSocket.readyState === WebSocket.OPEN) {
+      targetSocket.send(JSON.stringify({ type: "room:kicked", payload: kickedPayload }));
+      targetSocket.close();
+    }
+
+    this.broadcast({
+      type: "room:player:kicked",
+      payload: { playerId: targetPlayerId, byPlayerId, name: targetPlayer.name },
+    });
+    this.broadcastState();
+    return true;
   }
 
   private getPlayerIdByWs(ws: WebSocket): string | undefined {

@@ -25,8 +25,16 @@ export function registerRoomIpc() {
   );
 
   ipcMain.handle(IPC.ROOM_LEAVE, async () => {
+    const localPlayerId = storeService.getSettings().playerId;
+    if (roomServer.room?.hostId === localPlayerId) {
+      await roomServer.stop();
+      roomClient.disconnect();
+      return;
+    }
     roomClient.disconnect();
-    await roomServer.stop();
+    if (roomServer.room) {
+      await roomServer.stop();
+    }
   });
 
   ipcMain.handle(IPC.ROOM_READY, async () => {
@@ -86,4 +94,9 @@ export function registerRoomIpc() {
       roomClient.send(msg);
     },
   );
+
+  ipcMain.handle(IPC.ROOM_KICK_PLAYER, async (_, playerId: string) => {
+    const hostId = storeService.getSettings().playerId;
+    return roomServer.kickPlayer(hostId, playerId);
+  });
 }

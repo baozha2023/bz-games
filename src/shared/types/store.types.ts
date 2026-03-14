@@ -48,4 +48,6 @@ export interface AppSettings {
   closeBehavior: "tray" | "exit";
   autoLaunch: boolean;
   ignoredUpdateVersion?: string;
+  gameStoragePath?: string;
+  gameStorageHistory?: string[];
 }

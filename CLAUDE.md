@@ -319,6 +319,8 @@ interface AppSettings {
     defaultRoomPort: number;        // Room Server 监听端口，默认 38080
     closeBehavior: 'tray' | 'exit';
     autoLaunch: boolean;
+    gameStoragePath?: string;       // 新导入游戏的默认保存目录（绝对路径）
+    gameStorageHistory?: string[];  // 历史保存目录列表（最多保留 20 条）
 }
 ```
 
@@ -340,21 +342,31 @@ interface AppSettings {
 
 ### 6.1 游戏导入规范
 
-- **严格文件夹导入**：`GameLoader` 仅支持导入游戏目录（必须包含 `game.json` 的目录）。不接受 ZIP 文件，不搜索子目录，不支持自动生成 Manifest。
+- **任意文件夹导入**：`GameLoader` 支持任意目录导入。若目录缺少 `game.json`，前端需弹出补录表单，由用户填写核心字段后生成 Manifest 并继续导入。
 - **文件选择策略**：Windows 下文件选择对话框使用 `openDirectory` 模式。
 - **版本检查**：导入时会检查 `game.json` 中的 `platformVersion` 字段，若当前平台版本不满足要求（使用 `semver` 比较），将拒绝导入并提示用户。
 - **拖拽路径解析统一**：游戏库拖拽导入路径统一使用 `webUtils.getPathForFile(file)` 获取。
-- **旧兼容逻辑移除**：不再支持 `game.js` 自动生成 Manifest 的兼容逻辑。
+- **表单约束**：
+  - `id` 需实时检测重复并校验反向域名格式。
+  - `platformVersion` 固定为当前平台版本，不允许修改。
+  - `type` 使用下拉框；仅当 `type !== singleplayer` 时展示 `minPlayers/maxPlayers`。
+  - `version` 必须通过语义化版本校验（`x.y.z`）。
+  - `entry` 由平台自动探测（优先 `index.html`、`*.exe`），未探测到时禁止导入。
 
 ### 6.2 IPC 接口扩展
 
 - 更新 `game:load(sourcePath?)`：支持无参弹窗导入，也支持传入目录绝对路径进行导入（用于拖拽导入）。
+- 新增 `game:prepareImport(sourcePath)`：导入前探测目录信息（是否存在 `game.json`、建议 `id/name/entry`、当前平台版本）。
+- 新增 `game:loadWithManifest(sourcePath, draft)`：使用表单数据生成 Manifest 并完成导入。
+- 新增 `game:checkIdExists(id)`：实时检测游戏 ID 是否重复。
 - 新增 `game:getManifest(id, version)`：获取指定游戏版本的 Manifest 信息，用于动态展示成就等元数据。
 - 新增 `game:getVideo(id, version)`：获取指定版本的详情页预览视频（Data URL）。
 - 新增 `game:reorder(gameIds)`：更新游戏排序。
 - 新增 `game:toggleFavorite(id)`：切换游戏的特别喜欢状态。
 - 更新 `game:remove(id, versions?)`：支持删除指定版本或整个游戏。
 - 新增更新相关 IPC：`system:getUpdateStatus`、`system:checkUpdate`、`system:downloadUpdate`、`system:installUpdate`。
+- 新增设置相关 IPC：`system:selectGameStoragePath`、`system:openPath`。
+- 新增房间管理 IPC：`room:kickPlayer`（仅 Host 可调用）。
 - 新增主进程到渲染进程的更新事件：`system:update:event`（推送检查/下载/完成/错误状态）。
 - 确保所有新增 IPC 均在 `src/shared/ipc-channels.ts` 中定义，并在 `preload/api.ts` 中暴露.
 
@@ -366,7 +378,7 @@ interface AppSettings {
 - **游戏库展示**：
   - 游戏封面展示区域统一使用 **16:9** 比例，图片模式为 `contain`（完整显示）或 `cover`（填满）。
   - 支持 **长按** 游戏封面进入编辑模式，此时可拖动调整游戏排序。
-  - 支持将游戏文件夹直接拖拽到游戏库窗口导入（仍要求目录包含 `game.json`）。
+  - 支持将任意游戏文件夹直接拖拽到游戏库窗口导入；缺少 `game.json` 时弹出补录表单。
   - 排序结果需持久化存储。
   - 聊天消息：当前用户发送的消息，名字显示为绿色（#18a058）。
   - 收藏游戏：特别喜欢的游戏在封面右上角展示爱心图标。
@@ -378,6 +390,14 @@ interface AppSettings {
 - **房间开始按钮冷却**：房间内收到 `room:game:end` 后，Host 的「开始游戏」按钮需禁用 5 秒。
 - **统计界面**：卡片右上角需展示该游戏的所有版本号，使用自动换行布局。
 - **设置页更新入口**：设置页需提供「检查更新」按钮，点击后弹出更新状态弹层，显示下载进度与安装按钮。
+- **设置页游戏目录管理**：
+  - 支持维护多游戏保存路径（路径池）。
+  - 当前选择路径仅影响后续新导入游戏，不改动已导入游戏所在目录。
+  - 展示“当前 + 历史”已保存游戏路径列表，并支持点击打开目录。
+- **房间管理增强**：
+  - Host 可在玩家列表中踢人，被踢玩家收到弹窗并自动离开房间。
+  - 被踢玩家在同一房间生命周期内禁止重新加入。
+  - 房主解散房间后，所有客户端需稳定收到 `room:disbanded` 并退出房间页。
 - **成就弹窗版本一致性**：成就弹窗读取 Manifest 时必须使用当前运行版本，避免出现“有音效但无弹窗”。
 - **经济系统前端同步**：游戏结束事件后需刷新用户数据，确保每 10 分钟时长奖励的 BZ 币能即时反映在 UI。
 
@@ -387,6 +407,10 @@ interface AppSettings {
 - **发布资产**：每个版本 Release 必须单独上传 `BZ-Games Setup x.x.x.exe`、`latest.yml`、`*.blockmap`，不可打包成 ZIP。
 - **版本策略**：发布前需先提升 `package.json` 版本号，并使用对应 Tag 创建 Release。
 - **生效条件**：自动更新仅在打包后的生产环境可用；开发模式（`pnpm dev`）下应提示不支持。
+- **本地数据保护**：
+  - 在下载更新与安装更新前，`UpdateService` 必须创建数据快照目录（`.update-snapshots/<timestamp-stage>`）。
+  - 快照至少包含 `config.json` 备份文件与所有游戏保存根目录副本（支持多路径）。
+  - 快照写入失败时需要记录日志，且不得删除现有 `config.json` 与任何游戏目录。
 
 ***
 
@@ -457,6 +481,8 @@ Room Server 与 Room Client 之间使用 **WebSocket + JSON** 通信。
 | `room:game:start`      | Server → All        | 游戏开始信号             |
 | `room:game:end`        | Client/Server → All | 游戏结束信号             |
 | `room:disbanded`       | Server → All        | 房间已解散              |
+| `room:kicked`          | Server → Target     | 被踢通知（仅目标玩家）        |
+| `room:player:kicked`   | Server → All        | 广播玩家被踢事件            |
 | `room:chat`            | Bidirectional       | 聊天消息               |
 | `game:message:relay`   | Bidirectional       | 游戏内单播消息中继          |
 | `game:broadcast:relay` | Bidirectional       | 游戏内广播消息中继          |
@@ -531,4 +557,3 @@ function send(msg) {
 - `event.playerJoined`: 有新玩家加入房间
 - `event.playerLeft`: 有玩家离开房间
 - `event.gameEnd`: 游戏被强制结束（如房间解散）
-

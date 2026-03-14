@@ -5,6 +5,26 @@ import type { AppSettings, RoomEvent } from "../shared/types";
 export const electronAPI = {
   game: {
     load: (sourcePath?: string) => ipcRenderer.invoke(IPC.GAME_LOAD, sourcePath),
+    prepareImport: (sourcePath: string) =>
+      ipcRenderer.invoke(IPC.GAME_PREPARE_IMPORT, sourcePath),
+    loadWithManifest: (
+      sourcePath: string,
+      draft: {
+        id: string;
+        name: string;
+        version: string;
+        description?: string;
+        author: string;
+        entry?: string;
+        platformVersion?: string;
+        icon?: string;
+        cover?: string;
+        type: "singleplayer" | "multiplayer" | "singlemultiple";
+        minPlayers?: number;
+        maxPlayers?: number;
+      },
+    ) => ipcRenderer.invoke(IPC.GAME_LOAD_WITH_MANIFEST, sourcePath, draft),
+    checkIdExists: (id: string) => ipcRenderer.invoke(IPC.GAME_CHECK_ID_EXISTS, id),
     getPathForFile: (file: File) => webUtils.getPathForFile(file),
     remove: (id: string, versions?: string[]) =>
       ipcRenderer.invoke(IPC.GAME_REMOVE, id, versions),
@@ -71,6 +91,8 @@ export const electronAPI = {
     getState: () => ipcRenderer.invoke(IPC.ROOM_GET_STATE),
     sendChat: (content: string, type?: "text" | "audio") =>
       ipcRenderer.invoke(IPC.ROOM_SEND_CHAT, content, type),
+    kickPlayer: (playerId: string) =>
+      ipcRenderer.invoke(IPC.ROOM_KICK_PLAYER, playerId),
     onEvent: (callback: (event: RoomEvent) => void) => {
       const handler = (_: any, event: RoomEvent) => callback(event);
       ipcRenderer.on(IPC.ROOM_EVENT, handler);
@@ -82,6 +104,12 @@ export const electronAPI = {
     save: (settings: AppSettings) =>
       ipcRenderer.invoke(IPC.SYSTEM_SAVE_SETTINGS, settings),
     uploadAvatar: () => ipcRenderer.invoke(IPC.SYSTEM_UPLOAD_AVATAR),
+    selectGameStoragePath: () =>
+      ipcRenderer.invoke(IPC.SYSTEM_SELECT_GAME_STORAGE_PATH),
+    openPath: (targetPath: string) =>
+      ipcRenderer.invoke(IPC.SYSTEM_OPEN_PATH, targetPath),
+    removeGameStoragePath: (targetPath: string) =>
+      ipcRenderer.invoke(IPC.SYSTEM_REMOVE_GAME_STORAGE_PATH, targetPath),
     getUpdateStatus: () => ipcRenderer.invoke(IPC.SYSTEM_GET_UPDATE_STATUS),
     checkUpdate: () => ipcRenderer.invoke(IPC.SYSTEM_CHECK_UPDATE),
     downloadUpdate: () => ipcRenderer.invoke(IPC.SYSTEM_DOWNLOAD_UPDATE),

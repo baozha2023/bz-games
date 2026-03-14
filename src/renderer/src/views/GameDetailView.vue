@@ -337,6 +337,8 @@ const handleJoin = async () => {
         errorMsg = t('room.joinError.gameStarted');
     } else if (res.error === 'game_id_mismatch') {
         errorMsg = t('room.joinError.gameIdMismatch');
+    } else if (res.error === 'kicked') {
+        errorMsg = t('room.youWereKicked');
     }
     
     message.error(errorMsg || t('gameDetail.joinFail'));

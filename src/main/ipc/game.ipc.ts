@@ -2,7 +2,10 @@ import { ipcMain } from "electron";
 import fs from "fs";
 import path from "path";
 import { IPC } from "../../shared/ipc-channels";
-import { GameLoader } from "../services/GameLoader";
+import {
+  GameLoader,
+  type ManualManifestDraft,
+} from "../services/GameLoader";
 import { gameManager } from "../services/GameManager";
 import { storeService } from "../services/StoreService";
 import { logger } from "../utils/logger";
@@ -52,6 +55,21 @@ export function registerGameIpc() {
       return await GameLoader.loadGameFromPath(sourcePath);
     }
     return await GameLoader.loadGameFromDialog();
+  });
+
+  ipcMain.handle(IPC.GAME_PREPARE_IMPORT, async (_, sourcePath: string) => {
+    return await GameLoader.prepareImportFromPath(sourcePath);
+  });
+
+  ipcMain.handle(
+    IPC.GAME_LOAD_WITH_MANIFEST,
+    async (_, sourcePath: string, draft: ManualManifestDraft) => {
+      return await GameLoader.loadGameFromPathWithManifest(sourcePath, draft);
+    },
+  );
+
+  ipcMain.handle(IPC.GAME_CHECK_ID_EXISTS, async (_, id: string) => {
+    return await GameLoader.checkGameIdExists(id);
   });
 
   ipcMain.handle(IPC.GAME_GET_RECORDS, async () => {

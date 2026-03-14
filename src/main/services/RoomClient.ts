@@ -147,6 +147,10 @@ export class RoomClient {
     // 1. Update local cache
     if (msg.type === "room:state:sync") {
       this.room = msg.payload as RoomInfo;
+    } else if (msg.type === "room:disbanded" || msg.type === "room:kicked") {
+      this.room = null;
+      this.shouldReconnect = false;
+      this.hasJoinedRoom = false;
     }
 
     // 2. Handle handshake
@@ -220,6 +224,10 @@ export class RoomClient {
     this.hasJoinedRoom = false;
     this.cleanup();
     this.room = null;
+    mainWindow?.webContents.send(IPC.ROOM_EVENT, {
+      type: "room:disconnected",
+      payload: {},
+    });
   }
 
   private cleanup() {
