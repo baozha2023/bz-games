@@ -1,5 +1,4 @@
 import { app } from "electron";
-import fs from "fs";
 import path from "path";
 
 let customGamesDir: string | null = null;
@@ -16,18 +15,9 @@ export function getExecutableDir(): string {
   return process.cwd();
 }
 
-export function isPortableMode(): boolean {
-  if (!app.isPackaged) return true;
-  const exeDir = getExecutableDir();
-  return fs.existsSync(path.join(exeDir, "portable.flag"));
-}
-
 export function getAppRoot(): string {
   if (app.isPackaged) {
-    if (isPortableMode()) {
-      return getExecutableDir();
-    }
-    return app.getPath("userData");
+    return getExecutableDir();
   }
   return process.cwd();
 }

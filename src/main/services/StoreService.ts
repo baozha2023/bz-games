@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { app } from "electron";
 import ElectronStore from "electron-store";
 import fs from "fs/promises";
 import path from "path";
@@ -9,11 +10,7 @@ import type {
   GameVersion,
   UserData,
 } from "../../shared/types";
-import {
-  getAppRoot,
-  getExecutableDir,
-  isPortableMode,
-} from "../utils/appPath";
+import { getAppRoot } from "../utils/appPath";
 import { logger } from "../utils/logger";
 
 const defaultSettings: AppSettings = {
@@ -144,6 +141,74 @@ class StoreService {
   private store: ElectronStore<AppStore> | null = null;
   private _initPromise: Promise<void> | null = null;
 
+  private getSnapshotRoots(dataRoot: string): string[] {
+    const roots = [path.join(dataRoot, ".update-snapshots")];
+    const userDataRoot = app.getPath("userData");
+    if (path.resolve(userDataRoot) !== path.resolve(dataRoot)) {
+      roots.push(path.join(userDataRoot, ".update-snapshots"));
+    }
+    return roots;
+  }
+
+  private async restoreDataFromSnapshotIfNeeded(dataRoot: string): Promise<void> {
+    const configPath = path.join(dataRoot, "config.json");
+    if (await pathExists(configPath)) {
+      return;
+    }
+
+    const defaultGamesPath = path.join(dataRoot, "games");
+    const configBackupName = `config_${toSnapshotLabel(configPath)}.backup`;
+    const gamesBackupName = `games_${toSnapshotLabel(defaultGamesPath)}`;
+
+    for (const snapshotRoot of this.getSnapshotRoots(dataRoot)) {
+      let snapshots: string[] = [];
+      try {
+        const entries = await fs.readdir(snapshotRoot, { withFileTypes: true });
+        snapshots = entries
+          .filter((entry) => entry.isDirectory())
+          .map((entry) => entry.name)
+          .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+      } catch {
+        continue;
+      }
+
+      for (const dirName of snapshots) {
+        const dirPath = path.join(snapshotRoot, dirName);
+        const configBackups = [
+          path.join(dirPath, configBackupName),
+          path.join(dirPath, "config.json.backup"),
+        ];
+
+        let restoredConfig = false;
+        for (const backupPath of configBackups) {
+          if (await pathExists(backupPath)) {
+            await fs.copyFile(backupPath, configPath);
+            restoredConfig = true;
+            logger.info(
+              `[StoreService] Restored config.json from snapshot: ${dirPath}`,
+            );
+            break;
+          }
+        }
+
+        if (!restoredConfig) {
+          continue;
+        }
+
+        if (!(await pathExists(defaultGamesPath))) {
+          const gamesBackupPath = path.join(dirPath, gamesBackupName);
+          if (await pathExists(gamesBackupPath)) {
+            await fs.cp(gamesBackupPath, defaultGamesPath, { recursive: true });
+            logger.info(
+              `[StoreService] Restored default games dir from snapshot: ${dirPath}`,
+            );
+          }
+        }
+        return;
+      }
+    }
+  }
+
   /**
    * Initialize the store.
    * This must be called after app.whenReady().
@@ -155,89 +220,10 @@ class StoreService {
     this._initPromise = (async () => {
       try {
         const dataRoot = getAppRoot();
-        const executableRoot = getExecutableDir();
-        if (
-          !isPortableMode() &&
-          path.resolve(dataRoot) !== path.resolve(executableRoot)
-        ) {
-          await fs.mkdir(dataRoot, { recursive: true });
-          const legacyConfigPath = path.join(executableRoot, "config.json");
-          const nextConfigPath = path.join(dataRoot, "config.json");
-          if (
-            (await pathExists(legacyConfigPath)) &&
-            !(await pathExists(nextConfigPath))
-          ) {
-            await fs.copyFile(legacyConfigPath, nextConfigPath);
-            logger.info(
-              `[StoreService] Migrated config from executable dir to user data dir`,
-            );
-          }
+        await fs.mkdir(dataRoot, { recursive: true });
+        await this.restoreDataFromSnapshotIfNeeded(dataRoot);
 
-          const legacyGamesPath = path.join(executableRoot, "games");
-          const nextGamesPath = path.join(dataRoot, "games");
-          if (
-            (await pathExists(legacyGamesPath)) &&
-            !(await pathExists(nextGamesPath))
-          ) {
-            await fs.cp(legacyGamesPath, nextGamesPath, { recursive: true });
-            logger.info(
-              `[StoreService] Migrated games from executable dir to user data dir`,
-            );
-          }
-        }
-
-        const snapshotRoot = path.join(dataRoot, ".update-snapshots");
         const configPath = path.join(dataRoot, "config.json");
-        if (!(await pathExists(configPath))) {
-          try {
-            const entries = await fs.readdir(snapshotRoot, {
-              withFileTypes: true,
-            });
-            const snapshots = entries
-              .filter((entry) => entry.isDirectory())
-              .map((entry) => entry.name)
-              .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
-
-            for (const dirName of snapshots) {
-              const dirPath = path.join(snapshotRoot, dirName);
-              let restoredConfig = false;
-              const configBackups = [
-                path.join(dirPath, `config_${toSnapshotLabel(configPath)}.backup`),
-                path.join(
-                  dirPath,
-                  `config_${toSnapshotLabel(path.join(executableRoot, "config.json"))}.backup`,
-                ),
-                path.join(dirPath, "config.json.backup"),
-              ];
-              for (const backupPath of configBackups) {
-                if (await pathExists(backupPath)) {
-                  await fs.copyFile(backupPath, configPath);
-                  restoredConfig = true;
-                  logger.info(
-                    `[StoreService] Restored config.json from snapshot: ${dirName}`,
-                  );
-                  break;
-                }
-              }
-
-              const defaultGamesPath = path.join(dataRoot, "games");
-              if (!(await pathExists(defaultGamesPath))) {
-                const source = path.join(
-                  dirPath,
-                  `games_${toSnapshotLabel(defaultGamesPath)}`,
-                );
-                if (await pathExists(source)) {
-                  await fs.cp(source, defaultGamesPath, { recursive: true });
-                  logger.info(
-                    `[StoreService] Restored default games dir from snapshot: ${dirName}`,
-                  );
-                }
-              }
-
-              if (restoredConfig) break;
-            }
-          } catch {}
-        }
         let legacyData: AppStore | null = null;
         try {
           const rawText = await fs.readFile(configPath, "utf-8");
@@ -263,32 +249,6 @@ class StoreService {
           const merged = mergeStoreWithDefaults(legacyData);
           this.store.store = merged;
           logger.info("[StoreService] Migrated legacy config.json to encrypted");
-        }
-
-        if (
-          !isPortableMode() &&
-          path.resolve(dataRoot) !== path.resolve(executableRoot)
-        ) {
-          const currentSettings = this.store.get("settings", defaultSettings);
-          const legacyDefaultPath = path.join(executableRoot, "games");
-          const currentPath = currentSettings.gameStoragePath?.trim();
-          if (
-            currentPath &&
-            path.resolve(currentPath) === path.resolve(legacyDefaultPath)
-          ) {
-            const nextDefaultPath = path.join(dataRoot, "games");
-            this.store.set("settings", {
-              ...currentSettings,
-              gameStoragePath: nextDefaultPath,
-              gameStorageHistory: this.toStorageHistory(
-                currentSettings.gameStorageHistory,
-                nextDefaultPath,
-              ),
-            });
-            logger.info(
-              `[StoreService] Reset default game storage path to user data dir`,
-            );
-          }
         }
       } catch (error) {
         logger.error("[StoreService] Failed to initialize store:", error);

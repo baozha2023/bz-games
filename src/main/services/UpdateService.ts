@@ -5,11 +5,7 @@ import path from "path";
 import { IPC } from "../../shared/ipc-channels";
 import { mainWindow } from "../window";
 import { logger } from "../utils/logger";
-import {
-  getAppRoot,
-  getExecutableDir,
-  isPortableMode,
-} from "../utils/appPath";
+import { getAppRoot } from "../utils/appPath";
 import { storeService } from "./StoreService";
 
 export type UpdateStatus =
@@ -157,10 +153,7 @@ class UpdateService {
   }
 
   private getSnapshotBaseRoot(): string {
-    if (app.isPackaged && !isPortableMode()) {
-      return app.getPath("userData");
-    }
-    return getAppRoot();
+    return app.getPath("userData");
   }
 
   private toSnapshotLabel(targetPath: string): string {
@@ -172,46 +165,35 @@ class UpdateService {
 
   private async createDataSnapshot(stage: string): Promise<void> {
     const appRoot = getAppRoot();
-    const exeRoot = getExecutableDir();
     const snapshotRoot = path.join(this.getSnapshotBaseRoot(), ".update-snapshots");
     const stamp = `${Date.now()}-${stage}`;
     const targetDir = path.join(snapshotRoot, stamp);
     await fs.mkdir(targetDir, { recursive: true });
 
-    const configCandidates = Array.from(
-      new Set([
-        path.resolve(path.join(appRoot, "config.json")),
-        path.resolve(path.join(exeRoot, "config.json")),
-      ]),
-    );
-
     const metadata: {
       createdAt: number;
       stage: string;
       appRoot: string;
-      configPaths: string[];
+      configPath?: string;
       gameRoots: string[];
     } = {
       createdAt: Date.now(),
       stage,
       appRoot,
-      configPaths: [],
       gameRoots: [],
     };
 
-    for (const configPath of configCandidates) {
-      const label = this.toSnapshotLabel(configPath);
-      try {
-        await fs.copyFile(configPath, path.join(targetDir, `config_${label}.backup`));
-        metadata.configPaths.push(configPath);
-      } catch {}
-    }
+    const configPath = path.resolve(path.join(appRoot, "config.json"));
+    const configLabel = this.toSnapshotLabel(configPath);
+    try {
+      await fs.copyFile(configPath, path.join(targetDir, `config_${configLabel}.backup`));
+      metadata.configPath = configPath;
+    } catch {}
 
     const gameRoots = Array.from(
       new Set([
         ...storeService.getGameStorageRoots().map((p) => path.resolve(p)),
         path.resolve(path.join(appRoot, "games")),
-        path.resolve(path.join(exeRoot, "games")),
       ]),
     );
     for (const gameRoot of gameRoots) {
