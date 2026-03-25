@@ -133,6 +133,13 @@ async function pathExists(targetPath: string): Promise<boolean> {
   }
 }
 
+function toSnapshotLabel(targetPath: string): string {
+  return targetPath
+    .replace(/[:\\\/]/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
 class StoreService {
   private store: ElectronStore<AppStore> | null = null;
   private _initPromise: Promise<void> | null = null;
@@ -179,7 +186,58 @@ class StoreService {
           }
         }
 
+        const snapshotRoot = path.join(dataRoot, ".update-snapshots");
         const configPath = path.join(dataRoot, "config.json");
+        if (!(await pathExists(configPath))) {
+          try {
+            const entries = await fs.readdir(snapshotRoot, {
+              withFileTypes: true,
+            });
+            const snapshots = entries
+              .filter((entry) => entry.isDirectory())
+              .map((entry) => entry.name)
+              .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+
+            for (const dirName of snapshots) {
+              const dirPath = path.join(snapshotRoot, dirName);
+              let restoredConfig = false;
+              const configBackups = [
+                path.join(dirPath, `config_${toSnapshotLabel(configPath)}.backup`),
+                path.join(
+                  dirPath,
+                  `config_${toSnapshotLabel(path.join(executableRoot, "config.json"))}.backup`,
+                ),
+                path.join(dirPath, "config.json.backup"),
+              ];
+              for (const backupPath of configBackups) {
+                if (await pathExists(backupPath)) {
+                  await fs.copyFile(backupPath, configPath);
+                  restoredConfig = true;
+                  logger.info(
+                    `[StoreService] Restored config.json from snapshot: ${dirName}`,
+                  );
+                  break;
+                }
+              }
+
+              const defaultGamesPath = path.join(dataRoot, "games");
+              if (!(await pathExists(defaultGamesPath))) {
+                const source = path.join(
+                  dirPath,
+                  `games_${toSnapshotLabel(defaultGamesPath)}`,
+                );
+                if (await pathExists(source)) {
+                  await fs.cp(source, defaultGamesPath, { recursive: true });
+                  logger.info(
+                    `[StoreService] Restored default games dir from snapshot: ${dirName}`,
+                  );
+                }
+              }
+
+              if (restoredConfig) break;
+            }
+          } catch {}
+        }
         let legacyData: AppStore | null = null;
         try {
           const rawText = await fs.readFile(configPath, "utf-8");

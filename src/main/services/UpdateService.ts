@@ -5,7 +5,11 @@ import path from "path";
 import { IPC } from "../../shared/ipc-channels";
 import { mainWindow } from "../window";
 import { logger } from "../utils/logger";
-import { getAppRoot } from "../utils/appPath";
+import {
+  getAppRoot,
+  getExecutableDir,
+  isPortableMode,
+} from "../utils/appPath";
 import { storeService } from "./StoreService";
 
 export type UpdateStatus =
@@ -152,41 +156,66 @@ class UpdateService {
       });
   }
 
+  private getSnapshotBaseRoot(): string {
+    if (app.isPackaged && !isPortableMode()) {
+      return app.getPath("userData");
+    }
+    return getAppRoot();
+  }
+
+  private toSnapshotLabel(targetPath: string): string {
+    return targetPath
+      .replace(/[:\\\/]/g, "_")
+      .replace(/_+/g, "_")
+      .replace(/^_+|_+$/g, "");
+  }
+
   private async createDataSnapshot(stage: string): Promise<void> {
-    const root = getAppRoot();
-    const configPath = path.join(root, "config.json");
-    const snapshotRoot = path.join(root, ".update-snapshots");
+    const appRoot = getAppRoot();
+    const exeRoot = getExecutableDir();
+    const snapshotRoot = path.join(this.getSnapshotBaseRoot(), ".update-snapshots");
     const stamp = `${Date.now()}-${stage}`;
     const targetDir = path.join(snapshotRoot, stamp);
     await fs.mkdir(targetDir, { recursive: true });
+
+    const configCandidates = Array.from(
+      new Set([
+        path.resolve(path.join(appRoot, "config.json")),
+        path.resolve(path.join(exeRoot, "config.json")),
+      ]),
+    );
 
     const metadata: {
       createdAt: number;
       stage: string;
       appRoot: string;
-      configPath: string;
+      configPaths: string[];
       gameRoots: string[];
     } = {
       createdAt: Date.now(),
       stage,
-      appRoot: root,
-      configPath,
+      appRoot,
+      configPaths: [],
       gameRoots: [],
     };
 
-    try {
-      await fs.copyFile(configPath, path.join(targetDir, "config.json.backup"));
-      metadata.configPath = configPath;
-    } catch {}
+    for (const configPath of configCandidates) {
+      const label = this.toSnapshotLabel(configPath);
+      try {
+        await fs.copyFile(configPath, path.join(targetDir, `config_${label}.backup`));
+        metadata.configPaths.push(configPath);
+      } catch {}
+    }
 
     const gameRoots = Array.from(
-      new Set(storeService.getGameStorageRoots().map((p) => path.resolve(p))),
+      new Set([
+        ...storeService.getGameStorageRoots().map((p) => path.resolve(p)),
+        path.resolve(path.join(appRoot, "games")),
+        path.resolve(path.join(exeRoot, "games")),
+      ]),
     );
     for (const gameRoot of gameRoots) {
-      const label = gameRoot
-        .replace(/[:\\\/]/g, "_")
-        .replace(/_+/g, "_")
-        .replace(/^_+|_+$/g, "");
+      const label = this.toSnapshotLabel(gameRoot);
       const target = path.join(targetDir, `games_${label}`);
       try {
         await fs.cp(gameRoot, target, { recursive: true });
