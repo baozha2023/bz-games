@@ -177,6 +177,18 @@ export class RoomClient {
         type: "room:state:sync",
         payload: ack.room,
       });
+    } else if (msg.type === "room:state:sync") {
+      const state = msg.payload as RoomInfo;
+      const localPlayerId = storeService.getSettings().playerId;
+      const joined = state.players.some((p) => p.id === localPlayerId);
+      const sameGame = state.gameId === this.gameId;
+      if (joined && sameGame) {
+        logger.info("[RoomClient] Join accepted via state sync");
+        this.room = state;
+        this.hasJoinedRoom = true;
+        this.reconnectAttempts = 0;
+        this.resolveConnection({ success: true });
+      }
     } else if (msg.type === "room:join:refused") {
       const payload = msg.payload as RoomJoinRefusedPayload;
       logger.warn("[RoomClient] Join refused:", payload.reason);

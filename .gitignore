@@ -39,6 +39,7 @@ games/
 坦克大战/
 打地鼠/
 荣耀领主：破城者/
+愤怒的小鸟/
 
 # 构建资源
 resources/app.asar
@@ -46,6 +47,7 @@ resources/elevate.exe
 
 # 测试文件
 test-connect.js
+
 
 
 

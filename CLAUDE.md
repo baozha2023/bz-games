@@ -17,7 +17,7 @@
 | 原则             | 说明                                                |
 | -------------- | ------------------------------------------------- |
 | **无服务器**       | 所有数据存储于本地，无需后端服务器，无需用户注册账号                        |
-| **便携式存储**      | 数据与游戏文件存储在应用根目录下，支持便携式运行（Portable Mode）           |
+| **便携式存储**      | 配置默认存储在应用根目录，游戏可存放在默认目录或用户维护的多路径目录中               |
 | **开放式游戏管理**    | 用户可将符合平台规范的游戏载入平台，平台会自动复制并管理游戏文件                  |
 | **统一联机基础设施**   | 平台提供完整的联机房间管理与消息通讯能力，游戏开发者无需自行实现网络层               |
 | **内网穿透工具无关**   | 联机依赖用户自行安装的内网穿透工具（如 SakuraFrp），平台通过标准端口对接，不绑定特定工具 |
@@ -25,18 +25,15 @@
 
 ### 平台核心功能
 
-- 游戏库管理（载入、删除、分类、封面/图标展示）
-- 游戏启动与进程生命周期管理
-- 联机房间系统（创建、加入、准备、开始、离开、聊天）
-- **国际化 (i18n)**：支持中文、英文和日文（ja-JP）。成就描述等元数据支持多语言配置（待实现）。
-- **语音聊天**：房间内支持发送语音消息（WebM 格式，Base64 编码传输），界面支持播放。
-- **成就系统**：查看、统计、游戏内解锁、系统级弹窗通知（红点提醒、进度统计、音效提示）。
-- **经济系统**：
-  - **BZ币**：平台通用货币，用于未来功能。
-  - **每日签到**：连续7天签到奖励机制（递增+满签大奖）。
-  - **时长奖励**：每游玩10分钟获得10 BZ币。
-- **Game API Server**：向游戏进程提供联机与通讯能力的本地 WebSocket 服务。
-- **系统设置**：玩家昵称、主题、默认端口、语言切换等。
+- 游戏库管理（导入、删除、排序、收藏、封面/图标展示）
+- 游戏启动与进程生命周期管理（主进程统一托管）
+- 联机房间系统（创建、加入、准备、开始、离开、聊天、踢人、解散同步）
+- 国际化（`zh-CN / en-US / ja-JP`）
+- 成就系统（列表、解锁、系统通知、红点提示）
+- 统计系统（支持增量/全量统计模式，游玩时长自动累计）
+- 经济系统（签到、BZ 币、累计游玩时长）
+- Game API Server（本地 `ws://127.0.0.1`，向游戏进程提供平台能力）
+- 系统设置（玩家信息、主题、端口、语言、更新、游戏保存路径）
 
 ***
 
@@ -64,98 +61,106 @@
 ## 三、项目目录结构
 
 ```
-bz-launcher/
-├── CLAUDE.md
-├── package.json
-├── pnpm-lock.yaml
-├── tsconfig.json
-├── tsconfig.node.json
-├── tsconfig.web.json
-├── electron.vite.config.ts
-├── config.json                        #  持久化配置文件（生成）
-├── games/                             #  游戏文件存储目录（生成）
-│   └── <id>/                      #  游戏 ID 目录
-│       └── <version>/             #  特定版本目录
+bz-games/
+├── CLAUDE.md                             # AI 开发上下文与项目规范文档
+├── README.md                             # 项目简介与基础使用说明
+├── DEVELOPER_GUIDE.md                    # 面向游戏接入方的开发接入指南
+├── package.json                          # 依赖、脚本与打包发布配置
+├── pnpm-lock.yaml                        # pnpm 依赖锁定文件
+├── tsconfig.json                         # TypeScript 根配置
+├── tsconfig.node.json                    # 主进程/预加载/共享代码 TS 配置
+├── tsconfig.web.json                     # 渲染进程 TS 配置
+├── electron.vite.config.ts               # Electron-Vite 构建配置
+├── config.json                           # 本地持久化配置（运行生成）
+├── games/                                # 默认游戏目录（运行生成）
+│   └── <id>/
+│       └── <version>/
 │
 ├── src/
-│   │
-│   ├── main/                          # Electron 主进程
-│   │   ├── index.ts                   # 主进程入口
-│   │   ├── window.ts                  # BrowserWindow 管理
-│   │   │
-│   │   ├── ipc/                       # IPC 处理器（按模块拆分）
-          │   │   ├── index.ts               # 统一注册所有 IPC Handler
-          │   │   ├── game.ipc.ts            # 游戏管理相关 IPC
-          │   │   ├── room.ipc.ts            # 房间管理相关 IPC
-          │   │   ├── system.ipc.ts          # 系统/设置相关 IPC
-          │   │   └── storage.ipc.ts         # 游戏数据存储 IPC
-          │   │
-          │   ├── services/                  # 主进程核心服务
-          │   ├── GameLoader.ts          # 游戏载入、校验与文件复制
-          │   ├── GameEnvironment.ts     # 游戏环境配置与 bz-config.js 生成
-          │   ├── GameManager.ts         # 游戏进程启动/管理/终止
-          │   ├── RoomServer.ts          # 联机 Room Server（Host 端 WebSocket 服务）
-│   │   │   ├── RoomClient.ts          # 联机 Room Client（Client 端 WebSocket 客户端）
-│   │   │   ├── GameApiServer.ts       # Game API Server（本地 WebSocket 服务，供游戏进程使用）
-│   │   │   ├── StoreService.ts        # electron-store 封装
-│   │   │   └── NotificationService.ts # 系统级通知窗口服务（成就弹窗等）
-│   │   │
+│   ├── main/                              # Electron 主进程
+│   │   ├── index.ts                       # 主进程入口与应用生命周期初始化
+│   │   ├── window.ts                      # 主窗口创建与管理
+│   │   ├── ipc/
+│   │   │   ├── index.ts                   # IPC 统一注册入口
+│   │   │   ├── game.ipc.ts                # 游戏相关 IPC 处理器
+│   │   │   ├── room.ipc.ts                # 房间相关 IPC 处理器
+│   │   │   ├── system.ipc.ts              # 设置/系统/更新 IPC 处理器
+│   │   │   └── storage.ipc.ts             # Web 游戏本地存储 IPC 处理器
+│   │   ├── services/
+│   │   │   ├── GameApiServer.ts           # 游戏进程本地 WebSocket API 服务
+│   │   │   ├── GameEnvironment.ts         # 游戏启动环境变量与 bz-config.js 生成
+│   │   │   ├── GameLoader.ts              # 游戏导入、校验、扫描与记录同步
+│   │   │   ├── GameManager.ts             # 游戏进程启动/停止与生命周期管理
+│   │   │   ├── NotificationService.ts     # 系统通知窗口服务
+│   │   │   ├── RoomClient.ts              # 客机房间连接与重连管理
+│   │   │   ├── RoomServer.ts              # 房主房间服务与消息中继
+│   │   │   ├── StoreService.ts            # 本地数据读写与业务数据维护
+│   │   │   └── UpdateService.ts           # 客户端更新检查/下载/安装服务
 │   │   └── utils/
-│   │       ├── logger.ts              # 日志工具
-│   │       ├── portUtils.ts           # 动态端口分配工具
-│   │       ├── pathValidator.ts       # 路径安全校验工具
-│   │       └── appPath.ts             #  应用路径工具（处理开发/生产环境路径差异）
+│   │       ├── appPath.ts                 # 应用根路径与游戏目录路径工具
+│   │       ├── fileUtils.ts               # 文件复制等通用文件工具
+│   │       ├── logger.ts                  # 日志输出封装
+│   │       ├── pathValidator.ts           # 路径安全校验工具
+│   │       └── portUtils.ts               # 可用端口探测工具
 │   │
-│   ├── preload/                       # 预加载脚本
-│   │   ├── index.ts                   # contextBridge 暴露入口
-│   │   └── api.ts                     # window.electronAPI 类型定义与实现
+│   ├── preload/
+│   │   ├── api.ts                         # 暴露给渲染进程的安全 API
+│   │   ├── game.ts                        # Web 游戏 localStorage 接管
+│   │   └── index.ts                       # Preload 入口
 │   │
-│   ├── renderer/                      # 渲染进程（Vue 应用）
-│   │   ├── index.html
+│   ├── renderer/
+│   │   ├── index.html                     # 渲染进程 HTML 入口
 │   │   └── src/
-│   │       ├── main.ts
-│   │       ├── App.vue
-│   │       │
+│   │       ├── App.vue                    # 根组件外壳
+│   │       ├── AppContent.vue             # 主界面布局与全局行为
+│   │       ├── i18n.ts                    # 国际化初始化与语言切换
+│   │       ├── main.ts                    # 渲染进程启动入口
 │   │       ├── router/
-│   │       │   └── index.ts
-│   │       │
-│   │       ├── stores/                # Pinia Stores
-│   │       │   ├── useGameStore.ts
-│   │       │   ├── useRoomStore.ts
-│   │       │   └── useSettingsStore.ts
-│   │       │
-│   │       ├── views/                 # 页面级组件
-│   │       │   ├── LibraryView.vue    # 游戏库（首页）
-│   │       │   ├── GameDetailView.vue # 游戏详情页
-│   │       │   ├── RoomView.vue       # 联机房间页
-│   │       │   ├── SettingsView.vue   # 设置页
-│   │       │   ├── AchievementsView.vue # 成就列表页
-│   │       │   └── StatisticsView.vue # 统计页面
-│   │       │
-│   │       ├── components/            # 可复用组件
+│   │       │   └── index.ts               # 路由配置
+│   │       ├── stores/
+│   │       │   ├── useGameStore.ts        # 游戏库状态管理
+│   │       │   ├── useRoomStore.ts        # 房间状态管理
+│   │       │   └── useSettingsStore.ts    # 设置与更新状态管理
+│   │       ├── views/
+│   │       │   ├── AchievementsView.vue   # 成就页面
+│   │       │   ├── GameDetailView.vue     # 游戏详情页面
+│   │       │   ├── LibraryView.vue        # 游戏库首页
+│   │       │   ├── NotificationView.vue   # 通知窗口页面
+│   │       │   ├── RoomView.vue           # 房间页面
+│   │       │   ├── SettingsView.vue       # 设置页面
+│   │       │   └── StatisticsView.vue     # 统计页面
+│   │       ├── components/
 │   │       │   ├── game/
-│   │       │   │   ├── GameCard.vue
-│   │       │   │   └── GameCover.vue
+│   │       │   │   ├── GameAchievementsModal.vue # 游戏成就弹窗组件
+│   │       │   │   ├── GameCard.vue        # 游戏卡片组件
+│   │       │   │   ├── GameCover.vue       # 游戏封面组件
+│   │       │   │   ├── GameDeleteModal.vue # 游戏删除弹窗组件
+│   │       │   │   └── GameIcon.vue        # 游戏图标组件
 │   │       │   └── room/
-│   │       │       ├── PlayerList.vue
-│   │       │       ├── PlayerCard.vue
-│   │       │       └── RoomChat.vue
-│   │       │
-│   │       └── types/                 # 渲染进程专用类型
-│   │           └── electron-api.d.ts  # window.electronAPI 类型声明
+│   │       │       ├── PlayerCard.vue      # 房间玩家卡片组件
+│   │       │       ├── PlayerList.vue      # 房间玩家列表组件
+│   │       │       └── RoomChat.vue        # 房间聊天组件
+│   │       ├── locales/
+│   │       │   ├── en-US.ts                # 英文文案
+│   │       │   ├── ja-JP.ts                # 日文文案
+│   │       │   └── zh-CN.ts                # 中文文案
+│   │       ├── types/
+│   │       │   └── electron-api.d.ts       # window.electronAPI 类型声明
+│   │       └── utils/
+│   │           ├── achievementNotifier.ts  # 成就通知辅助逻辑
+│   │           └── sound.ts                # 音效播放工具
 │   │
-│   └── shared/                        # 主进程与渲染进程共享代码
-│       ├── ipc-channels.ts            # 所有 IPC 频道名常量
-│       ├── game-manifest.ts           # GameManifest 接口定义（game.json 类型）
+│   └── shared/
+│       ├── game-manifest.ts                # Game Manifest Schema 与类型
+│       ├── ipc-channels.ts                 # IPC 频道常量定义
 │       └── types/
-│           ├── game.types.ts          # 游戏相关共享类型
-│           ├── room.types.ts          # 房间相关共享类型
-│           └── store.types.ts         # 本地存储相关类型
+│           ├── game.types.ts               # Game API 消息类型
+│           ├── index.ts                    # 共享类型聚合导出
+│           ├── room.types.ts               # 房间协议与房间模型类型
+│           └── store.types.ts              # 本地存储模型类型
 │
 ├── resources/
-│   ├── icon.png                       # 平台图标
-│
-└── build/                             # electron-builder 配置相关资源
+│   └── icon.png                            # 应用图标资源
 ```
 
 ***
@@ -165,7 +170,7 @@ bz-launcher/
 | 术语                       | 说明                                                                             |
 | ------------------------ | ------------------------------------------------------------------------------ |
 | **游戏清单 (Game Manifest)** | `game.json` 文件，描述游戏元信息与平台集成配置                                                  |
-| **游戏库 (Library)**        | 用户已载入平台的所有游戏集合，存于本地 `games/` 目录                                                |
+| **游戏库 (Library)**        | 用户已载入平台的所有游戏集合，来源于本地默认目录与已记录的多游戏路径                                |
 | **房间 (Room)**            | 一次联机会话，包含房主与所有玩家的状态                                                            |
 | **房主 (Host)**            | 创建房间的玩家，其平台负责运行 Room Server                                                    |
 | **玩家 (Player)**          | 加入房间的用户（含房主自身）                                                                 |
@@ -195,10 +200,10 @@ bz-launcher/
 ║                         HOST 主机                                ║
 ║                                                                  ║
 ║  ┌────────────────────────────────────────────────────────────┐  ║
-║  │                    Electron 平台进程                        │  ║
+║  │                    Electron 平台进程                        │ ║
 ║  │                                                            │  ║
 ║  │  ┌─────────────┐    IPC     ┌─────────────────────────┐   │  ║
-║  │  │  渲染进程   │◄──────────►│       主进程             │   │  ║
+║  │  │  渲染进程    │◄─────────►│       主进程             │   │  ║
 ║  │  │  (Vue UI)   │            │                         │   │  ║
 ║  │  │  - 游戏库   │            │  ┌─────────────────────┐│   │  ║
 ║  │  │  - 房间管理 │            │  │    GameManager      ││   │  ║
@@ -212,12 +217,12 @@ bz-launcher/
 ║  │                             │  └──────────┬──────────┘│   │  ║
 ║  │                             └─────────────┼───────────┘   │  ║
 ║  └─────────────────────────────────────────── ┼ ─────────────┘  ║
-║                                               │ localhost         ║
-║  ┌────────────────────────────────────────────┴──────────────┐  ║
+║                                               │ localhost        ║
+║  ┌────────────────────────────────────────────┴──────────────┐   ║
 ║  │                   游戏进程 (game.exe)                      │  ║
-║  │   ws://127.0.0.1:{BZ_API_PORT}                         │  ║
-║  │   通过 Game API Server 进行所有联机通信                    │  ║
-║  └────────────────────────────────────────────────────────────┘  ║
+║  │   ws://127.0.0.1:{BZ_API_PORT}                            │   ║
+║  │   通过 Game API Server 进行所有联机通信                     │  ║
+║  └───────────────────────────────────────────────────────────┘   ║
 ╚══════════════════════════════════════════════════════════════════╝
                               ▲
                     SakuraFrp 公网地址
@@ -227,21 +232,21 @@ bz-launcher/
 ║                      CLIENT 客机（可多个）                        ║
 ║                                                                  ║
 ║  ┌────────────────────────────────────────────────────────────┐  ║
-║  │                    Electron 平台进程                        │  ║
-║  │                                                            │  ║
-║  │  ┌─────────────┐    IPC     ┌─────────────────────────┐   │  ║
-║  │  │  渲染进程   │◄──────────►│       主进程             │   │  ║
-║  │  │  - 渲染进程   │            │  ┌─────────────────────┐│   │  ║
-║  │  │  - 渲染进程   │            │  │    RoomClient       ││   │  ║
-║  │  │  - 渲染进程   │            │  │    连接至房主公网地址 ││   │  ║
-║  │  └─────────────┘            │  ├─────────────────────┤│   │  ║
-║  │                             │  │   GameApiServer     ││   │  ║
-║  │                             │  │   (状态同步缓存)     ││   │  ║
-║  │                             │  └──────────┬──────────┘│   │  ║
-║  │                             └─────────────┼───────────┘   │  ║
-║  └─────────────────────────────────────────── ┼ ─────────────┘  ║
-║                                               │ localhost         ║
-║  ┌────────────────────────────────────────────┴──────────────┐  ║
+║  │                    Electron 平台进程                       │   ║
+║  │                                                           │   ║
+║  │  ┌─────────────┐    IPC     ┌─────────────────────────┐   │   ║
+║  │  │  渲染进程    │◄─────────►│       主进程             │   │   ║
+║  │  │  - 房间页    │            │  ┌─────────────────────┐│   │  ║
+║  │  │  - 设置页    │            │  │    RoomClient       ││   │  ║
+║  │  │  - 游戏详情  │            │  │   连接至房主公网地址 ││   │   ║
+║  │  └─────────────┘            │  ├─────────────────────┤│   │   ║
+║  │                             │  │   GameApiServer     ││   │   ║
+║  │                             │  │   (状态同步缓存)     ││   │   ║
+║  │                             │  └──────────┬──────────┘│   │   ║
+║  │                             └─────────────┼───────────┘   │   ║
+║  └────────────────────────────────────────── ┼ ─────────────┘   ║
+║                                              │ localhost        ║
+║  ┌───────────────────────────────────────────┴──────────────┐   ║
 ║  │                   游戏进程 (game.exe)                      │  ║
 ║  └────────────────────────────────────────────────────────────┘  ║
 ╚══════════════════════════════════════════════════════════════════╝
@@ -281,46 +286,58 @@ bz-launcher/
 
 ```typescript
 // src/shared/types/store.types.ts
-
-interface AppStore {
-    games: GameRecord[];
-    settings: AppSettings;
-    recentPlayed: string[];         // 游戏 ID 列表，最多保留 20 条
+interface UserData {
+  bzCoins: number;
+  cumulativePlayTime: number;
+  checkIn: {
+    lastCheckInDate: string;
+    consecutiveDays: number;
+  };
 }
 
-interface GameRecord {
-    id: string;                     // 与 game.json 中的 id 一致
-    versions: GameVersion[];        // 游戏版本列表
-    latestVersion: string;          // 当前最新版本号
-    addedAt: number;                // 首次添加时间（ms）
-    stats: Record<string, Record<string, number>>; // 统计数据 { version: { key: value } }
-    lastPlayedAt?: number;
-    unlockedAchievements: UnlockedAchievement[]; // 已解锁成就
+interface AppStore {
+  games: GameRecord[];
+  settings: AppSettings;
+  userData: UserData;
+  recentPlayed: string[];
 }
 
 interface UnlockedAchievement {
-    id: string;
-    unlockedAt: number;
+  id: string;
+  unlockedAt: number;
 }
 
 interface GameVersion {
-    version: string;                // 版本号
-    path: string;                   // 游戏在 games/<id>/<version>/ 下的绝对路径
-    addedAt: number;                // 该版本添加时间
+  version: string;
+  path: string;
+  addedAt: number;
+  stats: Record<string, number>;
+  unlockedAchievements: UnlockedAchievement[];
+  playtime: number;
+}
+
+interface GameRecord {
+  id: string;
+  versions: GameVersion[];
+  latestVersion: string;
+  addedAt: number;
+  lastPlayedAt?: number;
+  isFavorite?: boolean;
 }
 
 interface AppSettings {
-    playerName: string;             // 玩家昵称，默认 "玩家"
-    playerId: string;               // 本机唯一玩家 ID（UUID，首次启动生成，持久化）
-    avatar?: string;                // 玩家头像（Base64 字符串）
-    lastJoinRoomAddress?: string;   // 最近一次成功加入房间地址
-    language: 'zh-CN' | 'en-US' | 'ja-JP';
-    theme: 'dark' | 'light';
-    defaultRoomPort: number;        // Room Server 监听端口，默认 38080
-    closeBehavior: 'tray' | 'exit';
-    autoLaunch: boolean;
-    gameStoragePath?: string;       // 新导入游戏的默认保存目录（绝对路径）
-    gameStorageHistory?: string[];  // 历史保存目录列表（最多保留 20 条）
+  playerName: string;
+  playerId: string;
+  avatar?: string;
+  lastJoinRoomAddress?: string;
+  language: "zh-CN" | "en-US" | "ja-JP";
+  theme: "dark" | "light";
+  defaultRoomPort: number;
+  closeBehavior: "tray" | "exit";
+  autoLaunch: boolean;
+  ignoredUpdateVersion?: string;
+  gameStoragePath?: string;
+  gameStorageHistory?: string[];
 }
 ```
 
@@ -351,24 +368,58 @@ interface AppSettings {
   - `platformVersion` 固定为当前平台版本，不允许修改。
   - `type` 使用下拉框；仅当 `type !== singleplayer` 时展示 `minPlayers/maxPlayers`。
   - `version` 必须通过语义化版本校验（`x.y.z`）。
-  - `entry` 由平台自动探测（优先 `index.html`、`*.exe`），未探测到时禁止导入。
+  - `entry` 会自动探测并允许用户手动修改；提交时要求为相对路径、不得为绝对路径、不得包含 `..`。
+  - `icon/cover` 若填写则必须是游戏目录内存在的相对路径。
 
-### 6.2 IPC 接口扩展
+### 6.2 IPC 接口清单
 
-- 更新 `game:load(sourcePath?)`：支持无参弹窗导入，也支持传入目录绝对路径进行导入（用于拖拽导入）。
-- 新增 `game:prepareImport(sourcePath)`：导入前探测目录信息（是否存在 `game.json`、建议 `id/name/entry`、当前平台版本）。
-- 新增 `game:loadWithManifest(sourcePath, draft)`：使用表单数据生成 Manifest 并完成导入。
-- 新增 `game:checkIdExists(id)`：实时检测游戏 ID 是否重复。
-- 新增 `game:getManifest(id, version)`：获取指定游戏版本的 Manifest 信息，用于动态展示成就等元数据。
-- 新增 `game:getVideo(id, version)`：获取指定版本的详情页预览视频（Data URL）。
-- 新增 `game:reorder(gameIds)`：更新游戏排序。
-- 新增 `game:toggleFavorite(id)`：切换游戏的特别喜欢状态。
-- 更新 `game:remove(id, versions?)`：支持删除指定版本或整个游戏。
-- 新增更新相关 IPC：`system:getUpdateStatus`、`system:checkUpdate`、`system:downloadUpdate`、`system:installUpdate`。
-- 新增设置相关 IPC：`system:selectGameStoragePath`、`system:openPath`。
-- 新增房间管理 IPC：`room:kickPlayer`（仅 Host 可调用）。
-- 新增主进程到渲染进程的更新事件：`system:update:event`（推送检查/下载/完成/错误状态）。
-- 确保所有新增 IPC 均在 `src/shared/ipc-channels.ts` 中定义，并在 `preload/api.ts` 中暴露.
+- `game:load`：导入游戏（支持弹窗选目录或传入目录路径）。
+- `game:prepareImport`：导入前预检查目录并返回建议草稿信息。
+- `game:loadWithManifest`：使用补录表单生成 Manifest 并导入。
+- `game:checkIdExists`：校验游戏 ID 是否已存在。
+- `game:getAll`：获取用于展示的完整游戏列表数据。
+- `game:getRecords`：获取原始游戏记录（版本路径等）。
+- `game:getManifest`：读取指定游戏版本的 `game.json`。
+- `game:getVideo`：读取指定版本视频并返回 Data URL。
+- `game:getCover`：读取指定版本封面并返回 Data URL。
+- `game:getIcon`：读取指定版本图标并返回 Data URL。
+- `game:getVersions`：获取指定游戏的版本列表。
+- `game:reorder`：保存游戏库排序结果。
+- `game:toggleFavorite`：切换游戏收藏状态。
+- `game:remove`：删除指定游戏或指定版本。
+- `game:launch`：启动指定游戏版本。
+- `room:create`：创建房间并在本地启动房间服务。
+- `room:join`：加入指定房主地址的房间。
+- `room:leave`：离开房间（房主离开会解散房间）。
+- `room:ready`：标记当前玩家为已准备。
+- `room:unready`：取消当前玩家准备状态。
+- `room:start`：由房主触发房间开始游戏。
+- `room:setAddress`：设置并广播房主公网地址。
+- `room:getState`：获取当前房间状态快照。
+- `room:sendChat`：发送文本或语音聊天消息。
+- `room:kickPlayer`：房主踢出指定玩家。
+- `system:getSettings`：读取当前应用设置。
+- `system:saveSettings`：保存应用设置并应用相关系统行为。
+- `system:uploadAvatar`：选择并处理玩家头像。
+- `system:selectGameStoragePath`：弹窗选择默认游戏保存路径。
+- `system:openPath`：在系统文件管理器中打开路径。
+- `system:removeGameStoragePath`：删除保存路径及其内部已导入游戏数据。
+- `system:getUserData`：读取用户经济与签到数据。
+- `system:checkIn`：执行每日签到并返回奖励结果。
+- `system:getUpdateStatus`：获取当前更新状态。
+- `system:checkUpdate`：检查是否有可用更新。
+- `system:downloadUpdate`：下载可用更新包。
+- `system:installUpdate`：安装更新并重启。
+- `room:event`：主进程推送房间事件给渲染层。
+- `game:process:started`：推送游戏进程启动事件。
+- `game:process:ended`：推送游戏进程结束事件。
+- `game:launch:failed`：推送游戏启动失败事件。
+- `system:update:event`：推送更新状态变化事件。
+- `game:unlockAchievement`：推送成就解锁事件到渲染层。
+- `game:storage:init`：初始化 Web 游戏本地存储数据。
+- `game:storage:save`：保存单个 localStorage 键值。
+- `game:storage:remove`：删除单个 localStorage 键。
+- `game:storage:clear`：清空当前游戏版本 localStorage 数据。
 
 ### 6.3 UI 交互规范
 
@@ -393,7 +444,8 @@ interface AppSettings {
 - **设置页游戏目录管理**：
   - 支持维护多游戏保存路径（路径池）。
   - 当前选择路径仅影响后续新导入游戏，不改动已导入游戏所在目录。
-  - 展示“当前 + 历史”已保存游戏路径列表，并支持点击打开目录。
+  - 支持展示“当前 + 历史”路径列表、打开路径、删除路径。
+  - 删除路径时会删除该路径目录及其已导入游戏数据，并更新本地记录。
 - **房间管理增强**：
   - Host 可在玩家列表中踢人，被踢玩家收到弹窗并自动离开房间。
   - 被踢玩家在同一房间生命周期内禁止重新加入。
@@ -548,6 +600,7 @@ function send(msg) {
 | `message.broadcast`  | `{ ... }`                                       | `{ success: true }`                                  | 广播消息给所有玩家（平台中继）。                              |
 | `achievement.list`   | -                                               | `[{ id, title, description, unlocked, unlockedAt }]` | 获取当前游戏版本的成就列表及解锁状态。                           |
 | `achievement.unlock` | `{ achievementId, playerId }`                   | `{ success: true, new: boolean }`                    | 解锁成就。`playerId` 必须为当前玩家 ID。                   |
+| `stats.report`       | `Record<string, number>`                        | `{ success: true }`                                  | 上报统计数据；平台根据 Manifest 配置按增量/全量写入。            |
 
 ### 8.3 事件列表 (Event)
 
