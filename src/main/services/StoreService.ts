@@ -9,7 +9,11 @@ import type {
   GameVersion,
   UserData,
 } from "../../shared/types";
-import { getAppRoot } from "../utils/appPath";
+import {
+  getAppRoot,
+  getExecutableDir,
+  isPortableMode,
+} from "../utils/appPath";
 import { logger } from "../utils/logger";
 
 const defaultSettings: AppSettings = {
@@ -120,6 +124,15 @@ function mergeStoreWithDefaults(raw: Partial<AppStore>): AppStore {
   };
 }
 
+async function pathExists(targetPath: string): Promise<boolean> {
+  try {
+    await fs.access(targetPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 class StoreService {
   private store: ElectronStore<AppStore> | null = null;
   private _initPromise: Promise<void> | null = null;
@@ -135,6 +148,37 @@ class StoreService {
     this._initPromise = (async () => {
       try {
         const dataRoot = getAppRoot();
+        const executableRoot = getExecutableDir();
+        if (
+          !isPortableMode() &&
+          path.resolve(dataRoot) !== path.resolve(executableRoot)
+        ) {
+          await fs.mkdir(dataRoot, { recursive: true });
+          const legacyConfigPath = path.join(executableRoot, "config.json");
+          const nextConfigPath = path.join(dataRoot, "config.json");
+          if (
+            (await pathExists(legacyConfigPath)) &&
+            !(await pathExists(nextConfigPath))
+          ) {
+            await fs.copyFile(legacyConfigPath, nextConfigPath);
+            logger.info(
+              `[StoreService] Migrated config from executable dir to user data dir`,
+            );
+          }
+
+          const legacyGamesPath = path.join(executableRoot, "games");
+          const nextGamesPath = path.join(dataRoot, "games");
+          if (
+            (await pathExists(legacyGamesPath)) &&
+            !(await pathExists(nextGamesPath))
+          ) {
+            await fs.cp(legacyGamesPath, nextGamesPath, { recursive: true });
+            logger.info(
+              `[StoreService] Migrated games from executable dir to user data dir`,
+            );
+          }
+        }
+
         const configPath = path.join(dataRoot, "config.json");
         let legacyData: AppStore | null = null;
         try {
@@ -161,6 +205,32 @@ class StoreService {
           const merged = mergeStoreWithDefaults(legacyData);
           this.store.store = merged;
           logger.info("[StoreService] Migrated legacy config.json to encrypted");
+        }
+
+        if (
+          !isPortableMode() &&
+          path.resolve(dataRoot) !== path.resolve(executableRoot)
+        ) {
+          const currentSettings = this.store.get("settings", defaultSettings);
+          const legacyDefaultPath = path.join(executableRoot, "games");
+          const currentPath = currentSettings.gameStoragePath?.trim();
+          if (
+            currentPath &&
+            path.resolve(currentPath) === path.resolve(legacyDefaultPath)
+          ) {
+            const nextDefaultPath = path.join(dataRoot, "games");
+            this.store.set("settings", {
+              ...currentSettings,
+              gameStoragePath: nextDefaultPath,
+              gameStorageHistory: this.toStorageHistory(
+                currentSettings.gameStorageHistory,
+                nextDefaultPath,
+              ),
+            });
+            logger.info(
+              `[StoreService] Reset default game storage path to user data dir`,
+            );
+          }
         }
       } catch (error) {
         logger.error("[StoreService] Failed to initialize store:", error);

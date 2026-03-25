@@ -308,41 +308,44 @@ const createRoom = async () => {
 
 const handleJoin = async () => {
   if (!joinAddress.value) { message.error(t('gameDetail.addressEmpty')); return false; }
-  
-  // Auto-append wss:// if no protocol is specified
+
   let address = joinAddress.value.trim();
   if (!/^(ws|wss):\/\//.test(address)) {
     address = 'wss://' + address;
   }
-  
-  const res = await roomStore.joinRoom(gameId, address, selectedVersion.value)
-  if (res.success) {
-    if (settingsStore.settings) {
-      await settingsStore.saveSettings({
-        ...settingsStore.settings,
-        lastJoinRoomAddress: address
-      })
+
+  try {
+    const res = await roomStore.joinRoom(gameId, address, selectedVersion.value)
+    if (res.success) {
+      showJoinModal.value = false;
+      await router.push(`/room/${gameId}`)
+      if (settingsStore.settings) {
+        settingsStore.saveSettings({
+          ...settingsStore.settings,
+          lastJoinRoomAddress: address
+        }).catch(() => {})
+      }
+      return true
     }
-    showJoinModal.value = false;
-    router.push(`/room/${gameId}`)
-    return true;
-  } else {
-    // Translate error code
+
     let errorMsg = res.error;
     if (res.error === 'version_mismatch') {
-        errorMsg = t('room.joinError.versionMismatch');
+      errorMsg = t('room.joinError.versionMismatch');
     } else if (res.error === 'room_full') {
-        errorMsg = t('room.joinError.roomFull');
+      errorMsg = t('room.joinError.roomFull');
     } else if (res.error === 'game_started') {
-        errorMsg = t('room.joinError.gameStarted');
+      errorMsg = t('room.joinError.gameStarted');
     } else if (res.error === 'game_id_mismatch') {
-        errorMsg = t('room.joinError.gameIdMismatch');
+      errorMsg = t('room.joinError.gameIdMismatch');
     } else if (res.error === 'kicked') {
-        errorMsg = t('room.youWereKicked');
+      errorMsg = t('room.youWereKicked');
     }
-    
+
     message.error(errorMsg || t('gameDetail.joinFail'));
     return false;
+  } catch (e: any) {
+    message.error(e?.message || t('gameDetail.joinFail'))
+    return false
   }
 }
 </script>

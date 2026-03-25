@@ -24,7 +24,10 @@ export function isPortableMode(): boolean {
 
 export function getAppRoot(): string {
   if (app.isPackaged) {
-    return getExecutableDir();
+    if (isPortableMode()) {
+      return getExecutableDir();
+    }
+    return app.getPath("userData");
   }
   return process.cwd();
 }
