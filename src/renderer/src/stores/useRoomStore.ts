@@ -41,13 +41,13 @@ export const useRoomStore = defineStore("room", () => {
     isConnecting.value = true;
     try {
       const res = await window.electronAPI.room.join(gameId, address, version);
-      if (res.success) {
-        // Wait a bit for sync event or manually get state
-        const state = await window.electronAPI.room.getState();
-        if (state) {
-          room.value = state;
-        }
+      const state = await window.electronAPI.room.getState();
+      if (state) {
+        room.value = state;
+      }
+      if (res.success || state) {
         chatMessages.value = [];
+        return { ...res, success: true };
       }
       return res;
     } finally {

@@ -106,12 +106,6 @@ export class RoomClient {
 
   private handleError(err: Error) {
     logger.error(`[RoomClient] Error`, err);
-    if (this.connectionResolver) {
-      this.resolveConnection({
-        success: false,
-        error: err.message || "连接错误",
-      });
-    }
   }
 
   private handleClose() {
