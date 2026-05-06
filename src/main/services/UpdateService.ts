@@ -6,7 +6,6 @@ import { IPC } from "../../shared/ipc-channels";
 import { mainWindow } from "../window";
 import { logger } from "../utils/logger";
 import { getAppRoot } from "../utils/appPath";
-import { storeService } from "./StoreService";
 
 export type UpdateStatus =
   | "idle"
@@ -190,20 +189,14 @@ class UpdateService {
       metadata.configPath = configPath;
     } catch {}
 
-    const gameRoots = Array.from(
-      new Set([
-        ...storeService.getGameStorageRoots().map((p) => path.resolve(p)),
-        path.resolve(path.join(appRoot, "games")),
-      ]),
-    );
-    for (const gameRoot of gameRoots) {
-      const label = this.toSnapshotLabel(gameRoot);
-      const target = path.join(targetDir, `games_${label}`);
-      try {
-        await fs.cp(gameRoot, target, { recursive: true });
-        metadata.gameRoots.push(gameRoot);
-      } catch {}
-    }
+    const defaultGamesRoot = path.resolve(path.join(appRoot, "games"));
+    const gamesLabel = this.toSnapshotLabel(defaultGamesRoot);
+    try {
+      await fs.cp(defaultGamesRoot, path.join(targetDir, `games_${gamesLabel}`), {
+        recursive: true,
+      });
+      metadata.gameRoots.push(defaultGamesRoot);
+    } catch {}
 
     try {
       await fs.writeFile(

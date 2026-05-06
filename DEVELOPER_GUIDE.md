@@ -47,6 +47,7 @@ my-game/
   "author": "开发者名称",
   "platformVersion": ">=1.0.0",
   "entry": "index.html",
+  "web_url": "https://example.com",
   "icon": "icon.png",
   "cover": "cover.png",
   "video": "preview.mp4",
@@ -92,8 +93,9 @@ my-game/
 | `description` | string | 否 | 游戏描述 |
 | `author` | string | 否 | 作者名称 |
 | `platformVersion`| string/array | 是 | 兼容的平台版本范围 (如 `">=1.0.0"` 或 `["1.0.0", "2.0.0"]`) |
-| `entry` | string | 是 | 启动入口文件路径 (相对于根目录) |
-| `type` | string | 是 | `"singleplayer"` (单机) / `"multiplayer"` (联机) / `"singlemultiple"` (单人+联机) |
+| `entry` | string | 是 | 启动入口。支持本地入口文件（如 `index.html`、`game.exe`）、`serve` 或 `url` |
+| `web_url` | string | `entry=url` 时必填 | 远程网页地址（必须为合法 `https?://` URL） |
+| `type` | string | 是 | `"singleplayer"` (单机) / `"multiplayer"` (联机) / `"singlemultiple"` (单人+联机) / `"networkgame"` (网络游戏，仅网页直连启动) |
 | `multiplayer` | object | 联机必填 | 包含 `minPlayers` 和 `maxPlayers` (整数)，`type` 为 `multiplayer` 或 `singlemultiple` 时必填 |
 | `icon` | string | 否 | 图标路径 |
 | `cover` | string | 否 | 封面路径 |
@@ -142,7 +144,9 @@ window.BZ_CONFIG = {
 
 **备选方案**：如果上述配置都不存在（例如调试模式），游戏应尝试从 URL 参数获取配置：
 `index.html?apiPort=12345&token=...&playerId=...&playerAvatar=...&roomId=...&isHost=1&isMultiple=1`
-**注意**：entry 为 `serve` 模式时，游戏平台会使用 npm 的 `serve` 命令启动游戏并托管静态资源。
+**注意**：
+- `entry=serve` 时，游戏平台会使用静态托管方式启动并访问本地 `index.html`。
+- `entry=url` 时，游戏平台会直接打开 `web_url` 指向的网站，不会生成/注入 `bz-config.js`，也不会注入 `window.BZ_CONFIG`。
 
 ### 3.2 Native 游戏 (Exe/Executable)
 

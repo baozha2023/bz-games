@@ -60,10 +60,15 @@ declare global {
             description?: string;
             author: string;
             entry?: string;
+            web_url?: string;
             platformVersion?: string;
             icon?: string;
             cover?: string;
-            type: "singleplayer" | "multiplayer" | "singlemultiple";
+            type:
+              | "singleplayer"
+              | "multiplayer"
+              | "singlemultiple"
+              | "networkgame";
             minPlayers?: number;
             maxPlayers?: number;
           },

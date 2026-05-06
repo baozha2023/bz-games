@@ -28,10 +28,11 @@ export interface ManualManifestDraft {
   description?: string;
   author: string;
   entry?: string;
+  web_url?: string;
   platformVersion?: string;
   icon?: string;
   cover?: string;
-  type: "singleplayer" | "multiplayer" | "singlemultiple";
+  type: "singleplayer" | "multiplayer" | "singlemultiple" | "networkgame";
   minPlayers?: number;
   maxPlayers?: number;
 }
@@ -260,13 +261,22 @@ export class GameLoader {
 
   private static buildManualManifestDraft(draft: ManualManifestDraft): GameManifest {
     const entry = draft.entry?.trim();
-    if (!entry || path.isAbsolute(entry) || entry.includes("..")) {
+    if (!entry) {
       throw { code: "entryNotFound", params: { entry: entry || "" } };
+    }
+    if (
+      entry !== "serve" &&
+      entry !== "url" &&
+      (path.isAbsolute(entry) || entry.includes(".."))
+    ) {
+      throw { code: "entryNotFound", params: { entry } };
     }
     const minPlayers = draft.minPlayers || 2;
     const maxPlayers = draft.maxPlayers || Math.max(minPlayers, 4);
+    const needsMultiplayerConfig =
+      draft.type === "multiplayer" || draft.type === "singlemultiple";
     if (
-      draft.type !== "singleplayer" &&
+      needsMultiplayerConfig &&
       (!Number.isInteger(minPlayers) ||
         !Number.isInteger(maxPlayers) ||
         minPlayers < 2 ||
@@ -282,16 +292,16 @@ export class GameLoader {
       author: draft.author.trim(),
       platformVersion: app.getVersion(),
       entry,
+      web_url: draft.web_url?.trim() || undefined,
       icon: draft.icon?.trim() || undefined,
       cover: draft.cover?.trim() || undefined,
       type: draft.type,
-      multiplayer:
-        draft.type === "singleplayer"
-          ? undefined
-          : {
-              minPlayers,
-              maxPlayers,
-            },
+      multiplayer: needsMultiplayerConfig
+        ? {
+            minPlayers,
+            maxPlayers,
+          }
+        : undefined,
     });
     return parsed;
   }
@@ -360,6 +370,12 @@ export class GameLoader {
     sourcePath: string,
     manifest: GameManifest,
   ): void {
+    if (manifest.entry === "serve" || manifest.entry === "url") {
+      return;
+    }
+    if (!manifest.entry.toLowerCase().endsWith(".html")) {
+      return;
+    }
     const entryPath = path.join(sourcePath, manifest.entry);
     if (!fs.existsSync(entryPath)) {
       throw { code: "entryNotFound", params: { entry: manifest.entry } };

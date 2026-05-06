@@ -141,15 +141,6 @@ class StoreService {
   private store: ElectronStore<AppStore> | null = null;
   private _initPromise: Promise<void> | null = null;
 
-  private getSnapshotRoots(dataRoot: string): string[] {
-    const roots = [path.join(dataRoot, ".update-snapshots")];
-    const userDataRoot = app.getPath("userData");
-    if (path.resolve(userDataRoot) !== path.resolve(dataRoot)) {
-      roots.push(path.join(userDataRoot, ".update-snapshots"));
-    }
-    return roots;
-  }
-
   private async restoreDataFromSnapshotIfNeeded(dataRoot: string): Promise<void> {
     const configPath = path.join(dataRoot, "config.json");
     if (await pathExists(configPath)) {
@@ -159,53 +150,52 @@ class StoreService {
     const defaultGamesPath = path.join(dataRoot, "games");
     const configBackupName = `config_${toSnapshotLabel(configPath)}.backup`;
     const gamesBackupName = `games_${toSnapshotLabel(defaultGamesPath)}`;
+    const snapshotRoot = path.join(app.getPath("userData"), ".update-snapshots");
 
-    for (const snapshotRoot of this.getSnapshotRoots(dataRoot)) {
-      let snapshots: string[] = [];
-      try {
-        const entries = await fs.readdir(snapshotRoot, { withFileTypes: true });
-        snapshots = entries
-          .filter((entry) => entry.isDirectory())
-          .map((entry) => entry.name)
-          .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
-      } catch {
+    let snapshots: string[] = [];
+    try {
+      const entries = await fs.readdir(snapshotRoot, { withFileTypes: true });
+      snapshots = entries
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => entry.name)
+        .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+    } catch {
+      return;
+    }
+
+    for (const dirName of snapshots) {
+      const dirPath = path.join(snapshotRoot, dirName);
+      const configBackups = [
+        path.join(dirPath, configBackupName),
+        path.join(dirPath, "config.json.backup"),
+      ];
+
+      let restoredConfig = false;
+      for (const backupPath of configBackups) {
+        if (await pathExists(backupPath)) {
+          await fs.copyFile(backupPath, configPath);
+          restoredConfig = true;
+          logger.info(
+            `[StoreService] Restored config.json from snapshot: ${dirPath}`,
+          );
+          break;
+        }
+      }
+
+      if (!restoredConfig) {
         continue;
       }
 
-      for (const dirName of snapshots) {
-        const dirPath = path.join(snapshotRoot, dirName);
-        const configBackups = [
-          path.join(dirPath, configBackupName),
-          path.join(dirPath, "config.json.backup"),
-        ];
-
-        let restoredConfig = false;
-        for (const backupPath of configBackups) {
-          if (await pathExists(backupPath)) {
-            await fs.copyFile(backupPath, configPath);
-            restoredConfig = true;
-            logger.info(
-              `[StoreService] Restored config.json from snapshot: ${dirPath}`,
-            );
-            break;
-          }
+      if (!(await pathExists(defaultGamesPath))) {
+        const gamesBackupPath = path.join(dirPath, gamesBackupName);
+        if (await pathExists(gamesBackupPath)) {
+          await fs.cp(gamesBackupPath, defaultGamesPath, { recursive: true });
+          logger.info(
+            `[StoreService] Restored default games dir from snapshot: ${dirPath}`,
+          );
         }
-
-        if (!restoredConfig) {
-          continue;
-        }
-
-        if (!(await pathExists(defaultGamesPath))) {
-          const gamesBackupPath = path.join(dirPath, gamesBackupName);
-          if (await pathExists(gamesBackupPath)) {
-            await fs.cp(gamesBackupPath, defaultGamesPath, { recursive: true });
-            logger.info(
-              `[StoreService] Restored default games dir from snapshot: ${dirPath}`,
-            );
-          }
-        }
-        return;
       }
+      return;
     }
   }
 

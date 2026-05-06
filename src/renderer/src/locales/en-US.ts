@@ -44,6 +44,8 @@ export default {
       playersInvalid: "Invalid player range, please check min/max players",
       iconNotFound: "Icon file not found: {file}",
       coverNotFound: "Cover file not found: {file}",
+      webUrlInvalid:
+        "Invalid web_url. Please use a valid http:// or https:// URL",
       unknown: "Import failed: {message}",
     },
     importDraftTitle: "Complete Game Information",
@@ -55,7 +57,8 @@ export default {
     importDraftIdFormatHint: "Use reverse-domain format, e.g. com.dev.game",
     importDraftRequired: "Please fill all required fields",
     importDraftEntryHint:
-      "Entry file is auto-detected and can be edited manually if needed",
+      "Entry is auto-detected and can be edited manually (.html / serve / url)",
+    importDraftWebUrlHint: "When entry is url, web_url is required",
     importDraftFields: {
       id: "Game ID",
       name: "Game Name",
@@ -63,7 +66,8 @@ export default {
       description: "Description",
       author: "Author",
       platformVersion: "Platform Version",
-      entry: "Entry File",
+      entry: "Entry",
+      web_url: "Web URL",
       icon: "Icon File",
       cover: "Cover File",
       type: "Game Type",
@@ -76,7 +80,8 @@ export default {
       version: "e.g. 1.0.0",
       description: "Enter game description",
       author: "Enter author name",
-      entry: "e.g. index.html or game.exe",
+      entry: "e.g. index.html, serve, or url",
+      web_url: "e.g. https://example.com",
       icon: "e.g. icon.png",
       cover: "e.g. cover.png",
     },
@@ -90,6 +95,7 @@ export default {
     typeMultiplayer: "Multiplayer",
     typeSingleplayer: "Singleplayer",
     typeSingleMultiple: "Single & Multiplayer",
+    typeNetworkGame: "Network Game",
     description: "Description",
     favorite: "Favorite",
     deleteAllVersionsWarning:

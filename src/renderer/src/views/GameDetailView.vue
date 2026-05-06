@@ -42,6 +42,11 @@
               {{ isRunning ? t('gameDetail.gameRunning') : t('gameDetail.launchGame') }}
             </n-button>
           </template>
+          <template v-else-if="resolvedType === 'networkgame'">
+            <n-button type="primary" size="large" @click="handleLaunch" :disabled="isRunning">
+              {{ isRunning ? t('gameDetail.gameRunning') : t('gameDetail.launchGame') }}
+            </n-button>
+          </template>
           <template v-else-if="resolvedType === 'multiplayer'">
             <n-space>
               <n-button type="primary" size="large" @click="createRoom">{{ t('gameDetail.createRoom') }}</n-button>
@@ -113,6 +118,7 @@ const versionOptions = computed(() => versions.value.map(v => ({ label: v, value
 const isLatestVersion = computed(() => !game.value || selectedVersion.value === game.value.version)
 const resolvedType = computed(() => (currentManifest.value?.type) || (isLatestVersion.value ? game.value?.type : '') || 'singleplayer')
 const typeLabel = computed(() => {
+    if (resolvedType.value === 'networkgame') return t('gameDetail.typeNetworkGame')
     if (resolvedType.value === 'multiplayer') return t('gameDetail.typeMultiplayer')
     if (resolvedType.value === 'singlemultiple') return t('gameDetail.typeSingleMultiple')
     return t('gameDetail.typeSingleplayer')
@@ -146,6 +152,9 @@ const gameAchievements = computed(() => {
 });
 
 onMounted(async () => {
+  if (!settingsStore.settings) {
+    await settingsStore.loadSettings()
+  }
   if (settingsStore.settings?.lastJoinRoomAddress) {
     joinAddress.value = settingsStore.settings.lastJoinRoomAddress
   }
@@ -317,14 +326,17 @@ const handleJoin = async () => {
   try {
     const res = await roomStore.joinRoom(gameId, address, selectedVersion.value)
     if (res.success) {
+      try {
+        const currentSettings =
+          settingsStore.settings || (await window.electronAPI.settings.get())
+        await settingsStore.saveSettings({
+          ...currentSettings,
+          lastJoinRoomAddress: address
+        })
+      } catch {}
+      joinAddress.value = address
       showJoinModal.value = false;
       await router.push(`/room/${gameId}`)
-      if (settingsStore.settings) {
-        settingsStore.saveSettings({
-          ...settingsStore.settings,
-          lastJoinRoomAddress: address
-        }).catch(() => {})
-      }
       return true
     }
 

@@ -187,7 +187,8 @@ bz-games/
 - **时间追踪优化**：平台会自动追踪并记录所有游戏的游玩时长（`time`），无需在 `statistics` 字段中显式定义。若定义了 `time`，平台也会正常处理。
 - **详情媒体扩展**：`video` 字段为可选项，指向游戏目录内预览视频（`mp4/webm/ogv/mov/m4v`），仅用于详情页展示。
 - **本地存储加密开关**：`encryptLocalStorage` 为可选布尔字段，仅作用于 Web 游戏 `localStorage` 对应的 `gamedata.json` 持久化。
-- **游戏类型扩展**：`type` 支持 `singleplayer`、`multiplayer`、`singlemultiple`，其中 `singlemultiple` 代表同时支持单人与联机。
+- **游戏类型扩展**：`type` 支持 `singleplayer`、`multiplayer`、`singlemultiple`、`networkgame`，其中 `singlemultiple` 代表同时支持单人与联机，`networkgame` 代表网络网页游戏（仅启动网页，不参与房间联机流程）。
+- **远程网页启动**：`entry` 新增 `url` 模式；当 `entry=url` 时，Manifest 必须提供 `web_url`（合法 URL），平台直接打开该网页地址。
 
 ***
 
@@ -347,6 +348,7 @@ interface AppSettings {
 - **Web 游戏存储接管**：通过 Preload 脚本接管 `localStorage`，将数据重定向存储至 `games/<id>/<version>/gamedata.json`，实现跨启动模式（File/Serve）的数据互通与版本隔离。
 - **Web 存储可选加密**：支持通过 Manifest 字段 `encryptLocalStorage` 控制 `gamedata.json` 是否加密存储（默认关闭）。
 - **Web 联机模式标记**：平台生成的 `bz-config.js` 提供 `isMultiple` 字段，便于 `singlemultiple` 游戏在运行时区分单人模式与联机模式。
+- **远程网页模式约束**：当 `entry=url` 时，平台不生成 `bz-config.js`，也不向页面注入 `window.BZ_CONFIG`。
 
 ### 5.5 代码组织与内聚性
 
@@ -366,9 +368,10 @@ interface AppSettings {
 - **表单约束**：
   - `id` 需实时检测重复并校验反向域名格式。
   - `platformVersion` 固定为当前平台版本，不允许修改。
-  - `type` 使用下拉框；仅当 `type !== singleplayer` 时展示 `minPlayers/maxPlayers`。
+  - `type` 使用下拉框；仅当 `type` 为 `multiplayer` 或 `singlemultiple` 时展示 `minPlayers/maxPlayers`。
   - `version` 必须通过语义化版本校验（`x.y.z`）。
-  - `entry` 会自动探测并允许用户手动修改；提交时要求为相对路径、不得为绝对路径、不得包含 `..`。
+  - `entry` 会自动探测并允许用户手动修改；仅当 `entry` 为 `.html` 时校验入口文件存在。`entry=serve` 或 `entry=url` 不做入口文件存在性校验。
+  - `entry=url` 时必须提供 `web_url`（合法 URL）。
   - `icon/cover` 若填写则必须是游戏目录内存在的相对路径。
 
 ### 6.2 IPC 接口清单

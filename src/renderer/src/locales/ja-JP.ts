@@ -44,6 +44,8 @@ export default {
       playersInvalid: "プレイヤー人数設定が無効です",
       iconNotFound: "アイコンファイルが見つかりません: {file}",
       coverNotFound: "カバーファイルが見つかりません: {file}",
+      webUrlInvalid:
+        "web_url が無効です。http:// または https:// のURLを入力してください",
       unknown: "インポート失敗: {message}",
     },
     importDraftTitle: "ゲーム情報を補完",
@@ -55,7 +57,9 @@ export default {
     importDraftIdFormatHint:
       "com.dev.game のような逆ドメイン形式を使用してください",
     importDraftRequired: "必須項目をすべて入力してください",
-    importDraftEntryHint: "エントリーファイルは自動検出され、手動で編集可能です",
+    importDraftEntryHint:
+      "エントリーは自動検出され、手動で編集可能です（.html / serve / url）",
+    importDraftWebUrlHint: "entry が url の場合、web_url は必須です",
     importDraftFields: {
       id: "ゲームID",
       name: "ゲーム名",
@@ -63,7 +67,8 @@ export default {
       description: "説明",
       author: "作者",
       platformVersion: "プラットフォームバージョン",
-      entry: "エントリーファイル",
+      entry: "エントリー",
+      web_url: "Web URL",
       icon: "アイコンファイル",
       cover: "カバーファイル",
       type: "ゲームタイプ",
@@ -76,7 +81,8 @@ export default {
       version: "例: 1.0.0",
       description: "ゲーム説明を入力",
       author: "作者名を入力",
-      entry: "例: index.html または game.exe",
+      entry: "例: index.html、serve、または url",
+      web_url: "例: https://example.com",
       icon: "例: icon.png",
       cover: "例: cover.png",
     },
@@ -90,6 +96,7 @@ export default {
     typeMultiplayer: "マルチプレイヤー",
     typeSingleplayer: "シングルプレイヤー",
     typeSingleMultiple: "シングル+マルチ",
+    typeNetworkGame: "ネットワークゲーム",
     description: "説明",
     favorite: "お気に入り",
     deleteAllVersionsWarning:

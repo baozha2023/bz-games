@@ -53,6 +53,10 @@ class GameManager {
         version,
       );
 
+      if (manifest.entry === "url") {
+        return this.launchRemoteWebGame(id, versionPath, manifest);
+      }
+
       const { port, token } = await this.startApiServer(id, manifest.version);
 
       const settings = storeService.getSettings();
@@ -179,6 +183,18 @@ class GameManager {
     }
 
     this.createGameWindow(id, manifest, versionPath, entryPath, true);
+    return true;
+  }
+
+  private launchRemoteWebGame(
+    id: string,
+    versionPath: string,
+    manifest: GameManifest,
+  ): boolean {
+    if (!manifest.web_url) {
+      throw new Error("entry=url requires web_url in game.json");
+    }
+    this.createGameWindow(id, manifest, versionPath, manifest.web_url, false);
     return true;
   }
 

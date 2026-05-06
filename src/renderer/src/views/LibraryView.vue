@@ -125,6 +125,21 @@
                 <n-text depth="3">{{ t('library.importDraftEntryHint') }}</n-text>
               </n-space>
             </n-form-item-gi>
+            <n-form-item-gi
+              v-if="isUrlEntry"
+              :span="2"
+              :label="t('library.importDraftFields.web_url')"
+              path="web_url"
+              required
+            >
+              <n-space vertical size="small" style="width: 100%;">
+                <n-input
+                  v-model:value="draftForm.web_url"
+                  :placeholder="t('library.importDraftPlaceholders.web_url')"
+                />
+                <n-text depth="3">{{ t('library.importDraftWebUrlHint') }}</n-text>
+              </n-space>
+            </n-form-item-gi>
             <n-form-item-gi :span="2" :label="t('library.importDraftFields.description')">
               <n-input
                 v-model:value="draftForm.description"
@@ -146,14 +161,14 @@
               />
             </n-form-item-gi>
             <n-form-item-gi
-              v-if="draftForm.type !== 'singleplayer'"
+              v-if="needsMultiplayerConfig"
               :label="t('library.importDraftFields.minPlayers')"
               required
             >
               <n-input-number v-model:value="draftForm.minPlayers" :min="2" :max="64" style="width: 100%;" />
             </n-form-item-gi>
             <n-form-item-gi
-              v-if="draftForm.type !== 'singleplayer'"
+              v-if="needsMultiplayerConfig"
               :label="t('library.importDraftFields.maxPlayers')"
               required
             >
@@ -205,9 +220,10 @@ const draftForm = ref({
   author: '',
   platformVersion: '',
   entry: '',
+  web_url: '',
   icon: '',
   cover: '',
-  type: 'singleplayer' as 'singleplayer' | 'multiplayer' | 'singlemultiple',
+  type: 'singleplayer' as 'singleplayer' | 'multiplayer' | 'singlemultiple' | 'networkgame',
   minPlayers: 2,
   maxPlayers: 4
 })
@@ -215,8 +231,14 @@ const draftForm = ref({
 const draftTypeOptions = computed(() => [
   { label: t('gameDetail.typeSingleplayer'), value: 'singleplayer' },
   { label: t('gameDetail.typeMultiplayer'), value: 'multiplayer' },
-  { label: t('gameDetail.typeSingleMultiple'), value: 'singlemultiple' }
+  { label: t('gameDetail.typeSingleMultiple'), value: 'singlemultiple' },
+  { label: t('gameDetail.typeNetworkGame'), value: 'networkgame' }
 ])
+
+const isUrlEntry = computed(() => draftForm.value.entry.trim().toLowerCase() === 'url')
+const needsMultiplayerConfig = computed(
+  () => draftForm.value.type === 'multiplayer' || draftForm.value.type === 'singlemultiple'
+)
 
 onMounted(() => {
   gameStore.loadGames()
@@ -392,6 +414,7 @@ const openImportDraftModal = async (sourcePath: string) => {
     author: '',
     platformVersion: prep.currentPlatformVersion,
     entry: prep.suggestedEntry,
+    web_url: '',
     icon: '',
     cover: '',
     type: 'singleplayer',
@@ -427,9 +450,21 @@ const handleConfirmDraftImport = async () => {
   const version = draftForm.value.version.trim()
   const author = draftForm.value.author.trim()
   const entry = draftForm.value.entry.trim()
+  const webUrl = draftForm.value.web_url.trim()
   if (!id || !name || !version || !author || !entry) {
     message.error(t('library.importDraftRequired'))
     return
+  }
+  if (entry.toLowerCase() === 'url') {
+    try {
+      const parsed = new URL(webUrl)
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        throw new Error('invalid protocol')
+      }
+    } catch {
+      message.error(t('library.importError.webUrlInvalid'))
+      return
+    }
   }
   if (!/^[a-z0-9]+(\.[a-z0-9\-]+)+$/.test(id)) {
     message.error(t('library.importDraftIdFormatHint'))
@@ -443,10 +478,7 @@ const handleConfirmDraftImport = async () => {
     message.error(t('library.importError.idExists'))
     return
   }
-  if (
-    draftForm.value.type !== 'singleplayer' &&
-    draftForm.value.minPlayers > draftForm.value.maxPlayers
-  ) {
+  if (needsMultiplayerConfig.value && draftForm.value.minPlayers > draftForm.value.maxPlayers) {
     message.error(t('library.importError.playersInvalid'))
     return
   }
@@ -460,12 +492,13 @@ const handleConfirmDraftImport = async () => {
       description: draftForm.value.description.trim(),
       author,
       entry,
+      web_url: entry.toLowerCase() === 'url' ? webUrl : undefined,
       platformVersion: draftForm.value.platformVersion,
       icon: draftForm.value.icon.trim(),
       cover: draftForm.value.cover.trim(),
       type: draftForm.value.type,
-      minPlayers: draftForm.value.type === 'singleplayer' ? undefined : draftForm.value.minPlayers,
-      maxPlayers: draftForm.value.type === 'singleplayer' ? undefined : draftForm.value.maxPlayers
+      minPlayers: needsMultiplayerConfig.value ? draftForm.value.minPlayers : undefined,
+      maxPlayers: needsMultiplayerConfig.value ? draftForm.value.maxPlayers : undefined
     })
     if (result.success) {
       showImportDraftModal.value = false
