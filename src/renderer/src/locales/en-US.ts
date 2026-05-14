@@ -148,8 +148,16 @@ export default {
     playerKicked: "{name} was kicked from the room",
     youWereKicked: "You were kicked from this room",
     gameStarted: "Game started",
+    gameEnded: "Game ended",
     launchFailed: "Launch failed: {reason}",
     startFailed: "Failed to start",
+    connectionStatus: {
+      connecting: "Connecting to room...",
+      reconnecting:
+        "Room connection lost. Reconnecting ({current}/5), retrying in {seconds}s",
+      failed: "Room connection failed: {reason}",
+      disconnected: "Disconnected from room",
+    },
     joinError: {
       versionMismatch: "Game version mismatch",
       roomFull: "Room is full",
@@ -223,6 +231,14 @@ export default {
     removeStoragePathSuccess:
       "Path removed. Deleted {gameCount} games and {versionCount} versions",
     removeStoragePathFailed: "Failed to remove storage path",
+    dataHealth: "Data Health",
+    runDataHealthCheck: "Run Check",
+    dataHealthOk: "Data health check passed",
+    dataHealthIssuesFound: "Data health issues were found",
+    dataHealthSummary:
+      "{errors} errors, {warnings} warnings, {games} games, {versions} versions, {paths} paths",
+    healthError: "Error",
+    healthWarning: "Warning",
     update: "Client Update",
     checkUpdate: "Check for Updates",
     updateTitle: "Update Status",
@@ -238,6 +254,15 @@ export default {
     updateUnsupported: "Auto update is unavailable in dev mode",
     updateFailed: "Update failed",
     updateError: "Update failed: {message}",
+    updateErrors: {
+      network_error: "Network request failed. Check your connection or update feed",
+      feed_invalid: "Update metadata is invalid. Check latest.yml or publish config",
+      download_failed: "Failed to download update package",
+      verify_failed: "Update package verification failed",
+      permission_denied: "Permission denied while writing update files",
+      unsupported_dev_mode: "Auto update is unavailable in dev mode",
+      unknown: "Unknown update error",
+    },
     updatePromptTitle: "Update Available",
     updatePromptMessage: "New version {version} is available. Update now?",
     updateNow: "Update Now",

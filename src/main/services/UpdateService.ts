@@ -6,24 +6,7 @@ import { IPC } from "../../shared/ipc-channels";
 import { mainWindow } from "../window";
 import { logger } from "../utils/logger";
 import { getAppRoot } from "../utils/appPath";
-
-export type UpdateStatus =
-  | "idle"
-  | "checking"
-  | "available"
-  | "up_to_date"
-  | "downloading"
-  | "downloaded"
-  | "error"
-  | "unsupported";
-
-export interface UpdateState {
-  status: UpdateStatus;
-  currentVersion: string;
-  latestVersion?: string;
-  progress?: number;
-  message?: string;
-}
+import type { UpdateErrorCode, UpdateState } from "../../shared/types";
 
 class UpdateService {
   private inited = false;
@@ -80,9 +63,11 @@ class UpdateService {
     });
 
     autoUpdater.on("error", (err) => {
+      const { errorCode, message } = this.classifyError(err);
       this.setState({
         status: "error",
-        message: err?.message || String(err),
+        errorCode,
+        message,
       });
     });
   }
@@ -96,6 +81,7 @@ class UpdateService {
       this.setState({
         status: "unsupported",
         message: "not-packaged",
+        errorCode: "unsupported_dev_mode",
       });
       return this.state;
     }
@@ -104,9 +90,11 @@ class UpdateService {
       return this.state;
     } catch (error: any) {
       logger.error("[UpdateService] checkForUpdates failed", error);
+      const { errorCode, message } = this.classifyError(error);
       this.setState({
         status: "error",
-        message: error?.message || String(error),
+        errorCode,
+        message,
       });
       return this.state;
     }
@@ -117,6 +105,7 @@ class UpdateService {
       this.setState({
         status: "unsupported",
         message: "not-packaged",
+        errorCode: "unsupported_dev_mode",
       });
       return this.state;
     }
@@ -126,9 +115,11 @@ class UpdateService {
       return this.state;
     } catch (error: any) {
       logger.error("[UpdateService] downloadUpdate failed", error);
+      const { errorCode, message } = this.classifyError(error);
       this.setState({
         status: "error",
-        message: error?.message || String(error),
+        errorCode,
+        message,
       });
       return this.state;
     }
@@ -139,6 +130,7 @@ class UpdateService {
       this.setState({
         status: "unsupported",
         message: "not-packaged",
+        errorCode: "unsupported_dev_mode",
       });
       return;
     }
@@ -209,9 +201,13 @@ class UpdateService {
   }
 
   private setState(patch: Partial<UpdateState>) {
+    const normalizedPatch =
+      patch.status && patch.status !== "error" && patch.errorCode === undefined
+        ? { ...patch, errorCode: undefined }
+        : patch;
     this.state = {
       ...this.state,
-      ...patch,
+      ...normalizedPatch,
       currentVersion: app.getVersion(),
     };
     this.emit();
@@ -223,6 +219,57 @@ class UpdateService {
     } catch (error) {
       logger.warn("[UpdateService] emit update event failed", error);
     }
+  }
+
+  private classifyError(error: unknown): {
+    errorCode: UpdateErrorCode;
+    message: string;
+  } {
+    const message =
+      error instanceof Error ? error.message : typeof error === "string" ? error : String(error);
+    const lower = message.toLowerCase();
+
+    if (
+      lower.includes("net::") ||
+      lower.includes("network") ||
+      lower.includes("socket") ||
+      lower.includes("timeout") ||
+      lower.includes("econn") ||
+      lower.includes("unable to find latest version")
+    ) {
+      return { errorCode: "network_error", message };
+    }
+    if (
+      lower.includes("yml") ||
+      lower.includes("latest.yml") ||
+      lower.includes("sha") ||
+      lower.includes("checksum")
+    ) {
+      return { errorCode: "feed_invalid", message };
+    }
+    if (
+      lower.includes("download") ||
+      lower.includes("status code") ||
+      lower.includes("http error")
+    ) {
+      return { errorCode: "download_failed", message };
+    }
+    if (
+      lower.includes("signature") ||
+      lower.includes("verify") ||
+      lower.includes("blockmap")
+    ) {
+      return { errorCode: "verify_failed", message };
+    }
+    if (
+      lower.includes("eacces") ||
+      lower.includes("eperm") ||
+      lower.includes("access is denied")
+    ) {
+      return { errorCode: "permission_denied", message };
+    }
+
+    return { errorCode: "unknown", message };
   }
 }
 

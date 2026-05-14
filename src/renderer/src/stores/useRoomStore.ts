@@ -6,6 +6,8 @@ import type {
   RoomEvent,
   PlayerInRoom,
   ChatPayload,
+  RoomConnectionStatus,
+  RoomConnectionStatusPayload,
 } from "../../../shared/types";
 import { useSettingsStore } from "./useSettingsStore";
 
@@ -16,7 +18,12 @@ export const useRoomStore = defineStore("room", () => {
   const isConnecting = ref(false);
   const chatMessages = ref<ChatPayload[]>([]);
   const isStartCooldown = ref(false);
+  const connectionStatus = ref<RoomConnectionStatus>("idle");
+  const connectionReason = ref("");
+  const reconnectAttempts = ref(0);
+  const reconnectCountdownSec = ref(0);
   let startCooldownTimer: number | null = null;
+  let reconnectCountdownTimer: number | null = null;
 
   const localPlayerId = computed(() => settingsStore.settings?.playerId || "");
   const isHost = computed(() => room.value?.hostId === localPlayerId.value);
@@ -60,6 +67,7 @@ export const useRoomStore = defineStore("room", () => {
     room.value = null;
     chatMessages.value = [];
     isStartCooldown.value = false;
+    resetConnectionStatus();
     if (startCooldownTimer) {
       window.clearTimeout(startCooldownTimer);
       startCooldownTimer = null;
@@ -91,11 +99,49 @@ export const useRoomStore = defineStore("room", () => {
     return await window.electronAPI.room.kickPlayer(playerId);
   }
 
+  function clearReconnectCountdown() {
+    if (reconnectCountdownTimer) {
+      window.clearInterval(reconnectCountdownTimer);
+      reconnectCountdownTimer = null;
+    }
+  }
+
+  function startReconnectCountdown(nextRetryMs: number | undefined) {
+    clearReconnectCountdown();
+    if (!nextRetryMs || nextRetryMs <= 0) {
+      reconnectCountdownSec.value = 0;
+      return;
+    }
+    reconnectCountdownSec.value = Math.max(1, Math.ceil(nextRetryMs / 1000));
+    reconnectCountdownTimer = window.setInterval(() => {
+      if (reconnectCountdownSec.value <= 1) {
+        reconnectCountdownSec.value = 0;
+        clearReconnectCountdown();
+        return;
+      }
+      reconnectCountdownSec.value -= 1;
+    }, 1000);
+  }
+
+  function resetConnectionStatus() {
+    connectionStatus.value = "idle";
+    connectionReason.value = "";
+    reconnectAttempts.value = 0;
+    reconnectCountdownSec.value = 0;
+    clearReconnectCountdown();
+  }
+
   function handleRoomEvent(event: RoomEvent) {
     if (event.type === "room:state:sync") {
       room.value = event.payload as RoomInfo;
     } else if (event.type === "room:chat") {
       chatMessages.value.push(event.payload as ChatPayload);
+    } else if (event.type === "room:connection-status") {
+      const payload = event.payload as RoomConnectionStatusPayload;
+      connectionStatus.value = payload.status;
+      connectionReason.value = payload.reason || "";
+      reconnectAttempts.value = payload.attempts;
+      startReconnectCountdown(payload.nextRetryMs);
     } else if (event.type === "room:player:joined") {
       const payload = event.payload as PlayerInRoom;
       chatMessages.value.push({
@@ -130,10 +176,12 @@ export const useRoomStore = defineStore("room", () => {
       room.value = null;
       chatMessages.value = [];
       isStartCooldown.value = false;
+      resetConnectionStatus();
     } else if (event.type === "room:kicked") {
       room.value = null;
       chatMessages.value = [];
       isStartCooldown.value = false;
+      resetConnectionStatus();
     } else if (event.type === "room:player:kicked") {
       const payload = event.payload as { playerId: string; name?: string };
       chatMessages.value.push({
@@ -176,6 +224,10 @@ export const useRoomStore = defineStore("room", () => {
   return {
     room,
     isConnecting,
+    connectionStatus,
+    connectionReason,
+    reconnectAttempts,
+    reconnectCountdownSec,
     localPlayerId,
     isHost,
     isStartCooldown,
@@ -190,5 +242,6 @@ export const useRoomStore = defineStore("room", () => {
     kickPlayer,
     handleRoomEvent,
     sendChatMessage,
+    resetConnectionStatus,
   };
 });

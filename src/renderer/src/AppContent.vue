@@ -80,7 +80,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { NAvatar, NSpace, NBadge, NIcon, NModal, NText, NProgress, NButton, useDialog } from 'naive-ui'
+import { NAvatar, NSpace, NBadge, NIcon, NModal, NText, NProgress, NButton, useDialog, useMessage } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { useSettingsStore } from './stores/useSettingsStore'
 import { useRoomStore } from './stores/useRoomStore'
@@ -99,6 +99,7 @@ const settingsStore = useSettingsStore()
 const roomStore = useRoomStore()
 const gameStore = useGameStore()
 const dialog = useDialog()
+const message = useMessage()
 const showCheckIn = ref(false)
 const calendarIconColor = computed(() => {
   return settingsStore.settings?.theme === 'light' ? '#1f2937' : '#fff'
@@ -140,6 +141,15 @@ const showProgress = computed(() => {
 })
 
 const updateStatusText = computed(() => {
+  const errorTextByCode: Record<string, string> = {
+    network_error: t('settings.updateErrors.network_error'),
+    feed_invalid: t('settings.updateErrors.feed_invalid'),
+    download_failed: t('settings.updateErrors.download_failed'),
+    verify_failed: t('settings.updateErrors.verify_failed'),
+    permission_denied: t('settings.updateErrors.permission_denied'),
+    unsupported_dev_mode: t('settings.updateErrors.unsupported_dev_mode'),
+    unknown: t('settings.updateErrors.unknown')
+  }
   const map: Record<string, string> = {
     idle: t('settings.updateIdle'),
     checking: t('settings.updateChecking'),
@@ -147,7 +157,12 @@ const updateStatusText = computed(() => {
     up_to_date: t('settings.updateLatest'),
     downloading: t('settings.updateDownloading', { progress: progressPercent.value }),
     downloaded: t('settings.updateDownloaded'),
-    error: t('settings.updateError', { message: updateState.value.message || '' }),
+    error: t('settings.updateError', {
+      message:
+        errorTextByCode[updateState.value.errorCode || 'unknown'] ||
+        updateState.value.message ||
+        ''
+    }),
     unsupported: t('settings.updateUnsupported')
   }
   return map[updateState.value.status] || t('settings.updateIdle')
@@ -179,13 +194,11 @@ const handleAutoUpdateCheck = async () => {
     onPositiveClick: async () => {
       await settingsStore.checkUpdate()
     },
-    onNegativeClick: async () => {
-      if (settingsStore.settings && state.latestVersion) {
-        await settingsStore.saveSettings({
-          ...settingsStore.settings,
-          ignoredUpdateVersion: state.latestVersion
-        })
-      }
+    onNegativeClick: () => {
+      if (!state.latestVersion) return
+      void settingsStore.ignoreUpdateVersion(state.latestVersion).catch((error: any) => {
+        message.error(`${t('settings.saveFail')}: ${error?.message || error}`)
+      })
     }
   })
 }

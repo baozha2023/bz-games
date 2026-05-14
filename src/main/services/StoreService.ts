@@ -6,6 +6,8 @@ import path from "path";
 import type {
   AppStore,
   AppSettings,
+  DataHealthIssue,
+  DataHealthReport,
   GameRecord,
   GameVersion,
   UserData,
@@ -701,6 +703,166 @@ class StoreService {
       removedVersions,
       nextStoragePath,
     };
+  }
+
+  async healthCheck(): Promise<DataHealthReport> {
+    const issues: DataHealthIssue[] = [];
+    const configPath = path.join(getAppRoot(), "config.json");
+    const games = this.getGamesList();
+    const settings = this.getSettings();
+    const storageRoots = this.getGameStorageRoots();
+
+    if (!(await pathExists(configPath))) {
+      issues.push({
+        level: "error",
+        code: "config_missing",
+        message: "config.json 不存在",
+        target: configPath,
+      });
+    } else {
+      try {
+        const rawText = await fs.readFile(configPath, "utf-8");
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(rawText);
+        } catch {
+          issues.push({
+            level: "error",
+            code: "config_invalid_json",
+            message: "config.json 不是有效的 JSON",
+            target: configPath,
+          });
+          parsed = null;
+        }
+
+        if (parsed && typeof parsed === "object") {
+          const encryptedStore = parsed as { __encrypted?: boolean };
+          if (encryptedStore.__encrypted === true) {
+            const decrypted = tryDecryptConfigPayload(parsed);
+            if (!decrypted) {
+              issues.push({
+                level: "error",
+                code: "config_decrypt_failed",
+                message: "config.json 解密失败",
+                target: configPath,
+              });
+            }
+          } else {
+            const migrated = deserializeConfig(rawText);
+            if (!migrated || typeof migrated !== "object") {
+              issues.push({
+                level: "error",
+                code: "config_invalid_structure",
+                message: "config.json 结构无效",
+                target: configPath,
+              });
+            } else {
+              issues.push({
+                level: "warning",
+                code: "config_plaintext_legacy",
+                message: "config.json 仍为旧版明文格式，建议重新保存设置完成迁移",
+                target: configPath,
+              });
+            }
+          }
+        }
+      } catch (error) {
+        issues.push({
+          level: "error",
+          code: "config_read_failed",
+          message: `读取 config.json 失败: ${(error as Error).message}`,
+          target: configPath,
+        });
+      }
+    }
+
+    if (!settings.playerId?.trim()) {
+      issues.push({
+        level: "error",
+        code: "player_id_missing",
+        message: "玩家 ID 缺失",
+      });
+    }
+
+    const gameIds = new Set<string>();
+    for (const game of games) {
+      if (gameIds.has(game.id)) {
+        issues.push({
+          level: "error",
+          code: "duplicate_game_id",
+          message: `存在重复的游戏 ID: ${game.id}`,
+          target: game.id,
+        });
+      }
+      gameIds.add(game.id);
+
+      const seenVersions = new Set<string>();
+      for (const version of game.versions) {
+        if (seenVersions.has(version.version)) {
+          issues.push({
+            level: "warning",
+            code: "duplicate_game_version",
+            message: `游戏 ${game.id} 存在重复版本记录: ${version.version}`,
+            target: `${game.id}@${version.version}`,
+          });
+        }
+        seenVersions.add(version.version);
+
+        const manifestPath = path.join(version.path, "game.json");
+        if (!(await pathExists(version.path))) {
+          issues.push({
+            level: "error",
+            code: "version_path_missing",
+            message: `游戏版本目录不存在: ${game.id}@${version.version}`,
+            target: version.path,
+          });
+          continue;
+        }
+        if (!(await pathExists(manifestPath))) {
+          issues.push({
+            level: "error",
+            code: "manifest_missing",
+            message: `版本目录缺少 game.json: ${game.id}@${version.version}`,
+            target: manifestPath,
+          });
+        }
+      }
+
+      if (!game.versions.some((v) => v.version === game.latestVersion)) {
+        issues.push({
+          level: "error",
+          code: "latest_version_invalid",
+          message: `游戏 ${game.id} 的 latestVersion 指向不存在的版本`,
+          target: `${game.id}@${game.latestVersion}`,
+        });
+      }
+    }
+
+    for (const storageRoot of storageRoots) {
+      if (!(await pathExists(storageRoot))) {
+        issues.push({
+          level: "warning",
+          code: "storage_root_missing",
+          message: "游戏存储路径不存在",
+          target: storageRoot,
+        });
+      }
+    }
+
+    const report: DataHealthReport = {
+      ok: !issues.some((issue) => issue.level === "error"),
+      checkedAt: Date.now(),
+      summary: {
+        errors: issues.filter((issue) => issue.level === "error").length,
+        warnings: issues.filter((issue) => issue.level === "warning").length,
+        gameCount: games.length,
+        versionCount: games.reduce((sum, game) => sum + game.versions.length, 0),
+        storagePathCount: storageRoots.length,
+      },
+      issues,
+    };
+
+    return report;
   }
 
   updateGameStats(

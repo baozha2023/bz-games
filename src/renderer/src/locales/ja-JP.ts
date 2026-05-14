@@ -149,8 +149,16 @@ export default {
     playerKicked: "{name} が部屋からキックされました",
     youWereKicked: "この部屋からキックされました",
     gameStarted: "ゲームが開始されました",
+    gameEnded: "ゲームが終了しました",
     launchFailed: "起動失敗: {reason}",
     startFailed: "開始失敗",
+    connectionStatus: {
+      connecting: "部屋に接続中...",
+      reconnecting:
+        "部屋との接続が切れました。再接続中（{current}/5）、{seconds} 秒後に再試行します",
+      failed: "部屋への接続に失敗しました: {reason}",
+      disconnected: "部屋との接続が切断されました",
+    },
     joinError: {
       versionMismatch: "ゲームのバージョンが一致しません",
       roomFull: "部屋が満員です",
@@ -224,6 +232,14 @@ export default {
     removeStoragePathSuccess:
       "保存先を削除しました。{gameCount} 件のゲーム、{versionCount} 件のバージョンを削除しました",
     removeStoragePathFailed: "保存先の削除に失敗しました",
+    dataHealth: "データ健全性",
+    runDataHealthCheck: "チェックを実行",
+    dataHealthOk: "データ健全性チェックに合格しました",
+    dataHealthIssuesFound: "対応が必要なデータ問題が見つかりました",
+    dataHealthSummary:
+      "エラー {errors} 件、警告 {warnings} 件、ゲーム {games} 件、バージョン {versions} 件、パス {paths} 件",
+    healthError: "エラー",
+    healthWarning: "警告",
     update: "クライアント更新",
     checkUpdate: "更新を確認",
     updateTitle: "更新状態",
@@ -239,6 +255,17 @@ export default {
     updateUnsupported: "開発モードでは自動更新を利用できません",
     updateFailed: "更新に失敗しました",
     updateError: "更新失敗: {message}",
+    updateErrors: {
+      network_error:
+        "ネットワーク要求に失敗しました。接続または更新配信先を確認してください",
+      feed_invalid:
+        "更新メタデータが無効です。latest.yml または publish 設定を確認してください",
+      download_failed: "更新パッケージのダウンロードに失敗しました",
+      verify_failed: "更新パッケージの検証に失敗しました",
+      permission_denied: "更新ファイルの書き込み権限がありません",
+      unsupported_dev_mode: "開発モードでは自動更新を利用できません",
+      unknown: "不明な更新エラー",
+    },
     updatePromptTitle: "新しいバージョンがあります",
     updatePromptMessage: "新しいバージョン {version} を検出しました。今すぐ更新しますか？",
     updateNow: "今すぐ更新",

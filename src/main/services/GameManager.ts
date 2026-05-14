@@ -31,6 +31,9 @@ class GameManager {
 
   private initializeHandlers() {
     roomClient.setMsgHandler((gameId, msg) => this.relayToGame(gameId, msg));
+    roomServer.setLocalRelayHandler((gameId, msg) =>
+      this.relayToGame(gameId, msg),
+    );
     roomClient.setStartGameHandler((gameId, version) =>
       this.launch(gameId, version),
     );

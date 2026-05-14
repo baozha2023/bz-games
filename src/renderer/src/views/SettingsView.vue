@@ -82,6 +82,40 @@
         </n-space>
       </n-form-item>
 
+      <n-form-item :label="t('settings.dataHealth')">
+        <n-space vertical style="width: 100%;">
+          <n-space>
+            <n-button :loading="isCheckingHealth" @click="handleDataHealthCheck">
+              {{ t('settings.runDataHealthCheck') }}
+            </n-button>
+            <n-text v-if="dataHealthReport" depth="3">
+              {{ t('settings.dataHealthSummary', dataHealthSummaryText) }}
+            </n-text>
+          </n-space>
+          <n-alert
+            v-if="dataHealthReport"
+            :type="dataHealthReport.ok ? 'success' : 'warning'"
+          >
+            {{
+              dataHealthReport.ok
+                ? t('settings.dataHealthOk')
+                : t('settings.dataHealthIssuesFound')
+            }}
+          </n-alert>
+          <n-list v-if="dataHealthReport?.issues.length">
+            <n-list-item v-for="issue in dataHealthReport.issues" :key="`${issue.code}-${issue.target || issue.message}`">
+              <n-space vertical size="small">
+                <n-tag :type="issue.level === 'error' ? 'error' : 'warning'" size="small">
+                  {{ issue.level === 'error' ? t('settings.healthError') : t('settings.healthWarning') }}
+                </n-tag>
+                <n-text>{{ issue.message }}</n-text>
+                <n-text v-if="issue.target" depth="3">{{ issue.target }}</n-text>
+              </n-space>
+            </n-list-item>
+          </n-list>
+        </n-space>
+      </n-form-item>
+
     <n-form-item :label="t('settings.update')">
         <n-space>
         <n-button :loading="isCheckingUpdate" @click="handleCheckUpdate">
@@ -118,7 +152,9 @@ const dialog = useDialog()
 const formRef = ref(null)
 const formValue = ref<AppSettings | null>(null)
 const updateState = computed(() => settingsStore.updateState)
+const dataHealthReport = computed(() => settingsStore.dataHealthReport)
 const isCheckingUpdate = ref(false)
+const isCheckingHealth = ref(false)
 const removingPath = ref('')
 const allStoragePaths = computed(() => {
   const current = formValue.value?.gameStoragePath?.trim()
@@ -147,6 +183,23 @@ const languageOptions = computed(() => [
   { label: t('settings.langEnUS'), value: 'en-US' },
   { label: t('settings.langJaJP'), value: 'ja-JP' }
 ])
+
+const dataHealthSummaryText = computed(() => {
+  const summary = dataHealthReport.value?.summary
+  return {
+    errors: summary?.errors || 0,
+    warnings: summary?.warnings || 0,
+    games: summary?.gameCount || 0,
+    versions: summary?.versionCount || 0,
+    paths: summary?.storagePathCount || 0
+  }
+})
+
+const updateErrorText = (errorCode?: string, rawMessage?: string) => {
+  const key = errorCode ? `settings.updateErrors.${errorCode}` : 'settings.updateErrors.unknown'
+  const translated = t(key)
+  return translated === key ? rawMessage || t('settings.updateErrors.unknown') : translated
+}
 
 onMounted(async () => {
   await settingsStore.loadSettings()
@@ -234,13 +287,11 @@ const handleCheckUpdate = async () => {
         onPositiveClick: async () => {
           await settingsStore.checkUpdate()
         },
-        onNegativeClick: async () => {
-          if (settingsStore.settings && state.latestVersion) {
-            await settingsStore.saveSettings({
-              ...settingsStore.settings,
-              ignoredUpdateVersion: state.latestVersion
-            })
-          }
+        onNegativeClick: () => {
+          if (!state.latestVersion) return
+          void settingsStore.ignoreUpdateVersion(state.latestVersion).catch((error: any) => {
+            message.error(`${t('settings.saveFail')}: ${error?.message || error}`)
+          })
         }
       })
       return
@@ -250,10 +301,31 @@ const handleCheckUpdate = async () => {
     } else if (state.status === 'unsupported') {
       message.warning(t('settings.updateUnsupported'))
     } else if (state.status === 'error') {
-      message.error(t('settings.updateFailed'))
+      message.error(
+        t('settings.updateError', {
+          message: updateErrorText(state.errorCode, state.message)
+        })
+      )
     }
   } finally {
     isCheckingUpdate.value = false
+  }
+}
+
+const handleDataHealthCheck = async () => {
+  if (isCheckingHealth.value) return
+  isCheckingHealth.value = true
+  try {
+    const report = await settingsStore.runDataHealthCheck()
+    if (report.ok) {
+      message.success(t('settings.dataHealthOk'))
+    } else {
+      message.warning(t('settings.dataHealthIssuesFound'))
+    }
+  } catch (error: any) {
+    message.error(`${t('common.error')}: ${error?.message || error}`)
+  } finally {
+    isCheckingHealth.value = false
   }
 }
 

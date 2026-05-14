@@ -409,6 +409,7 @@ interface AppSettings {
 - `system:removeGameStoragePath`：删除保存路径及其内部已导入游戏数据。
 - `system:getUserData`：读取用户经济与签到数据。
 - `system:checkIn`：执行每日签到并返回奖励结果。
+- `system:dataHealthCheck`：执行本地数据健康检查，返回结构化报告（错误/警告/摘要）。
 - `system:getUpdateStatus`：获取当前更新状态。
 - `system:checkUpdate`：检查是否有可用更新。
 - `system:downloadUpdate`：下载可用更新包。
@@ -440,10 +441,13 @@ interface AppSettings {
   - 删除游戏功能升级为模态框，支持多选版本进行删除，默认选中当前版本。
   - 若 Manifest 配置了 `video` 字段，详情页进入后自动播放预览视频；视频结束后自动回退显示封面。
 - **加入房间地址**：加入房间输入框需要回填最近一次成功地址（持久化于设置），减少重复输入。
+- **房间连接状态可视化**：房间页需展示 `connecting / reconnecting / failed / disconnected` 状态，以及重连倒计时与失败原因。
 - **统计/成就搜索**：右上角默认展示搜索图标，点击后展开输入框并支持按游戏名或游戏 ID 模糊搜索。
 - **房间开始按钮冷却**：房间内收到 `room:game:end` 后，Host 的「开始游戏」按钮需禁用 5 秒。
 - **统计界面**：卡片右上角需展示该游戏的所有版本号，使用自动换行布局。
 - **设置页更新入口**：设置页需提供「检查更新」按钮，点击后弹出更新状态弹层，显示下载进度与安装按钮。
+- **设置页数据自检**：设置页需提供“数据自检”按钮，展示 `config.json`、游戏目录、版本路径、Manifest 完整性等检查结果。
+- **更新错误诊断**：更新失败时前端必须展示归类后的错误码文案与技术摘要，避免仅显示底层原始错误。
 - **设置页游戏目录管理**：
   - 支持维护多游戏保存路径（路径池）。
   - 当前选择路径仅影响后续新导入游戏，不改动已导入游戏所在目录。
@@ -479,6 +483,7 @@ interface AppSettings {
 4. **两层 WebSocket 服务**：
    - **Room Server/Client**：平台之间互联，处理房间状态与游戏消息中继。
    - **Game API Server**：平台与本机游戏进程互联，提供平台能力给游戏。
+   - **Host 本地投递优化**：当客机消息目标是房主本机游戏进程时，`RoomServer` 应直接调用 `GameApiServer.sendEvent()` 投递，避免再经房主本地 `RoomClient` 走一跳 WebSocket 回环。
 
 ### 7.2 联机完整流程
 
@@ -547,6 +552,8 @@ Room Server 与 Room Client 之间使用 **WebSocket + JSON** 通信。
 - `message.broadcast` 默认仅转发给其他玩家，不会回环给发送者。
 - `message.send` 必须提供目标玩家（`to` 或 `targetPlayerId`），否则返回错误。
 - 中继层会自动补齐 `senderId`、`messageId`、`sentAt` 字段，便于游戏侧幂等处理与时序判断。
+- Host 处理来自客机、且目标为房主本机游戏的 `game:message:relay` / `game:broadcast:relay` 时，应优先直接投递给本机 `GameApiServer`，不要通过房主本地 `RoomClient` 再走一次 WebSocket。
+- `RoomClient` 需通过 `room:event` 向渲染层同步连接状态变化，包括 `connecting / connected / reconnecting / failed / disconnected` 及重试信息。
 - 房间已满时允许同一 `playerId` 重连加入（Rejoin），不会被误判为 `room_full`。
 
 ***

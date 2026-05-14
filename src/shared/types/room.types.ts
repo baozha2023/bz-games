@@ -10,8 +10,10 @@ export type RoomMessageType =
   | "room:game:start" // Server → All：游戏开始
   | "room:game:end" // Client → Server / Server → All：游戏结束
   | "room:disbanded" // Server → All：房间已解散
+  | "room:disconnected"
   | "room:kicked" // Server → Target：被踢通知
   | "room:player:kicked" // Server → All：玩家被踢通知
+  | "room:connection-status"
   | "room:chat" // 双向：房间内聊天消息
   | "game:message:relay"
   | "game:broadcast:relay";
@@ -81,6 +83,22 @@ export interface RoomJoinRefusedPayload {
 export interface RoomKickedPayload {
   roomId: string;
   byPlayerId: string;
+  reason?: string;
+}
+
+export type RoomConnectionStatus =
+  | "idle"
+  | "connecting"
+  | "connected"
+  | "reconnecting"
+  | "failed"
+  | "disconnected";
+
+export interface RoomConnectionStatusPayload {
+  status: RoomConnectionStatus;
+  attempts: number;
+  maxAttempts: number;
+  nextRetryMs?: number;
   reason?: string;
 }
 

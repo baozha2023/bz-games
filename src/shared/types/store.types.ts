@@ -51,3 +51,51 @@ export interface AppSettings {
   gameStoragePath?: string;
   gameStorageHistory?: string[];
 }
+
+export type UpdateErrorCode =
+  | "network_error"
+  | "feed_invalid"
+  | "download_failed"
+  | "verify_failed"
+  | "permission_denied"
+  | "unsupported_dev_mode"
+  | "unknown";
+
+export type UpdateStatus =
+  | "idle"
+  | "checking"
+  | "available"
+  | "up_to_date"
+  | "downloading"
+  | "downloaded"
+  | "error"
+  | "unsupported";
+
+export interface UpdateState {
+  status: UpdateStatus;
+  currentVersion: string;
+  latestVersion?: string;
+  progress?: number;
+  message?: string;
+  errorCode?: UpdateErrorCode;
+}
+
+export interface DataHealthIssue {
+  level: "warning" | "error";
+  code: string;
+  message: string;
+  target?: string;
+}
+
+export interface DataHealthReport {
+  ok: boolean;
+  checkedAt: number;
+  summary: {
+    errors: number;
+    warnings: number;
+    gameCount: number;
+    versionCount: number;
+    storagePathCount: number;
+  };
+  issues: DataHealthIssue[];
+}

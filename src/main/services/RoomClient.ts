@@ -5,6 +5,7 @@ import type {
   RoomJoinAckPayload,
   RoomJoinRefusedPayload,
   RoomInfo,
+  RoomConnectionStatusPayload,
 } from "../../shared/types";
 import { logger } from "../utils/logger";
 import { storeService } from "./StoreService";
@@ -54,6 +55,11 @@ export class RoomClient {
     this.manuallyDisconnected = false;
     this.shouldReconnect = true;
     this.hasJoinedRoom = false;
+    this.emitConnectionStatus({
+      status: "connecting",
+      attempts: 0,
+      maxAttempts: this.maxReconnectAttempts,
+    });
 
     return new Promise((resolve) => {
       this.connectionResolver = resolve;
@@ -61,6 +67,12 @@ export class RoomClient {
       setTimeout(() => {
         if (this.connectionResolver) {
           logger.error(`[RoomClient] Connection timed out to ${this.address}`);
+          this.emitConnectionStatus({
+            status: "failed",
+            attempts: this.reconnectAttempts,
+            maxAttempts: this.maxReconnectAttempts,
+            reason: "连接超时 (15s)",
+          });
           this.resolveConnection({ success: false, error: "连接超时 (15s)" });
         }
       }, 15000);
@@ -107,6 +119,12 @@ export class RoomClient {
   private handleError(err: Error) {
     logger.error(`[RoomClient] Error`, err);
     if (this.connectionResolver) {
+      this.emitConnectionStatus({
+        status: "failed",
+        attempts: this.reconnectAttempts,
+        maxAttempts: this.maxReconnectAttempts,
+        reason: err.message || "连接错误",
+      });
       this.resolveConnection({
         success: false,
         error: err.message || "连接错误",
@@ -120,6 +138,12 @@ export class RoomClient {
       !this.manuallyDisconnected && this.shouldReconnect && this.hasJoinedRoom;
 
     if (this.connectionResolver) {
+      this.emitConnectionStatus({
+        status: "failed",
+        attempts: this.reconnectAttempts,
+        maxAttempts: this.maxReconnectAttempts,
+        reason: "Closed before join",
+      });
       this.resolveConnection({ success: false, error: "Closed before join" });
     }
     if (shouldReconnect) {
@@ -127,6 +151,11 @@ export class RoomClient {
     } else {
       this.room = null;
       this.hasJoinedRoom = false;
+      this.emitConnectionStatus({
+        status: this.manuallyDisconnected ? "disconnected" : "failed",
+        attempts: this.reconnectAttempts,
+        maxAttempts: this.maxReconnectAttempts,
+      });
     }
     mainWindow?.webContents.send(IPC.ROOM_EVENT, {
       type: "room:disconnected",
@@ -172,6 +201,11 @@ export class RoomClient {
       this.room = ack.room;
       this.hasJoinedRoom = true;
       this.reconnectAttempts = 0;
+      this.emitConnectionStatus({
+        status: "connected",
+        attempts: 0,
+        maxAttempts: this.maxReconnectAttempts,
+      });
       this.resolveConnection({ success: true });
       mainWindow?.webContents.send(IPC.ROOM_EVENT, {
         type: "room:state:sync",
@@ -187,6 +221,11 @@ export class RoomClient {
         this.room = state;
         this.hasJoinedRoom = true;
         this.reconnectAttempts = 0;
+        this.emitConnectionStatus({
+          status: "connected",
+          attempts: 0,
+          maxAttempts: this.maxReconnectAttempts,
+        });
         this.resolveConnection({ success: true });
       }
     } else if (msg.type === "room:join:refused") {
@@ -194,6 +233,12 @@ export class RoomClient {
       logger.warn("[RoomClient] Join refused:", payload.reason);
       this.shouldReconnect = false;
       this.hasJoinedRoom = false;
+      this.emitConnectionStatus({
+        status: "failed",
+        attempts: this.reconnectAttempts,
+        maxAttempts: this.maxReconnectAttempts,
+        reason: payload.message || payload.reason,
+      });
       this.resolveConnection({
         success: false,
         error: payload.reason,
@@ -236,6 +281,11 @@ export class RoomClient {
     this.hasJoinedRoom = false;
     this.cleanup();
     this.room = null;
+    this.emitConnectionStatus({
+      status: "disconnected",
+      attempts: 0,
+      maxAttempts: this.maxReconnectAttempts,
+    });
     mainWindow?.webContents.send(IPC.ROOM_EVENT, {
       type: "room:disconnected",
       payload: {},
@@ -262,6 +312,12 @@ export class RoomClient {
       this.shouldReconnect = false;
       this.hasJoinedRoom = false;
       this.room = null;
+      this.emitConnectionStatus({
+        status: "failed",
+        attempts: this.reconnectAttempts,
+        maxAttempts: this.maxReconnectAttempts,
+        reason: "重连次数已达上限",
+      });
       return;
     }
     this.clearReconnectTimer();
@@ -270,6 +326,12 @@ export class RoomClient {
     logger.info(
       `[RoomClient] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`,
     );
+    this.emitConnectionStatus({
+      status: "reconnecting",
+      attempts: this.reconnectAttempts,
+      maxAttempts: this.maxReconnectAttempts,
+      nextRetryMs: delay,
+    });
     this.reconnectTimer = setTimeout(() => {
       if (!this.shouldReconnect || this.manuallyDisconnected) return;
       this.openSocket();
@@ -293,6 +355,13 @@ export class RoomClient {
 
   setStopGameHandler(handler: (gameId: string) => void) {
     this.onGameStop = handler;
+  }
+
+  private emitConnectionStatus(payload: RoomConnectionStatusPayload) {
+    mainWindow?.webContents.send(IPC.ROOM_EVENT, {
+      type: "room:connection-status",
+      payload,
+    });
   }
 }
 

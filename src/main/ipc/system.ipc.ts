@@ -97,6 +97,10 @@ export function registerSystemIpc() {
     return storeService.performCheckIn();
   });
 
+  ipcMain.handle(IPC.SYSTEM_DATA_HEALTH_CHECK, async () => {
+    return await storeService.healthCheck();
+  });
+
   ipcMain.handle(IPC.SYSTEM_GET_UPDATE_STATUS, async () => {
     return updateService.getState();
   });

@@ -1,6 +1,11 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import { IPC } from "../shared/ipc-channels";
-import type { AppSettings, RoomEvent } from "../shared/types";
+import type {
+  AppSettings,
+  DataHealthReport,
+  RoomEvent,
+  UpdateState,
+} from "../shared/types";
 
 export const electronAPI = {
   game: {
@@ -115,29 +120,16 @@ export const electronAPI = {
       ipcRenderer.invoke(IPC.SYSTEM_OPEN_PATH, targetPath),
     removeGameStoragePath: (targetPath: string) =>
       ipcRenderer.invoke(IPC.SYSTEM_REMOVE_GAME_STORAGE_PATH, targetPath),
+    dataHealthCheck: (): Promise<DataHealthReport> =>
+      ipcRenderer.invoke(IPC.SYSTEM_DATA_HEALTH_CHECK),
     getUpdateStatus: () => ipcRenderer.invoke(IPC.SYSTEM_GET_UPDATE_STATUS),
     checkUpdate: () => ipcRenderer.invoke(IPC.SYSTEM_CHECK_UPDATE),
     downloadUpdate: () => ipcRenderer.invoke(IPC.SYSTEM_DOWNLOAD_UPDATE),
     installUpdate: () => ipcRenderer.invoke(IPC.SYSTEM_INSTALL_UPDATE),
     onUpdateEvent: (
-      callback: (payload: {
-        status: string;
-        currentVersion: string;
-        latestVersion?: string;
-        progress?: number;
-        message?: string;
-      }) => void,
+      callback: (payload: UpdateState) => void,
     ) => {
-      const handler = (
-        _: any,
-        payload: {
-          status: string;
-          currentVersion: string;
-          latestVersion?: string;
-          progress?: number;
-          message?: string;
-        },
-      ) => callback(payload);
+      const handler = (_: any, payload: UpdateState) => callback(payload);
       ipcRenderer.on(IPC.SYSTEM_UPDATE_EVENT, handler);
       return () => ipcRenderer.removeListener(IPC.SYSTEM_UPDATE_EVENT, handler);
     },

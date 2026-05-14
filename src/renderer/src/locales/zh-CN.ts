@@ -145,6 +145,12 @@ export default {
     gameEnded: "游戏已结束",
     launchFailed: "启动失败: {reason}",
     startFailed: "启动失败",
+    connectionStatus: {
+      connecting: "正在连接房间...",
+      reconnecting: "房间连接中断，正在重连（{current}/5），预计 {seconds} 秒后重试",
+      failed: "房间连接失败：{reason}",
+      disconnected: "已与房间断开连接",
+    },
     joinError: {
       versionMismatch: "游戏版本不匹配",
       roomFull: "房间已满",
@@ -218,6 +224,14 @@ export default {
     removeStoragePathSuccess:
       "已删除路径，移除 {gameCount} 个游戏、{versionCount} 个版本",
     removeStoragePathFailed: "删除路径失败",
+    dataHealth: "数据自检",
+    runDataHealthCheck: "开始自检",
+    dataHealthOk: "数据自检通过",
+    dataHealthIssuesFound: "发现需要处理的数据问题",
+    dataHealthSummary:
+      "错误 {errors} 项，警告 {warnings} 项，游戏 {games} 个，版本 {versions} 个，路径 {paths} 个",
+    healthError: "错误",
+    healthWarning: "警告",
     update: "客户端更新",
     checkUpdate: "检查更新",
     updateTitle: "更新状态",
@@ -232,6 +246,15 @@ export default {
     updateUnsupported: "开发模式不支持自动更新，请打包后测试",
     updateFailed: "更新失败",
     updateError: "更新失败：{message}",
+    updateErrors: {
+      network_error: "网络连接失败，请检查网络或更新源是否可访问",
+      feed_invalid: "更新元数据无效，请检查 latest.yml 或发布配置",
+      download_failed: "更新包下载失败，请稍后重试",
+      verify_failed: "更新包校验失败，请重新下载或检查发布文件",
+      permission_denied: "权限不足，无法写入更新文件",
+      unsupported_dev_mode: "开发模式不支持自动更新",
+      unknown: "未知更新错误",
+    },
     updatePromptTitle: "发现新版本",
     updatePromptMessage: "检测到新版本 {version}，是否立即更新？",
     updateNow: "立即更新",

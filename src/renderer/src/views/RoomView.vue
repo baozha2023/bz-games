@@ -8,6 +8,14 @@
     </template>
   </n-page-header>
 
+    <n-alert
+      v-if="showConnectionAlert"
+      :type="connectionAlertType"
+      style="margin-top: 16px;"
+    >
+      {{ connectionStatusText }}
+    </n-alert>
+
     <n-grid x-gap="24" :cols="1" md="2" style="margin-top: 24px;">
       <n-grid-item span="2">
         <PlayerList 
@@ -84,6 +92,40 @@ const canStart = computed(() => {
   if (!roomStore.room) return false
   const playerCount = roomStore.room.players.length
   return roomStore.allReady && playerCount >= minPlayers.value && !roomStore.isStartCooldown
+})
+
+const showConnectionAlert = computed(() => {
+  return ['connecting', 'reconnecting', 'failed', 'disconnected'].includes(
+    roomStore.connectionStatus
+  )
+})
+
+const connectionAlertType = computed(() => {
+  if (roomStore.connectionStatus === 'failed') return 'error'
+  if (roomStore.connectionStatus === 'disconnected') return 'warning'
+  return 'info'
+})
+
+const connectionStatusText = computed(() => {
+  if (roomStore.connectionStatus === 'connecting') {
+    return t('room.connectionStatus.connecting')
+  }
+  if (roomStore.connectionStatus === 'reconnecting') {
+    return t('room.connectionStatus.reconnecting', {
+      current: roomStore.reconnectAttempts,
+      max: 5,
+      seconds: roomStore.reconnectCountdownSec
+    })
+  }
+  if (roomStore.connectionStatus === 'failed') {
+    return t('room.connectionStatus.failed', {
+      reason: roomStore.connectionReason || t('room.joinError.unknown')
+    })
+  }
+  if (roomStore.connectionStatus === 'disconnected') {
+    return t('room.connectionStatus.disconnected')
+  }
+  return ''
 })
 
 onMounted(async () => {

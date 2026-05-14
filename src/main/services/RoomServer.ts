@@ -20,6 +20,9 @@ export class RoomServer {
   private playerConnections: Map<string, WebSocket> = new Map();
   private kickedPlayers: Set<string> = new Set();
   private heartbeatInterval: NodeJS.Timeout | null = null;
+  private localRelayHandler:
+    | ((gameId: string, msg: RoomMessage) => void)
+    | null = null;
 
   async start(gameId: string, version?: string): Promise<number> {
     const port = storeService.getSettings().defaultRoomPort;
@@ -70,6 +73,10 @@ export class RoomServer {
         c.send(data);
       }
     });
+  }
+
+  setLocalRelayHandler(handler: ((gameId: string, msg: RoomMessage) => void) | null) {
+    this.localRelayHandler = handler;
   }
 
   private async getMaxPlayers(
@@ -432,6 +439,7 @@ export class RoomServer {
     senderId: string | undefined,
     payload: Record<string, unknown>,
   ) {
+    if (!this.room) return;
     const normalizedPayload = this.normalizeRelayPayload(senderId, payload);
     const targetPlayerId = this.resolveTargetPlayerId(normalizedPayload);
     if (!targetPlayerId) {
@@ -439,6 +447,13 @@ export class RoomServer {
       return;
     }
     if (senderId && targetPlayerId === senderId) return;
+    if (targetPlayerId === this.room.hostId) {
+      this.localRelayHandler?.(this.room.gameId, {
+        type: "game:message:relay",
+        payload: normalizedPayload,
+      });
+      return;
+    }
     const targetSocket = this.getSocketByPlayerId(targetPlayerId);
     if (!targetSocket) return;
     this.send(targetSocket, {
@@ -451,8 +466,15 @@ export class RoomServer {
     senderId: string | undefined,
     payload: Record<string, unknown>,
   ) {
+    if (!this.room) return;
     const normalizedPayload = this.normalizeRelayPayload(senderId, payload);
     const senderSocket = this.getSocketByPlayerId(senderId);
+    if (senderId !== this.room.hostId) {
+      this.localRelayHandler?.(this.room.gameId, {
+        type: "game:broadcast:relay",
+        payload: normalizedPayload,
+      });
+    }
     this.broadcast(
       {
         type: "game:broadcast:relay",

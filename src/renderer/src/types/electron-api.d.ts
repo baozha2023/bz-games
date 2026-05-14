@@ -1,27 +1,13 @@
 import type {
   AppSettings,
+  DataHealthReport,
   RoomInfo,
   RoomEvent,
   GameRecord,
+  UpdateState,
   UserData,
 } from "../../../shared/types";
 import type { GameManifest } from "../../../shared/game-manifest";
-
-type UpdateState = {
-  status:
-    | "idle"
-    | "checking"
-    | "available"
-    | "up_to_date"
-    | "downloading"
-    | "downloaded"
-    | "error"
-    | "unsupported";
-  currentVersion: string;
-  latestVersion?: string;
-  progress?: number;
-  message?: string;
-};
 
 declare global {
   interface Window {
@@ -136,6 +122,7 @@ declare global {
           removedVersions: number;
           nextStoragePath: string;
         }>;
+        dataHealthCheck: () => Promise<DataHealthReport>;
         getUpdateStatus: () => Promise<UpdateState>;
         checkUpdate: () => Promise<UpdateState>;
         downloadUpdate: () => Promise<UpdateState>;
