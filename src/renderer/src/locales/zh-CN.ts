@@ -101,6 +101,7 @@ export default {
     platformVersion: "平台兼容：{version}",
     packageSize: "安装包大小：{size}",
     installPath: "安装目录：{path}",
+    updatedAt: "更新时间 {time}",
     downloadInstall: "下载并安装",
     cancelTask: "取消任务",
     canceled: "已取消下载任务",

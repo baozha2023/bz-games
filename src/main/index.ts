@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, session } from "electron";
 import { createWindow, markAppQuitting } from "./window";
 import { registerAllIpc } from "./ipc";
 import { electronApp, optimizer } from "@electron-toolkit/utils";
@@ -7,6 +7,14 @@ import { setCustomGamesDir } from "./utils/appPath";
 
 app.whenReady().then(async () => {
   electronApp.setAppUserModelId("com.bz.launcher");
+
+  session.defaultSession.webRequest.onBeforeSendHeaders(
+    { urls: ["https://web-bz.oss-cn-beijing.aliyuncs.com/*"] },
+    (details, callback) => {
+      details.requestHeaders["Referer"] = "https://bz-game-client.local";
+      callback({ requestHeaders: details.requestHeaders });
+    },
+  );
 
   await storeService.init();
   const settings = storeService.getSettings();

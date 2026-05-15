@@ -105,6 +105,7 @@ export default {
     platformVersion: "Platform Requirement: {version}",
     packageSize: "Package Size: {size}",
     installPath: "Install Path: {path}",
+    updatedAt: "Updated {time}",
     downloadInstall: "Download and Install",
     cancelTask: "Cancel Task",
     canceled: "Download task canceled",

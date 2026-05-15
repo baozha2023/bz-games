@@ -234,7 +234,7 @@ bz-games/
 | `schemaVersion`     | `string`       | 是  | 市场索引格式版本，建议使用语义化版本，便于未来升级兼容逻辑。 |
 | `marketId`          | `string`       | 是  | 市场唯一标识，如 `official`。           |
 | `marketName`        | `string`       | 是  | 市场显示名称。                        |
-| `generatedAt`       | `string`       | 是  | 索引生成时间，ISO 8601 格式。            |
+| `generatedAt`       | `string`       | 是  | 索引生成时间，ISO 8601 格式。平台在市场页面标题下方展示该时间（本地化格式）。           |
 | `source.repository` | `string`       | 否  | 索引来源仓库地址，用于诊断与展示。              |
 | `source.branch`     | `string`       | 否  | 索引来源分支，如 `master`。             |
 | `games`             | `MarketGame[]` | 是  | 市场中的游戏列表。                      |
@@ -394,7 +394,7 @@ interface MarketTaskState {
 - 读写本地存储（electron-store），**配置与数据均存储于应用根目录**
 - 调用系统 API（文件对话框、环境变量、子进程）
 - 游戏进程启动 / 管理 / 终止（`child_process.spawn`，支持 Windows 隐藏窗口）
-- 拉取远程游戏市场索引、下载市场安装包并执行校验与安装
+- 拉取远程游戏市场索引、下载市场安装包并执行校验与安装。所有 OSS 请求均携带 `Referer: https://bz-game-client.local` 防盗链 header（fetch 显式设置 + `session.webRequest.onBeforeSendHeaders` 全量拦截）
 - 运行 Room Server（Host 时）/ Room Client（Client 时）
 - 运行 Game API Server（每次有游戏运行时）
 - 注册并处理所有 IPC Handler
@@ -406,7 +406,7 @@ interface MarketTaskState {
 - Vue 3 + TypeScript UI，仅负责界面展示与交互
 - 通过 `window.electronAPI` 调用主进程功能（严禁直接使用 Node.js API，所有文件操作与系统调用必须通过 IPC）
 - 使用 Pinia 管理前端状态（GameStore, RoomStore）
-- 负责游戏市场页面展示、版本选择、下载进度/取消、安装结果反馈。通过 `pendingDownloads`/`pendingCancels` Set 实现按钮幂等保护，`isAlive` 标志位防止卸载后 toast 泄漏
+- 负责游戏市场页面展示、版本选择、下载进度/取消、安装结果反馈、索引更新时间展示。通过 `pendingDownloads`/`pendingCancels` Set 实现按钮幂等保护，`isAlive` 标志位防止卸载后 toast 泄漏
 - 监听并响应房间事件和游戏进程事件
 
 #### 预加载脚本 (Preload)
@@ -496,6 +496,8 @@ interface AppSettings {
     - `AbortController` 贯穿全流程，下载阶段通过 `fetch({ signal })` 原生响应，校验/解压阶段在入口强制检查 `signal.aborted`。
     - 错误分类由 `classifyErrorCode()` 统一处理，根据错误消息自动归类为四种错误码（download/verify/extract/install）。
     - `tasks` Map 维护任务全生命周期，终态任务 30 秒自动清理，`finally` 块确保临时文件必然清理。
+    - OSS 防盗链：`OSS_REFERER` 常量注入 `fetchIndexFromUrl()` 和 `downloadArchive()` 的 fetch header。
+- **应用入口 OSS 拦截**：`index.ts` 在 `app.whenReady` 中注册 `session.defaultSession.webRequest.onBeforeSendHeaders`，对所有 `web-bz.oss-cn-beijing.aliyuncs.com` 请求注入 `Referer` header，覆盖 `<img>` 标签等非 fetch 请求。
 
 ***
 
@@ -509,7 +511,9 @@ interface AppSettings {
 - **版本检查**：导入时会检查 `game.json` 中的 `platformVersion` 字段，若当前平台版本不满足要求（使用 `semver`
   比较），将拒绝导入并提示用户。
 - **拖拽路径解析统一**：游戏库拖拽导入路径统一使用 `webUtils.getPathForFile(file)` 获取。
-- **市场入口拉取策略**：每次进入“游戏市场”页面时，必须重新请求远程 `market.json`，不得仅依赖本地旧数据。
+- **市场入口拉取策略**：每次进入"游戏市场"页面时，必须重新请求远程 `market.json`，不得仅依赖本地旧数据。
+- **市场索引更新时间展示**：`MarketView` 从 `index.generatedAt` 读取时间戳，在标题"游戏市场"右侧以小字展示（格式 `YYYY-MM-DD HH:mm`），使用 `updatedAtLabel` computed 实现，三语 i18n 支持。
+- **OSS 防盗链 Referer**：所有指向 `web-bz.oss-cn-beijing.aliyuncs.com` 的请求（市场索引拉取、游戏包下载、封面/图标/截图 `<img>` 标签）均携带 `Referer: https://bz-game-client.local`。实现分两层：`fetch` 请求在 `fetchIndexFromUrl()` 和 `downloadArchive()` 中显式设置 header；`<img>` 标签等渲染层请求由 `index.ts` 中 `session.defaultSession.webRequest.onBeforeSendHeaders` 全局拦截注入。
 - **市场下载暂存**：市场安装包应先下载到应用可控的临时目录（如 `.market-cache/`）中，校验通过后再解压并导入。
 - **市场安装统一导入**：市场下载成功后，解压目录必须复用现有 `GameLoader` 导入链路，避免形成独立且不一致的安装逻辑。
 - **市场安装失败保护**：下载、校验、解压或导入任一步失败时，不得破坏已有游戏记录；仅清理当前失败任务产生的临时文件（`finally`
@@ -603,8 +607,9 @@ interface AppSettings {
 
 - **返回导航**：所有二级页面（设置、统计、成就等）的 `n-page-header` 必须包含返回按钮，统一导航回 `Library` 页面。
 - **市场入口位置**：在游戏库左侧导航区域新增“游戏市场”按钮，入口层级与游戏库其他主导航一致。
-- **市场刷新行为**：点击“游戏市场”后立即拉取最新远程索引；默认先请求 GitHub，失败后自动回退
+- **市场刷新行为**：点击"游戏市场"后立即拉取最新远程索引；默认先请求 GitHub，失败后自动回退
   OSS；加载中需展示骨架屏或加载态，全部来源都失败时展示错误态与重试按钮。
+- **市场索引时间展示**：市场页面标题"游戏市场"右侧以小字展示索引更新时间（`generatedAt` 字段，格式 `YYYY-MM-DD HH:mm`），安装目录另起一行独立展示。
 - **市场展示内容**：市场列表至少展示封面/图标、游戏名、作者、类型、标签、简介、最新版本、安装状态与下载按钮。
 - **市场详情与安装**
   ：用户可查看游戏简介、当前选中版本详情、版本列表、平台兼容要求、包体大小；当前选中版本的说明与下载操作区必须紧跟在选中游戏信息下方展示，不得沉到底部；点击下载后展示下载进度、校验中、安装中、完成/失败等明确状态。

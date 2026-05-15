@@ -106,6 +106,7 @@ export default {
     platformVersion: "対応プラットフォーム: {version}",
     packageSize: "パッケージサイズ: {size}",
     installPath: "インストール先: {path}",
+    updatedAt: "更新日時 {time}",
     downloadInstall: "ダウンロードしてインストール",
     cancelTask: "タスクをキャンセル",
     canceled: "ダウンロードタスクをキャンセルしました",

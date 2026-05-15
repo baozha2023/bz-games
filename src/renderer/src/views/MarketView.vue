@@ -2,7 +2,12 @@
   <div class="market-root">
     <n-space justify="space-between" align="center" style="margin-bottom: 20px;">
       <div>
-        <h1 style="margin: 0;">{{ t("market.title") }}</h1>
+        <n-space size="small" align="center">
+          <h1 style="margin: 0;">{{ t("market.title") }}</h1>
+          <n-text v-if="updatedAtLabel" depth="3" style="font-size: 14px;">
+            {{ updatedAtLabel }}
+          </n-text>
+        </n-space>
         <n-text depth="3">
           {{ t("market.installPath", { path: installPathLabel }) }}
         </n-text>
@@ -301,6 +306,7 @@ const taskStates = ref<Record<string, MarketTaskState>>({});
 const expandedGames = ref<Record<string, boolean>>({});
 const selectedVersions = ref<Record<string, string>>({});
 const appVersion = ref("");
+const generatedAt = ref("");
 const timeoutIds: number[] = [];
 const notifiedTaskIds = new Set<string>();
 const pendingDownloads = new Set<string>();
@@ -343,6 +349,21 @@ const filteredGames = computed(() => {
 
 const installPathLabel = computed(() => {
   return settingsStore.settings?.gameStoragePath || "games/";
+});
+
+const updatedAtLabel = computed(() => {
+  if (!generatedAt.value) return "";
+  try {
+    const date = new Date(generatedAt.value);
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    const h = String(date.getHours()).padStart(2, "0");
+    const min = String(date.getMinutes()).padStart(2, "0");
+    return t("market.updatedAt", { time: `${y}-${m}-${d} ${h}:${min}` });
+  } catch {
+    return "";
+  }
 });
 
 function taskKey(gameId: string, version: string): string {
@@ -479,6 +500,7 @@ async function loadIndex(): Promise<void> {
   try {
     const index = await window.electronAPI.market.getIndex();
     games.value = index.games;
+    generatedAt.value = index.generatedAt || "";
     for (const game of index.games) {
       if (!(game.id in expandedGames.value)) {
         expandedGames.value[game.id] = false;
