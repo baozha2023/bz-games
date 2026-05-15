@@ -3,6 +3,9 @@ import { IPC } from "../shared/ipc-channels";
 import type {
   AppSettings,
   DataHealthReport,
+  MarketIndex,
+  MarketTaskEvent,
+  MarketTaskState,
   RoomEvent,
   UpdateState,
 } from "../shared/types";
@@ -109,8 +112,23 @@ export const electronAPI = {
       return () => ipcRenderer.removeListener(IPC.ROOM_EVENT, handler);
     },
   },
+  market: {
+    getIndex: (): Promise<MarketIndex> => ipcRenderer.invoke(IPC.MARKET_GET_INDEX),
+    downloadAndInstall: (gameId: string, version: string): Promise<MarketTaskState> =>
+      ipcRenderer.invoke(IPC.MARKET_DOWNLOAD_AND_INSTALL, gameId, version),
+    getTaskState: (taskId: string): Promise<MarketTaskState | null> =>
+      ipcRenderer.invoke(IPC.MARKET_GET_TASK_STATE, taskId),
+    cancelTask: (taskId: string): Promise<boolean> =>
+      ipcRenderer.invoke(IPC.MARKET_CANCEL_TASK, taskId),
+    onEvent: (callback: (payload: MarketTaskEvent) => void) => {
+      const handler = (_: any, payload: MarketTaskEvent) => callback(payload);
+      ipcRenderer.on(IPC.MARKET_EVENT, handler);
+      return () => ipcRenderer.removeListener(IPC.MARKET_EVENT, handler);
+    },
+  },
   settings: {
     get: () => ipcRenderer.invoke(IPC.SYSTEM_GET_SETTINGS),
+    getAppVersion: () => ipcRenderer.invoke(IPC.SYSTEM_GET_APP_VERSION),
     save: (settings: AppSettings) =>
       ipcRenderer.invoke(IPC.SYSTEM_SAVE_SETTINGS, settings),
     uploadAvatar: () => ipcRenderer.invoke(IPC.SYSTEM_UPLOAD_AVATAR),

@@ -7,6 +7,11 @@ const router = createRouter({
     { path: "/", redirect: "/library" },
     { path: "/library", name: "Library", component: LibraryView },
     {
+      path: "/market",
+      name: "Market",
+      component: () => import("../views/MarketView.vue"),
+    },
+    {
       path: "/library/:id",
       name: "GameDetail",
       component: () => import("../views/GameDetailView.vue"),

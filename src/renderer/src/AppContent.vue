@@ -37,6 +37,7 @@
           >
             {{ t('nav.backToRoom') }}
           </n-button>
+          <n-button @click="router.push('/market')">{{ t('nav.market') }}</n-button>
           <n-button @click="router.push('/library')">{{ t('nav.myGames') }}</n-button>
           <n-button @click="router.push('/statistics')">{{ t('statistics.title') }}</n-button>
           <n-badge :dot="gameStore.newAchievements.size > 0">

@@ -4,6 +4,9 @@ import type {
   RoomInfo,
   RoomEvent,
   GameRecord,
+  MarketIndex,
+  MarketTaskEvent,
+  MarketTaskState,
   UpdateState,
   UserData,
 } from "../../../shared/types";
@@ -111,8 +114,19 @@ declare global {
         kickPlayer: (playerId: string) => Promise<boolean>;
         onEvent: (callback: (event: RoomEvent) => void) => () => void;
       };
+      market: {
+        getIndex: () => Promise<MarketIndex>;
+        downloadAndInstall: (
+          gameId: string,
+          version: string,
+        ) => Promise<MarketTaskState>;
+        getTaskState: (taskId: string) => Promise<MarketTaskState | null>;
+        cancelTask: (taskId: string) => Promise<boolean>;
+        onEvent: (callback: (payload: MarketTaskEvent) => void) => () => void;
+      };
       settings: {
         get: () => Promise<AppSettings>;
+        getAppVersion: () => Promise<string>;
         save: (settings: AppSettings) => Promise<void>;
         uploadAvatar: () => Promise<string | null>;
         selectGameStoragePath: () => Promise<string | null>;

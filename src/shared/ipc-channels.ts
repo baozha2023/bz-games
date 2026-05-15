@@ -17,6 +17,12 @@ export const IPC = {
   GAME_LOAD_WITH_MANIFEST: "game:loadWithManifest",
   GAME_CHECK_ID_EXISTS: "game:checkIdExists",
 
+  // ── 游戏市场 ──
+  MARKET_GET_INDEX: "market:getIndex",
+  MARKET_DOWNLOAD_AND_INSTALL: "market:downloadAndInstall",
+  MARKET_GET_TASK_STATE: "market:getTaskState",
+  MARKET_CANCEL_TASK: "market:cancelTask",
+
   // ── 房间管理 ──
   ROOM_CREATE: "room:create",
   ROOM_JOIN: "room:join",
@@ -36,9 +42,11 @@ export const IPC = {
   GAME_PROCESS_STARTED: "game:process:started",
   GAME_PROCESS_ENDED: "game:process:ended",
   GAME_LAUNCH_FAILED: "game:launch:failed",
+  MARKET_EVENT: "market:event",
 
   // ── 系统 ──
   SYSTEM_GET_SETTINGS: "system:getSettings",
+  SYSTEM_GET_APP_VERSION: "system:getAppVersion",
   SYSTEM_SAVE_SETTINGS: "system:saveSettings",
   SYSTEM_UPLOAD_AVATAR: "system:uploadAvatar",
   SYSTEM_SELECT_GAME_STORAGE_PATH: "system:selectGameStoragePath",

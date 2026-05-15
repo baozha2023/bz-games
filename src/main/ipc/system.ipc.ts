@@ -14,6 +14,10 @@ export function registerSystemIpc() {
     return storeService.getSettings();
   });
 
+  ipcMain.handle(IPC.SYSTEM_GET_APP_VERSION, async () => {
+    return app.getVersion();
+  });
+
   ipcMain.handle(IPC.SYSTEM_SAVE_SETTINGS, async (_, settings: AppSettings) => {
     logger.info("[SystemIPC] Saving settings:", settings);
     try {
