@@ -303,6 +303,9 @@ const selectedVersions = ref<Record<string, string>>({});
 const appVersion = ref("");
 const timeoutIds: number[] = [];
 const notifiedTaskIds = new Set<string>();
+const pendingDownloads = new Set<string>();
+const pendingCancels = new Set<string>();
+let isAlive = true;
 
 const TYPE_LABEL_KEYS: Record<MarketGame["type"], string> = {
   singleplayer: "gameDetail.typeSingleplayer",
@@ -455,12 +458,12 @@ async function syncExistingTasks(): Promise<void> {
         needsGameRefresh = true;
         const game = games.value.find((g) => g.id === state.gameId);
         const gameName = game?.name || state.gameId;
-        message.success(t("market.installSuccess", { name: gameName, version: state.version }));
+        if (isAlive) message.success(t("market.installSuccess", { name: gameName, version: state.version }));
       } else if (state.status === "error") {
         const errMsg = errorMessage(state);
-        message.error(errMsg || t("market.downloadFailed"));
+        if (isAlive) message.error(errMsg || t("market.downloadFailed"));
       } else if (state.status === "canceled") {
-        message.info(t("market.canceled"));
+        if (isAlive) message.info(t("market.canceled"));
       }
     }
   }
@@ -495,6 +498,12 @@ async function loadIndex(): Promise<void> {
 }
 
 async function handleDownload(gameId: string, version: string): Promise<void> {
+  const taskId = taskKey(gameId, version);
+  if (pendingDownloads.has(taskId)) return;
+  const busyStatuses: MarketTaskStatus[] = ["downloading", "verifying", "extracting", "installing"];
+  const current = taskStates.value[taskId];
+  if (current && busyStatuses.includes(current.status)) return;
+  pendingDownloads.add(taskId);
   try {
     const task = await window.electronAPI.market.downloadAndInstall(gameId, version);
     taskStates.value = {
@@ -510,15 +519,25 @@ async function handleDownload(gameId: string, version: string): Promise<void> {
     } else {
       message.error(t("market.downloadFailed"));
     }
+  } finally {
+    pendingDownloads.delete(taskId);
   }
 }
 
 async function handleCancel(taskId: string): Promise<void> {
-  const ok = await window.electronAPI.market.cancelTask(taskId);
-  if (ok) {
-    message.info(t("market.canceled"));
-  } else {
-    message.info(t("market.taskAlreadyDone"));
+  if (pendingCancels.has(taskId)) return;
+  const current = taskStates.value[taskId];
+  if (!current || !["downloading", "verifying", "extracting", "installing"].includes(current.status)) return;
+  pendingCancels.add(taskId);
+  try {
+    const ok = await window.electronAPI.market.cancelTask(taskId);
+    if (ok) {
+      message.info(t("market.canceled"));
+    } else {
+      message.info(t("market.taskAlreadyDone"));
+    }
+  } finally {
+    pendingCancels.delete(taskId);
   }
 }
 
@@ -539,7 +558,7 @@ onMounted(async () => {
       await gameStore.loadGames();
       const game = games.value.find((g) => g.id === task.gameId);
       const gameName = game?.name || task.gameId;
-      message.success(t("market.installSuccess", { name: gameName, version: task.version }));
+      if (isAlive) message.success(t("market.installSuccess", { name: gameName, version: task.version }));
       const id = window.setTimeout(() => {
         const { [task.taskId]: _, ...rest } = taskStates.value;
         taskStates.value = rest;
@@ -551,7 +570,7 @@ onMounted(async () => {
     if (task.status === "error") {
       notifiedTaskIds.add(task.taskId);
       const errMsg = errorMessage(task);
-      message.error(errMsg || t("market.downloadFailed"));
+      if (isAlive) message.error(errMsg || t("market.downloadFailed"));
       const id = window.setTimeout(() => {
         const { [task.taskId]: _, ...rest } = taskStates.value;
         taskStates.value = rest;
@@ -575,6 +594,7 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  isAlive = false;
   if (cleanupMarketEvent) cleanupMarketEvent();
   for (const id of timeoutIds) {
     window.clearTimeout(id);

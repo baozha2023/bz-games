@@ -192,6 +192,17 @@ export class MarketService {
     if (!existing) return;
     delete existing.controller;
     this.tasks.set(taskId, existing);
+    this.scheduleTaskCleanup(taskId);
+  }
+
+  private scheduleTaskCleanup(taskId: string): void {
+    const ctx = this.tasks.get(taskId);
+    if (!ctx) return;
+    const terminal = ["completed", "error", "canceled"];
+    if (!terminal.includes(ctx.state.status)) return;
+    setTimeout(() => {
+      this.tasks.delete(taskId);
+    }, 30_000);
   }
 
   private async fetchIndexInternal(): Promise<MarketIndex> {
@@ -240,7 +251,7 @@ export class MarketService {
     const existing = this.getTaskContext(taskId)?.state;
     if (
       existing &&
-      ["downloading", "verifying", "extracting", "installing"].includes(
+      ["idle", "downloading", "verifying", "extracting", "installing"].includes(
         existing.status,
       )
     ) {
@@ -266,6 +277,8 @@ export class MarketService {
 
     const task = this.createTask(gameId, version);
     void this.runDownloadTask(task.taskId, game, targetVersion).catch((error) => {
+      const ctx = this.getTaskContext(task.taskId);
+      if (ctx?.state?.status === "canceled") return;
       logger.error("[MarketService] Task failed", error);
       const message =
         error instanceof Error ? error.message : typeof error === "string" ? error : "未知错误";
@@ -310,9 +323,9 @@ export class MarketService {
 
       await this.downloadArchive(taskId, targetVersion, downloadPath, controller);
       if (controller.signal.aborted) throw new Error("market_download_aborted");
-      await this.verifyArchive(taskId, targetVersion, downloadPath);
+      await this.verifyArchive(taskId, targetVersion, downloadPath, controller);
       if (controller.signal.aborted) throw new Error("market_download_aborted");
-      await this.extractArchive(taskId, archiveType, downloadPath, extractRoot);
+      await this.extractArchive(taskId, archiveType, downloadPath, extractRoot, controller);
       if (controller.signal.aborted) throw new Error("market_download_aborted");
       await this.installExtractedGame(taskId, game, targetVersion, extractRoot);
       this.updateTask(taskId, {
@@ -378,7 +391,10 @@ export class MarketService {
             if (done) break;
             if (!value) continue;
             received += value.byteLength;
-            writer.write(Buffer.from(value));
+            const buf = Buffer.from(value);
+            if (!writer.write(buf)) {
+              await new Promise<void>((r) => writer.once("drain", r));
+            }
             const progress = targetVersion.size
               ? Math.min(60, Math.round((received / targetVersion.size) * 60))
               : 0;
@@ -405,7 +421,9 @@ export class MarketService {
     taskId: string,
     targetVersion: MarketGameVersion,
     downloadPath: string,
+    controller: AbortController,
   ): Promise<void> {
+    if (controller.signal.aborted) throw new Error("market_download_aborted");
     this.updateTask(taskId, {
       status: "verifying",
       progress: 70,
@@ -427,7 +445,9 @@ export class MarketService {
     archiveType: MarketArchiveType,
     downloadPath: string,
     extractRoot: string,
+    controller: AbortController,
   ): Promise<void> {
+    if (controller.signal.aborted) throw new Error("market_download_aborted");
     this.updateTask(taskId, {
       status: "extracting",
       progress: 80,
@@ -460,10 +480,15 @@ export class MarketService {
       throw new Error("market_manifest_mismatch");
     }
 
-    const platformVersion = Array.isArray(manifest.platformVersion)
-      ? manifest.platformVersion.join(" - ")
-      : manifest.platformVersion;
-    if (platformVersion !== targetVersion.platformVersion) {
+    const currentVersion = app.getVersion();
+    let manifestVersionOk = false;
+    if (Array.isArray(manifest.platformVersion)) {
+      const [min, max] = manifest.platformVersion;
+      manifestVersionOk = semver.gte(currentVersion, min) && semver.lte(currentVersion, max);
+    } else {
+      manifestVersionOk = semver.satisfies(currentVersion, manifest.platformVersion);
+    }
+    if (!manifestVersionOk) {
       throw new Error("market_platform_version_manifest_mismatch");
     }
 

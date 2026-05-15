@@ -280,8 +280,8 @@ bz-games/
 - **解压方式**：使用 `extract-zip`（纯 Node.js 实现），不依赖 PowerShell 或外部解压工具，避免 .NET Framework 版本兼容性问题。
 - **目录约束**：压缩包解压后的根目录或第一层单子目录中必须存在 `game.json`，且整体目录结构应能直接作为一次普通"本地导入"
   输入目录。
-- **一致性校验**：平台安装前必须校验下载包的 `sha256`、`size`、`game.json.id`、`game.json.version`、
-  `game.json.platformVersion` 与市场索引一致。
+- **一致性校验**：平台安装前必须校验下载包的 `sha256`、`size`、`game.json.id`、`game.json.version`；
+  `game.json.platformVersion` 使用 `semver` 做语义化兼容性检查（支持 string 和 tuple 两种 manifest 格式），**不做字符串直接比对**。
 - **安全约束**：压缩包内不得出现绝对路径、盘符路径或 `../` 路径穿越条目；发现后直接拒绝安装。
 - **覆盖策略**：若本地已存在相同 `id + version`，默认视为“已安装”，不重复覆盖；后续若要支持“重新安装”，需单独增加明确交互。
 - **落盘路径**：市场安装目标目录优先使用当前设置中的 `gameStoragePath`；若未设置，则回退到应用根目录下的默认 `games/` 目录。
@@ -320,6 +320,8 @@ interface MarketTaskState {
   UI 更新。
 - **终态清理策略**：`completed` / `error` / `canceled` 三种终态在 500ms 后从渲染进程移除，切回页面时通过
   `syncExistingTasks` 仅恢复进行中的任务；`notifiedTaskIds` 集合防止重复弹 toast。
+- **幂等性设计**：前端 `pendingDownloads`/`pendingCancels` Set + 后端 `idle` 状态保护 + `.catch()` 回调 canceled 守卫，三层防护确保同一任务不会并发执行或被重复触发。
+- **内存管理**：主进程 `tasks` Map 在任务终态后 30 秒自动清理；渲染进程 `isAlive` 标志位防止组件卸载后异步 toast。
 
 ***
 
@@ -404,7 +406,7 @@ interface MarketTaskState {
 - Vue 3 + TypeScript UI，仅负责界面展示与交互
 - 通过 `window.electronAPI` 调用主进程功能（严禁直接使用 Node.js API，所有文件操作与系统调用必须通过 IPC）
 - 使用 Pinia 管理前端状态（GameStore, RoomStore）
-- 负责游戏市场页面展示、详情展示、下载进度与安装结果反馈
+- 负责游戏市场页面展示、版本选择、下载进度/取消、安装结果反馈。通过 `pendingDownloads`/`pendingCancels` Set 实现按钮幂等保护，`isAlive` 标志位防止卸载后 toast 泄漏
 - 监听并响应房间事件和游戏进程事件
 
 #### 预加载脚本 (Preload)
@@ -489,6 +491,11 @@ interface AppSettings {
 - **模块化**：复杂逻辑（如 `GameLoader.loadGameFromDialog`）拆分为独立函数（`validateManifestFile`, `checkPlatformVersion`,
   `checkEntryFile` 等），提升可读性与可维护性。
 - **环境配置抽离**：游戏环境变量准备与 `bz-config.js` 生成逻辑由 `GameEnvironment` 统一处理，提高 `GameManager` 的内聚性。
+- **MarketService 设计**：
+    - `runDownloadTask` 编排四阶段流水线（download → verify → extract → install），各阶段语义清晰、状态更新完整。
+    - `AbortController` 贯穿全流程，下载阶段通过 `fetch({ signal })` 原生响应，校验/解压阶段在入口强制检查 `signal.aborted`。
+    - 错误分类由 `classifyErrorCode()` 统一处理，根据错误消息自动归类为四种错误码（download/verify/extract/install）。
+    - `tasks` Map 维护任务全生命周期，终态任务 30 秒自动清理，`finally` 块确保临时文件必然清理。
 
 ***
 
@@ -510,8 +517,15 @@ interface AppSettings {
 - **市场错误码分类**：所有安装失败必须归类为四种错误码之一：`download`（下载失败）、`verify`（校验失败，含 sha256 与 size 不匹配）、
   `extract`（解压失败）、`install`（安装/导入失败）。主进程通过错误信息自动归类（`classifyErrorCode`），渲染进程根据错误码映射
   i18n 文案展示给用户，禁止直接暴露内部错误码。
-- **市场取消逻辑**：取消操作用 `AbortController` 实现；下载阶段通过 `fetch({ signal })` 取消 HTTP 请求，校验/解压/安装各阶段之间检查
-  `controller.signal.aborted` 并主动抛出中断异常；`finally` 块保证取消后临时文件被清理。
+- **市场取消逻辑**：取消操作用 `AbortController` 实现；下载阶段通过 `fetch({ signal })` 取消 HTTP 请求；校验/解压阶段在入口处检查
+  `controller.signal.aborted`，进入后立即响应取消；各阶段之间检查并主动抛出中断异常；`finally` 块保证取消后临时文件被清理。
+- **市场安装包 platformVersion 校验**：`installExtractedGame` 对 manifest 的 `platformVersion`（支持 string 和 tuple `[min, max]` 两种格式）使用 `semver` 做语义化兼容性检查，**不得**与市场索引的 `platformVersion` 做字符串 `!==` 比较。tuple 格式 join 后必然不等于市场字符串，会导致校验 100% 失败。
+- **市场幂等性保护**：
+    - **前端**：`pendingDownloads` / `pendingCancels` 两个 `Set` 追踪飞行中的请求。`handleDownload` 进入时先检查 `pendingDownloads` 和本地 `taskStates` 是否已有进行中任务；`handleCancel` 进入时检查 `pendingCancels` 和任务状态是否可取消。`finally` 块清理 Set。
+    - **后端**：`downloadAndInstall` 的防重复检查覆盖 `idle` 状态（防止 `createTask` 刚创建的 idle 任务被重复调用覆盖，导致两份并行下载）；`.catch()` 回调写入 `"error"` 前检查当前状态是否已被标记为 `"canceled"`。
+- **市场内存管理**：`MarketService.tasks` Map 在任务进入终态（completed/error/canceled）后 30 秒自动清理，防止长期运行内存泄漏。
+- **市场下载背压处理**：`downloadArchive` 写入流检查 `writer.write()` 返回值，返回 `false` 时 await `drain` 事件，防止极端快速下载场景下内存激增。
+- **市场 Toast 生命周期绑定**：`MarketView` 维护 `isAlive` 标志位，`onUnmounted` 时置 `false`，所有异步回调中的 `message.*` toast 调用前检查 `isAlive`，防止组件卸载后仍弹出 toast。
 - **市场平台兼容性前端检测**：渲染进程通过 `system:getAppVersion` 获取当前平台版本，使用 `semver.satisfies` 判断每个游戏版本的
   `platformVersion` 兼容性；不兼容时下载按钮变灰并显示"平台版本不兼容"文案。
 - **市场任务状态管理**：已完成/失败/取消的任务在 500ms 后从渲染进程 `taskStates` 中自动清除，进度条 UI 回归原始布局；页面切换回来时通过
