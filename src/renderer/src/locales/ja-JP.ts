@@ -117,6 +117,7 @@ export default {
     verifyError: "検証失敗",
     extractError: "展開失敗",
     installError: "インストール失敗",
+    versionInvalid: "バージョンデータ異常",
     platformIncompatible: "プラットフォームバージョン非互換",
     installSuccess: "{name} {version} のインストールが完了しました",
     taskStatus: {

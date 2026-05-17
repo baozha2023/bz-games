@@ -116,6 +116,7 @@ export default {
     verifyError: "Verification failed",
     extractError: "Extraction failed",
     installError: "Installation failed",
+    versionInvalid: "Version data invalid",
     platformIncompatible: "Platform version incompatible",
     installSuccess: "{name} {version} installed",
     taskStatus: {

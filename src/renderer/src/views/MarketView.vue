@@ -160,6 +160,14 @@
                         {{ t("market.prerelease") }}
                       </n-tag>
                       <n-tag
+                        v-if="getSelectedVersionInfo(game) && !isVersionPayloadValid(getSelectedVersionInfo(game)!)"
+                        size="small"
+                        type="error"
+                        :bordered="false"
+                      >
+                        {{ t("market.versionInvalid") }}
+                      </n-tag>
+                      <n-tag
                         v-if="getSelectedVersionInfo(game) && isInstalled(game.id, getSelectedVersionInfo(game)!.version)"
                         size="small"
                         type="info"
@@ -191,7 +199,7 @@
                       <n-button
                         v-if="getSelectedVersionInfo(game)"
                         type="primary"
-                        :disabled="isInstalled(game.id, getSelectedVersionInfo(game)!.version) || isPlatformIncompatible(game)"
+                        :disabled="isInstalled(game.id, getSelectedVersionInfo(game)!.version) || isPlatformIncompatible(game) || isSelectedVersionInvalid(game)"
                         :loading="isTaskBusy(game)"
                         @click="handleDownload(game.id, getSelectedVersionInfo(game)!.version)"
                       >
@@ -255,6 +263,14 @@
                               >
                                 {{ t("market.installed") }}
                               </n-tag>
+                              <n-tag
+                                v-if="!isVersionPayloadValid(version)"
+                                size="small"
+                                type="error"
+                                :bordered="false"
+                              >
+                                {{ t("market.versionInvalid") }}
+                              </n-tag>
                             </n-space>
                             <div class="market-version-desc">{{ version.description }}</div>
                             <n-text depth="3">
@@ -290,6 +306,7 @@ import type {
   MarketTaskState,
   MarketTaskStatus,
 } from "../../../shared/types";
+import { isVersionPayloadValid } from "../../../shared/types";
 import { useSettingsStore } from "../stores/useSettingsStore";
 import { useGameStore } from "../stores/useGameStore";
 
@@ -445,6 +462,11 @@ function isInstalled(gameId: string, version: string): boolean {
   return Boolean(
     gameStore.getGameRecord(gameId)?.versions.some((item) => item.version === version),
   );
+}
+
+function isSelectedVersionInvalid(game: MarketGame): boolean {
+  const version = getSelectedVersionInfo(game);
+  return version ? !isVersionPayloadValid(version) : false;
 }
 
 function friendlyLoadError(raw: string): string {

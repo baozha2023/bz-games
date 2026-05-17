@@ -4,13 +4,18 @@ export const MarketGameVersionSchema = z.object({
   version: z.string().regex(/^\d+\.\d+\.\d+$/),
   description: z.string().min(1),
   platformVersion: z.string().min(1),
-  downloadUrl: z.string().url(),
-  sha256: z.string().regex(/^[a-fA-F0-9]{64}$/),
+  downloadUrl: z.string(),
+  sha256: z.string(),
   size: z.number().int().nonnegative(),
   publishedAt: z.string().datetime().optional(),
   releaseNotes: z.string().optional(),
   isPrerelease: z.boolean().optional(),
 });
+
+/** 运行时校验 downloadUrl 和 sha256 是否有效（不依赖 Zod，仅前端展示用） */
+export function isVersionPayloadValid(v: { downloadUrl: string; sha256: string }): boolean {
+  return /^https?:\/\/.+/.test(v.downloadUrl) && /^[a-fA-F0-9]{64}$/.test(v.sha256);
+}
 
 export const MarketGameSchema = z.object({
   id: z.string().regex(/^[a-z0-9]+(\.[a-z0-9\-]+)+$/),

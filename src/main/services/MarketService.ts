@@ -26,7 +26,7 @@ const PRIMARY_MARKET_INDEX_URL =
 const FALLBACK_MARKET_INDEX_URL =
   "https://web-bz.oss-cn-beijing.aliyuncs.com/market.json";
 
-const OSS_REFERER = "https://bz-game-client.local";
+const REFERER = "https://bz-game-client.local";
 
 interface TaskContext {
   state: MarketTaskState;
@@ -135,7 +135,7 @@ export class MarketService {
       headers: {
         Accept: "application/json",
         "Cache-Control": "no-cache",
-        Referer: OSS_REFERER,
+        Referer: REFERER,
       },
     });
     if (!response.ok) {
@@ -371,7 +371,7 @@ export class MarketService {
       signal: controller.signal,
       headers: {
         "Cache-Control": "no-cache",
-        Referer: OSS_REFERER,
+        Referer: REFERER,
       },
     });
     if (!response.ok || !response.body) {

@@ -40,9 +40,10 @@
           <n-button @click="router.push('/market')">{{ t('nav.market') }}</n-button>
           <n-button @click="router.push('/library')">{{ t('nav.myGames') }}</n-button>
           <n-button @click="router.push('/statistics')">{{ t('statistics.title') }}</n-button>
-          <n-badge :dot="gameStore.newAchievements.size > 0">
+          <div class="badge-wrapper">
+            <span v-if="gameStore.newAchievements.size > 0" class="red-dot"></span>
             <n-button @click="router.push('/achievements')">{{ t('achievement.title') }}</n-button>
-          </n-badge>
+          </div>
           <n-button @click="router.push('/settings')">{{ t('nav.settings') }}</n-button>
         </n-space>
       </n-space>
@@ -81,7 +82,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { NAvatar, NSpace, NBadge, NIcon, NModal, NText, NProgress, NButton, useDialog, useMessage } from 'naive-ui'
+import { NAvatar, NSpace, NIcon, NModal, NText, NProgress, NButton, useDialog, useMessage } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { useSettingsStore } from './stores/useSettingsStore'
 import { useRoomStore } from './stores/useRoomStore'
@@ -236,3 +237,21 @@ onUnmounted(() => {
   achievementNotifier.dispose()
 })
 </script>
+
+<style scoped>
+.badge-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.red-dot {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 8px;
+  height: 8px;
+  background-color: #d03050;
+  border-radius: 50%;
+  z-index: 1;
+}
+</style>

@@ -112,6 +112,7 @@ export default {
     verifyError: "校验失败",
     extractError: "解压失败",
     installError: "安装失败",
+    versionInvalid: "当前版本异常",
     platformIncompatible: "平台版本不兼容",
     installSuccess: "{name} {version} 安装完成",
     taskStatus: {

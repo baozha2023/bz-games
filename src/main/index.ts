@@ -9,7 +9,7 @@ app.whenReady().then(async () => {
   electronApp.setAppUserModelId("com.bz.launcher");
 
   session.defaultSession.webRequest.onBeforeSendHeaders(
-    { urls: ["https://web-bz.oss-cn-beijing.aliyuncs.com/*"] },
+    { urls: ["http://cdn.bzgames.top/*"] },
     (details, callback) => {
       details.requestHeaders["Referer"] = "https://bz-game-client.local";
       callback({ requestHeaders: details.requestHeaders });
