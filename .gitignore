@@ -30,7 +30,7 @@ games/
 斗地主/
 扫雷/
 推箱子/
-消消乐/
+灵韵消消：元素纪元/
 五子棋单机版/
 黄金矿工/
 四子棋/
@@ -45,6 +45,9 @@ games/
 bird_fly/
 
 
+bz-games-website/
+bz-games-market/
+fc-api/
 
 # 构建资源
 resources/app.asar
@@ -61,9 +64,3 @@ test-connect.js
 
 
 
-
-
-
-
-bz-games-market/
-fc-api/

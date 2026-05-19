@@ -302,6 +302,7 @@ export default {
     updatePromptMessage: "检测到新版本 {version}，是否立即更新？",
     updateNow: "立即更新",
     updateLater: "以后再说",
+    officialWebsite: "官方网站",
   },
   statistics: {
     title: "游戏统计",

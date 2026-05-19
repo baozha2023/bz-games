@@ -124,7 +124,13 @@
           <n-text depth="3">{{ t('settings.currentVersion', { version: updateState.currentVersion }) }}</n-text>
         </n-space>
       </n-form-item>
-      
+
+      <n-form-item :label="t('settings.officialWebsite')">
+        <n-a href="http://www.bzgames.top/" @click.prevent="handleOpenWebsite">
+          http://www.bzgames.top/
+        </n-a>
+      </n-form-item>
+
       <n-form-item label="Player ID">
         <n-text depth="3">{{ formValue.playerId }} {{ t('settings.idHint') }}</n-text>
       </n-form-item>
@@ -327,6 +333,10 @@ const handleDataHealthCheck = async () => {
   } finally {
     isCheckingHealth.value = false
   }
+}
+
+const handleOpenWebsite = () => {
+  window.electronAPI.settings.openUrl("http://www.bzgames.top/")
 }
 
 </script>

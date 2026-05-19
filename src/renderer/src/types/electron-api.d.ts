@@ -131,6 +131,7 @@ declare global {
         uploadAvatar: () => Promise<string | null>;
         selectGameStoragePath: () => Promise<string | null>;
         openPath: (targetPath: string) => Promise<boolean>;
+        openUrl: (url: string) => Promise<boolean>;
         removeGameStoragePath: (targetPath: string) => Promise<{
           removedGames: number;
           removedVersions: number;

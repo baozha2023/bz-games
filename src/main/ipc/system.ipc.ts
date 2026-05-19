@@ -84,6 +84,14 @@ export function registerSystemIpc() {
     return result === "";
   });
 
+  ipcMain.handle(IPC.SYSTEM_OPEN_URL, async (_, url: string) => {
+    if (!url || typeof url !== "string") {
+      return false;
+    }
+    await shell.openExternal(url);
+    return true;
+  });
+
   ipcMain.handle(
     IPC.SYSTEM_REMOVE_GAME_STORAGE_PATH,
     async (_, targetPath: string) => {

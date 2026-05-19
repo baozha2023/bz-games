@@ -6,6 +6,27 @@ import type { GameManifest } from "../../shared/game-manifest";
 import type { AppSettings } from "../../shared/types";
 
 export class GameEnvironment {
+  private static readonly STRIP_ENV_PREFIXES = [
+    "ELECTRON_",
+    "NODE_",
+    "NPM_",
+    "VSCODE_",
+  ];
+
+  private static stripProcessEnv(): NodeJS.ProcessEnv {
+    const filtered: NodeJS.ProcessEnv = {};
+    for (const key of Object.keys(process.env)) {
+      const upper = key.toUpperCase();
+      const shouldStrip = this.STRIP_ENV_PREFIXES.some(
+        (prefix) => upper.startsWith(prefix),
+      );
+      if (!shouldStrip) {
+        filtered[key] = process.env[key];
+      }
+    }
+    return filtered;
+  }
+
   static prepare(
     id: string,
     manifest: GameManifest,
@@ -16,18 +37,22 @@ export class GameEnvironment {
     const isHost =
       roomClient.room && roomClient.room.hostId === settings.playerId;
 
-    return Object.assign({}, process.env, manifest.env || {}, {
-      BZ_PLATFORM: "1",
-      BZ_PLATFORM_VERSION: "1.0.0",
-      BZ_API_PORT: port.toString(),
-      BZ_API_TOKEN: token,
-      BZ_PLAYER_ID: settings.playerId,
-      BZ_PLAYER_NAME: settings.playerName,
-      BZ_PLAYER_AVATAR: settings.avatar || "",
-      BZ_GAME_ID: id,
-      BZ_ROOM_ID: roomClient.room ? roomClient.room.id : "",
-      BZ_IS_HOST: isHost ? "1" : "0",
-    });
+    return Object.assign(
+      this.stripProcessEnv(),
+      manifest.env || {},
+      {
+        BZ_PLATFORM: "1",
+        BZ_PLATFORM_VERSION: "1.0.0",
+        BZ_API_PORT: port.toString(),
+        BZ_API_TOKEN: token,
+        BZ_PLAYER_ID: settings.playerId,
+        BZ_PLAYER_NAME: settings.playerName,
+        BZ_PLAYER_AVATAR: settings.avatar || "",
+        BZ_GAME_ID: id,
+        BZ_ROOM_ID: roomClient.room ? roomClient.room.id : "",
+        BZ_IS_HOST: isHost ? "1" : "0",
+      },
+    );
   }
 
   static writeConfig(

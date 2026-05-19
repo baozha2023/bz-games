@@ -122,8 +122,7 @@ class GameManager {
 
     apiServer.setOnStop(() => {
       logger.info(`[GameManager] API Server stopped for ${id}`);
-      this.stop(id);
-      mainWindow?.webContents.send(IPC.GAME_PROCESS_ENDED, id);
+      this.cleanupApiOnly(id);
     });
 
     const { port, token } = await apiServer.start();
@@ -274,8 +273,9 @@ class GameManager {
 
     return {
       fullscreen:
-        lowered.includes("--fullscreen") || lowered.includes("--fullscreen=true"),
-      kiosk: lowered.includes("--kiosk") || lowered.includes("--kiosk=true"),
+        lowered.includes("--fullscreen") && !lowered.includes("--fullscreen=false"),
+      kiosk:
+        lowered.includes("--kiosk") && !lowered.includes("--kiosk=false"),
       width: getValue("--width"),
       height: getValue("--height"),
     };
@@ -365,6 +365,20 @@ class GameManager {
       this.activeWindows.delete(id);
     }
 
+    const server = this.activeServers.get(id);
+    if (server) {
+      server.close();
+      this.activeServers.delete(id);
+    }
+
+    const api = this.gameApiServers.get(id);
+    if (api) {
+      api.stop();
+      this.gameApiServers.delete(id);
+    }
+  }
+
+  private cleanupApiOnly(id: string) {
     const server = this.activeServers.get(id);
     if (server) {
       server.close();

@@ -158,6 +158,33 @@ export function registerStorageIpc() {
       for (const k in data) delete data[k];
     });
   });
+
+  ipcMain.on(IPC.GAME_STORAGE_FLUSH, (event, gameId, version, data) => {
+    if (!gameId) return;
+    try {
+      const filePath = getStoragePath(gameId, version);
+      const dirPath = path.dirname(filePath);
+
+      if (!fs.existsSync(dirPath)) {
+        fs.mkdirSync(dirPath, { recursive: true });
+      }
+
+      const encrypted = isEncryptedStorageEnabled(gameId, version);
+      const safeData =
+        typeof data === "object" && data ? data : {};
+      const finalContent = encrypted
+        ? encryptStoragePayload(safeData as Record<string, any>, gameId, version)
+        : JSON.stringify(safeData, null, 2);
+      fs.writeFileSync(filePath, finalContent, "utf-8");
+      event.returnValue = true;
+    } catch (error) {
+      console.error(
+        `[Storage] Failed to flush data for ${gameId} @ ${version}:`,
+        error,
+      );
+      event.returnValue = false;
+    }
+  });
 }
 
 function updateStorage(

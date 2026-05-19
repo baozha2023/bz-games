@@ -136,6 +136,8 @@ export const electronAPI = {
       ipcRenderer.invoke(IPC.SYSTEM_SELECT_GAME_STORAGE_PATH),
     openPath: (targetPath: string) =>
       ipcRenderer.invoke(IPC.SYSTEM_OPEN_PATH, targetPath),
+    openUrl: (url: string) =>
+      ipcRenderer.invoke(IPC.SYSTEM_OPEN_URL, url),
     removeGameStoragePath: (targetPath: string) =>
       ipcRenderer.invoke(IPC.SYSTEM_REMOVE_GAME_STORAGE_PATH, targetPath),
     dataHealthCheck: (): Promise<DataHealthReport> =>

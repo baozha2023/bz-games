@@ -104,7 +104,6 @@ bz-games/
 │   │       ├── appPath.ts                 # 应用根路径与游戏目录路径工具
 │   │       ├── fileUtils.ts               # 文件复制等通用文件工具
 │   │       ├── logger.ts                  # 日志输出封装
-│   │       ├── pathValidator.ts           # 路径安全校验工具
 │   │       └── portUtils.ts               # 可用端口探测工具
 │   │
 │   ├── preload/
@@ -481,7 +480,9 @@ interface AppSettings {
 
 - **Web 游戏隔离**：Web 游戏启动时使用 `persist:game_<id>_<version>` 分区，实现版本间的数据隔离（Cookie/LocalStorage）。
 - **Web 游戏存储接管**：通过 Preload 脚本接管 `localStorage`，将数据重定向存储至 `games/<id>/<version>/gamedata.json`
-  ，实现跨启动模式（File/Serve）的数据互通与版本隔离。
+  ，实现跨启动模式（File/Serve）的数据互通与版本隔离。采用内存缓存 + 500ms 防抖批量落盘策略，避免 IPC 同步写盘导致游戏卡顿。
+- **Web 存储上下文模式**：游戏窗口使用 `contextIsolation: false` 以确保 preload 脚本在游戏 JS 执行前覆盖 `window.localStorage`。配合 `nodeIntegration: false` 维持基本安全隔离。窗口关闭时通过 `beforeunload` 回调 + `ipcRenderer.sendSync` 确保数据完整落盘，避免异步 send 丢数据。
+- **Web 游戏独立渲染进程**：每个游戏窗口使用独立 `partition: persist:game_<id>_<version>`，通过 Chromium 站点隔离机制自动分配到独立的渲染进程，确保不同游戏进程不互相干扰。
 - **Web 存储可选加密**：支持通过 Manifest 字段 `encryptLocalStorage` 控制 `gamedata.json` 是否加密存储（默认关闭）。
 - **Web 联机模式标记**：平台生成的 `bz-config.js` 提供 `isMultiple` 字段，便于 `singlemultiple` 游戏在运行时区分单人模式与联机模式。
 - **远程网页模式约束**：当 `entry=url` 时，平台不生成 `bz-config.js`，也不向页面注入 `window.BZ_CONFIG`。
@@ -490,7 +491,8 @@ interface AppSettings {
 
 - **模块化**：复杂逻辑（如 `GameLoader.loadGameFromDialog`）拆分为独立函数（`validateManifestFile`, `checkPlatformVersion`,
   `checkEntryFile` 等），提升可读性与可维护性。
-- **环境配置抽离**：游戏环境变量准备与 `bz-config.js` 生成逻辑由 `GameEnvironment` 统一处理，提高 `GameManager` 的内聚性。
+- **环境配置抽离**：游戏环境变量准备与 `bz-config.js` 生成逻辑由 `GameEnvironment` 统一处理，提高 `GameManager` 的内聚性。`stripProcessEnv()` 过滤 `ELECTRON_`/`NODE_`/`NPM_`/`VSCODE_` 前缀的环境变量，避免平台内部环境泄漏到子进程。
+- **GameManager 生命周期**：`cleanupApiOnly()` 方法仅清理 WebSocket/HTTP 服务器资源，不终止游戏进程也不关闭窗口。当 API Server 超时自动停止时调用，避免误杀正在运行的游戏。
 - **MarketService 设计**：
     - `runDownloadTask` 编排四阶段流水线（download → verify → extract → install），各阶段语义清晰、状态更新完整。
     - `AbortController` 贯穿全流程，下载阶段通过 `fetch({ signal })` 原生响应，校验/解压阶段在入口强制检查 `signal.aborted`。
@@ -602,6 +604,8 @@ interface AppSettings {
 - `game:storage:save`：保存单个 localStorage 键值。
 - `game:storage:remove`：删除单个 localStorage 键。
 - `game:storage:clear`：清空当前游戏版本 localStorage 数据。
+- `game:storage:flush`：将内存缓存的 localStorage 数据批量落盘（sendSync 同步调用，确保 beforeunload 时不丢数据）。
+- `system:openUrl`：使用系统默认浏览器打开外部 URL。
 
 ### 6.3 UI 交互规范
 
@@ -635,7 +639,8 @@ interface AppSettings {
 - **房间开始按钮冷却**：房间内收到 `room:game:end` 后，Host 的「开始游戏」按钮需禁用 5 秒。
 - **统计界面**：卡片右上角需展示该游戏的所有版本号，使用自动换行布局。
 - **设置页更新入口**：设置页需提供「检查更新」按钮，点击后弹出更新状态弹层，显示下载进度与安装按钮。
-- **设置页数据自检**：设置页需提供“数据自检”按钮，展示 `config.json`、游戏目录、版本路径、Manifest 完整性等检查结果。
+- **设置页官网链接**：设置页需展示官方网址 `http://www.bzgames.top/`，使用 NaiveUI `n-a` 组件渲染为可点击链接，`@click.prevent` 拦截默认跳转后通过 `system:openUrl` IPC 调用 `shell.openExternal` 打开系统默认浏览器。
+- **设置页数据自检**：设置页需提供"数据自检"按钮，展示 `config.json`、游戏目录、版本路径、Manifest 完整性等检查结果。
 - **更新错误诊断**：更新失败时前端必须展示归类后的错误码文案与技术摘要，避免仅显示底层原始错误。
 - **设置页游戏目录管理**：
     - 支持维护多游戏保存路径（路径池）。

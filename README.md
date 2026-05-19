@@ -4,6 +4,8 @@
 [![Vue](https://img.shields.io/badge/Vue-v3-green)](https://vuejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-v5-blue)](https://www.typescriptlang.org/)
 
+中文 | [English](./README.en.md) | [日本語](./README.ja.md)
+
 **BZ-Games** 是一个**无服务器本地游戏平台**，专为 Windows 设计。它允许用户导入本地游戏，并通过内置的 P2P 联机房间系统与好友进行多人游戏，无需依赖任何第三方游戏服务器。
 
 ## ✨ 核心特性

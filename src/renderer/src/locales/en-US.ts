@@ -310,6 +310,7 @@ export default {
     updatePromptMessage: "New version {version} is available. Update now?",
     updateNow: "Update Now",
     updateLater: "Later",
+    officialWebsite: "Official Website",
   },
   statistics: {
     title: "Statistics",

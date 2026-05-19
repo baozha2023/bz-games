@@ -313,6 +313,7 @@ export default {
     updatePromptMessage: "新しいバージョン {version} を検出しました。今すぐ更新しますか？",
     updateNow: "今すぐ更新",
     updateLater: "後で",
+    officialWebsite: "公式サイト",
   },
   statistics: {
     title: "統計",
