@@ -129,6 +129,9 @@ async function resolveExtractedImportDir(extractRoot: string): Promise<string> {
 
 export class MarketService {
   private readonly tasks = new Map<string, TaskContext>();
+  private cachedIndex: MarketIndex | null = null;
+  private cachedIndexAt = 0;
+  private static readonly CACHE_TTL_MS = 60 * 60 * 1000;
 
   private async fetchIndexFromUrl(url: string): Promise<MarketIndex> {
     const response = await fetch(url, {
@@ -228,8 +231,21 @@ export class MarketService {
     }
   }
 
-  async getIndex(): Promise<MarketIndex> {
-    return await this.fetchIndexInternal();
+  async getIndex(forceRefresh = false): Promise<MarketIndex> {
+    const now = Date.now();
+    if (
+      !forceRefresh &&
+      this.cachedIndex &&
+      now - this.cachedIndexAt < MarketService.CACHE_TTL_MS
+    ) {
+      logger.info("[MarketService] Returning cached market index");
+      return this.cachedIndex;
+    }
+    logger.info("[MarketService] Fetching fresh market index");
+    const index = await this.fetchIndexInternal();
+    this.cachedIndex = index;
+    this.cachedIndexAt = now;
+    return index;
   }
 
   getTaskState(taskId: string): MarketTaskState | null {

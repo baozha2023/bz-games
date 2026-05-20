@@ -106,6 +106,8 @@ export const electronAPI = {
       ipcRenderer.invoke(IPC.ROOM_SEND_CHAT, content, type),
     kickPlayer: (playerId: string) =>
       ipcRenderer.invoke(IPC.ROOM_KICK_PLAYER, playerId),
+    reconnect: () =>
+      ipcRenderer.invoke(IPC.ROOM_RECONNECT),
     onEvent: (callback: (event: RoomEvent) => void) => {
       const handler = (_: any, event: RoomEvent) => callback(event);
       ipcRenderer.on(IPC.ROOM_EVENT, handler);
@@ -113,7 +115,8 @@ export const electronAPI = {
     },
   },
   market: {
-    getIndex: (): Promise<MarketIndex> => ipcRenderer.invoke(IPC.MARKET_GET_INDEX),
+    getIndex: (forceRefresh?: boolean): Promise<MarketIndex> =>
+      ipcRenderer.invoke(IPC.MARKET_GET_INDEX, forceRefresh),
     downloadAndInstall: (gameId: string, version: string): Promise<MarketTaskState> =>
       ipcRenderer.invoke(IPC.MARKET_DOWNLOAD_AND_INSTALL, gameId, version),
     getTaskState: (taskId: string): Promise<MarketTaskState | null> =>

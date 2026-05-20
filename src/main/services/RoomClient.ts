@@ -73,6 +73,7 @@ export class RoomClient {
             maxAttempts: this.maxReconnectAttempts,
             reason: "连接超时 (15s)",
           });
+          this.cleanup();
           this.resolveConnection({ success: false, error: "连接超时 (15s)" });
         }
       }, 15000);

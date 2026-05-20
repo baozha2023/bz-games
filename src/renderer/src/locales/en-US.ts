@@ -173,6 +173,7 @@ export default {
     notReady: "Not Ready",
     you: "(You)",
     startGame: "Start Game",
+    reconnect: "Reconnect",
     cancelReady: "Unready",
     doReady: "Ready",
     notInRoom: "Please create or join a room first",

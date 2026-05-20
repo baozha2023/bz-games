@@ -52,7 +52,10 @@
         </n-tooltip>
       </template>
       <template v-else>
-        <n-button size="large" :type="roomStore.localPlayer?.isReady ? 'warning' : 'primary'" @click="toggleReady">
+        <n-button v-if="roomStore.isReconnectMode" type="primary" size="large" @click="handleReconnect">
+          {{ t('room.reconnect') }}
+        </n-button>
+        <n-button v-else size="large" :type="roomStore.localPlayer?.isReady ? 'warning' : 'primary'" @click="toggleReady">
           {{ roomStore.localPlayer?.isReady ? t('room.cancelReady') : t('room.doReady') }}
         </n-button>
       </template>
@@ -230,6 +233,15 @@ const handleStartGame = async () => {
       return
     }
     message.error(t('room.startFailed'));
+  }
+}
+
+const handleReconnect = async () => {
+  try {
+    await roomStore.reconnectGame();
+    message.success(t('room.gameStarted'));
+  } catch (e) {
+    message.error(t('room.launchFailed', { reason: String(e) }));
   }
 }
 

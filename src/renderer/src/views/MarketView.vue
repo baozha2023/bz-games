@@ -19,7 +19,7 @@
           :placeholder="t('market.searchPlaceholder')"
           style="width: 260px;"
         />
-        <n-button :loading="isLoading" @click="loadIndex">
+        <n-button :loading="isLoading" @click="loadIndex(true)">
           {{ t("market.refresh") }}
         </n-button>
       </n-space>
@@ -28,7 +28,7 @@
     <n-alert v-if="loadError" type="error" style="margin-bottom: 16px;">
       <n-space justify="space-between" align="center" style="width: 100%;">
         <span>{{ loadError }}</span>
-        <n-button quaternary size="small" @click="loadIndex">
+        <n-button quaternary size="small" @click="loadIndex(true)">
           {{ t("market.retry") }}
         </n-button>
       </n-space>
@@ -516,11 +516,11 @@ async function syncExistingTasks(): Promise<void> {
   }
 }
 
-async function loadIndex(): Promise<void> {
+async function loadIndex(forceRefresh = false): Promise<void> {
   isLoading.value = true;
   loadError.value = "";
   try {
-    const index = await window.electronAPI.market.getIndex();
+    const index = await window.electronAPI.market.getIndex(forceRefresh);
     games.value = index.games;
     generatedAt.value = index.generatedAt || "";
     for (const game of index.games) {

@@ -167,6 +167,7 @@ export default {
     notReady: "未准备",
     you: "(你)",
     startGame: "开始游戏",
+    reconnect: "重连",
     cancelReady: "取消准备",
     doReady: "准备",
     notInRoom: "请先创建或加入房间",

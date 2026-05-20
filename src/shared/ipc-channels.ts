@@ -34,6 +34,7 @@ export const IPC = {
   ROOM_GET_STATE: "room:getState",
   ROOM_SEND_CHAT: "room:sendChat",
   ROOM_KICK_PLAYER: "room:kickPlayer",
+  ROOM_RECONNECT: "room:reconnect",
 
   // ── 房间事件推送（主→渲染，使用 ipcRenderer.on）──
   ROOM_EVENT: "room:event",

@@ -112,10 +112,11 @@ declare global {
         getState: () => Promise<RoomInfo | null>;
         sendChat: (content: string, type?: "text" | "audio") => Promise<void>;
         kickPlayer: (playerId: string) => Promise<boolean>;
+        reconnect: () => Promise<void>;
         onEvent: (callback: (event: RoomEvent) => void) => () => void;
       };
       market: {
-        getIndex: () => Promise<MarketIndex>;
+        getIndex: (forceRefresh?: boolean) => Promise<MarketIndex>;
         downloadAndInstall: (
           gameId: string,
           version: string,

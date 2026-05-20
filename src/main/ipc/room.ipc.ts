@@ -4,6 +4,7 @@ import { roomServer } from "../services/RoomServer";
 import { roomClient } from "../services/RoomClient";
 import { storeService } from "../services/StoreService";
 import { gameManager } from "../services/GameManager";
+import { mainWindow } from "../window";
 import crypto from "crypto";
 import type { RoomMessage, ChatPayload } from "../../shared/types";
 
@@ -46,7 +47,7 @@ export function registerRoomIpc() {
   });
 
   ipcMain.handle(IPC.ROOM_START, async () => {
-    if (roomServer.room) {
+    if (roomServer.room && roomServer.room.state === "waiting") {
       roomServer.room.state = "playing";
       roomServer.broadcast({ type: "room:game:start", payload: {} });
       roomServer.broadcast({
@@ -91,12 +92,28 @@ export function registerRoomIpc() {
           timestamp: Date.now(),
         },
       };
-      roomClient.send(msg);
+
+      if (roomServer.room && roomServer.room.hostId === settings.playerId) {
+        const hostSocket = roomServer.getSocketByPlayerId(settings.playerId);
+        roomServer.broadcast(msg, hostSocket);
+        mainWindow?.webContents.send(IPC.ROOM_EVENT, msg);
+      } else {
+        roomClient.send(msg);
+      }
     },
   );
 
   ipcMain.handle(IPC.ROOM_KICK_PLAYER, async (_, playerId: string) => {
     const hostId = storeService.getSettings().playerId;
     return roomServer.kickPlayer(hostId, playerId);
+  });
+
+  ipcMain.handle(IPC.ROOM_RECONNECT, async () => {
+    if (roomClient.room && roomClient.room.state === "playing") {
+      await gameManager.launch(
+        roomClient.room.gameId,
+        roomClient.room.gameVersion,
+      );
+    }
   });
 }

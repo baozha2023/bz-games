@@ -3,8 +3,8 @@ import { IPC } from "../../shared/ipc-channels";
 import { marketService } from "../services/MarketService";
 
 export function registerMarketIpc() {
-  ipcMain.handle(IPC.MARKET_GET_INDEX, async () => {
-    return await marketService.getIndex();
+  ipcMain.handle(IPC.MARKET_GET_INDEX, async (_, forceRefresh?: boolean) => {
+    return await marketService.getIndex(!!forceRefresh);
   });
 
   ipcMain.handle(

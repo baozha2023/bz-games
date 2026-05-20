@@ -174,6 +174,7 @@ export default {
     notReady: "準備中",
     you: "(あなた)",
     startGame: "ゲーム開始",
+    reconnect: "再接続",
     cancelReady: "準備キャンセル",
     doReady: "準備完了",
     notInRoom: "まず部屋を作成または参加してください",

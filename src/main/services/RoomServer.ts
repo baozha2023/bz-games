@@ -407,7 +407,7 @@ export class RoomServer {
     return undefined;
   }
 
-  private getSocketByPlayerId(playerId?: string): WebSocket | undefined {
+  public getSocketByPlayerId(playerId?: string): WebSocket | undefined {
     if (!playerId) return undefined;
     return this.playerConnections.get(playerId);
   }

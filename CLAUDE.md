@@ -494,6 +494,7 @@ interface AppSettings {
 - **环境配置抽离**：游戏环境变量准备与 `bz-config.js` 生成逻辑由 `GameEnvironment` 统一处理，提高 `GameManager` 的内聚性。`stripProcessEnv()` 过滤 `ELECTRON_`/`NODE_`/`NPM_`/`VSCODE_` 前缀的环境变量，避免平台内部环境泄漏到子进程。
 - **GameManager 生命周期**：`cleanupApiOnly()` 方法仅清理 WebSocket/HTTP 服务器资源，不终止游戏进程也不关闭窗口。当 API Server 超时自动停止时调用，避免误杀正在运行的游戏。
 - **MarketService 设计**：
+    - `getIndex(forceRefresh)` 内置 1 小时内存缓存，`forceRefresh=true` 或缓存过期时重新拉取，应用重启后自动失效。
     - `runDownloadTask` 编排四阶段流水线（download → verify → extract → install），各阶段语义清晰、状态更新完整。
     - `AbortController` 贯穿全流程，下载阶段通过 `fetch({ signal })` 原生响应，校验/解压阶段在入口强制检查 `signal.aborted`。
     - 错误分类由 `classifyErrorCode()` 统一处理，根据错误消息自动归类为四种错误码（download/verify/extract/install）。
@@ -513,7 +514,7 @@ interface AppSettings {
 - **版本检查**：导入时会检查 `game.json` 中的 `platformVersion` 字段，若当前平台版本不满足要求（使用 `semver`
   比较），将拒绝导入并提示用户。
 - **拖拽路径解析统一**：游戏库拖拽导入路径统一使用 `webUtils.getPathForFile(file)` 获取。
-- **市场入口拉取策略**：每次进入"游戏市场"页面时，必须重新请求远程 `market.json`，不得仅依赖本地旧数据。
+- **市场入口拉取策略**：进入"游戏市场"页面时，若缓存有效（1 小时内且未重启应用）则直接使用缓存数据；超过 1 小时或首次进入则自动请求远程 `market.json`。用户可点击"刷新"按钮强制重新拉取。应用重启后缓存自动失效（仅内存缓存，不落盘）。
 - **市场索引更新时间展示**：`MarketView` 从 `index.generatedAt` 读取时间戳，在标题"游戏市场"右侧以小字展示（格式 `YYYY-MM-DD HH:mm`），使用 `updatedAtLabel` computed 实现，三语 i18n 支持。
 - **OSS 防盗链 Referer**：所有指向 `web-bz.oss-cn-beijing.aliyuncs.com` 的请求（市场索引拉取、游戏包下载、封面/图标/截图 `<img>` 标签）均携带 `Referer: https://bz-game-client.local`。实现分两层：`fetch` 请求在 `fetchIndexFromUrl()` 和 `downloadArchive()` 中显式设置 header；`<img>` 标签等渲染层请求由 `index.ts` 中 `session.defaultSession.webRequest.onBeforeSendHeaders` 全局拦截注入。
 - **市场下载暂存**：市场安装包应先下载到应用可控的临时目录（如 `.market-cache/`）中，校验通过后再解压并导入。
@@ -579,6 +580,7 @@ interface AppSettings {
 - `room:getState`：获取当前房间状态快照。
 - `room:sendChat`：发送文本或语音聊天消息。
 - `room:kickPlayer`：房主踢出指定玩家。
+- `room:reconnect`：客机游戏进程崩溃后重新启动游戏（要求 room.state === "playing"）。
 - `system:getSettings`：读取当前应用设置。
 - `system:getAppVersion`：获取当前平台版本号（供渲染进程进行平台兼容性判断）。
 - `system:saveSettings`：保存应用设置并应用相关系统行为。
@@ -611,8 +613,7 @@ interface AppSettings {
 
 - **返回导航**：所有二级页面（设置、统计、成就等）的 `n-page-header` 必须包含返回按钮，统一导航回 `Library` 页面。
 - **市场入口位置**：在游戏库左侧导航区域新增“游戏市场”按钮，入口层级与游戏库其他主导航一致。
-- **市场刷新行为**：点击"游戏市场"后立即拉取最新远程索引；默认先请求 GitHub，失败后自动回退
-  OSS；加载中需展示骨架屏或加载态，全部来源都失败时展示错误态与重试按钮。
+- **市场刷新行为**：首次进入或缓存过期时自动拉取最新远程索引（优先 GitHub，失败回退 OSS）；加载中展示骨架屏或加载态；全部来源失败时展示错误态与重试按钮。用户可通过搜索栏旁的"刷新"按钮强制拉取最新索引。缓存有效期内重复进入不发起网络请求。
 - **市场索引时间展示**：市场页面标题"游戏市场"右侧以小字展示索引更新时间（`generatedAt` 字段，格式 `YYYY-MM-DD HH:mm`），安装目录另起一行独立展示。
 - **市场展示内容**：市场列表至少展示封面/图标、游戏名、作者、类型、标签、简介、最新版本、安装状态与下载按钮。
 - **市场详情与安装**
@@ -637,6 +638,7 @@ interface AppSettings {
 - **房间连接状态可视化**：房间页需展示 `connecting / reconnecting / failed / disconnected` 状态，以及重连倒计时与失败原因。
 - **统计/成就搜索**：右上角默认展示搜索图标，点击后展开输入框并支持按游戏名或游戏 ID 模糊搜索。
 - **房间开始按钮冷却**：房间内收到 `room:game:end` 后，Host 的「开始游戏」按钮需禁用 5 秒。
+- **客机重连按钮**：客机游戏进程意外退出后，当前仍是 `playing` 状态时，Ready/Unready 按钮位替换为"重连"按钮。点击后重新 `launch()` 同一游戏版本。`room:game:start` 或 `playing→waiting` 时恢复原状。
 - **统计界面**：卡片右上角需展示该游戏的所有版本号，使用自动换行布局。
 - **设置页更新入口**：设置页需提供「检查更新」按钮，点击后弹出更新状态弹层，显示下载进度与安装按钮。
 - **设置页官网链接**：设置页需展示官方网址 `http://www.bzgames.top/`，使用 NaiveUI `n-a` 组件渲染为可点击链接，`@click.prevent` 拦截默认跳转后通过 `system:openUrl` IPC 调用 `shell.openExternal` 打开系统默认浏览器。
@@ -679,6 +681,11 @@ interface AppSettings {
     - **Game API Server**：平台与本机游戏进程互联，提供平台能力给游戏。
     - **Host 本地投递优化**：当客机消息目标是房主本机游戏进程时，`RoomServer` 应直接调用 `GameApiServer.sendEvent()`
       投递，避免再经房主本地 `RoomClient` 走一跳 WebSocket 回环。
+    - **Host 聊天本地投递**：房主发送聊天消息时，直接通过 `mainWindow.webContents.send` + `roomServer.broadcast`（排除自己）推送，不经过 WebSocket 本地回环。
+5. **游戏结束语义**：
+    - `game.end` API：游戏主动调用，平台仅回复 `{success: true}`，不改变房间状态、不杀死进程、不通知他人。为未来战绩展示预留。
+    - 游戏真正结束仅由 **Host 进程退出** 触发：`handleProcessExit` → `notifyRoomGameEnd` → state 变 `"waiting"` + 广播 `room:game:end` + `room:state:sync`。客机 `RoomClient` 收到 `room:game:end` 后调用 `onGameStop` → `stop()` 杀死所有客机进程。
+    - 前端通过 `room:state:sync` 检测 `playing→waiting` 态变化来显示"游戏已结束"聊天消息，避免重复。
 
 ### 7.2 联机完整流程
 
@@ -717,6 +724,16 @@ interface AppSettings {
     - 收到 `room:game:start` 信号。
     - 平台自动启动本地游戏进程，注入 `BZ_IS_HOST=0` 和 `BZ_ROOM_ID`。
 
+#### 客机重连流程（v2.0.5 新增）
+
+当客机游戏进程意外崩溃退出后：
+
+1. **触发条件**：`GameManager.handleProcessExit` → `GAME_PROCESS_ENDED` → `useRoomStore.onProcessEvent` 检测 `type==="end" && room.state==="playing" && !isHost` → `isReconnectMode = true`。
+2. **UI 表现**：客机玩家在房间页看到"重连"按钮，替代原有的 Ready/Unready 按钮。
+3. **点击重连**：`handleReconnect()` → `reconnectGame()` → `room.reconnect` IPC → `gameManager.launch(gameId, version)`。`launch()` 内部 `isGameRunning()` 守卫（已退出进程为 false）→ 正常启动新进程，注入同一个 `BZ_ROOM_ID`。
+4. **对其他人零影响**：Host 和其他客机完全不受影响，房间 `state` 保持 `"playing"`。客机进程退出不广播 `room:game:end`（只有 Host 进程退出才会触发 `notifyRoomGameEnd`）。
+5. **游戏侧适配**：重连的游戏进程是全新实例（运行时状态丢失），游戏需要调用 `room.getInfo()` 判断 `state`：若 `"playing"` 则是重连；若 `"waiting"` 则是正常启动。
+
 ### 7.3 Room Server / Room Client 消息协议
 
 Room Server 与 Room Client 之间使用 **WebSocket + JSON** 通信。
@@ -734,7 +751,7 @@ Room Server 与 Room Client 之间使用 **WebSocket + JSON** 通信。
 | `room:player:unready`  | Client → Server     | 玩家取消准备             |
 | `room:state:sync`      | Server → All        | 房间状态全量同步           |
 | `room:game:start`      | Server → All        | 游戏开始信号             |
-| `room:game:end`        | Client/Server → All | 游戏结束信号             |
+| `room:game:end`        | Server → All        | 游戏结束信号（仅 Host 方触发，`notifyRoomGameEnd` / `RoomServer` broadcast） |
 | `room:disbanded`       | Server → All        | 房间已解散              |
 | `room:kicked`          | Server → Target     | 被踢通知（仅目标玩家）        |
 | `room:player:kicked`   | Server → All        | 广播玩家被踢事件           |
@@ -752,6 +769,8 @@ Room Server 与 Room Client 之间使用 **WebSocket + JSON** 通信。
 - `RoomClient` 需通过 `room:event` 向渲染层同步连接状态变化，包括
   `connecting / connected / reconnecting / failed / disconnected` 及重试信息。
 - 房间已满时允许同一 `playerId` 重连加入（Rejoin），不会被误判为 `room_full`。
+- **房主聊天本地优化**：Host 发送聊天消息时，`room.ipc` 判为 Host 后直接 `roomServer.broadcast(msg, hostSocket)` + `mainWindow.webContents.send` 推送自身渲染层，不经 WebSocket 回环。
+- **房间结束消息双重源**：`room:game:end` 由 Host 广播（`notifyRoomGameEnd`）触发前端 `isReconnectMode=false`；"游戏已结束"聊天消息由前端 `room:state:sync` 检测 `playing→waiting` 态变化产生。两者互补不重复。
 
 ***
 

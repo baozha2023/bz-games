@@ -1,5 +1,5 @@
 import { defineStore } from "pinia";
-import { ref, computed } from "vue";
+import { ref, computed, onScopeDispose } from "vue";
 import { useI18n } from "vue-i18n";
 import type {
   RoomInfo,
@@ -18,6 +18,7 @@ export const useRoomStore = defineStore("room", () => {
   const isConnecting = ref(false);
   const chatMessages = ref<ChatPayload[]>([]);
   const isStartCooldown = ref(false);
+  const isReconnectMode = ref(false);
   const connectionStatus = ref<RoomConnectionStatus>("idle");
   const connectionReason = ref("");
   const reconnectAttempts = ref(0);
@@ -67,6 +68,7 @@ export const useRoomStore = defineStore("room", () => {
     room.value = null;
     chatMessages.value = [];
     isStartCooldown.value = false;
+    isReconnectMode.value = false;
     resetConnectionStatus();
     if (startCooldownTimer) {
       window.clearTimeout(startCooldownTimer);
@@ -84,6 +86,11 @@ export const useRoomStore = defineStore("room", () => {
       throw new Error("START_COOLDOWN");
     }
     await window.electronAPI.room.start();
+  }
+
+  async function reconnectGame() {
+    isReconnectMode.value = false;
+    await window.electronAPI.room.reconnect();
   }
 
   async function sendChatMessage(
@@ -133,7 +140,27 @@ export const useRoomStore = defineStore("room", () => {
 
   function handleRoomEvent(event: RoomEvent) {
     if (event.type === "room:state:sync") {
+      const prevState = room.value?.state;
       room.value = event.payload as RoomInfo;
+      if (prevState === "playing" && room.value?.state === "waiting") {
+        isReconnectMode.value = false;
+        chatMessages.value.push({
+          id: window.crypto.randomUUID(),
+          senderId: "system",
+          senderName: "System",
+          content: t("room.gameEnded"),
+          timestamp: Date.now(),
+          isSystem: true,
+        });
+        isStartCooldown.value = true;
+        if (startCooldownTimer) {
+          window.clearTimeout(startCooldownTimer);
+        }
+        startCooldownTimer = window.setTimeout(() => {
+          isStartCooldown.value = false;
+          startCooldownTimer = null;
+        }, 5000);
+      }
     } else if (event.type === "room:chat") {
       chatMessages.value.push(event.payload as ChatPayload);
     } else if (event.type === "room:connection-status") {
@@ -176,11 +203,13 @@ export const useRoomStore = defineStore("room", () => {
       room.value = null;
       chatMessages.value = [];
       isStartCooldown.value = false;
+      isReconnectMode.value = false;
       resetConnectionStatus();
     } else if (event.type === "room:kicked") {
       room.value = null;
       chatMessages.value = [];
       isStartCooldown.value = false;
+      isReconnectMode.value = false;
       resetConnectionStatus();
     } else if (event.type === "room:player:kicked") {
       const payload = event.payload as { playerId: string; name?: string };
@@ -193,6 +222,7 @@ export const useRoomStore = defineStore("room", () => {
         isSystem: true,
       });
     } else if (event.type === "room:game:start") {
+      isReconnectMode.value = false;
       chatMessages.value.push({
         id: window.crypto.randomUUID(),
         senderId: "system",
@@ -202,24 +232,19 @@ export const useRoomStore = defineStore("room", () => {
         isSystem: true,
       });
     } else if (event.type === "room:game:end") {
-      chatMessages.value.push({
-        id: window.crypto.randomUUID(),
-        senderId: "system",
-        senderName: "System",
-        content: t("room.gameEnded"),
-        timestamp: Date.now(),
-        isSystem: true,
-      });
-      isStartCooldown.value = true;
-      if (startCooldownTimer) {
-        window.clearTimeout(startCooldownTimer);
-      }
-      startCooldownTimer = window.setTimeout(() => {
-        isStartCooldown.value = false;
-        startCooldownTimer = null;
-      }, 5000);
+      isReconnectMode.value = false;
     }
   }
+
+  const cleanupProcessEvent = window.electronAPI.game.onProcessEvent((type, gameId) => {
+    if (type === "end" && room.value?.state === "playing" && room.value?.gameId === gameId && !isHost.value) {
+      isReconnectMode.value = true;
+    }
+  });
+
+  onScopeDispose(() => {
+    cleanupProcessEvent?.();
+  });
 
   return {
     room,
@@ -231,6 +256,7 @@ export const useRoomStore = defineStore("room", () => {
     localPlayerId,
     isHost,
     isStartCooldown,
+    isReconnectMode,
     localPlayer,
     allReady,
     chatMessages,
@@ -239,6 +265,7 @@ export const useRoomStore = defineStore("room", () => {
     leaveRoom,
     setReady,
     startGame,
+    reconnectGame,
     kickPlayer,
     handleRoomEvent,
     sendChatMessage,
