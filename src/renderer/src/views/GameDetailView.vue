@@ -174,14 +174,11 @@ onMounted(async () => {
   }
 })
 
-watch(
-  () => settingsStore.settings?.lastJoinRoomAddress,
-  (address) => {
-    if (address && !joinAddress.value) {
-      joinAddress.value = address
-    }
+watch(showJoinModal, (open) => {
+  if (open && settingsStore.settings?.lastJoinRoomAddress) {
+    joinAddress.value = settingsStore.settings.lastJoinRoomAddress
   }
-)
+})
 
 const handleVersionChange = async (version: string) => {
     selectedVersion.value = version;

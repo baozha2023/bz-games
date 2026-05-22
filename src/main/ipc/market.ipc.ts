@@ -3,14 +3,18 @@ import { IPC } from "../../shared/ipc-channels";
 import { marketService } from "../services/MarketService";
 
 export function registerMarketIpc() {
-  ipcMain.handle(IPC.MARKET_GET_INDEX, async (_, forceRefresh?: boolean) => {
-    return await marketService.getIndex(!!forceRefresh);
+  ipcMain.handle(IPC.MARKET_GET_SOURCES, async () => {
+    return await marketService.getSources();
+  });
+
+  ipcMain.handle(IPC.MARKET_GET_INDEX, async (_, sourceIdx: number, forceRefresh?: boolean) => {
+    return await marketService.getIndex(sourceIdx, !!forceRefresh);
   });
 
   ipcMain.handle(
     IPC.MARKET_DOWNLOAD_AND_INSTALL,
-    async (_, gameId: string, version: string) => {
-      return await marketService.downloadAndInstall(gameId, version);
+    async (_, gameId: string, version: string, sourceIdx: number) => {
+      return await marketService.downloadAndInstall(gameId, version, sourceIdx);
     },
   );
 

@@ -18,6 +18,7 @@ export const IPC = {
   GAME_CHECK_ID_EXISTS: "game:checkIdExists",
 
   // ── 游戏市场 ──
+  MARKET_GET_SOURCES: "market:getSources",
   MARKET_GET_INDEX: "market:getIndex",
   MARKET_DOWNLOAD_AND_INSTALL: "market:downloadAndInstall",
   MARKET_GET_TASK_STATE: "market:getTaskState",

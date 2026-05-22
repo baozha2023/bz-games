@@ -3,6 +3,7 @@ import { IPC } from "../shared/ipc-channels";
 import type {
   AppSettings,
   DataHealthReport,
+  MarketDirectory,
   MarketIndex,
   MarketTaskEvent,
   MarketTaskState,
@@ -115,10 +116,12 @@ export const electronAPI = {
     },
   },
   market: {
-    getIndex: (forceRefresh?: boolean): Promise<MarketIndex> =>
-      ipcRenderer.invoke(IPC.MARKET_GET_INDEX, forceRefresh),
-    downloadAndInstall: (gameId: string, version: string): Promise<MarketTaskState> =>
-      ipcRenderer.invoke(IPC.MARKET_DOWNLOAD_AND_INSTALL, gameId, version),
+    getSources: (): Promise<MarketDirectory> =>
+      ipcRenderer.invoke(IPC.MARKET_GET_SOURCES),
+    getIndex: (sourceIdx: number, forceRefresh?: boolean): Promise<MarketIndex> =>
+      ipcRenderer.invoke(IPC.MARKET_GET_INDEX, sourceIdx, forceRefresh),
+    downloadAndInstall: (gameId: string, version: string, sourceIdx: number): Promise<MarketTaskState> =>
+      ipcRenderer.invoke(IPC.MARKET_DOWNLOAD_AND_INSTALL, gameId, version, sourceIdx),
     getTaskState: (taskId: string): Promise<MarketTaskState | null> =>
       ipcRenderer.invoke(IPC.MARKET_GET_TASK_STATE, taskId),
     cancelTask: (taskId: string): Promise<boolean> =>

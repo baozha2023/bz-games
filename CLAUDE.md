@@ -128,7 +128,8 @@ bz-games/
 │   │       │   ├── AchievementsView.vue   # 成就页面
 │   │       │   ├── GameDetailView.vue     # 游戏详情页面
 │   │       │   ├── LibraryView.vue        # 游戏库首页
-│   │       │   ├── MarketView.vue          # 游戏市场页面
+│   │       │   ├── MarketListView.vue      # 市场列表页面（一级界面）
+│   │       │   ├── MarketView.vue          # 市场游戏详情页面（二级界面）
 │   │       │   ├── NotificationView.vue   # 通知窗口页面
 │   │       │   ├── RoomView.vue           # 房间页面
 │   │       │   ├── SettingsView.vue       # 设置页面
@@ -182,7 +183,8 @@ bz-games/
 | **Room Server**            | 房主平台运行的 WebSocket 服务器，经内网穿透工具对外暴露                                              |
 | **Room Client**            | 非房主玩家的平台连接 Room Server 的 WebSocket 客户端                                         |
 | **Game API Server**        | 平台在本机运行的本地 WebSocket 服务（`127.0.0.1`），供游戏进程调用平台能力                               |
-| **游戏市场索引 (Market Index)**  | 远程 `market.json` 文件，描述市场内可展示和可下载的游戏及其版本信息                                      |
+| **游戏市场目录 (Market Directory)** | 顶层 `market.json` 文件，`sources` 数组列出所有可用市场源，平台一级界面展示                           |
+| **游戏市场索引 (Market Index)**  | 远程 `market.json` 文件（每个市场源仓库中），描述该市场内可展示和可下载的游戏及其版本信息                          |
 | **市场安装包 (Market Package)** | 市场游戏某个版本对应的下载产物，平台下载后校验并安装到默认游戏目录                                              |
 | **bz-config.js**           | 平台在游戏启动前生成的配置文件（包含端口、Token、玩家信息、房间 ID、`isHost` 与 `isMultiple`），解决进程环境变量传递不可靠问题 |
 | **内网穿透**                   | 由用户自备（如 SakuraFrp），将 Room Server 本地端口映射到公网地址                                   |
@@ -203,7 +205,8 @@ bz-games/
 
 - **托管方式**：游戏市场索引文件由独立 GitHub 仓库维护，推荐固定文件名为 `market.json`。平台优先读取 GitHub 原始地址
   `https://raw.githubusercontent.com/baozha2023/bz-games-market/master/market.json`；若 GitHub 拉取失败，必须自动回退到 OSS 镜像地址 `https://web-bz.oss-cn-beijing.aliyuncs.com/market.json`。
-- **拉取时机**：用户每次点击左侧“游戏市场”按钮时，平台都必须主动重新拉取最新索引；若未来实现本地缓存，也只能作为网络失败时的兜底展示，不能跳过本次远程请求。
+- **两级市场架构**：顶层 `market.json` 作为**市场目录**，`sources` 数组列出所有可用市场源；每个市场源的仓库中有自己的 `market.json`。顶层 `market.json` 同时保留 `games` 字段（对应 `sources[0]`）。外部市场源从其仓库 raw 地址直接加载，不经 OSS 回退。
+- **拉取时机**：用户首次进入"游戏市场"列表页面时拉取市场目录（`getSources`），进入具体市场时拉取该市场的游戏索引（`getIndex`）。均有 1 小时内存缓存。
 - **镜像同步**：允许市场仓库通过 GitHub Actions 等自动化流程在 `market.json` 更新后同步 OSS 镜像；平台无需感知同步过程，只要求优先
   GitHub、失败回退 OSS。
 - **展示目标**：索引文件必须同时满足“列表展示”“下载校验”“安装校验”三类需求，因此除基础元信息外，还需要包含封面、简介、标签、文件校验值、包大小等字段。
@@ -217,11 +220,19 @@ bz-games/
   "schemaVersion": "1.0.0",
   "marketId": "official",
   "marketName": "BZ Games Market",
-  "generatedAt": "2026-05-15T12:00:00.000Z",
-  "source": {
-    "repository": "https://github.com/baozha2023/bz-games-market.git",
-    "branch": "master"
-  },
+  "generatedAt": "2026-05-22T04:21:02.000Z",
+  "sources": [
+    {
+      "marketId": "official",
+      "marketName": "BZ Games Market",
+      "coverUrl": "http://cdn.bzgames.top/bz-games-market/cover.png",
+      "generatedAt": "2026-05-22T04:21:02.000Z",
+      "repository": "https://github.com/baozha2023/bz-games-market.git",
+      "branch": "master",
+      "featured": true,
+      "visibility": "public"
+    }
+  ],
   "games": []
 }
 ```
@@ -231,12 +242,24 @@ bz-games/
 | 字段                  | 类型             | 必填 | 说明                             |
 |---------------------|----------------|----|--------------------------------|
 | `schemaVersion`     | `string`       | 是  | 市场索引格式版本，建议使用语义化版本，便于未来升级兼容逻辑。 |
-| `marketId`          | `string`       | 是  | 市场唯一标识，如 `official`。           |
-| `marketName`        | `string`       | 是  | 市场显示名称。                        |
+| `marketId`          | `string`       | 是  | 当前市场的唯一标识，与 `sources[0].marketId` 一致。           |
+| `marketName`        | `string`       | 是  | 当前市场的显示名称。                        |
 | `generatedAt`       | `string`       | 是  | 索引生成时间，ISO 8601 格式。平台在市场页面标题下方展示该时间（本地化格式）。           |
-| `source.repository` | `string`       | 否  | 索引来源仓库地址，用于诊断与展示。              |
-| `source.branch`     | `string`       | 否  | 索引来源分支，如 `master`。             |
-| `games`             | `MarketGame[]` | 是  | 市场中的游戏列表。                      |
+| `sources`           | `MarketSource[]` | 是  | 市场源列表，至少 1 项。平台一级界面展示所有 `visibility !== "hidden"` 的源。 |
+| `games`             | `MarketGame[]` | 是  | 当前市场（sources[0]）中的游戏列表。                      |
+
+#### 市场源对象 `MarketSource`
+
+| 字段            | 类型      | 必填 | 说明                             |
+|---------------|---------|----|--------------------------------|
+| `marketId`    | `string`  | 是  | 市场唯一标识。                    |
+| `marketName`  | `string`  | 是  | 市场显示名称。                    |
+| `coverUrl`    | `string`  | 否  | 市场封面图，用于一级界面卡片。         |
+| `generatedAt` | `string`  | 是  | 该市场索引的生成时间。              |
+| `repository`  | `string`  | 是  | GitHub 仓库地址（仅支持 GitHub）。    |
+| `branch`      | `string`  | 是  | 仓库分支。                      |
+| `featured`    | `boolean` | 否  | 是否重点推荐。                    |
+| `visibility`  | `string`  | 否  | `public` / `hidden`。           |
 
 #### 游戏对象 `MarketGame`
 
@@ -494,12 +517,15 @@ interface AppSettings {
 - **环境配置抽离**：游戏环境变量准备与 `bz-config.js` 生成逻辑由 `GameEnvironment` 统一处理，提高 `GameManager` 的内聚性。`stripProcessEnv()` 过滤 `ELECTRON_`/`NODE_`/`NPM_`/`VSCODE_` 前缀的环境变量，避免平台内部环境泄漏到子进程。
 - **GameManager 生命周期**：`cleanupApiOnly()` 方法仅清理 WebSocket/HTTP 服务器资源，不终止游戏进程也不关闭窗口。当 API Server 超时自动停止时调用，避免误杀正在运行的游戏。
 - **MarketService 设计**：
-    - `getIndex(forceRefresh)` 内置 1 小时内存缓存，`forceRefresh=true` 或缓存过期时重新拉取，应用重启后自动失效。
+    - **两级市场架构**：`getSources()` 拉取顶层市场目录（通过 `fetchDirectory()` 获取，主源 GitHub + 备源 OSS），`getIndex(sourceIdx)` 拉取指定市场源的游戏索引。sourceIdx=0 使用 `fetchIndexInternal()`（主备双源），sourceIdx>0 使用 `fetchIndexForSource()`（通过 `gitToRawUrl()` 推导 raw URL 直接加载，无 OSS 回退）。
+    - `fetchJson(url)` 为通用 HTTP JSON 获取器，统一注入 `Referer` 防盗链 header。`fetchDirectory()` 与 `fetchIndexFromUrl()` 均基于此构建，各司其职：前者解析 `MarketDirectorySchema`，后者解析 `MarketIndexSchema` 并过滤 `hidden` 游戏。
+    - `getSources()` 与 `getIndex(sourceIdx, forceRefresh)` 均内置 1 小时内存缓存，按 sourceIdx 独立缓存，`forceRefresh=true` 或缓存过期时重新拉取，应用重启后自动失效。
+    - `downloadAndInstall(gameId, version, sourceIdx)` 中 `sourceIdx` 为**必传参数**，直接从对应 source 拉取索引后查找目标游戏，无回退逻辑。
+    - `gitToRawUrl()` 从 GitHub 仓库地址推导 raw 文件 URL：`https://raw.githubusercontent.com/{owner}/{repo}/{branch}/market.json`。
     - `runDownloadTask` 编排四阶段流水线（download → verify → extract → install），各阶段语义清晰、状态更新完整。
     - `AbortController` 贯穿全流程，下载阶段通过 `fetch({ signal })` 原生响应，校验/解压阶段在入口强制检查 `signal.aborted`。
     - 错误分类由 `classifyErrorCode()` 统一处理，根据错误消息自动归类为四种错误码（download/verify/extract/install）。
     - `tasks` Map 维护任务全生命周期，终态任务 30 秒自动清理，`finally` 块确保临时文件必然清理。
-    - OSS 防盗链：`OSS_REFERER` 常量注入 `fetchIndexFromUrl()` 和 `downloadArchive()` 的 fetch header。
 - **应用入口 OSS 拦截**：`index.ts` 在 `app.whenReady` 中注册 `session.defaultSession.webRequest.onBeforeSendHeaders`，对所有 `web-bz.oss-cn-beijing.aliyuncs.com` 请求注入 `Referer` header，覆盖 `<img>` 标签等非 fetch 请求。
 
 ***
@@ -566,7 +592,8 @@ interface AppSettings {
 - `game:toggleFavorite`：切换游戏收藏状态。
 - `game:remove`：删除指定游戏或指定版本。
 - `game:launch`：启动指定游戏版本。
-- `market:getIndex`：拉取并解析远程游戏市场索引。
+- `market:getSources`：拉取并解析市场目录（含 sources 列表）。
+- `market:getIndex`：拉取并解析指定市场源的远程游戏市场索引。
 - `market:downloadAndInstall`：下载指定市场游戏版本、执行完整性校验并安装到默认游戏目录。
 - `market:getTaskState`：获取市场下载/安装任务状态与进度。
 - `market:cancelTask`：取消指定市场下载/安装任务。
@@ -612,8 +639,9 @@ interface AppSettings {
 ### 6.3 UI 交互规范
 
 - **返回导航**：所有二级页面（设置、统计、成就等）的 `n-page-header` 必须包含返回按钮，统一导航回 `Library` 页面。
-- **市场入口位置**：在游戏库左侧导航区域新增“游戏市场”按钮，入口层级与游戏库其他主导航一致。
-- **市场刷新行为**：首次进入或缓存过期时自动拉取最新远程索引（优先 GitHub，失败回退 OSS）；加载中展示骨架屏或加载态；全部来源失败时展示错误态与重试按钮。用户可通过搜索栏旁的"刷新"按钮强制拉取最新索引。缓存有效期内重复进入不发起网络请求。
+- **市场入口位置**：在游戏库左侧导航区域"游戏市场"按钮，点击后进入市场列表页面（一级界面 `/markets`）。
+- **市场两级导航**：一级界面（`MarketListView`）以卡片网格展示所有可用市场源（来自 `sources` 数组），展示市场封面、名称、更新时间。用户点击任意市场卡片进入该市场的游戏列表（二级界面 `/market/:sourceIdx`）。二级界面左上角有返回按钮可回到市场列表。
+- **市场刷新行为**：市场列表和游戏索引均有 1 小时内存缓存。首次进入或缓存过期时自动拉取最新数据；加载中展示骨架屏或加载态；全部来源失败时展示错误态与重试按钮。用户可通过"刷新"按钮强制拉取最新数据。缓存有效期内重复进入不发起网络请求。
 - **市场索引时间展示**：市场页面标题"游戏市场"右侧以小字展示索引更新时间（`generatedAt` 字段，格式 `YYYY-MM-DD HH:mm`），安装目录另起一行独立展示。
 - **市场展示内容**：市场列表至少展示封面/图标、游戏名、作者、类型、标签、简介、最新版本、安装状态与下载按钮。
 - **市场详情与安装**

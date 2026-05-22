@@ -3,9 +3,14 @@
     <n-space justify="space-between" align="center" style="margin-bottom: 20px;">
       <div>
         <n-space size="small" align="center">
-          <h1 style="margin: 0;">{{ t("market.title") }}</h1>
-          <n-text v-if="updatedAtLabel" depth="3" style="font-size: 14px;">
-            {{ updatedAtLabel }}
+          <n-button text @click="$router.push('/markets')">
+            <template #icon>
+              <n-icon><ChevronBack /></n-icon>
+            </template>
+          </n-button>
+          <h1 style="margin: 0;">{{ marketName || t("market.title") }}</h1>
+          <n-text v-if="createdAtLabel" depth="3" style="font-size: 14px;">
+            {{ createdAtLabel }}
           </n-text>
         </n-space>
         <n-text depth="3">
@@ -20,7 +25,7 @@
           style="width: 260px;"
         />
         <n-button :loading="isLoading" @click="loadIndex(true)">
-          {{ t("market.refresh") }}
+          {{ t("market.refreshGames") }}
         </n-button>
       </n-space>
     </n-space>
@@ -50,10 +55,11 @@
           <div
             class="market-game-item"
             :class="{ active: expandedGames[game.id] }"
+            @click="toggleExpand(game.id)"
           >
             <img
-              v-if="game.coverUrl || game.iconUrl"
-              :src="game.coverUrl || game.iconUrl"
+              v-if="game.iconUrl || game.coverUrl"
+              :src="game.iconUrl || game.coverUrl"
               class="market-thumb"
             />
             <div class="market-game-text">
@@ -296,9 +302,10 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
-import { useMessage } from "naive-ui";
-import { ChevronDown, ChevronUp } from "@vicons/ionicons5";
+import { useDialog, useMessage } from "naive-ui";
+import { ChevronBack, ChevronDown, ChevronUp } from "@vicons/ionicons5";
 import semver from "semver";
 import type {
   MarketGame,
@@ -312,8 +319,16 @@ import { useGameStore } from "../stores/useGameStore";
 
 const { t } = useI18n();
 const message = useMessage();
+const dialog = useDialog();
+const route = useRoute();
+const router = useRouter();
 const settingsStore = useSettingsStore();
 const gameStore = useGameStore();
+
+const sourceIdx = computed(() => {
+  const idx = Number(route.params.sourceIdx);
+  return Number.isFinite(idx) ? idx : 0;
+});
 
 const isLoading = ref(false);
 const loadError = ref("");
@@ -323,6 +338,7 @@ const taskStates = ref<Record<string, MarketTaskState>>({});
 const expandedGames = ref<Record<string, boolean>>({});
 const selectedVersions = ref<Record<string, string>>({});
 const appVersion = ref("");
+const marketName = ref("");
 const generatedAt = ref("");
 const timeoutIds: number[] = [];
 const notifiedTaskIds = new Set<string>();
@@ -368,7 +384,7 @@ const installPathLabel = computed(() => {
   return settingsStore.settings?.gameStoragePath || "games/";
 });
 
-const updatedAtLabel = computed(() => {
+const createdAtLabel = computed(() => {
   if (!generatedAt.value) return "";
   try {
     const date = new Date(generatedAt.value);
@@ -377,7 +393,7 @@ const updatedAtLabel = computed(() => {
     const d = String(date.getDate()).padStart(2, "0");
     const h = String(date.getHours()).padStart(2, "0");
     const min = String(date.getMinutes()).padStart(2, "0");
-    return t("market.updatedAt", { time: `${y}-${m}-${d} ${h}:${min}` });
+    return t("market.createdAt", { time: `${y}-${m}-${d} ${h}:${min}` });
   } catch {
     return "";
   }
@@ -470,6 +486,9 @@ function isSelectedVersionInvalid(game: MarketGame): boolean {
 }
 
 function friendlyLoadError(raw: string): string {
+  if (raw.includes("market_id_mismatch")) {
+    return "MARKET_ID_MISMATCH";
+  }
   if (raw.includes("market_index_request_failed:404")) {
     return t("market.loadFailed");
   }
@@ -520,8 +539,9 @@ async function loadIndex(forceRefresh = false): Promise<void> {
   isLoading.value = true;
   loadError.value = "";
   try {
-    const index = await window.electronAPI.market.getIndex(forceRefresh);
+    const index = await window.electronAPI.market.getIndex(sourceIdx.value, forceRefresh);
     games.value = index.games;
+    marketName.value = index.marketName || "";
     generatedAt.value = index.generatedAt || "";
     for (const game of index.games) {
       if (!(game.id in expandedGames.value)) {
@@ -535,7 +555,19 @@ async function loadIndex(forceRefresh = false): Promise<void> {
     await syncExistingTasks();
   } catch (error) {
     const text = error instanceof Error ? error.message : String(error);
-    loadError.value = friendlyLoadError(text);
+    const friendly = friendlyLoadError(text);
+    if (friendly === "MARKET_ID_MISMATCH") {
+      dialog.error({
+        title: t("market.marketIdMismatchTitle"),
+        content: t("market.marketIdMismatchDesc"),
+        positiveText: t("common.confirm"),
+        onPositiveClick: () => {
+          router.push("/markets");
+        },
+      });
+    } else {
+      loadError.value = friendly;
+    }
   } finally {
     isLoading.value = false;
   }
@@ -549,7 +581,7 @@ async function handleDownload(gameId: string, version: string): Promise<void> {
   if (current && busyStatuses.includes(current.status)) return;
   pendingDownloads.add(taskId);
   try {
-    const task = await window.electronAPI.market.downloadAndInstall(gameId, version);
+    const task = await window.electronAPI.market.downloadAndInstall(gameId, version, sourceIdx.value);
     taskStates.value = {
       ...taskStates.value,
       [task.taskId]: task,
@@ -682,10 +714,9 @@ onUnmounted(() => {
 
 .market-thumb {
   width: 96px;
-  height: 54px;
+  height: 96px;
   object-fit: cover;
   border-radius: 8px;
-  background: rgba(0, 0, 0, 0.08);
 }
 
 .market-game-text {
@@ -715,7 +746,6 @@ onUnmounted(() => {
   aspect-ratio: 16 / 9;
   object-fit: cover;
   border-radius: 12px;
-  background: rgba(0, 0, 0, 0.08);
 }
 
 .market-detail-meta {

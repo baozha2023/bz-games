@@ -7,7 +7,16 @@ const router = createRouter({
     { path: "/", redirect: "/library" },
     { path: "/library", name: "Library", component: LibraryView },
     {
+      path: "/markets",
+      name: "MarketList",
+      component: () => import("../views/MarketListView.vue"),
+    },
+    {
       path: "/market",
+      redirect: "/market/0",
+    },
+    {
+      path: "/market/:sourceIdx",
       name: "Market",
       component: () => import("../views/MarketView.vue"),
     },

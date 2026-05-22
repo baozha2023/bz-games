@@ -11,12 +11,13 @@ import {
 import { GameManifestSchema } from "../../shared/game-manifest";
 import type {
   MarketErrorCode,
+  MarketDirectory,
   MarketGame,
   MarketGameVersion,
   MarketIndex,
   MarketTaskState,
 } from "../../shared/types";
-import { MarketIndexSchema } from "../../shared/types";
+import { MarketDirectorySchema, MarketIndexSchema } from "../../shared/types";
 import { GameLoader } from "./GameLoader";
 import { logger } from "../utils/logger";
 import { mainWindow } from "../window";
@@ -25,6 +26,12 @@ const PRIMARY_MARKET_INDEX_URL =
   "https://raw.githubusercontent.com/baozha2023/bz-games-market/master/market.json";
 const FALLBACK_MARKET_INDEX_URL =
   "https://web-bz.oss-cn-beijing.aliyuncs.com/market.json";
+
+function gitToRawUrl(repository: string, branch: string): string {
+  const match = repository.match(/github\.com\/(.+?)\/(.+?)(?:\.git)?$/);
+  if (!match) throw new Error(`market_unsupported_repo:${repository}`);
+  return `https://raw.githubusercontent.com/${match[1]}/${match[2]}/${branch}/market.json`;
+}
 
 const REFERER = "https://bz-game-client.local";
 
@@ -129,11 +136,12 @@ async function resolveExtractedImportDir(extractRoot: string): Promise<string> {
 
 export class MarketService {
   private readonly tasks = new Map<string, TaskContext>();
-  private cachedIndex: MarketIndex | null = null;
-  private cachedIndexAt = 0;
+  private cachedIndexes = new Map<number, { index: MarketIndex; at: number }>();
+  private cachedSources: MarketDirectory | null = null;
+  private cachedSourcesAt = 0;
   private static readonly CACHE_TTL_MS = 60 * 60 * 1000;
 
-  private async fetchIndexFromUrl(url: string): Promise<MarketIndex> {
+  private async fetchJson(url: string): Promise<unknown> {
     const response = await fetch(url, {
       headers: {
         Accept: "application/json",
@@ -144,12 +152,38 @@ export class MarketService {
     if (!response.ok) {
       throw new Error(`market_index_request_failed:${response.status}`);
     }
-    const raw = await response.json();
+    return await response.json();
+  }
+
+  private async fetchIndexFromUrl(url: string): Promise<MarketIndex> {
+    const raw = await this.fetchJson(url);
     const parsed = MarketIndexSchema.parse(raw);
     return {
       ...parsed,
       games: parsed.games.filter((game) => game.visibility !== "hidden"),
     };
+  }
+
+  private async fetchDirectory(): Promise<MarketDirectory> {
+    try {
+      const raw = await this.fetchJson(PRIMARY_MARKET_INDEX_URL);
+      return MarketDirectorySchema.parse(raw);
+    } catch (primaryError) {
+      logger.warn("[MarketService] Failed to load market directory from GitHub, falling back to OSS", primaryError);
+      try {
+        const raw = await this.fetchJson(FALLBACK_MARKET_INDEX_URL);
+        return MarketDirectorySchema.parse(raw);
+      } catch (fallbackError) {
+        logger.error("[MarketService] Failed to load market directory from OSS fallback", fallbackError);
+        const primaryMessage =
+          primaryError instanceof Error ? primaryError.message : String(primaryError);
+        const fallbackMessage =
+          fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
+        throw new Error(
+          `market_directory_all_sources_failed:github=${primaryMessage};oss=${fallbackMessage}`,
+        );
+      }
+    }
   }
 
   private getTaskContext(taskId: string): TaskContext | undefined {
@@ -231,20 +265,57 @@ export class MarketService {
     }
   }
 
-  async getIndex(forceRefresh = false): Promise<MarketIndex> {
+  private async fetchIndexForSource(sourceIdx: number): Promise<MarketIndex> {
+    const sources = await this.getSources();
+    const source = sources.sources[sourceIdx];
+    if (!source) throw new Error("market_source_not_found");
+    const url = gitToRawUrl(source.repository, source.branch);
+    return await this.fetchIndexFromUrl(url);
+  }
+
+  async getSources(forceRefresh = false): Promise<MarketDirectory> {
     const now = Date.now();
     if (
       !forceRefresh &&
-      this.cachedIndex &&
-      now - this.cachedIndexAt < MarketService.CACHE_TTL_MS
+      this.cachedSources &&
+      now - this.cachedSourcesAt < MarketService.CACHE_TTL_MS
     ) {
-      logger.info("[MarketService] Returning cached market index");
-      return this.cachedIndex;
+      return this.cachedSources;
     }
-    logger.info("[MarketService] Fetching fresh market index");
-    const index = await this.fetchIndexInternal();
-    this.cachedIndex = index;
-    this.cachedIndexAt = now;
+    const parsed = await this.fetchDirectory();
+    this.cachedSources = parsed;
+    this.cachedSourcesAt = now;
+    return parsed;
+  }
+
+  async getIndex(sourceIdx: number, forceRefresh = false): Promise<MarketIndex> {
+    const now = Date.now();
+    const cached = this.cachedIndexes.get(sourceIdx);
+    if (
+      !forceRefresh &&
+      cached &&
+      now - cached.at < MarketService.CACHE_TTL_MS
+    ) {
+      logger.info(`[MarketService] Returning cached market index for source ${sourceIdx}`);
+      return cached.index;
+    }
+    logger.info(`[MarketService] Fetching fresh market index for source ${sourceIdx}`);
+
+    const directory = await this.getSources();
+    const source = directory.sources[sourceIdx];
+    if (!source) throw new Error("market_source_not_found");
+
+    const index = sourceIdx === 0
+      ? await this.fetchIndexInternal()
+      : await this.fetchIndexForSource(sourceIdx);
+
+    if (index.marketId !== source.marketId) {
+      throw new Error(
+        `market_id_mismatch:expected=${source.marketId};actual=${index.marketId}`,
+      );
+    }
+
+    this.cachedIndexes.set(sourceIdx, { index, at: now });
     return index;
   }
 
@@ -265,7 +336,7 @@ export class MarketService {
     return true;
   }
 
-  async downloadAndInstall(gameId: string, version: string): Promise<MarketTaskState> {
+  async downloadAndInstall(gameId: string, version: string, sourceIdx: number): Promise<MarketTaskState> {
     const taskId = toTaskId(gameId, version);
     const existing = this.getTaskContext(taskId)?.state;
     if (
@@ -277,9 +348,10 @@ export class MarketService {
       return existing;
     }
 
-    const index = await this.fetchIndexInternal();
+    const index = await this.getIndex(sourceIdx);
     const game = index.games.find((item) => item.id === gameId);
     const targetVersion = game?.versions.find((item) => item.version === version);
+
     if (!game || !targetVersion) {
       throw new Error("market_version_not_found");
     }

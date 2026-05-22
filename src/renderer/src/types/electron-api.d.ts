@@ -4,6 +4,7 @@ import type {
   RoomInfo,
   RoomEvent,
   GameRecord,
+  MarketDirectory,
   MarketIndex,
   MarketTaskEvent,
   MarketTaskState,
@@ -116,10 +117,12 @@ declare global {
         onEvent: (callback: (event: RoomEvent) => void) => () => void;
       };
       market: {
-        getIndex: (forceRefresh?: boolean) => Promise<MarketIndex>;
+        getSources: () => Promise<MarketDirectory>;
+        getIndex: (sourceIdx: number, forceRefresh?: boolean) => Promise<MarketIndex>;
         downloadAndInstall: (
           gameId: string,
           version: string,
+          sourceIdx: number,
         ) => Promise<MarketTaskState>;
         getTaskState: (taskId: string) => Promise<MarketTaskState | null>;
         cancelTask: (taskId: string) => Promise<boolean>;

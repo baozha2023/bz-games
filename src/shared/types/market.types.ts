@@ -40,20 +40,32 @@ export const MarketGameSchema = z.object({
   versions: z.array(MarketGameVersionSchema).min(1),
 });
 
+export const MarketSourceSchema = z.object({
+  marketId: z.string().min(1),
+  marketName: z.string().min(1),
+  coverUrl: z.string().url().optional(),
+  generatedAt: z.string().datetime(),
+  repository: z.string().url(),
+  branch: z.string().min(1),
+  featured: z.boolean().optional(),
+  visibility: z.enum(["public", "hidden"]).optional(),
+});
+
+export const MarketDirectorySchema = z.object({
+  schemaVersion: z.string().min(1),
+  sources: z.array(MarketSourceSchema).min(1),
+});
+
 export const MarketIndexSchema = z.object({
   schemaVersion: z.string().min(1),
   marketId: z.string().min(1),
   marketName: z.string().min(1),
   generatedAt: z.string().datetime(),
-  source: z
-    .object({
-      repository: z.string().url().optional(),
-      branch: z.string().min(1).optional(),
-    })
-    .optional(),
   games: z.array(MarketGameSchema),
 });
 
+export type MarketSource = z.infer<typeof MarketSourceSchema>;
+export type MarketDirectory = z.infer<typeof MarketDirectorySchema>;
 export type MarketGameVersion = z.infer<typeof MarketGameVersionSchema>;
 export type MarketGame = z.infer<typeof MarketGameSchema>;
 export type MarketIndex = z.infer<typeof MarketIndexSchema>;

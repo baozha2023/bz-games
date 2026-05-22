@@ -84,9 +84,15 @@ export default {
     },
     importDraftSubmit: "生成并导入",
   },
+  marketList: {
+    title: "游戏市场",
+    empty: "暂无可用市场",
+    official: "官方",
+  },
   market: {
     title: "游戏市场",
     refresh: "刷新市场",
+    refreshGames: "刷新游戏",
     retry: "重试",
     searchPlaceholder: "搜索游戏名、作者、标签或ID",
     empty: "当前没有可展示的市场游戏",
@@ -101,7 +107,7 @@ export default {
     platformVersion: "平台兼容：{version}",
     packageSize: "安装包大小：{size}",
     installPath: "安装目录：{path}",
-    updatedAt: "更新时间 {time}",
+    createdAt: "创建时间 {time}",
     downloadInstall: "下载并安装",
     cancelTask: "取消任务",
     canceled: "已取消下载任务",
@@ -115,6 +121,8 @@ export default {
     versionInvalid: "当前版本异常",
     platformIncompatible: "平台版本不兼容",
     installSuccess: "{name} {version} 安装完成",
+    marketIdMismatchTitle: "市场ID不匹配",
+    marketIdMismatchDesc: "当前市场ID与平台登记不一致，可能存在风险，已禁止下载游戏。",
     taskStatus: {
       idle: "等待中",
       downloading: "下载中",

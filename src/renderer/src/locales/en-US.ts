@@ -88,9 +88,15 @@ export default {
     },
     importDraftSubmit: "Generate and Import",
   },
+  marketList: {
+    title: "Game Market",
+    empty: "No markets available",
+    official: "Official",
+  },
   market: {
     title: "Game Market",
     refresh: "Refresh",
+    refreshGames: "Refresh Games",
     retry: "Retry",
     searchPlaceholder: "Search by game, author, tag, or ID",
     empty: "No market games available",
@@ -105,7 +111,7 @@ export default {
     platformVersion: "Platform Requirement: {version}",
     packageSize: "Package Size: {size}",
     installPath: "Install Path: {path}",
-    updatedAt: "Updated {time}",
+    createdAt: "Created {time}",
     downloadInstall: "Download and Install",
     cancelTask: "Cancel Task",
     canceled: "Download task canceled",
@@ -119,6 +125,8 @@ export default {
     versionInvalid: "Version data invalid",
     platformIncompatible: "Platform version incompatible",
     installSuccess: "{name} {version} installed",
+    marketIdMismatchTitle: "Market ID Mismatch",
+    marketIdMismatchDesc: "The market ID does not match the platform registration. Game downloads have been disabled for safety.",
     taskStatus: {
       idle: "Idle",
       downloading: "Downloading",

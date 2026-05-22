@@ -89,9 +89,15 @@ export default {
     },
     importDraftSubmit: "生成して取り込む",
   },
+  marketList: {
+    title: "ゲーム市場",
+    empty: "利用可能な市場はありません",
+    official: "公式",
+  },
   market: {
     title: "ゲーム市場",
     refresh: "更新",
+    refreshGames: "ゲームを更新",
     retry: "再試行",
     searchPlaceholder: "ゲーム名、作者、タグ、IDで検索",
     empty: "表示できる市場ゲームがありません",
@@ -106,7 +112,7 @@ export default {
     platformVersion: "対応プラットフォーム: {version}",
     packageSize: "パッケージサイズ: {size}",
     installPath: "インストール先: {path}",
-    updatedAt: "更新日時 {time}",
+    createdAt: "作成日時 {time}",
     downloadInstall: "ダウンロードしてインストール",
     cancelTask: "タスクをキャンセル",
     canceled: "ダウンロードタスクをキャンセルしました",
@@ -120,6 +126,8 @@ export default {
     versionInvalid: "バージョンデータ異常",
     platformIncompatible: "プラットフォームバージョン非互換",
     installSuccess: "{name} {version} のインストールが完了しました",
+    marketIdMismatchTitle: "マーケットID不一致",
+    marketIdMismatchDesc: "現在のマーケットIDがプラットフォーム登録と一致しません。安全のため、ゲームのダウンロードは無効化されています。",
     taskStatus: {
       idle: "待機中",
       downloading: "ダウンロード中",
