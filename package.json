@@ -1,6 +1,6 @@
 {
   "name": "bz-launcher",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "BZ-Games game platform",
   "main": "./out/main/index.js",
   "author": "BZ-Games",
@@ -25,6 +25,7 @@
     "build:linux": "electron-builder --linux"
   },
   "dependencies": {
+    "7zip-bin": "^5.2.0",
     "@electron-toolkit/preload": "^3.0.1",
     "@electron-toolkit/utils": "^3.0.0",
     "@types/semver": "^7.7.1",
@@ -96,7 +97,10 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
+      "createStartMenuShortcut": true,
+      "multiLanguageInstaller": true,
+      "installerLanguages": ["zh_CN", "en_US", "ja_JP"],
+      "include": "build/installer.nsh"
     }
   }
 }

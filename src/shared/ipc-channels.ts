@@ -55,6 +55,7 @@ export const IPC = {
   SYSTEM_OPEN_PATH: "system:openPath",
   SYSTEM_OPEN_URL: "system:openUrl",
   SYSTEM_REMOVE_GAME_STORAGE_PATH: "system:removeGameStoragePath",
+  SYSTEM_UNINSTALL: "system:uninstall",
   SYSTEM_GET_USER_DATA: "system:getUserData",
   SYSTEM_CHECK_IN: "system:checkIn",
   SYSTEM_DATA_HEALTH_CHECK: "system:dataHealthCheck",

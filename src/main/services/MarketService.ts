@@ -1,9 +1,12 @@
 import { app } from "electron";
+import { execFile } from "child_process";
+import { promisify } from "util";
 import crypto from "crypto";
 import fs from "fs";
 import fsp from "fs/promises";
 import path from "path";
 import semver from "semver";
+import { path7za } from "7zip-bin";
 import extractZip from "extract-zip";
 import {
   IPC,
@@ -113,6 +116,31 @@ async function extractZipArchive(
 ): Promise<void> {
   await ensureDir(destinationPath);
   await extractZip(zipPath, { dir: path.resolve(destinationPath) });
+}
+
+const execFileAsync = promisify(execFile);
+
+async function extract7zArchive(
+  archivePath: string,
+  destinationPath: string,
+): Promise<void> {
+  await ensureDir(destinationPath);
+  try {
+    await execFileAsync(path7za, [
+      "x",
+      archivePath,
+      `-o${destinationPath}`,
+      "-y",
+    ]);
+  } catch (error: unknown) {
+    const err = error as NodeJS.ErrnoException;
+    if (err.code === "ENOENT") {
+      throw new Error("market_7z_not_installed");
+    }
+    throw new Error(
+      `market_extract_7z_failed:${err.message || String(error)}`,
+    );
+  }
 }
 
 async function resolveExtractedImportDir(extractRoot: string): Promise<string> {
@@ -545,11 +573,13 @@ export class MarketService {
       progress: 80,
     });
 
-    if (archiveType !== "zip") {
+    if (archiveType === "zip") {
+      await extractZipArchive(downloadPath, extractRoot);
+    } else if (archiveType === "7z") {
+      await extract7zArchive(downloadPath, extractRoot);
+    } else {
       throw new Error("market_archive_type_not_supported");
     }
-
-    await extractZipArchive(downloadPath, extractRoot);
   }
 
   private async installExtractedGame(

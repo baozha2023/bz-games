@@ -56,6 +56,7 @@
 | WebSocket 服务 | ws                          | <br />                     |
 | 版本比较         | semver                      | 用于平台版本与游戏版本兼容性检查           |
 | ZIP 解压       | extract-zip                 | 纯 Node.js 解压，不依赖外部进程       |
+| 7Z 解压        | 7zip-bin (7za)              | 通过 `child_process.execFile` 调用   |
 | 目标平台         | Windows 10/11 x64           | <br />                     |
 
 ***
@@ -67,6 +68,8 @@ bz-games/
 ├── CLAUDE.md                             # AI 开发上下文与项目规范文档
 ├── README.md                             # 项目简介与基础使用说明
 ├── DEVELOPER_GUIDE.md                    # 面向游戏接入方的开发接入指南
+├── build/
+│   └── installer.nsh                     # NSIS 自定义安装/卸载钩子（多语言支持）
 ├── package.json                          # 依赖、脚本与打包发布配置
 ├── pnpm-lock.yaml                        # pnpm 依赖锁定文件
 ├── tsconfig.json                         # TypeScript 根配置
@@ -297,9 +300,8 @@ bz-games/
 
 #### 安装包约束
 
-- **格式识别**：平台必须根据 `downloadUrl` 的文件后缀自动识别压缩包格式；首版至少支持 `.zip`，若未来扩展 `.7z`
-  ，也必须由平台自动判断，不要求市场维护者额外填写格式字段。
-- **解压方式**：使用 `extract-zip`（纯 Node.js 实现），不依赖 PowerShell 或外部解压工具，避免 .NET Framework 版本兼容性问题。
+- **格式识别**：平台必须根据 `downloadUrl` 的文件后缀自动识别压缩包格式；支持 `.zip`（`extract-zip` 纯 Node.js 解压）和 `.7z`（`7zip-bin` 内置 `7za` 解压），不要求市场维护者额外填写格式字段。
+- **解压方式**：`.zip` 使用 `extract-zip`（纯 Node.js 实现），不依赖 PowerShell 或外部解压工具；`.7z` 使用 `7zip-bin` 内置的 `7za` 二进制。
 - **目录约束**：压缩包解压后的根目录或第一层单子目录中必须存在 `game.json`，且整体目录结构应能直接作为一次普通"本地导入"
   输入目录。
 - **一致性校验**：平台安装前必须校验下载包的 `sha256`、`size`、`game.json.id`、`game.json.version`；
@@ -338,12 +340,10 @@ interface MarketTaskState {
 
 - **错误码自动归类**：主进程 `classifyErrorCode()` 根据异常信息自动映射为 `download` / `verify` / `extract` / `install`
   ，渲染进程通过 `MARKET_EVENT` 接收 `errorCode` 并映射 i18n 文案。
-- **任务状态推送**：主进程每次更新任务状态后通过 `market:event` 推送给渲染进程，渲染进程的 `onEvent` 回调处理 toast 通知与
-  UI 更新。
-- **终态清理策略**：`completed` / `error` / `canceled` 三种终态在 500ms 后从渲染进程移除，切回页面时通过
-  `syncExistingTasks` 仅恢复进行中的任务；`notifiedTaskIds` 集合防止重复弹 toast。
+- **任务状态推送**：主进程每次更新任务状态后通过 `market:event` 推送给渲染进程。通知由根布局组件 `AppContent` 统一处理，确保用户在任何页面都能收到安装完成/失败的通知。
+- **通知去重与生命周期**：模块级 `notifiedTaskIds` Set 防止重复弹 toast（仅在 `completed`/`error`/`canceled` 终态时写入，中间态不污染 Set）；`AppContent` 作为始终挂载的根组件保证通知可跨页面送达，`onUnmounted` 时注销事件监听器。
 - **幂等性设计**：前端 `pendingDownloads`/`pendingCancels` Set + 后端 `idle` 状态保护 + `.catch()` 回调 canceled 守卫，三层防护确保同一任务不会并发执行或被重复触发。
-- **内存管理**：主进程 `tasks` Map 在任务终态后 30 秒自动清理；渲染进程 `isAlive` 标志位防止组件卸载后异步 toast。
+- **内存管理**：主进程 `tasks` Map 在任务终态后 30 秒自动清理。MarketView 组件卸载时注销事件监听器并清理所有定时器。
 
 ***
 
@@ -522,6 +522,7 @@ interface AppSettings {
     - `getSources()` 与 `getIndex(sourceIdx, forceRefresh)` 均内置 1 小时内存缓存，按 sourceIdx 独立缓存，`forceRefresh=true` 或缓存过期时重新拉取，应用重启后自动失效。
     - `downloadAndInstall(gameId, version, sourceIdx)` 中 `sourceIdx` 为**必传参数**，直接从对应 source 拉取索引后查找目标游戏，无回退逻辑。
     - `gitToRawUrl()` 从 GitHub 仓库地址推导 raw 文件 URL：`https://raw.githubusercontent.com/{owner}/{repo}/{branch}/market.json`。
+    - `inferArchiveType()` 根据 `downloadUrl` 后缀自动识别压缩包格式（当前支持 `.zip` 和 `.7z`）。`.zip` 使用 `extract-zip` 纯 Node.js 解压，`.7z` 使用 `7zip-bin` 内置的 `7za` 二进制通过 `child_process.execFile` 解压。
     - `runDownloadTask` 编排四阶段流水线（download → verify → extract → install），各阶段语义清晰、状态更新完整。
     - `AbortController` 贯穿全流程，下载阶段通过 `fetch({ signal })` 原生响应，校验/解压阶段在入口强制检查 `signal.aborted`。
     - 错误分类由 `classifyErrorCode()` 统一处理，根据错误消息自动归类为四种错误码（download/verify/extract/install）。
@@ -558,12 +559,11 @@ interface AppSettings {
     - **后端**：`downloadAndInstall` 的防重复检查覆盖 `idle` 状态（防止 `createTask` 刚创建的 idle 任务被重复调用覆盖，导致两份并行下载）；`.catch()` 回调写入 `"error"` 前检查当前状态是否已被标记为 `"canceled"`。
 - **市场内存管理**：`MarketService.tasks` Map 在任务进入终态（completed/error/canceled）后 30 秒自动清理，防止长期运行内存泄漏。
 - **市场下载背压处理**：`downloadArchive` 写入流检查 `writer.write()` 返回值，返回 `false` 时 await `drain` 事件，防止极端快速下载场景下内存激增。
-- **市场 Toast 生命周期绑定**：`MarketView` 维护 `isAlive` 标志位，`onUnmounted` 时置 `false`，所有异步回调中的 `message.*` toast 调用前检查 `isAlive`，防止组件卸载后仍弹出 toast。
+- **市场 Toast 跨页面通知**：市场安装完成/失败通知由根布局组件 `AppContent` 统一监听 `market:event` 处理，确保用户在游戏库、设置等任何页面都能收到。`marketNotifiedTaskIds` Set 在 `completed`/`error`/`canceled` 终态时写入，中间态（`idle`/`downloading` 等）不污染 Set，保证每次安装只弹一次 toast。
 - **市场平台兼容性前端检测**：渲染进程通过 `system:getAppVersion` 获取当前平台版本，使用 `semver.satisfies` 判断每个游戏版本的
   `platformVersion` 兼容性；不兼容时下载按钮变灰并显示"平台版本不兼容"文案。
 - **市场任务状态管理**：已完成/失败/取消的任务在 500ms 后从渲染进程 `taskStates` 中自动清除，进度条 UI 回归原始布局；页面切换回来时通过
-  `syncExistingTasks` 仅恢复进行中（downloading/verifying/extracting/installing）的任务；终态任务通过 `notifiedTaskIds`
-  集合确保每次安装只弹一次 toast，避免切回页面时重复通知。
+  `syncExistingTasks` 仅恢复进行中（downloading/verifying/extracting/installing）的任务；终态通知由 `AppContent` 统一处理并确保不重复。
 - **重复版本处理**：若本地已安装相同 `id` 与 `version`，市场页应明确展示“已安装”状态，并阻止重复安装。
 - **表单约束**：
     - `id` 需实时检测重复并校验反向域名格式。
@@ -574,6 +574,19 @@ interface AppSettings {
       不做入口文件存在性校验。
     - `entry=url` 时必须提供 `web_url`（合法 URL）。
     - `icon/cover` 若填写则必须是游戏目录内存在的相对路径。
+
+### 6.1.1 NSIS 多语言安装程序
+
+- **语言选择**：`electron-builder` NSIS 配置启用 `multiLanguageInstaller: true`，支持 `zh_CN`、`en_US`、`ja_JP` 三种安装语言。用户在安装向导第一步选择语言后，NSIS 继续以该语言完成安装流程。
+- **语言标记文件**：`build/installer.nsh` 在 `customInstall` 钩子中根据 `$LANGUAGE` 常量（1033=en-US, 2052=zh-CN, 1041=ja-JP）写入 `.initial-language` 标记文件到安装目录。首次启动时 `StoreService.getSettings()` 读取该文件，覆盖默认语言设置后立即删除文件，确保语言设置只生效一次。
+- **卸载数据清理**：`installer.nsh` 的 `customUnInstall` 钩子在卸载时清理 `%APPDATA%\BZ-Games` 目录，确保卸载后无残留数据。
+- **仅 Windows**：`installer.nsh` 为 NSIS 专用脚本，仅对 Windows 平台打包生效，不影响 macOS/Linux 构建。
+
+### 6.1.2 游戏保存路径管理
+
+- **空目录约束**：`system:selectGameStoragePath` 通过 `fs.readdirSync` 检查所选目录是否为空。若非空，返回 `{ path, error: "directory_not_empty" }`，由前端通过 `dialog.warning()` 弹出友好提示（使用三语 i18n 文案），阻止选择。防止未来卸载时误删该目录中的其他文件。
+- **精确清理**：`system:removeGameStoragePath` 删除保存路径时，仅删除路径下含 `game.json` 清单的一级子目录（`removeEmptyGameDirs`），不删除存储根目录下的其他文件或子目录。避免用户将游戏库目录与其他用途文件混放时误删数据。
+- **单层检测**：`removeEmptyGameDirs` 仅检查存储根目录的一级子目录，不递归检测嵌套目录。符合"游戏库根目录 → gameId 子目录 → version 子目录"的标准目录结构。
 
 ### 6.2 IPC 接口清单
 
@@ -612,9 +625,10 @@ interface AppSettings {
 - `system:getAppVersion`：获取当前平台版本号（供渲染进程进行平台兼容性判断）。
 - `system:saveSettings`：保存应用设置并应用相关系统行为。
 - `system:uploadAvatar`：选择并处理玩家头像。
-- `system:selectGameStoragePath`：弹窗选择默认游戏保存路径。
+- `system:selectGameStoragePath`：弹窗选择默认游戏保存路径。返回 `{ path: string }` 或 `{ path: string; error: "directory_not_empty" }`，要求所选目录为空（防止卸载时误删其他文件），若非空则由前端弹出友好提示。
 - `system:openPath`：在系统文件管理器中打开路径。
-- `system:removeGameStoragePath`：删除保存路径及其内部已导入游戏数据。
+- `system:removeGameStoragePath`：删除保存路径及其内部已导入游戏数据。仅删除含 `game.json` 清单的一级子目录，不删除存储根目录下的其他文件或子目录。
+- `system:uninstall`：卸载客户端。先检查 `uninstall.exe` 存在性，可选删除所有游戏库目录（`deleteGames: boolean`），随后打开系统卸载程序并退出应用。返回 `{ success: boolean; error?: string }`。
 - `system:getUserData`：读取用户经济与签到数据。
 - `system:checkIn`：执行每日签到并返回奖励结果。
 - `system:dataHealthCheck`：执行本地数据健康检查，返回结构化报告（错误/警告/摘要）。
@@ -647,7 +661,7 @@ interface AppSettings {
 - **市场详情与安装**
   ：用户可查看游戏简介、当前选中版本详情、版本列表、平台兼容要求、包体大小；当前选中版本的说明与下载操作区必须紧跟在选中游戏信息下方展示，不得沉到底部；点击下载后展示下载进度、校验中、安装中、完成/失败等明确状态。
 - **市场列表容器**：市场页不应再额外包一层无业务意义的“市场游戏”外层卡片；应直接展示游戏列表项，减少视觉嵌套。
-- **市场展开交互**：市场列表需支持手动展开/收起动画，默认全部收起；已展开项不得因为用户点击其他游戏而自动收回，必须由用户主动收起。
+- **市场展开交互**：市场列表需支持手动展开/收起动画，默认全部收起；已展开项不得因为用户点击其他游戏而自动收回，必须由用户主动收起。展开/收起箭头按钮使用 `@click.stop` 阻止事件冒泡，避免点击箭头时因父级 div 也绑定了 `@click` 导致双重 toggle。
 - **市场安装目录提示**：市场页需明确提示当前安装目标目录；若用户未设置 `gameStoragePath`，需提示将安装到默认 `games/` 目录。
 - **市场版本状态**：对于已安装版本、当前最新版本、预发布版本，需要在版本列表中展示不同状态标记，避免重复安装或误装测试版。
 - **成就展示**：成就列表支持按游戏版本筛选，支持展开/收起，默认收起。若当前版本无成就，显示空列表。
@@ -669,6 +683,7 @@ interface AppSettings {
 - **客机重连按钮**：客机游戏进程意外退出后，当前仍是 `playing` 状态时，Ready/Unready 按钮位替换为"重连"按钮。点击后重新 `launch()` 同一游戏版本。`room:game:start` 或 `playing→waiting` 时恢复原状。
 - **统计界面**：卡片右上角需展示该游戏的所有版本号，使用自动换行布局。
 - **设置页更新入口**：设置页需提供「检查更新」按钮，点击后弹出更新状态弹层，显示下载进度与安装按钮。
+- **设置页卸载入口**：设置页底部（与保存按钮同行，`justify-content: space-between`）提供"卸载客户端"按钮（`type="error" secondary`）。点击后弹出 NaiveUI 自定义确认弹窗，包含不可撤销的警告文案、是否同时删除所有游戏库目录的勾选项、以及删除路径列表预览。确认后调用 `system:uninstall` IPC 执行卸载。若处于开发模式或卸载程序不可用，弹出友好提示。
 - **设置页官网链接**：设置页需展示官方网址 `http://www.bzgames.top/`，使用 NaiveUI `n-a` 组件渲染为可点击链接，`@click.prevent` 拦截默认跳转后通过 `system:openUrl` IPC 调用 `shell.openExternal` 打开系统默认浏览器。
 - **设置页数据自检**：设置页需提供"数据自检"按钮，展示 `config.json`、游戏目录、版本路径、Manifest 完整性等检查结果。
 - **更新错误诊断**：更新失败时前端必须展示归类后的错误码文案与技术摘要，避免仅显示底层原始错误。

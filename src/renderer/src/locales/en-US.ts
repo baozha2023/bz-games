@@ -277,6 +277,8 @@ export default {
     storagePathEmpty: "No saved path",
     enterStoragePath: "Please select game storage path",
     openPathFailed: "Failed to open path",
+    storagePathNotEmptyTitle: "Directory Not Empty",
+    storagePathNotEmptyContent: "The selected directory must be empty. Please choose an empty directory or create a new one to avoid accidentally deleting other files during uninstallation.",
     removeStoragePathTitle: "Remove Storage Path",
     removeStoragePathConfirm:
       "This will delete the path and all imported games inside it: {path}. This action cannot be undone. Continue?",
@@ -320,6 +322,10 @@ export default {
     updateNow: "Update Now",
     updateLater: "Later",
     officialWebsite: "Official Website",
+    uninstallClient: "Uninstall Client",
+    uninstallClientDescription: "This cannot be undone. BZ-Games will be completely removed.",
+    uninstallDeleteGames: "Also delete all game library directories",
+    uninstallNotAvailable: "Uninstaller is not available, only supported in installed version.",
   },
   statistics: {
     title: "Statistics",

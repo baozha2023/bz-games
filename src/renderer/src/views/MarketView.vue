@@ -70,7 +70,7 @@
                     {{ t("market.featured") }}
                   </n-tag>
                 </n-space>
-                <n-button text style="font-size: 20px;" @click="toggleExpand(game.id)">
+                <n-button text style="font-size: 20px;" @click.stop="toggleExpand(game.id)">
                   <n-icon>
                     <ChevronUp v-if="expandedGames[game.id]" />
                     <ChevronDown v-else />
@@ -341,10 +341,8 @@ const appVersion = ref("");
 const marketName = ref("");
 const generatedAt = ref("");
 const timeoutIds: number[] = [];
-const notifiedTaskIds = new Set<string>();
 const pendingDownloads = new Set<string>();
 const pendingCancels = new Set<string>();
-let isAlive = true;
 
 const TYPE_LABEL_KEYS: Record<MarketGame["type"], string> = {
   singleplayer: "gameDetail.typeSingleplayer",
@@ -514,19 +512,8 @@ async function syncExistingTasks(): Promise<void> {
     if (!state) continue;
     if (["downloading", "verifying", "extracting", "installing"].includes(state.status)) {
       next[state.taskId] = state;
-    } else if (!notifiedTaskIds.has(state.taskId)) {
-      notifiedTaskIds.add(state.taskId);
-      if (state.status === "completed") {
-        needsGameRefresh = true;
-        const game = games.value.find((g) => g.id === state.gameId);
-        const gameName = game?.name || state.gameId;
-        if (isAlive) message.success(t("market.installSuccess", { name: gameName, version: state.version }));
-      } else if (state.status === "error") {
-        const errMsg = errorMessage(state);
-        if (isAlive) message.error(errMsg || t("market.downloadFailed"));
-      } else if (state.status === "canceled") {
-        if (isAlive) message.info(t("market.canceled"));
-      }
+    } else if (state.status === "completed") {
+      needsGameRefresh = true;
     }
   }
   taskStates.value = next;
@@ -630,33 +617,9 @@ onMounted(async () => {
       [task.taskId]: task,
     };
     if (task.status === "completed") {
-      notifiedTaskIds.add(task.taskId);
       await gameStore.loadGames();
-      const game = games.value.find((g) => g.id === task.gameId);
-      const gameName = game?.name || task.gameId;
-      if (isAlive) message.success(t("market.installSuccess", { name: gameName, version: task.version }));
-      const id = window.setTimeout(() => {
-        const { [task.taskId]: _, ...rest } = taskStates.value;
-        taskStates.value = rest;
-        const idx = timeoutIds.indexOf(id);
-        if (idx !== -1) timeoutIds.splice(idx, 1);
-      }, 500);
-      timeoutIds.push(id);
     }
-    if (task.status === "error") {
-      notifiedTaskIds.add(task.taskId);
-      const errMsg = errorMessage(task);
-      if (isAlive) message.error(errMsg || t("market.downloadFailed"));
-      const id = window.setTimeout(() => {
-        const { [task.taskId]: _, ...rest } = taskStates.value;
-        taskStates.value = rest;
-        const idx = timeoutIds.indexOf(id);
-        if (idx !== -1) timeoutIds.splice(idx, 1);
-      }, 500);
-      timeoutIds.push(id);
-    }
-    if (task.status === "canceled") {
-      notifiedTaskIds.add(task.taskId);
+    if (task.status !== "downloading" && task.status !== "verifying" && task.status !== "extracting" && task.status !== "installing") {
       const id = window.setTimeout(() => {
         const { [task.taskId]: _, ...rest } = taskStates.value;
         taskStates.value = rest;
@@ -670,7 +633,6 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
-  isAlive = false;
   if (cleanupMarketEvent) cleanupMarketEvent();
   for (const id of timeoutIds) {
     window.clearTimeout(id);

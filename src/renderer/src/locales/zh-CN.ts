@@ -270,6 +270,8 @@ export default {
     storagePathEmpty: "暂无可用路径",
     enterStoragePath: "请选择游戏保存路径",
     openPathFailed: "打开路径失败",
+    storagePathNotEmptyTitle: "目录非空",
+    storagePathNotEmptyContent: "所选目录必须为空目录。请选择一个空目录，或使用新建文件夹功能创建新目录，以避免未来卸载时误删其他文件。",
     removeStoragePathTitle: "删除保存路径",
     removeStoragePathConfirm:
       "将删除该路径及其包含的已导入游戏数据：{path}。此操作不可撤销，是否继续？",
@@ -312,6 +314,10 @@ export default {
     updateNow: "立即更新",
     updateLater: "以后再说",
     officialWebsite: "官方网站",
+    uninstallClient: "卸载客户端",
+    uninstallClientDescription: "此操作不可撤销，将完全移除 BZ-Games 客户端。",
+    uninstallDeleteGames: "同时删除所有游戏库目录",
+    uninstallNotAvailable: "卸载程序不可用，仅在安装版中支持此功能。",
   },
   statistics: {
     title: "游戏统计",

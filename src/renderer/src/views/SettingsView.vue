@@ -135,10 +135,33 @@
         <n-text depth="3">{{ formValue.playerId }} {{ t('settings.idHint') }}</n-text>
       </n-form-item>
 
-      <div style="display: flex; justify-content: flex-end;">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <n-button type="error" secondary @click="showUninstallModal = true">
+          {{ t('settings.uninstallClient') }}
+        </n-button>
         <n-button type="primary" @click="handleSave">{{ t('settings.save') }}</n-button>
       </div>
     </n-form>
+
+    <n-modal v-model:show="showUninstallModal" preset="dialog" :title="t('settings.uninstallClient')" positive-text="" negative-text="">
+      <n-space vertical :size="16" style="width: 100%;">
+        <n-text>{{ t('settings.uninstallClientDescription') }}</n-text>
+        <n-checkbox v-model:checked="uninstallDeleteGames">
+          {{ t('settings.uninstallDeleteGames') }}
+        </n-checkbox>
+        <n-list v-if="uninstallDeleteGames && allStoragePaths.length > 0" bordered>
+          <n-list-item v-for="item in allStoragePaths" :key="item">
+            <n-text depth="3" style="word-break: break-all;">{{ item }}</n-text>
+          </n-list-item>
+        </n-list>
+      </n-space>
+      <template #action>
+        <n-space>
+          <n-button @click="showUninstallModal = false">{{ t('common.cancel') }}</n-button>
+          <n-button type="error" @click="confirmUninstall">{{ t('settings.uninstallClient') }}</n-button>
+        </n-space>
+      </template>
+    </n-modal>
 
   </div>
 </template>
@@ -157,6 +180,8 @@ const dialog = useDialog()
 
 const formRef = ref(null)
 const formValue = ref<AppSettings | null>(null)
+const showUninstallModal = ref(false)
+const uninstallDeleteGames = ref(false)
 const updateState = computed(() => settingsStore.updateState)
 const dataHealthReport = computed(() => settingsStore.dataHealthReport)
 const isCheckingUpdate = ref(false)
@@ -238,9 +263,16 @@ const handleUploadAvatar = async () => {
 }
 
 const handlePickGameStoragePath = async () => {
-  const selected = await window.electronAPI.settings.selectGameStoragePath()
-  if (!selected || !formValue.value) return
-  formValue.value.gameStoragePath = selected
+  const result = await window.electronAPI.settings.selectGameStoragePath()
+  if (!result || !formValue.value) return
+  if (result.error === "directory_not_empty") {
+    dialog.warning({
+      title: t('settings.storagePathNotEmptyTitle'),
+      content: t('settings.storagePathNotEmptyContent'),
+    })
+    return
+  }
+  formValue.value.gameStoragePath = result.path
 }
 
 const handleOpenPath = async (targetPath: string) => {
@@ -337,6 +369,16 @@ const handleDataHealthCheck = async () => {
 
 const handleOpenWebsite = () => {
   window.electronAPI.settings.openUrl("http://www.bzgames.top/")
+}
+
+const confirmUninstall = async () => {
+  showUninstallModal.value = false
+  const result = await window.electronAPI.settings.uninstall({
+    deleteGames: uninstallDeleteGames.value,
+  })
+  if (!result.success && result.error === "uninstaller_not_found") {
+    message.warning(t('settings.uninstallNotAvailable'))
+  }
 }
 
 </script>

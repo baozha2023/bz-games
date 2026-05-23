@@ -133,7 +133,7 @@ declare global {
         getAppVersion: () => Promise<string>;
         save: (settings: AppSettings) => Promise<void>;
         uploadAvatar: () => Promise<string | null>;
-        selectGameStoragePath: () => Promise<string | null>;
+        selectGameStoragePath: () => Promise<{ path: string; error?: string } | null>;
         openPath: (targetPath: string) => Promise<boolean>;
         openUrl: (url: string) => Promise<boolean>;
         removeGameStoragePath: (targetPath: string) => Promise<{
@@ -146,6 +146,7 @@ declare global {
         checkUpdate: () => Promise<UpdateState>;
         downloadUpdate: () => Promise<UpdateState>;
         installUpdate: () => Promise<boolean>;
+        uninstall: (payload?: { deleteGames?: boolean }) => Promise<{ success: boolean; error?: string }>;
         onUpdateEvent: (callback: (payload: UpdateState) => void) => () => void;
       };
     };

@@ -278,6 +278,8 @@ export default {
     storagePathEmpty: "利用可能なパスがありません",
     enterStoragePath: "ゲーム保存先を選択してください",
     openPathFailed: "パスを開けませんでした",
+    storagePathNotEmptyTitle: "ディレクトリが空ではありません",
+    storagePathNotEmptyContent: "選択したディレクトリは空である必要があります。アンインストール時に他のファイルを誤って削除しないよう、空のディレクトリを選択するか新しいディレクトリを作成してください。",
     removeStoragePathTitle: "保存先パスを削除",
     removeStoragePathConfirm:
       "このパスと内部の取り込み済みゲームを削除します: {path}。この操作は元に戻せません。続行しますか？",
@@ -323,6 +325,10 @@ export default {
     updateNow: "今すぐ更新",
     updateLater: "後で",
     officialWebsite: "公式サイト",
+    uninstallClient: "クライアントのアンインストール",
+    uninstallClientDescription: "この操作は取り消せません。BZ-Games が完全に削除されます。",
+    uninstallDeleteGames: "すべてのゲームディレクトリも削除する",
+    uninstallNotAvailable: "アンインストーラーは利用できません。インストール版のみ対応しています。",
   },
   statistics: {
     title: "統計",

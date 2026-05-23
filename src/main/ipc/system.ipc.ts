@@ -1,5 +1,6 @@
 import { app, ipcMain, dialog, nativeImage, shell } from "electron";
 import fs from "fs";
+import path from "path";
 import { IPC } from "../../shared/ipc-channels";
 import { storeService } from "../services/StoreService";
 import { updateService } from "../services/UpdateService";
@@ -73,7 +74,12 @@ export function registerSystemIpc() {
     if (canceled || filePaths.length === 0) {
       return null;
     }
-    return filePaths[0];
+    const selectedPath = filePaths[0];
+    const entries = fs.readdirSync(selectedPath);
+    if (entries.length > 0) {
+      return { path: selectedPath, error: "directory_not_empty" };
+    }
+    return { path: selectedPath };
   });
 
   ipcMain.handle(IPC.SYSTEM_OPEN_PATH, async (_, targetPath: string) => {
@@ -128,5 +134,27 @@ export function registerSystemIpc() {
   ipcMain.handle(IPC.SYSTEM_INSTALL_UPDATE, async () => {
     updateService.installUpdate();
     return true;
+  });
+
+  ipcMain.handle(IPC.SYSTEM_UNINSTALL, async (_, payload?: { deleteGames?: boolean }) => {
+    const exeDir = path.dirname(app.getPath("exe"));
+    const uninstaller = path.join(exeDir, "uninstall.exe");
+    if (!fs.existsSync(uninstaller)) {
+      return { success: false, error: "uninstaller_not_found" };
+    }
+    if (payload?.deleteGames) {
+      const roots = storeService.getGameStorageRoots();
+      for (const root of roots) {
+        try {
+          fs.rmSync(root, { recursive: true, force: true });
+          logger.info(`[SystemIPC] Removed storage root before uninstall: ${root}`);
+        } catch (error) {
+          logger.warn(`[SystemIPC] Failed to remove storage root: ${root}`, error);
+        }
+      }
+    }
+    shell.openPath(uninstaller);
+    app.quit();
+    return { success: true };
   });
 }

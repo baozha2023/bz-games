@@ -93,6 +93,9 @@ import { ref } from 'vue'
 import { AchievementNotifier } from './utils/achievementNotifier'
 import bzCoinIcon from './assets/images/bz-coin.png'
 import semver from 'semver'
+import type { MarketTaskState } from '../../shared/types'
+
+const marketNotifiedTaskIds = new Set<string>()
 
 const { t } = useI18n()
 const router = useRouter()
@@ -119,6 +122,7 @@ const handleBackToRoom = () => {
 
 let cleanup: (() => void) | undefined
 let cleanupAchievements: (() => void) | undefined
+let cleanupMarketEvent: (() => void) | undefined
 const achievementNotifier = new AchievementNotifier({
   delayMs: 5200,
   onProcess: async () => {
@@ -213,6 +217,20 @@ const hideUpdateModal = () => {
   settingsStore.hideUpdateModal()
 }
 
+const MARKET_ERROR_KEYS: Record<string, string> = {
+  download: "market.downloadError",
+  verify: "market.verifyError",
+  extract: "market.extractError",
+  install: "market.installError",
+}
+
+function marketErrorMessage(task: MarketTaskState): string {
+  if (task.errorCode && MARKET_ERROR_KEYS[task.errorCode]) {
+    return t(MARKET_ERROR_KEYS[task.errorCode])
+  }
+  return task.message || ""
+}
+
 onMounted(() => {
   if (window.electronAPI?.room?.onEvent) {
     cleanup = window.electronAPI.room.onEvent((event) => {
@@ -228,12 +246,34 @@ onMounted(() => {
     )
   }
 
+  if (window.electronAPI?.market?.onEvent) {
+    cleanupMarketEvent = window.electronAPI.market.onEvent(async ({ task }) => {
+      if (!marketNotifiedTaskIds.has(task.taskId)) {
+        if (task.status === "completed") {
+          marketNotifiedTaskIds.add(task.taskId)
+          await gameStore.loadGames()
+          const game = gameStore.games.find((g) => g.id === task.gameId)
+          const gameName = game?.name || task.gameId
+          message.success(t("market.installSuccess", { name: gameName, version: task.version }))
+        } else if (task.status === "error") {
+          marketNotifiedTaskIds.add(task.taskId)
+          const errMsg = marketErrorMessage(task)
+          message.error(errMsg || t("market.downloadFailed"))
+        } else if (task.status === "canceled") {
+          marketNotifiedTaskIds.add(task.taskId)
+          message.info(t("market.canceled"))
+        }
+      }
+    })
+  }
+
   handleAutoUpdateCheck()
 })
 
 onUnmounted(() => {
   if (cleanup) cleanup()
   if (cleanupAchievements) cleanupAchievements()
+  if (cleanupMarketEvent) cleanupMarketEvent()
   achievementNotifier.dispose()
 })
 </script>

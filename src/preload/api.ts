@@ -152,6 +152,8 @@ export const electronAPI = {
     checkUpdate: () => ipcRenderer.invoke(IPC.SYSTEM_CHECK_UPDATE),
     downloadUpdate: () => ipcRenderer.invoke(IPC.SYSTEM_DOWNLOAD_UPDATE),
     installUpdate: () => ipcRenderer.invoke(IPC.SYSTEM_INSTALL_UPDATE),
+    uninstall: (payload?: { deleteGames?: boolean }): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke(IPC.SYSTEM_UNINSTALL, payload),
     onUpdateEvent: (
       callback: (payload: UpdateState) => void,
     ) => {

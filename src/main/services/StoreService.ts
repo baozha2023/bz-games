@@ -2,6 +2,7 @@ import crypto from "crypto";
 import { app } from "electron";
 import ElectronStore from "electron-store";
 import fs from "fs/promises";
+import fsSync from "fs";
 import path from "path";
 import type {
   AppStore,
@@ -470,6 +471,23 @@ class StoreService {
     }
   }
 
+  private async removeEmptyGameDirs(storageRoot: string): Promise<void> {
+    let entries: fsSync.Dirent[];
+    try {
+      entries = fsSync.readdirSync(storageRoot, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const dirPath = path.join(storageRoot, entry.name);
+      if (fsSync.existsSync(path.join(dirPath, "game.json"))) {
+        await fs.rm(dirPath, { recursive: true, force: true });
+        logger.info(`[StoreService] Removed game dir with manifest: ${dirPath}`);
+      }
+    }
+  }
+
   private async removeGameRootByVersionPath(
     versionPath: string | undefined,
     level: "warn" | "error",
@@ -549,6 +567,20 @@ class StoreService {
     if (!merged.playerId) {
       merged.playerId = crypto.randomUUID();
       logger.info(`[StoreService] Generated new playerId: ${merged.playerId}`);
+
+      const initialLangFile = path.join(getAppRoot(), ".initial-language");
+      try {
+        const langContent = fsSync.readFileSync(initialLangFile, "utf-8");
+        const lang = langContent.trim();
+        if (["zh-CN", "en-US", "ja-JP"].includes(lang)) {
+          merged.language = lang as AppSettings["language"];
+          logger.info(`[StoreService] Detected installer language: ${lang}`);
+        }
+        fsSync.unlinkSync(initialLangFile);
+      } catch {
+        // File not found or not readable, keep default language
+      }
+
       store.set("settings", merged);
     }
 
@@ -669,11 +701,11 @@ class StoreService {
     }
 
     try {
-      await fs.rm(normalizedTarget, { recursive: true, force: true });
-      logger.info(`[StoreService] Removed game storage path: ${normalizedTarget}`);
+      await this.removeEmptyGameDirs(normalizedTarget);
+      logger.info(`[StoreService] Cleaned up empty game dirs in: ${normalizedTarget}`);
     } catch (e) {
       logger.warn(
-        `[StoreService] Failed to remove storage path directory: ${normalizedTarget}`,
+        `[StoreService] Failed to clean up storage path directory: ${normalizedTarget}`,
         e,
       );
     }
