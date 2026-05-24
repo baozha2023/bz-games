@@ -21,7 +21,7 @@ const defaultSettings: AppSettings = {
   playerId: "",
   lastJoinRoomAddress: "",
   language: "zh-CN",
-  theme: "dark",
+  theme: "auto",
   defaultRoomPort: 38080,
   closeBehavior: "tray",
   autoLaunch: false,

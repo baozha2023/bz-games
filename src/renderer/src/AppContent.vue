@@ -20,12 +20,12 @@
           {{ settingsStore.settings?.playerName || 'BZ-Games' }}
 
           <div 
-             style="margin-left: 16px; display: flex; align-items: center; background: rgba(255,255,255,0.1); padding: 4px 12px; border-radius: 16px; cursor: pointer; transition: all 0.3s;" 
+             style="margin-left: 16px; display: flex; align-items: center; background: var(--bz-bg-panel); padding: 4px 12px; border-radius: 16px; cursor: pointer; transition: all 0.3s;" 
              @click="showCheckIn = true"
           >
              <img :src="bzCoinIcon" style="width: 18px; height: 18px; margin-right: 4px;" />
              <span style="color: #FFD700; font-weight: bold; margin-right: 8px; font-size: 14px;">{{ settingsStore.userData?.bzCoins || 0 }}</span>
-             <n-icon :component="Calendar" :color="calendarIconColor" size="16" />
+             <n-icon :component="Calendar" :color="'var(--bz-text-title)'" size="16" />
           </div>
         </h2>
         <n-space>
@@ -106,9 +106,6 @@ const gameStore = useGameStore()
 const dialog = useDialog()
 const message = useMessage()
 const showCheckIn = ref(false)
-const calendarIconColor = computed(() => {
-  return settingsStore.settings?.theme === 'light' ? '#1f2937' : '#fff'
-})
 
 const isNotificationWindow = computed(() => {
   return route.name === 'Notification' || route.path.startsWith('/notification');
@@ -290,7 +287,7 @@ onUnmounted(() => {
   right: -4px;
   width: 8px;
   height: 8px;
-  background-color: #d03050;
+  background-color: var(--bz-red);
   border-radius: 50%;
   z-index: 1;
 }

@@ -20,7 +20,7 @@
     
     <n-grid x-gap="24" :cols="1" md="2" style="margin-top: 24px;">
       <n-grid-item>
-        <div style="width: 100%; display: flex; justify-content: center; background: rgba(0,0,0,0.1); border-radius: 8px; overflow: hidden;">
+        <div style="width: 100%; display: flex; justify-content: center; background: var(--bz-bg-overlay); border-radius: 8px; overflow: hidden;">
           <GameCover :game-id="game.id" :version="selectedVersion" :autoplay-video="true" style="width: 100%; height: auto; max-height: 400px; object-fit: contain;" />
         </div>
       </n-grid-item>

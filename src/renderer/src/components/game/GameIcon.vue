@@ -1,6 +1,6 @@
 <template>
   <img v-if="iconUrl" :src="iconUrl" style="width: 100%; height: 100%; object-fit: contain;" />
-  <div v-else style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background-color: #555; color: #fff; font-size: 12px; font-weight: bold;">
+  <div v-else style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background-color: var(--bz-bg-placeholder); color: var(--bz-text-on-placeholder); font-size: 12px; font-weight: bold;">
     {{ gameName?.charAt(0) || '?' }}
   </div>
 </template>

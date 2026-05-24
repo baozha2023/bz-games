@@ -16,9 +16,10 @@
             </div>
             <div class="message-content">
               <template v-if="msg.contentType === 'audio' || (msg.content && msg.content.startsWith('data:audio/'))">
-                <div class="audio-msg" @click="playAudio(msg.content)">
+                <div class="audio-msg" @click="playAudio(msg.id, msg.content)">
                   <n-icon size="16"><MusicalNote /></n-icon>
-                  <span>{{ t('chat.audioMsg') }}</span>
+                  <span v-if="playingAudioId === msg.id" class="playing-text">{{ t('chat.playing') }}<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></span>
+                  <span v-else>{{ t('chat.audioMsg') }}</span>
                 </div>
               </template>
               <template v-else>
@@ -69,10 +70,12 @@ const message = useMessage()
 const inputValue = ref('')
 const scrollContainer = ref<HTMLElement | null>(null)
 const isRecording = ref(false)
+const playingAudioId = ref<string | null>(null)
 
 let mediaRecorder: MediaRecorder | null = null;
 let audioChunks: Blob[] = [];
 let recordingTimer: ReturnType<typeof setTimeout> | null = null;
+let currentAudio: HTMLAudioElement | null = null;
 
 const handleSend = async () => {
   if (!inputValue.value.trim()) return;
@@ -82,8 +85,11 @@ const handleSend = async () => {
 
 const startRecording = async () => {
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    mediaRecorder = new MediaRecorder(stream);
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: { sampleRate: 24000 } });
+    mediaRecorder = new MediaRecorder(stream, {
+      mimeType: 'audio/webm;codecs=opus',
+      audioBitsPerSecond: 32000,
+    });
     audioChunks = [];
     
     mediaRecorder.ondataavailable = (event) => {
@@ -145,12 +151,28 @@ const cancelRecording = () => {
     stopRecording();
 }
 
-const playAudio = (dataUrl: string) => {
-  const audio = new Audio(dataUrl);
+const playAudio = (msgId: string, dataUrl: string) => {
+  if (playingAudioId.value) {
+    if (currentAudio) {
+      currentAudio.pause()
+      currentAudio = null
+    }
+    playingAudioId.value = null
+    return
+  }
+  playingAudioId.value = msgId
+  const audio = new Audio(dataUrl)
+  currentAudio = audio
+  audio.onended = () => {
+    playingAudioId.value = null
+    currentAudio = null
+  }
   audio.play().catch(e => {
-    console.error('Failed to play audio', e);
-    message.error(t('chat.playError'));
-  });
+    console.error('Failed to play audio', e)
+    message.error(t('chat.playError'))
+    playingAudioId.value = null
+    currentAudio = null
+  })
 }
 
 const formatTime = (ts: number) => {
@@ -171,7 +193,7 @@ watch(() => roomStore.chatMessages.length, () => {
   height: 200px;
   overflow-y: auto;
   padding: 8px;
-  background: rgba(0, 0, 0, 0.02);
+  background: var(--bz-bg-subtle);
   border-radius: 4px;
 }
 .no-message {
@@ -179,7 +201,7 @@ watch(() => roomStore.chatMessages.length, () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #999;
+  color: var(--bz-chat-text-system);
 }
 .message-item {
   margin-bottom: 8px;
@@ -187,7 +209,7 @@ watch(() => roomStore.chatMessages.length, () => {
 }
 .message-item.system {
   text-align: center;
-  color: #999;
+  color: var(--bz-chat-text-system);
   font-size: 12px;
   margin: 12px 0;
 }
@@ -198,13 +220,13 @@ watch(() => roomStore.chatMessages.length, () => {
 }
 .sender {
   font-weight: bold;
-  color: #2080f0;
+  color: var(--bz-info-blue);
 }
 .sender.is-me {
-  color: #18a058;
+  color: var(--bz-green);
 }
 .time {
-  color: #999;
+  color: var(--bz-chat-text-system);
   font-size: 11px;
 }
 .message-content {
@@ -215,13 +237,13 @@ watch(() => roomStore.chatMessages.length, () => {
   align-items: center;
   gap: 8px;
   padding: 4px 12px;
-  background: #e0e0e0;
+  background: var(--bz-bg-chat-bubble);
   border-radius: 16px;
   cursor: pointer;
   transition: background 0.2s;
 }
 .audio-msg:hover {
-  background: #d0d0d0;
+  background: var(--bz-bg-chat-bubble-hover);
 }
 .mic-btn {
   width: 40px;
@@ -229,5 +251,21 @@ watch(() => roomStore.chatMessages.length, () => {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+.playing-text {
+  color: var(--bz-green);
+}
+.dot {
+  animation: dot-blink 1.4s infinite;
+}
+.dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+@keyframes dot-blink {
+  0%, 20% { opacity: 0; }
+  50%, 100% { opacity: 1; }
 }
 </style>

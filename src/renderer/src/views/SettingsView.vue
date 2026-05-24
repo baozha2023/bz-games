@@ -14,6 +14,8 @@
             size="large" 
             :src="formValue.avatar" 
             :key="formValue.avatar"
+            class="avatar-clickable"
+            @click="handleAvatarClick"
           >
             <template v-if="!formValue.avatar">
               {{ formValue.playerName?.charAt(0)?.toUpperCase() }}
@@ -163,6 +165,24 @@
       </template>
     </n-modal>
 
+    <n-modal v-model:show="showAvatarPreview" preset="card" title="" style="width: 360px;" :bordered="false">
+      <div style="display: flex; justify-content: center; align-items: center; padding: 24px;">
+        <img
+          v-if="formValue?.avatar"
+          :src="formValue.avatar"
+          style="width: 280px; height: 280px; border-radius: 50%; object-fit: cover;"
+        />
+        <div
+          v-else
+          style="width: 280px; height: 280px; border-radius: 50%; background: var(--bz-bg-card-placeholder); display: flex; justify-content: center; align-items: center;"
+        >
+          <span style="font-size: 120px; color: var(--bz-text-on-placeholder); line-height: 1;">
+            {{ formValue?.playerName?.charAt(0)?.toUpperCase() }}
+          </span>
+        </div>
+      </div>
+    </n-modal>
+
   </div>
 </template>
 
@@ -181,6 +201,7 @@ const dialog = useDialog()
 const formRef = ref(null)
 const formValue = ref<AppSettings | null>(null)
 const showUninstallModal = ref(false)
+const showAvatarPreview = ref(false)
 const uninstallDeleteGames = ref(false)
 const updateState = computed(() => settingsStore.updateState)
 const dataHealthReport = computed(() => settingsStore.dataHealthReport)
@@ -206,7 +227,8 @@ const rules = {
 
 const themeOptions = computed(() => [
   { label: t('settings.themeDark'), value: 'dark' },
-  { label: t('settings.themeLight'), value: 'light' }
+  { label: t('settings.themeLight'), value: 'light' },
+  { label: t('settings.themeAuto'), value: 'auto' }
 ])
 
 const languageOptions = computed(() => [
@@ -260,6 +282,10 @@ const handleUploadAvatar = async () => {
     formValue.value.avatar = avatarUrl;
     await handleSave();
   }
+}
+
+const handleAvatarClick = () => {
+  showAvatarPreview.value = true
 }
 
 const handlePickGameStoragePath = async () => {
@@ -388,5 +414,13 @@ const confirmUninstall = async () => {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+.avatar-clickable {
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.avatar-clickable:hover {
+  transform: scale(1.08);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
 }
 </style>

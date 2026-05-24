@@ -2,7 +2,7 @@
   <div class="market-list-root">
     <n-space justify="space-between" align="center" style="margin-bottom: 20px;">
       <h1 style="margin: 0;">{{ t('marketList.title') }}</h1>
-      <n-button :loading="isLoading" @click="loadSources()">
+      <n-button :loading="isLoading" @click="loadSources(true)">
         {{ t('market.refresh') }}
       </n-button>
     </n-space>
@@ -32,13 +32,13 @@
         class="source-card"
         @click="enterMarket(index)"
       >
-        <img
+        <CachedImg
           v-if="source.coverUrl"
           :src="source.coverUrl"
           class="source-cover"
         />
         <div v-else class="source-cover-placeholder">
-          <n-icon size="48" color="#666">
+          <n-icon size="48" color="var(--bz-text-secondary)">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
           </n-icon>
         </div>
@@ -64,6 +64,7 @@ import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import type { MarketSource } from "../../../shared/types";
+import CachedImg from "../components/CachedImg.vue";
 
 interface DisplaySource extends MarketSource {
   originalIndex: number;
@@ -98,11 +99,11 @@ function formatTime(iso: string): string {
   }
 }
 
-async function loadSources(): Promise<void> {
+async function loadSources(forceRefresh = false): Promise<void> {
   isLoading.value = true;
   loadError.value = "";
   try {
-    const directory = await window.electronAPI.market.getSources();
+    const directory = await window.electronAPI.market.getSources(forceRefresh);
     sources.value = directory.sources
       .map((s, i) => ({ ...s, originalIndex: i }))
       .filter((s) => s.visibility !== "hidden");
@@ -139,7 +140,7 @@ onMounted(async () => {
 .source-card {
   display: flex;
   flex-direction: column;
-  border: 1px solid rgba(128, 128, 128, 0.18);
+  border: 1px solid var(--bz-border-subtle);
   border-radius: 12px;
   overflow: hidden;
   cursor: pointer;
@@ -147,15 +148,15 @@ onMounted(async () => {
 }
 
 .source-card:hover {
-  border-color: #18a058;
-  background: rgba(24, 160, 88, 0.06);
+  border-color: var(--bz-green);
+  background: var(--bz-green-soft);
 }
 
 .source-cover {
   width: 100%;
   height: 160px;
   object-fit: cover;
-  background: rgba(0, 0, 0, 0.08);
+  background: var(--bz-bg-panel);
 }
 
 .source-cover-placeholder {
@@ -164,7 +165,7 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.06);
+  background: var(--bz-bg-panel);
 }
 
 .source-info {

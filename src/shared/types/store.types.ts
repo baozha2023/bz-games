@@ -43,7 +43,7 @@ export interface AppSettings {
   avatar?: string; // 玩家头像路径
   lastJoinRoomAddress?: string;
   language: "zh-CN" | "en-US" | "ja-JP";
-  theme: "dark" | "light";
+  theme: "dark" | "light" | "auto";
   defaultRoomPort: number;
   closeBehavior: "tray" | "exit";
   autoLaunch: boolean;

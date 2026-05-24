@@ -28,7 +28,7 @@
             <span class="amount">+{{ getReward(day) }}</span>
           </div>
           <div v-if="isDayCompleted(day)" class="status-icon">
-            <n-icon :component="CheckmarkCircle" color="#4CAF50" size="20" />
+            <n-icon :component="CheckmarkCircle" color="var(--bz-checkin-green)" size="20" />
           </div>
         </div>
       </div>
@@ -186,7 +186,7 @@ const handleCheckIn = async () => {
     display: flex;
     align-items: center;
     gap: 8px;
-    color: #FFD700;
+    color: var(--bz-gold);
 }
 .days-grid {
     display: grid;
@@ -194,7 +194,7 @@ const handleCheckIn = async () => {
     gap: 10px;
 }
 .day-card {
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--bz-bg-subtle);
     border-radius: 8px;
     padding: 10px;
     display: flex;
@@ -206,13 +206,13 @@ const handleCheckIn = async () => {
     transition: all 0.3s;
 }
 .day-card.today {
-    border-color: #FFD700;
-    background: rgba(255, 215, 0, 0.1);
+    border-color: var(--bz-gold);
+    background: var(--bz-gold-soft);
     transform: scale(1.05);
 }
 .day-card.completed {
     background: rgba(76, 175, 80, 0.1);
-    border-color: #4CAF50;
+    border-color: var(--bz-checkin-green);
 }
 .day-label {
     font-size: 0.9rem;
@@ -225,7 +225,7 @@ const handleCheckIn = async () => {
 }
 .amount {
     font-weight: bold;
-    color: #FFD700;
+    color: var(--bz-gold);
 }
 .status-icon {
     position: absolute;

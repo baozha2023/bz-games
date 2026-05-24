@@ -116,10 +116,12 @@ export const electronAPI = {
     },
   },
   market: {
-    getSources: (): Promise<MarketDirectory> =>
-      ipcRenderer.invoke(IPC.MARKET_GET_SOURCES),
+    getSources: (forceRefresh?: boolean): Promise<MarketDirectory> =>
+      ipcRenderer.invoke(IPC.MARKET_GET_SOURCES, forceRefresh),
     getIndex: (sourceIdx: number, forceRefresh?: boolean): Promise<MarketIndex> =>
       ipcRenderer.invoke(IPC.MARKET_GET_INDEX, sourceIdx, forceRefresh),
+    getCachedImage: (url: string): Promise<string> =>
+      ipcRenderer.invoke(IPC.MARKET_GET_CACHED_IMAGE, url),
     downloadAndInstall: (gameId: string, version: string, sourceIdx: number): Promise<MarketTaskState> =>
       ipcRenderer.invoke(IPC.MARKET_DOWNLOAD_AND_INSTALL, gameId, version, sourceIdx),
     getTaskState: (taskId: string): Promise<MarketTaskState | null> =>

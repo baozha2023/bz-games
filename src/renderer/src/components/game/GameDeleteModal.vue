@@ -6,7 +6,7 @@
                 <n-checkbox v-for="v in versions" :key="v" :value="v" :label="v" />
             </n-space>
         </n-checkbox-group>
-        <div style="margin-top: 12px; font-size: 12px; color: #999;" v-if="selectedVersions.length === versions.length">
+        <div style="margin-top: 12px; font-size: 12px; color: var(--bz-delete-warning);" v-if="selectedVersions.length === versions.length">
             {{ t('gameDetail.deleteAllVersionsWarning') }}
         </div>
     </n-modal>

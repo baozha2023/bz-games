@@ -57,9 +57,9 @@
             :class="{ active: expandedGames[game.id] }"
             @click="toggleExpand(game.id)"
           >
-            <img
+            <CachedImg
               v-if="game.iconUrl || game.coverUrl"
-              :src="game.iconUrl || game.coverUrl"
+              :src="(game.iconUrl || game.coverUrl)!"
               class="market-thumb"
             />
             <div class="market-game-text">
@@ -102,9 +102,9 @@
             >
               <n-space vertical size="large">
                 <div class="market-detail-header">
-                  <img
+                  <CachedImg
                     v-if="game.coverUrl || game.iconUrl"
-                    :src="game.coverUrl || game.iconUrl"
+                    :src="(game.coverUrl || game.iconUrl)!"
                     class="market-cover"
                   />
                   <div class="market-detail-meta">
@@ -315,6 +315,7 @@ import type {
 } from "../../../shared/types";
 import { isVersionPayloadValid } from "../../../shared/types";
 import { useSettingsStore } from "../stores/useSettingsStore";
+import CachedImg from "../components/CachedImg.vue";
 import { useGameStore } from "../stores/useGameStore";
 
 const { t } = useI18n();
@@ -662,7 +663,7 @@ onUnmounted(() => {
   display: flex;
   gap: 12px;
   padding: 12px;
-  border: 1px solid rgba(128, 128, 128, 0.18);
+  border: 1px solid var(--bz-border-subtle);
   border-radius: 12px;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -670,8 +671,8 @@ onUnmounted(() => {
 
 .market-game-item:hover,
 .market-game-item.active {
-  border-color: #18a058;
-  background: rgba(24, 160, 88, 0.06);
+  border-color: var(--bz-green);
+  background: var(--bz-green-soft);
 }
 
 .market-thumb {
@@ -719,7 +720,7 @@ onUnmounted(() => {
 }
 
 .market-version-item {
-  border: 1px solid rgba(128, 128, 128, 0.18);
+  border: 1px solid var(--bz-border-subtle);
   border-radius: 10px;
   padding: 12px;
 }

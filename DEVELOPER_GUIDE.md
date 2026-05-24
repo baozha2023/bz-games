@@ -95,7 +95,7 @@ my-game/
 | `platformVersion`| string/array | 是 | 兼容的平台版本范围 (如 `">=1.0.0"` 或 `["1.0.0", "2.0.0"]`) |
 | `entry` | string | 是 | 启动入口。支持本地入口文件（如 `index.html`、`game.exe`）、`serve` 或 `url` |
 | `web_url` | string | `entry=url` 时必填 | 远程网页地址（必须为合法 `https?://` URL） |
-| `type` | string | 是 | `"singleplayer"` (单机) / `"multiplayer"` (联机) / `"singlemultiple"` (单人+联机) / `"networkgame"` (网络游戏，仅网页直连启动) |
+| `type` | string | 是 | `"singleplayer"` (单机) / `"multiplayer"` (联机) / `"singlemultiple"` (单人+联机) / `"networkgame"` (网页游戏，仅网页直连启动) |
 | `multiplayer` | object | 联机必填 | 包含 `minPlayers` 和 `maxPlayers` (整数)，`type` 为 `multiplayer` 或 `singlemultiple` 时必填 |
 | `icon` | string | 否 | 图标路径 |
 | `cover` | string | 否 | 封面路径 |

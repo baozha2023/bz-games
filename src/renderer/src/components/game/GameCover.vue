@@ -10,7 +10,7 @@
     @ended="handleVideoEnded"
   />
   <img v-else-if="coverUrl" :src="coverUrl" style="width: 100%; height: 100%; object-fit: contain;" />
-  <div v-else style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background-color: #555; color: #fff;">
+  <div v-else style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background-color: var(--bz-bg-placeholder); color: var(--bz-text-on-placeholder);">
     暂无封面
   </div>
 </template>

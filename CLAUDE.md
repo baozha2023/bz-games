@@ -201,7 +201,7 @@ bz-games/
 - **详情媒体扩展**：`video` 字段为可选项，指向游戏目录内预览视频（`mp4/webm/ogv/mov/m4v`），仅用于详情页展示。
 - **本地存储加密开关**：`encryptLocalStorage` 为可选布尔字段，仅作用于 Web 游戏 `localStorage` 对应的 `gamedata.json` 持久化。
 - **游戏类型扩展**：`type` 支持 `singleplayer`、`multiplayer`、`singlemultiple`、`networkgame`，其中 `singlemultiple`
-  代表同时支持单人与联机，`networkgame` 代表网络网页游戏（仅启动网页，不参与房间联机流程）。
+  代表同时支持单人与联机，`networkgame` 代表网页游戏（仅启动网页，不参与房间联机流程）。
 - **远程网页启动**：`entry` 新增 `url` 模式；当 `entry=url` 时，Manifest 必须提供 `web_url`（合法 URL），平台直接打开该网页地址。
 
 ### 4.2 游戏市场索引 JSON 规范
@@ -519,7 +519,9 @@ interface AppSettings {
 - **MarketService 设计**：
     - **两级市场架构**：`getSources()` 拉取顶层市场目录（通过 `fetchDirectory()` 获取，主源 GitHub + 备源 OSS），`getIndex(sourceIdx)` 拉取指定市场源的游戏索引。sourceIdx=0 使用 `fetchIndexInternal()`（主备双源），sourceIdx>0 使用 `fetchIndexForSource()`（通过 `gitToRawUrl()` 推导 raw URL 直接加载，无 OSS 回退）。
     - `fetchJson(url)` 为通用 HTTP JSON 获取器，统一注入 `Referer` 防盗链 header。`fetchDirectory()` 与 `fetchIndexFromUrl()` 均基于此构建，各司其职：前者解析 `MarketDirectorySchema`，后者解析 `MarketIndexSchema` 并过滤 `hidden` 游戏。
-    - `getSources()` 与 `getIndex(sourceIdx, forceRefresh)` 均内置 1 小时内存缓存，按 sourceIdx 独立缓存，`forceRefresh=true` 或缓存过期时重新拉取，应用重启后自动失效。
+    - `getSources()` 与 `getIndex(sourceIdx, forceRefresh)` 均内置 1 小时内存缓存，按 sourceIdx 独立缓存，`forceRefresh=true` 或缓存过期时重新拉取，应用重启后自动失效。同时，`forceRefresh=true` 时一并清除全部图片缓存（`cachedImages`），保证封面/图标数据与索引数据同步刷新。
+    - `getCachedImageDataUrl(url)` 为按需图片缓存方法，通过 `fetch(url)` 下载远程图片并转 base64 Data URL，缓存于 `cachedImages` Map（1 小时 TTL）。15 秒超时 + `AbortController` 保护，`finally` 块必定清理定时器。仅当渲染进程的 `<CachedImg>` 组件请求时才触发下载，不预载所有图片。
+    - `CachedImg` 为通用图片缓存组件，初始显示原始 URL（浏览器直连），异步调用 `getCachedImage` IPC 拿到 Data URL 后无缝替换。`onUnmounted` 时 abort 飞行中的请求，防止内存泄漏。
     - `downloadAndInstall(gameId, version, sourceIdx)` 中 `sourceIdx` 为**必传参数**，直接从对应 source 拉取索引后查找目标游戏，无回退逻辑。
     - `gitToRawUrl()` 从 GitHub 仓库地址推导 raw 文件 URL：`https://raw.githubusercontent.com/{owner}/{repo}/{branch}/market.json`。
     - `inferArchiveType()` 根据 `downloadUrl` 后缀自动识别压缩包格式（当前支持 `.zip` 和 `.7z`）。`.zip` 使用 `extract-zip` 纯 Node.js 解压，`.7z` 使用 `7zip-bin` 内置的 `7za` 二进制通过 `child_process.execFile` 解压。
@@ -528,6 +530,12 @@ interface AppSettings {
     - 错误分类由 `classifyErrorCode()` 统一处理，根据错误消息自动归类为四种错误码（download/verify/extract/install）。
     - `tasks` Map 维护任务全生命周期，终态任务 30 秒自动清理，`finally` 块确保临时文件必然清理。
 - **应用入口 OSS 拦截**：`index.ts` 在 `app.whenReady` 中注册 `session.defaultSession.webRequest.onBeforeSendHeaders`，对所有 `web-bz.oss-cn-beijing.aliyuncs.com` 请求注入 `Referer` header，覆盖 `<img>` 标签等非 fetch 请求。
+
+### 5.6 CSS 变量主题系统
+
+- **语义变量**：`theme.css` 定义全局 `:root` 层基础色板（`--bz-gold`、`--bz-green`、`--bz-red`、`--bz-amber`、`--bz-info-blue` 等），`.theme-dark` 与 `.theme-light` 分别定义暗/亮专属变量（`--bz-bg-*`、`--bz-text-*`、`--bz-border-*`、`--bz-chat-*` 等），组件层统一使用 `var(--bz-*)` 引用，彻底消除硬编码色值。
+- **`theme: "auto"` 模式**：`AppSettings.theme` 新增 `"auto"` 选项（默认值）。`App.vue` 通过 `window.matchMedia('(prefers-color-scheme: dark)')` 监听系统主题变化，自动切换 `.theme-dark` / `.theme-light` CSS class。`onUnmounted` 时注销 `change` 监听器。NaiveUI 的 `n-config-provider :theme` 同步联动。
+- **通知窗口独立主题**：`NotificationService` 创建成就弹窗时，根据用户设置的 `theme` 字段解析实际主题（`auto` → `nativeTheme.shouldUseDarkColors`），注入到 `NotificationView` 组件。`NotificationView` 独立导入 `theme.css` 获取 CSS 变量。`GameDetailView` 的灯光秀金色边框也统一迁移为 `--bz-gold` 变量。
 
 ***
 
@@ -607,6 +615,7 @@ interface AppSettings {
 - `game:launch`：启动指定游戏版本。
 - `market:getSources`：拉取并解析市场目录（含 sources 列表）。
 - `market:getIndex`：拉取并解析指定市场源的远程游戏市场索引。
+- `market:getCachedImage`：按需下载远程图片并返回 base64 Data URL，缓存 1 小时。供 `<CachedImg>` 组件使用。
 - `market:downloadAndInstall`：下载指定市场游戏版本、执行完整性校验并安装到默认游戏目录。
 - `market:getTaskState`：获取市场下载/安装任务状态与进度。
 - `market:cancelTask`：取消指定市场下载/安装任务。
@@ -671,7 +680,9 @@ interface AppSettings {
     - 支持 **长按** 游戏封面进入编辑模式，此时可拖动调整游戏排序。
     - 支持将任意游戏文件夹直接拖拽到游戏库窗口导入；缺少 `game.json` 时弹出补录表单。
     - 排序结果需持久化存储。
-    - 聊天消息：当前用户发送的消息，名字显示为绿色（#18a058）。
+    - 聊天消息：当前用户发送的消息，名字显示为绿色，使用 `--bz-green` CSS 变量。
+    - 语音消息：录制采用 Opus 编码（`audio/webm;codecs=opus`），采样率 24kHz、码率 32kbps，通过 `MediaRecorder` API 实现。语音消息最长 10 秒，过短（<0.5s）不予发送。
+    - 语音播放：点击语音消息气泡触发播放，文字切换为"播放中..."带三个依次闪烁的圆点动画（`dot-blink` @keyframes，`animation-delay` 错位 0s/0.2s/0.4s）。再次点击停止播放（`audio.pause()` + 状态清除）。`audio.onended` 自动恢复文字。`currentAudio` 引用确保停止行为确实终止音频播放。
     - 收藏游戏：特别喜欢的游戏在封面右上角展示爱心图标。
 - **游戏详情页**：
     - 删除游戏功能升级为模态框，支持多选版本进行删除，默认选中当前版本。
@@ -684,6 +695,8 @@ interface AppSettings {
 - **统计界面**：卡片右上角需展示该游戏的所有版本号，使用自动换行布局。
 - **设置页更新入口**：设置页需提供「检查更新」按钮，点击后弹出更新状态弹层，显示下载进度与安装按钮。
 - **设置页卸载入口**：设置页底部（与保存按钮同行，`justify-content: space-between`）提供"卸载客户端"按钮（`type="error" secondary`）。点击后弹出 NaiveUI 自定义确认弹窗，包含不可撤销的警告文案、是否同时删除所有游戏库目录的勾选项、以及删除路径列表预览。确认后调用 `system:uninstall` IPC 执行卸载。若处于开发模式或卸载程序不可用，弹出友好提示。
+- **设置页头像预览**：点击设置页头像缩略图（`n-avatar` 添加 `class="avatar-clickable"` hover 缩放+阴影），弹出 `n-modal preset="card"` 模态框，280×280 圆形大图预览；无头像时显示玩家名首字母大字（使用 `--bz-bg-card-placeholder` 和 `--bz-text-on-placeholder` CSS 变量适配暗/亮主题）。
+- **设置页主题跟随系统**：主题选择器新增"跟随系统"选项（`themeAuto`）。当选择 `auto` 时，平台自动跟随操作系统亮/暗模式切换，无需用户手动调整。
 - **设置页官网链接**：设置页需展示官方网址 `http://www.bzgames.top/`，使用 NaiveUI `n-a` 组件渲染为可点击链接，`@click.prevent` 拦截默认跳转后通过 `system:openUrl` IPC 调用 `shell.openExternal` 打开系统默认浏览器。
 - **设置页数据自检**：设置页需提供"数据自检"按钮，展示 `config.json`、游戏目录、版本路径、Manifest 完整性等检查结果。
 - **更新错误诊断**：更新失败时前端必须展示归类后的错误码文案与技术摘要，避免仅显示底层原始错误。

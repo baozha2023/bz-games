@@ -3,12 +3,16 @@ import { IPC } from "../../shared/ipc-channels";
 import { marketService } from "../services/MarketService";
 
 export function registerMarketIpc() {
-  ipcMain.handle(IPC.MARKET_GET_SOURCES, async () => {
-    return await marketService.getSources();
+  ipcMain.handle(IPC.MARKET_GET_SOURCES, async (_, forceRefresh?: boolean) => {
+    return await marketService.getSources(!!forceRefresh);
   });
 
   ipcMain.handle(IPC.MARKET_GET_INDEX, async (_, sourceIdx: number, forceRefresh?: boolean) => {
     return await marketService.getIndex(sourceIdx, !!forceRefresh);
+  });
+
+  ipcMain.handle(IPC.MARKET_GET_CACHED_IMAGE, async (_, url: string) => {
+    return await marketService.getCachedImageDataUrl(url);
   });
 
   ipcMain.handle(

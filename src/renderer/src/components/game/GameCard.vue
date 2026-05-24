@@ -1,7 +1,7 @@
 <template>
   <n-card hoverable style="cursor: pointer" @click="handleClick" content-style="padding: 0;">
     <template #cover>
-      <div style="aspect-ratio: 16/9; width: 100%; background: #333; display:flex; align-items:center; justify-content:center; overflow: hidden; position: relative;">
+      <div style="aspect-ratio: 16/9; width: 100%; background: var(--bz-bg-card-placeholder); display:flex; align-items:center; justify-content:center; overflow: hidden; position: relative;">
         <GameCover :game-id="game.id" />
         <n-icon v-if="isFavorite" :size="24" color="#d03050" style="position: absolute; top: 8px; right: 8px; filter: drop-shadow(0 0 2px rgba(0,0,0,0.5));">
             <Heart />

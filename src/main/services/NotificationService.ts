@@ -1,4 +1,4 @@
-import { BrowserWindow, screen } from "electron";
+import { BrowserWindow, nativeTheme, screen } from "electron";
 import path from "path";
 import { is } from "@electron-toolkit/utils";
 import { logger } from "../utils/logger";
@@ -68,7 +68,8 @@ class NotificationService {
     this.window.setIgnoreMouseEvents(false);
 
     const settings = storeService.getSettings();
-    const theme = settings.theme || "dark";
+    const rawTheme = settings.theme || "dark";
+    const theme = rawTheme === "auto" ? (nativeTheme.shouldUseDarkColors ? "dark" : "light") : rawTheme;
 
     const params = new URLSearchParams({
       title,

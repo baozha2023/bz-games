@@ -167,7 +167,9 @@ export class MarketService {
   private cachedIndexes = new Map<number, { index: MarketIndex; at: number }>();
   private cachedSources: MarketDirectory | null = null;
   private cachedSourcesAt = 0;
+  private cachedImages = new Map<string, { dataUrl: string; at: number }>();
   private static readonly CACHE_TTL_MS = 60 * 60 * 1000;
+  private static readonly IMAGE_FETCH_TIMEOUT_MS = 15_000;
 
   private async fetchJson(url: string): Promise<unknown> {
     const response = await fetch(url, {
@@ -302,6 +304,9 @@ export class MarketService {
   }
 
   async getSources(forceRefresh = false): Promise<MarketDirectory> {
+    if (forceRefresh) {
+      this.cachedImages.clear();
+    }
     const now = Date.now();
     if (
       !forceRefresh &&
@@ -317,6 +322,9 @@ export class MarketService {
   }
 
   async getIndex(sourceIdx: number, forceRefresh = false): Promise<MarketIndex> {
+    if (forceRefresh) {
+      this.cachedImages.clear();
+    }
     const now = Date.now();
     const cached = this.cachedIndexes.get(sourceIdx);
     if (
@@ -345,6 +353,36 @@ export class MarketService {
 
     this.cachedIndexes.set(sourceIdx, { index, at: now });
     return index;
+  }
+
+  async getCachedImageDataUrl(url: string): Promise<string> {
+    const now = Date.now();
+    const cached = this.cachedImages.get(url);
+    if (cached && now - cached.at < MarketService.CACHE_TTL_MS) {
+      return cached.dataUrl;
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), MarketService.IMAGE_FETCH_TIMEOUT_MS);
+
+    try {
+      const response = await fetch(url, {
+        headers: { Referer: REFERER },
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        throw new Error(`market_image_fetch_failed:${response.status}`);
+      }
+      const arrayBuffer = await response.arrayBuffer();
+      const contentType = response.headers.get("content-type") || "image/png";
+      const base64 = Buffer.from(arrayBuffer).toString("base64");
+      const dataUrl = `data:${contentType};base64,${base64}`;
+
+      this.cachedImages.set(url, { dataUrl, at: now });
+      return dataUrl;
+    } finally {
+      clearTimeout(timeoutId);
+    }
   }
 
   getTaskState(taskId: string): MarketTaskState | null {

@@ -521,9 +521,9 @@ const handleConfirmDraftImport = async () => {
 .drop-overlay {
   position: absolute;
   inset: 0;
-  border: 2px dashed #18a058;
+  border: 2px dashed var(--bz-green);
   border-radius: 8px;
-  background: rgba(24, 160, 88, 0.08);
+  background: var(--bz-green-soft);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -531,7 +531,7 @@ const handleConfirmDraftImport = async () => {
   z-index: 100;
 }
 .drop-panel {
-  background: rgba(24, 160, 88, 0.95);
+  background: var(--bz-green);
   color: #fff;
   padding: 10px 18px;
   border-radius: 999px;
@@ -544,11 +544,11 @@ const handleConfirmDraftImport = async () => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0,0,0,0.1);
+  background: var(--bz-bg-overlay);
   z-index: 10;
   cursor: move;
   border-radius: 4px;
-  border: 2px dashed #2080f0;
+  border: 2px dashed var(--bz-info-blue);
 }
 
 @keyframes shake {

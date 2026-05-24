@@ -1,0 +1,47 @@
+:root {
+  --bz-gold: #FFD700;
+  --bz-green: #18a058;
+  --bz-red: #d03050;
+  --bz-amber: #f0a020;
+  --bz-checkin-green: #4CAF50;
+  --bz-info-blue: #2080f0;
+  --bz-gold-soft: rgba(255, 215, 0, 0.1);
+  --bz-green-soft: rgba(24, 160, 88, 0.06);
+  --bz-border-subtle: rgba(128, 128, 128, 0.18);
+}
+
+.theme-dark {
+  --bz-bg-card-placeholder: #333;
+  --bz-bg-placeholder: #555;
+  --bz-text-secondary: #666;
+  --bz-text-tertiary: #888;
+  --bz-text-muted: #999;
+  --bz-text-on-placeholder: #fff;
+  --bz-text-title: #fff;
+  --bz-bg-panel: rgba(255, 255, 255, 0.1);
+  --bz-bg-overlay: rgba(0, 0, 0, 0.1);
+  --bz-bg-subtle: rgba(255, 255, 255, 0.05);
+  --bz-bg-chat-bubble: #e0e0e0;
+  --bz-bg-chat-bubble-hover: #d0d0d0;
+  --bz-icon-locked: #ccc;
+  --bz-chat-text-system: #999;
+  --bz-delete-warning: #888;
+}
+
+.theme-light {
+  --bz-bg-card-placeholder: #f0f0f0;
+  --bz-bg-placeholder: #ddd;
+  --bz-text-secondary: #666;
+  --bz-text-tertiary: #777;
+  --bz-text-muted: #888;
+  --bz-text-on-placeholder: #333;
+  --bz-text-title: #1f2937;
+  --bz-bg-panel: rgba(0, 0, 0, 0.06);
+  --bz-bg-overlay: rgba(0, 0, 0, 0.05);
+  --bz-bg-subtle: rgba(0, 0, 0, 0.02);
+  --bz-bg-chat-bubble: #e8e8e8;
+  --bz-bg-chat-bubble-hover: #ddd;
+  --bz-icon-locked: #bbb;
+  --bz-chat-text-system: #888;
+  --bz-delete-warning: #777;
+}

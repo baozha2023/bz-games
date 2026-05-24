@@ -117,8 +117,9 @@ declare global {
         onEvent: (callback: (event: RoomEvent) => void) => () => void;
       };
       market: {
-        getSources: () => Promise<MarketDirectory>;
+        getSources: (forceRefresh?: boolean) => Promise<MarketDirectory>;
         getIndex: (sourceIdx: number, forceRefresh?: boolean) => Promise<MarketIndex>;
+        getCachedImage: (url: string) => Promise<string>;
         downloadAndInstall: (
           gameId: string,
           version: string,

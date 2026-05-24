@@ -1,6 +1,6 @@
 <template>
   <transition name="notification" appear>
-    <div v-if="visible" class="notification-container" :class="theme" @click="close">
+    <div v-if="visible" :class="`theme-${theme} notification-container`" @click="close">
       <div class="icon-area">
         <img v-if="iconUrl" :src="iconUrl" class="game-icon" />
         <div v-else class="game-icon-placeholder">{{ gameName?.charAt(0) || '?' }}</div>
@@ -13,6 +13,7 @@
 </template>
 
 <script setup lang="ts">
+import '../assets/theme.css'
 import { ref, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 
@@ -61,6 +62,20 @@ const close = () => {
   transform-origin: bottom;
 }
 
+.notification-container.theme-dark {
+  background: rgba(28, 28, 30, 0.95);
+  color: white;
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+.notification-container.theme-light {
+  background: rgba(255, 255, 255, 0.95);
+  color: var(--bz-text-title);
+  border-color: rgba(0, 0, 0, 0.05);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
 .notification-enter-active {
   animation: grow-in 0.3s ease-in-out;
 }
@@ -77,20 +92,6 @@ const close = () => {
 @keyframes shrink-out {
   0% { transform: translateY(0); opacity: 1; }
   100% { transform: translateY(100%); opacity: 0; }
-}
-
-.notification-container.dark {
-  background: rgba(28, 28, 30, 0.95);
-  color: white;
-  border-color: rgba(255, 255, 255, 0.1);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-}
-
-.notification-container.light {
-  background: rgba(255, 255, 255, 0.95);
-  color: #333;
-  border-color: rgba(0, 0, 0, 0.05);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .icon-area {
@@ -110,18 +111,14 @@ const close = () => {
 .game-icon-placeholder {
   width: 100%;
   height: 100%;
-  background: #444;
+  background: var(--bz-bg-placeholder);
   border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: bold;
   font-size: 18px;
-  color: #fff;
-}
-.light .game-icon-placeholder {
-  background: #eee;
-  color: #666;
+  color: var(--bz-text-on-placeholder);
 }
 
 .content-area {
@@ -139,11 +136,12 @@ const close = () => {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.dark .title {
-  color: #fbbf24; 
-}
-.light .title {
-  color: #d97706; 
+
+.theme-dark .title {
+  color: var(--bz-gold);
 }
 
+.theme-light .title {
+  color: #d97706;
+}
 </style>
