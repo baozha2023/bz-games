@@ -89,13 +89,13 @@ my-game/
 | :--- | :--- | :--- | :--- |
 | `id` | string | 是 | 全局唯一标识，建议使用反向域名格式 (如 `com.studio.game`) |
 | `name` | string | 是 | 游戏显示名称 |
-| `version` | string | 是 | 游戏版本号 (SemVer 格式，如 `1.0.0`) |
+| `version` | string | 是 | 游戏版本号 (SemVer 格式，如 `1.0.0`)。`networkgame` 类型游戏版本号不参与校验与去重，仅以 `id` 判断唯一性。 |
 | `description` | string | 否 | 游戏描述 |
 | `author` | string | 否 | 作者名称 |
 | `platformVersion`| string/array | 是 | 兼容的平台版本范围 (如 `">=1.0.0"` 或 `["1.0.0", "2.0.0"]`) |
 | `entry` | string | 是 | 启动入口。支持本地入口文件（如 `index.html`、`game.exe`）、`serve` 或 `url` |
 | `web_url` | string | `entry=url` 时必填 | 远程网页地址（必须为合法 `https?://` URL） |
-| `type` | string | 是 | `"singleplayer"` (单机) / `"multiplayer"` (联机) / `"singlemultiple"` (单人+联机) / `"networkgame"` (网页游戏，仅网页直连启动) |
+| `type` | string | 是 | `"singleplayer"` (单机) / `"multiplayer"` (联机) / `"singlemultiple"` (单人+联机) / `"networkgame"` (网页游戏，仅网页直连启动，**忽略版本号，仅以 ID 去重**) |
 | `multiplayer` | object | 联机必填 | 包含 `minPlayers` 和 `maxPlayers` (整数)，`type` 为 `multiplayer` 或 `singlemultiple` 时必填 |
 | `icon` | string | 否 | 图标路径 |
 | `cover` | string | 否 | 封面路径 |
@@ -167,9 +167,9 @@ Web 游戏通常使用 `localStorage` 或 `IndexedDB` 存储本地数据（如�
 
 * **平台接管机制**：平台通过预加载脚本 (`preload/game.js`) 自动接管并覆盖了游戏的 `localStorage` 接口。
 * **统一存储路径**：所有 `localStorage` 数据会被重定向存储到 `games/<id>/<version>/gamedata.json` 文件中。
-* **版本隔离**：不同版本的游戏拥有独立的 `gamedata.json`，确保存档互不干扰。
+* **版本隔离**：非 `networkgame` 类型游戏的不同版本拥有独立的 `gamedata.json`，确保存档互不干扰。`networkgame` 类型游戏版本不参与隔离，同一 `id` 始终共享同一份数据。
 * **可选加密**：当 Manifest 配置 `"encryptLocalStorage": true` 时，平台会对 `gamedata.json` 进行加密存储；不配置时默认明文。
-* **启动模式互通**：无论使用 `index.html` 还是 `serve` 模式启动，只要是同一游戏同一版本，都将读取同一个 `gamedata.json`
+* **启动模式互通**：无论使用 `index.html` 还是 `serve` 模式启动，只要是同一游戏同一版本（`networkgame` 类型为同一 `id`），都将读取同一个 `gamedata.json`
   ，彻底解决了浏览器同源策略导致的存档隔离问题。
     * **开发者提示**：你无需修改游戏代码，只需像往常一样使用 `localStorage.getItem()` 和 `setItem()` 即可。
 

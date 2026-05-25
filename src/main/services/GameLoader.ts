@@ -89,10 +89,14 @@ export class GameLoader {
 
     try {
       const manifest = await this.validateManifestFile(resolvedSourcePath);
-      this.verifyManifestVersion(manifest.version);
+      this.verifyManifestVersion(manifest);
       this.checkPlatformVersion(manifest);
       this.checkEntryFile(resolvedSourcePath, manifest);
-      await this.ensureVersionNotExists(manifest.id, manifest.version);
+      if (manifest.type === "networkgame") {
+        await this.ensureGameIdNotExists(manifest.id);
+      } else {
+        await this.ensureVersionNotExists(manifest.id, manifest.version);
+      }
       const targetPath = this.installGameFiles(resolvedSourcePath, manifest);
       await this.updateGameRecord(manifest, targetPath);
 
@@ -154,13 +158,15 @@ export class GameLoader {
 
     try {
       const manifest = this.buildManualManifestDraft(draft);
-      this.verifyManifestVersion(manifest.version);
+      this.verifyManifestVersion(manifest);
       this.checkPlatformVersion(manifest);
       this.checkEntryFile(resolvedSourcePath, manifest);
       this.checkOptionalFile(resolvedSourcePath, manifest.icon, "iconNotFound");
       this.checkOptionalFile(resolvedSourcePath, manifest.cover, "coverNotFound");
       await this.ensureGameIdNotExists(manifest.id);
-      await this.ensureVersionNotExists(manifest.id, manifest.version);
+      if (manifest.type !== "networkgame") {
+        await this.ensureVersionNotExists(manifest.id, manifest.version);
+      }
 
       const targetPath = this.installGameFiles(resolvedSourcePath, manifest);
       fs.writeFileSync(
@@ -306,8 +312,9 @@ export class GameLoader {
     return parsed;
   }
 
-  private static verifyManifestVersion(version: string): void {
-    if (!semver.valid(version)) {
+  private static verifyManifestVersion(manifest: GameManifest): void {
+    if (manifest.type === "networkgame") return;
+    if (!semver.valid(manifest.version)) {
       throw { code: "versionInvalid" };
     }
   }
@@ -419,7 +426,28 @@ export class GameLoader {
     const games = await storeService.getGames();
     let record = games.find((g) => g.id === manifest.id);
 
-    if (record) {
+    if (manifest.type === "networkgame") {
+      const versionRecord = {
+        version: manifest.version,
+        path: targetPath,
+        addedAt: Date.now(),
+        stats: {},
+        unlockedAchievements: [],
+        playtime: 0,
+      };
+      if (record) {
+        record.versions = [versionRecord];
+        record.latestVersion = manifest.version;
+        record.addedAt = Date.now();
+      } else {
+        record = {
+          id: manifest.id,
+          versions: [versionRecord],
+          latestVersion: manifest.version,
+          addedAt: Date.now(),
+        };
+      }
+    } else if (record) {
       // Update existing record
       const versionExists = record.versions.some(
         (v) => v.version === manifest.version,
