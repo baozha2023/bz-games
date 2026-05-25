@@ -1,6 +1,7 @@
 import type {
   AppSettings,
   DataHealthReport,
+  DownloadTaskSnapshot,
   RoomInfo,
   RoomEvent,
   GameRecord,
@@ -127,6 +128,9 @@ declare global {
         ) => Promise<MarketTaskState>;
         getTaskState: (taskId: string) => Promise<MarketTaskState | null>;
         cancelTask: (taskId: string) => Promise<boolean>;
+        pauseTask: (taskId: string) => Promise<boolean>;
+        resumeTask: (taskId: string) => Promise<MarketTaskState | null>;
+        getPendingTasks: () => Promise<DownloadTaskSnapshot[]>;
         onEvent: (callback: (payload: MarketTaskEvent) => void) => () => void;
       };
       settings: {

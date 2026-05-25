@@ -7,6 +7,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
+import { useImageCache, gameAssetKey } from '../../composables/useImageCache'
 
 const props = defineProps<{ 
   gameId: string
@@ -15,9 +16,14 @@ const props = defineProps<{
 }>()
 const iconUrl = ref<string | null>(null)
 
+const { load: loadCached } = useImageCache()
+
 const loadIcon = async () => {
   if (!props.gameId) return;
-  iconUrl.value = await window.electronAPI.game.getIcon(props.gameId, props.version)
+  iconUrl.value = await loadCached(gameAssetKey(props.gameId, props.version, 'icon'), () =>
+    window.electronAPI.game.getIcon(props.gameId, props.version),
+    0,
+  )
 }
 
 onMounted(loadIcon)

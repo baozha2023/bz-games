@@ -3,6 +3,7 @@ import { createWindow, markAppQuitting } from "./window";
 import { registerAllIpc } from "./ipc";
 import { electronApp, optimizer } from "@electron-toolkit/utils";
 import { storeService } from "./services/StoreService";
+import { marketService } from "./services/MarketService";
 import { setCustomGamesDir } from "./utils/appPath";
 
 app.whenReady().then(async () => {
@@ -29,6 +30,8 @@ app.whenReady().then(async () => {
 
   registerAllIpc();
   createWindow();
+
+  marketService.restorePendingTasks();
 
   app.on("activate", function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

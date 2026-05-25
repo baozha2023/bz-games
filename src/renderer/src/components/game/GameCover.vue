@@ -17,6 +17,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
+import { useImageCache, gameAssetKey } from '../../composables/useImageCache'
 
 const props = defineProps<{ 
   gameId: string
@@ -27,12 +28,20 @@ const coverUrl = ref<string | null>(null)
 const videoUrl = ref<string | null>(null)
 const showCoverAfterVideo = ref(false)
 
+const { load: loadCached } = useImageCache()
+
 const loadCover = async () => {
   showCoverAfterVideo.value = false
   const [cover, video] = await Promise.all([
-    window.electronAPI.game.getCover(props.gameId, props.version),
+    loadCached(gameAssetKey(props.gameId, props.version, 'cover'), () =>
+      window.electronAPI.game.getCover(props.gameId, props.version),
+      0,
+    ),
     props.autoplayVideo
-      ? window.electronAPI.game.getVideo(props.gameId, props.version)
+      ? loadCached(gameAssetKey(props.gameId, props.version, 'video'), () =>
+          window.electronAPI.game.getVideo(props.gameId, props.version),
+          0,
+        )
       : Promise.resolve(null),
   ])
   coverUrl.value = cover

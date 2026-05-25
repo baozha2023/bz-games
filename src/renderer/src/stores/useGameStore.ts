@@ -3,6 +3,7 @@ import { ref } from "vue";
 import type { GameManifest } from "../../../shared/game-manifest";
 import type { GameRecord, UnlockedAchievement } from "../../../shared/types";
 import { useSettingsStore } from "./useSettingsStore";
+import { invalidateGameAssetCache } from "../composables/useImageCache";
 
 export const useGameStore = defineStore("game", () => {
   const settingsStore = useSettingsStore();
@@ -30,6 +31,7 @@ export const useGameStore = defineStore("game", () => {
   async function addGame(sourcePath?: string) {
     const res = await window.electronAPI.game.load(sourcePath);
     if (res.success && res.manifest) {
+      invalidateGameAssetCache(res.manifest.id);
       await loadGames();
     }
     return res;
@@ -59,6 +61,7 @@ export const useGameStore = defineStore("game", () => {
   ) {
     const res = await window.electronAPI.game.loadWithManifest(sourcePath, draft);
     if (res.success && res.manifest) {
+      invalidateGameAssetCache(draft.id);
       await loadGames();
     }
     return res;
@@ -66,6 +69,7 @@ export const useGameStore = defineStore("game", () => {
 
   async function removeGame(id: string, versions?: string[]) {
     await window.electronAPI.game.remove(id, versions);
+    invalidateGameAssetCache(id);
     await loadGames();
   }
 

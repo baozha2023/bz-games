@@ -17,13 +17,21 @@
           {{ t("market.installPath", { path: installPathLabel }) }}
         </n-text>
       </div>
-      <n-space>
+      <n-space align="center" :size="8">
         <n-input
+          v-if="isSearchExpanded"
           v-model:value="keyword"
           clearable
+          autofocus
           :placeholder="t('market.searchPlaceholder')"
           style="width: 260px;"
+          @blur="handleSearchBlur"
         />
+        <n-button quaternary circle @click="toggleSearch">
+          <template #icon>
+            <n-icon><SearchOutline /></n-icon>
+          </template>
+        </n-button>
         <n-button :loading="isLoading" @click="loadIndex(true)">
           {{ t("market.refreshGames") }}
         </n-button>
@@ -174,7 +182,7 @@
                         {{ t("market.versionInvalid") }}
                       </n-tag>
                       <n-tag
-                        v-if="getSelectedVersionInfo(game) && isInstalled(game.id, getSelectedVersionInfo(game)!.version)"
+                        v-if="getSelectedVersionInfo(game) && isInstalled(game.id, getSelectedVersionInfo(game)!.version, game.type)"
                         size="small"
                         type="info"
                         :bordered="false"
@@ -205,11 +213,14 @@
                       <n-button
                         v-if="getSelectedVersionInfo(game)"
                         type="primary"
-                        :disabled="isInstalled(game.id, getSelectedVersionInfo(game)!.version) || isPlatformIncompatible(game) || isSelectedVersionInvalid(game)"
-                        :loading="isTaskBusy(game)"
+                        :disabled="isInstalled(game.id, getSelectedVersionInfo(game)!.version, game.type) || isPlatformIncompatible(game) || isSelectedVersionInvalid(game) || isTaskActive(game)"
+                        :loading="isTaskActive(game) && getCurrentTask(game)?.status !== 'paused' && getCurrentTask(game)?.status !== 'interrupted'"
                         @click="handleDownload(game.id, getSelectedVersionInfo(game)!.version)"
                       >
-                        <template v-if="isInstalled(game.id, getSelectedVersionInfo(game)!.version)">
+                        <template v-if="isTaskActive(game) && (getCurrentTask(game)?.status === 'paused' || getCurrentTask(game)?.status === 'interrupted')">
+                          {{ t("market.taskStatus.paused") }}
+                        </template>
+                        <template v-else-if="isInstalled(game.id, getSelectedVersionInfo(game)!.version, game.type)">
                           {{ t("market.installed") }}
                         </template>
                         <template v-else-if="isPlatformIncompatible(game)">
@@ -220,7 +231,22 @@
                         </template>
                       </n-button>
                       <n-button
-                        v-if="isTaskBusy(game) && getCurrentTask(game)"
+                        v-if="isTaskActive(game) && getCurrentTask(game) && canPause(getCurrentTask(game)!)"
+                        secondary
+                        @click="handlePause(getCurrentTask(game)!.taskId)"
+                      >
+                        {{ t("market.pauseTask") }}
+                      </n-button>
+                      <n-button
+                        v-if="getCurrentTask(game) && (getCurrentTask(game)!.status === 'paused' || getCurrentTask(game)!.status === 'interrupted')"
+                        secondary
+                        type="warning"
+                        @click="handleResume(getCurrentTask(game)!.taskId)"
+                      >
+                        {{ t("market.resumeTask") }}
+                      </n-button>
+                      <n-button
+                        v-if="isTaskCancelable(game) && getCurrentTask(game)"
                         secondary
                         @click="handleCancel(getCurrentTask(game)!.taskId)"
                       >
@@ -262,7 +288,7 @@
                                 {{ t("market.prerelease") }}
                               </n-tag>
                               <n-tag
-                                v-if="isInstalled(game.id, version.version)"
+                                v-if="isInstalled(game.id, version.version, game.type)"
                                 size="small"
                                 type="info"
                                 :bordered="false"
@@ -305,7 +331,7 @@ import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { useDialog, useMessage } from "naive-ui";
-import { ChevronBack, ChevronDown, ChevronUp } from "@vicons/ionicons5";
+import { ChevronBack, ChevronDown, ChevronUp, SearchOutline } from "@vicons/ionicons5";
 import semver from "semver";
 import type {
   MarketGame,
@@ -334,6 +360,7 @@ const sourceIdx = computed(() => {
 const isLoading = ref(false);
 const loadError = ref("");
 const keyword = ref("");
+const isSearchExpanded = ref(false);
 const games = ref<MarketGame[]>([]);
 const taskStates = ref<Record<string, MarketTaskState>>({});
 const expandedGames = ref<Record<string, boolean>>({});
@@ -344,6 +371,8 @@ const generatedAt = ref("");
 const timeoutIds: number[] = [];
 const pendingDownloads = new Set<string>();
 const pendingCancels = new Set<string>();
+const pendingPauses = new Set<string>();
+const pendingResumes = new Set<string>();
 
 const TYPE_LABEL_KEYS: Record<MarketGame["type"], string> = {
   singleplayer: "gameDetail.typeSingleplayer",
@@ -406,6 +435,16 @@ function toggleExpand(gameId: string): void {
   expandedGames.value[gameId] = !expandedGames.value[gameId];
 }
 
+function toggleSearch(): void {
+  isSearchExpanded.value = true;
+}
+
+function handleSearchBlur(): void {
+  if (!keyword.value.trim()) {
+    isSearchExpanded.value = false;
+  }
+}
+
 function getSelectedVersionInfo(game: MarketGame): MarketGameVersion | null {
   return (
     game.versions.find((item) => item.version === selectedVersions.value[game.id]) ||
@@ -421,11 +460,22 @@ function getCurrentTask(game: MarketGame): MarketTaskState | null {
   return taskStates.value[taskKey(game.id, version.version)] || null;
 }
 
-function isTaskBusy(game: MarketGame): boolean {
+function isTaskActive(game: MarketGame): boolean {
   const task = getCurrentTask(game);
   return task
-    ? ["downloading", "verifying", "extracting", "installing"].includes(task.status)
+    ? ["downloading", "verifying", "extracting", "installing", "paused", "interrupted"].includes(task.status)
     : false;
+}
+
+function isTaskCancelable(game: MarketGame): boolean {
+  const task = getCurrentTask(game);
+  return task
+    ? !["completed", "error", "canceled"].includes(task.status)
+    : false;
+}
+
+function canPause(task: MarketTaskState): boolean {
+  return ["downloading", "verifying", "extracting", "installing"].includes(task.status)
 }
 
 function typeLabel(type: MarketGame["type"]): string {
@@ -452,6 +502,7 @@ function taskTagType(status: MarketTaskStatus): "default" | "success" | "warning
   if (status === "completed") return "success";
   if (status === "error") return "error";
   if (status === "canceled") return "warning";
+  if (status === "paused" || status === "interrupted") return "warning";
   if (status === "downloading") return "info";
   return "default";
 }
@@ -473,7 +524,10 @@ function isPlatformIncompatible(game: MarketGame): boolean {
   }
 }
 
-function isInstalled(gameId: string, version: string): boolean {
+function isInstalled(gameId: string, version: string, gameType?: string): boolean {
+  if (gameType === "networkgame") {
+    return Boolean(gameStore.getGameRecord(gameId));
+  }
   return Boolean(
     gameStore.getGameRecord(gameId)?.versions.some((item) => item.version === version),
   );
@@ -511,7 +565,7 @@ async function syncExistingTasks(): Promise<void> {
   let needsGameRefresh = false;
   for (const state of states) {
     if (!state) continue;
-    if (["downloading", "verifying", "extracting", "installing"].includes(state.status)) {
+    if (["downloading", "verifying", "extracting", "installing", "paused", "interrupted"].includes(state.status)) {
       next[state.taskId] = state;
     } else if (state.status === "completed") {
       needsGameRefresh = true;
@@ -564,9 +618,9 @@ async function loadIndex(forceRefresh = false): Promise<void> {
 async function handleDownload(gameId: string, version: string): Promise<void> {
   const taskId = taskKey(gameId, version);
   if (pendingDownloads.has(taskId)) return;
-  const busyStatuses: MarketTaskStatus[] = ["downloading", "verifying", "extracting", "installing"];
+  const activeStatuses: MarketTaskStatus[] = ["downloading", "verifying", "extracting", "installing", "paused", "interrupted"];
   const current = taskStates.value[taskId];
-  if (current && busyStatuses.includes(current.status)) return;
+  if (current && activeStatuses.includes(current.status)) return;
   pendingDownloads.add(taskId);
   try {
     const task = await window.electronAPI.market.downloadAndInstall(gameId, version, sourceIdx.value);
@@ -591,17 +645,56 @@ async function handleDownload(gameId: string, version: string): Promise<void> {
 async function handleCancel(taskId: string): Promise<void> {
   if (pendingCancels.has(taskId)) return;
   const current = taskStates.value[taskId];
-  if (!current || !["downloading", "verifying", "extracting", "installing"].includes(current.status)) return;
+  if (!current || !["downloading", "verifying", "extracting", "installing", "paused", "interrupted"].includes(current.status)) return;
   pendingCancels.add(taskId);
   try {
-    const ok = await window.electronAPI.market.cancelTask(taskId);
-    if (ok) {
-      message.info(t("market.canceled"));
-    } else {
-      message.info(t("market.taskAlreadyDone"));
-    }
+    await window.electronAPI.market.cancelTask(taskId);
   } finally {
     pendingCancels.delete(taskId);
+  }
+}
+
+async function handlePause(taskId: string): Promise<void> {
+  if (pendingPauses.has(taskId)) return;
+  const current = taskStates.value[taskId];
+  if (!current || !canPause(current)) return;
+  pendingPauses.add(taskId);
+  try {
+    await window.electronAPI.market.pauseTask(taskId);
+    message.info(t("market.taskPaused"));
+  } catch {
+    message.error(t("common.error"));
+  } finally {
+    pendingPauses.delete(taskId);
+  }
+}
+
+async function handleResume(taskId: string): Promise<void> {
+  if (pendingResumes.has(taskId)) return;
+  pendingResumes.add(taskId);
+  try {
+    const task = await window.electronAPI.market.resumeTask(taskId);
+    if (task) {
+      taskStates.value = {
+        ...taskStates.value,
+        [task.taskId]: task,
+      };
+    }
+  } catch (error) {
+    const text = error instanceof Error ? error.message : String(error);
+    if (text.includes("platform_version_mismatch")) {
+      message.error(t("market.platformIncompatible"));
+    } else if (text.includes("already_installed")) {
+      message.info(t("market.installed"));
+    } else if (text.includes("version_not_found")) {
+      message.error(t("market.versionNotFound"));
+      const { [taskId]: _, ...rest } = taskStates.value;
+      taskStates.value = rest;
+    } else {
+      message.error(t("market.downloadFailed"));
+    }
+  } finally {
+    pendingResumes.delete(taskId);
   }
 }
 
@@ -612,6 +705,28 @@ onMounted(async () => {
   } catch {
     appVersion.value = "";
   }
+
+  const pendingSnapshots = await window.electronAPI.market.getPendingTasks();
+  for (const snap of pendingSnapshots) {
+    const existing = taskStates.value[snap.taskId];
+    if (!existing) {
+      taskStates.value = {
+        ...taskStates.value,
+        [snap.taskId]: {
+          taskId: snap.taskId,
+          gameId: snap.gameId,
+          version: snap.version,
+          status: snap.status,
+          progress: snap.size > 0 ? Math.min(60, Math.round((snap.bytesReceived / snap.size) * 60)) : 0,
+          bytesReceived: snap.bytesReceived,
+          totalBytes: snap.size,
+          createdAt: snap.updatedAt,
+          updatedAt: snap.updatedAt,
+        },
+      };
+    }
+  }
+
   cleanupMarketEvent = window.electronAPI.market.onEvent(async ({ task }) => {
     taskStates.value = {
       ...taskStates.value,
@@ -620,7 +735,15 @@ onMounted(async () => {
     if (task.status === "completed") {
       await gameStore.loadGames();
     }
-    if (task.status !== "downloading" && task.status !== "verifying" && task.status !== "extracting" && task.status !== "installing") {
+    if (
+      task.status !== "idle" &&
+      task.status !== "downloading" &&
+      task.status !== "verifying" &&
+      task.status !== "extracting" &&
+      task.status !== "installing" &&
+      task.status !== "paused" &&
+      task.status !== "interrupted"
+    ) {
       const id = window.setTimeout(() => {
         const { [task.taskId]: _, ...rest } = taskStates.value;
         taskStates.value = rest;

@@ -78,7 +78,9 @@ export type MarketTaskStatus =
   | "installing"
   | "completed"
   | "error"
-  | "canceled";
+  | "canceled"
+  | "paused"
+  | "interrupted";
 
 export type MarketErrorCode =
   | "download"
@@ -103,4 +105,19 @@ export interface MarketTaskState {
 
 export interface MarketTaskEvent {
   task: MarketTaskState;
+}
+
+export interface DownloadTaskSnapshot {
+  taskId: string;
+  gameId: string;
+  version: string;
+  sourceIdx: number;
+  downloadUrl: string;
+  sha256: string;
+  size: number;
+  downloadPath: string;
+  archiveType: "zip" | "7z";
+  bytesReceived: number;
+  status: "paused" | "interrupted";
+  updatedAt: number;
 }

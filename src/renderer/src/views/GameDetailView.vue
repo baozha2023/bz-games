@@ -27,7 +27,7 @@
       
       <n-grid-item>
         <n-descriptions bordered column="1">
-          <n-descriptions-item :label="t('gameDetail.version')">
+          <n-descriptions-item v-if="!isNetworkGame" :label="t('gameDetail.version')">
              <n-select v-if="versions.length > 0" v-model:value="selectedVersion" :options="versionOptions" size="small" style="width: 120px; display: inline-block; vertical-align: middle;" @update:value="handleVersionChange" />
              <span v-else>{{ game.version }}</span>
           </n-descriptions-item>
@@ -116,6 +116,7 @@ const selectedVersion = ref('')
 const currentManifest = ref<GameManifest | null>(null)
 const versionOptions = computed(() => versions.value.map(v => ({ label: v, value: v })))
 const isLatestVersion = computed(() => !game.value || selectedVersion.value === game.value.version)
+const isNetworkGame = computed(() => resolvedType.value === 'networkgame')
 const resolvedType = computed(() => (currentManifest.value?.type) || (isLatestVersion.value ? game.value?.type : '') || 'singleplayer')
 const typeLabel = computed(() => {
     if (resolvedType.value === 'networkgame') return t('gameDetail.typeNetworkGame')
@@ -225,24 +226,30 @@ const confirmDelete = async (versionsToDelete: string[]) => {
   if (isDeleting.value) return;
   isDeleting.value = true;
   try {
-    await gameStore.removeGame(gameId, [...versionsToDelete])
-    message.success(t('gameDetail.deleteSuccess'))
-    
-    if (!game.value) {
-      router.push({ name: 'Library' })
+    const isFullDelete = !game.value || versionsToDelete.length === 0 ||
+      versionsToDelete.length >= versions.value.length
+
+    showDeleteModal.value = false
+
+    if (isFullDelete) {
+      await router.push({
+        name: 'Library',
+        query: {
+          deletedGameId: gameId,
+          deletedVersions: versionsToDelete.join(','),
+        },
+      })
     } else {
+      await gameStore.removeGame(gameId, [...versionsToDelete])
+      message.success(t('gameDetail.deleteSuccess'))
       const v = await window.electronAPI.game.getVersions(gameId)
       if (v) {
         versions.value = v
         versions.value.sort((a, b) => b.localeCompare(a, undefined, { numeric: true, sensitivity: 'base' }))
-
         if (!versions.value.includes(selectedVersion.value)) {
           if (versions.value.length > 0) {
             selectedVersion.value = versions.value[0]
             await handleVersionChange(selectedVersion.value)
-          } else {
-            // Should not happen if game.value exists, but safety check
-            router.push({ name: 'Library' })
           }
         }
       }
@@ -251,7 +258,6 @@ const confirmDelete = async (versionsToDelete: string[]) => {
     message.error(t('common.error'))
   } finally {
     isDeleting.value = false;
-    showDeleteModal.value = false;
   }
 }
 

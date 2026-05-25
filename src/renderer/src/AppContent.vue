@@ -93,6 +93,7 @@ import { ref } from 'vue'
 import { AchievementNotifier } from './utils/achievementNotifier'
 import bzCoinIcon from './assets/images/bz-coin.png'
 import semver from 'semver'
+import { invalidateGameAssetCache } from './composables/useImageCache'
 import type { MarketTaskState } from '../../shared/types'
 
 const marketNotifiedTaskIds = new Set<string>()
@@ -245,9 +246,15 @@ onMounted(() => {
 
   if (window.electronAPI?.market?.onEvent) {
     cleanupMarketEvent = window.electronAPI.market.onEvent(async ({ task }) => {
+      if (task.status === "idle") {
+        marketNotifiedTaskIds.delete(task.taskId)
+        return
+      }
+
       if (!marketNotifiedTaskIds.has(task.taskId)) {
         if (task.status === "completed") {
           marketNotifiedTaskIds.add(task.taskId)
+          invalidateGameAssetCache(task.gameId)
           await gameStore.loadGames()
           const game = gameStore.games.find((g) => g.id === task.gameId)
           const gameName = game?.name || task.gameId

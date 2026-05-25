@@ -11,6 +11,22 @@
     <n-space justify="space-between" align="center" style="margin-bottom: 24px;">
       <h1 style="margin: 0;">{{ t('library.title') }}</h1>
       <n-space>
+        <n-tooltip trigger="hover">
+          <template #trigger>
+            <n-button
+              quaternary
+              @click="layoutMode = layoutMode === 'card' ? 'icon' : 'card'"
+            >
+              <template #icon>
+                <n-icon :size="20">
+                  <GridOutline v-if="layoutMode === 'card'" />
+                  <AppsOutline v-else />
+                </n-icon>
+              </template>
+            </n-button>
+          </template>
+          {{ layoutMode === 'card' ? t('library.iconLayout') : t('library.cardLayout') }}
+        </n-tooltip>
         <n-button v-if="isReorderMode" type="success" @click.stop="isReorderMode = false">
           {{ t('common.save') }}
         </n-button>
@@ -18,7 +34,12 @@
       </n-space>
     </n-space>
 
-    <n-grid x-gap="24" y-gap="24" cols="2 s:3 m:4 l:5 xl:6" responsive="screen">
+    <n-grid
+      :x-gap="layoutMode === 'icon' ? 12 : 24"
+      :y-gap="layoutMode === 'icon' ? 12 : 24"
+      :cols="layoutMode === 'icon' ? '4 s:6 m:8 l:10 xl:12' : '2 s:3 m:4 l:5 xl:6'"
+      responsive="screen"
+    >
       <n-grid-item 
         v-for="(game, index) in gameStore.games" 
         :key="game.id"
@@ -29,10 +50,10 @@
         @mousedown="handleMouseDown"
         @mouseup="clearLongPress"
         @mouseleave="clearLongPress"
-        @contextmenu.prevent
+        @contextmenu.prevent="handleContextMenu($event, game.id)"
       >
-        <div class="game-card-wrapper" :class="{ 'shake': isReorderMode }">
-          <GameCard :game="game" @click="goToDetail" />
+        <div class="game-card-wrapper" :class="{ 'shake': isReorderMode, 'icon-mode': layoutMode === 'icon' }" :data-game-id="game.id">
+          <GameCard :game="game" :compact="layoutMode === 'icon'" @click="goToDetail" />
           <div v-if="isReorderMode" class="reorder-overlay"></div>
         </div>
       </n-grid-item>
@@ -52,6 +73,16 @@
     >
       <div class="drop-panel">{{ t('library.dropHint') }}</div>
     </div>
+
+    <n-dropdown
+      trigger="manual"
+      :show="contextMenuVisible"
+      :x="contextMenuX"
+      :y="contextMenuY"
+      :options="contextMenuOptions"
+      @select="handleContextMenuSelect"
+      @clickoutside="contextMenuVisible = false"
+    />
 
     <n-modal
       v-model:show="showImportDraftModal"
@@ -186,22 +217,35 @@
         </n-space>
       </template>
     </n-modal>
+
+    <GameDeleteModal
+      v-model:show="showDeleteModal"
+      :versions="deleteVersions"
+      :initial-selected="deleteVersions"
+      :loading="isDeleting"
+      @confirm="confirmDelete"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, computed, watch } from 'vue'
-import { useRouter } from 'vue-router'
-import { useMessage } from 'naive-ui'
+import { onMounted, ref, computed, watch, h, nextTick } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { useMessage, NIcon, NTooltip, NDropdown } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
+import { GridOutline, AppsOutline, Heart, HeartOutline, ArrowUpOutline, TrashOutline } from '@vicons/ionicons5'
 import { useGameStore } from '../stores/useGameStore'
 import GameCard from '../components/game/GameCard.vue'
+import GameDeleteModal from '../components/game/GameDeleteModal.vue'
+import { playShatterEffect } from '../utils/deleteEffect'
 
 const { t } = useI18n()
 const gameStore = useGameStore()
 const router = useRouter()
+const route = useRoute()
 const message = useMessage()
 
+const layoutMode = ref<'card' | 'icon'>('card')
 const isReorderMode = ref(false)
 const draggedIndex = ref<number | null>(null)
 const isDragActive = ref(false)
@@ -212,6 +256,17 @@ const showImportDraftModal = ref(false)
 const isDraftSubmitting = ref(false)
 const pendingImportSourcePath = ref('')
 const idCheckState = ref<'idle' | 'checking' | 'exists' | 'available'>('idle')
+
+const contextMenuX = ref(0)
+const contextMenuY = ref(0)
+const contextMenuVisible = ref(false)
+const rightClickedGameId = ref<string | null>(null)
+
+const showDeleteModal = ref(false)
+const deleteVersions = ref<string[]>([])
+const isDeleting = ref(false)
+const deleteGameId = ref<string | null>(null)
+
 const draftForm = ref({
   id: '',
   name: '',
@@ -240,7 +295,113 @@ const needsMultiplayerConfig = computed(
   () => draftForm.value.type === 'multiplayer' || draftForm.value.type === 'singlemultiple'
 )
 
-onMounted(() => {
+const isRightClickedFavorite = computed(() => {
+  if (!rightClickedGameId.value) return false
+  const record = gameStore.getGameRecord(rightClickedGameId.value)
+  return record?.isFavorite || false
+})
+
+const contextMenuOptions = computed(() => {
+  const favLabel = isRightClickedFavorite.value ? 'library.unfavorite' : 'library.favorite'
+  const favIcon = isRightClickedFavorite.value ? HeartOutline : Heart
+  return [
+    {
+      label: t(favLabel),
+      key: 'favorite',
+      icon: () => h(NIcon, null, { default: () => h(favIcon) }),
+    },
+    {
+      label: t('library.moveToFront'),
+      key: 'moveToFront',
+      icon: () => h(NIcon, null, { default: () => h(ArrowUpOutline) }),
+    },
+    {
+      label: t('library.deleteGameTitle'),
+      key: 'delete',
+      icon: () => h(NIcon, null, { default: () => h(TrashOutline) }),
+    },
+  ]
+})
+
+const handleContextMenu = (e: MouseEvent, gameId: string) => {
+  if (isReorderMode.value) return
+  contextMenuX.value = e.clientX + 60
+  contextMenuY.value = e.clientY + 4
+  rightClickedGameId.value = gameId
+  contextMenuVisible.value = true
+}
+
+const handleContextMenuSelect = (key: string) => {
+  contextMenuVisible.value = false
+  const gameId = rightClickedGameId.value
+  if (!gameId) return
+  if (key === 'favorite') {
+    handleToggleFavorite(gameId)
+  } else if (key === 'moveToFront') {
+    handleMoveToFront(gameId)
+  } else if (key === 'delete') {
+    handleDelete(gameId)
+  }
+}
+
+const handleToggleFavorite = async (gameId: string) => {
+  try {
+    await gameStore.toggleFavorite(gameId)
+  } catch {
+    message.error(t('common.error'))
+  }
+}
+
+const handleMoveToFront = async (gameId: string) => {
+  const newOrder = [gameId, ...gameStore.games.filter(g => g.id !== gameId).map(g => g.id)]
+  await gameStore.reorderGames(newOrder)
+}
+
+const handleDelete = async (gameId: string) => {
+  try {
+    const v = await window.electronAPI.game.getVersions(gameId)
+    deleteGameId.value = gameId
+    deleteVersions.value = v || []
+    showDeleteModal.value = true
+  } catch {
+    message.error(t('common.error'))
+  }
+}
+
+const confirmDelete = async (versionsToDelete: string[]) => {
+  if (isDeleting.value || !deleteGameId.value) return
+  isDeleting.value = true
+  showDeleteModal.value = false
+  const gameId = deleteGameId.value
+  try {
+    const cardEl = document.querySelector(`[data-game-id="${gameId}"]`) as HTMLElement | null
+    if (cardEl) {
+      playShatterEffect(cardEl)
+    }
+    await gameStore.removeGame(gameId, [...versionsToDelete])
+    message.success(t('gameDetail.deleteSuccess'))
+  } catch {
+    message.error(t('common.error'))
+  } finally {
+    isDeleting.value = false
+  }
+}
+
+onMounted(async () => {
+  const deletedGameId = route.query.deletedGameId as string | undefined
+  if (deletedGameId) {
+    await nextTick()
+    await new Promise((r) => requestAnimationFrame(r))
+    const deletedVersions = ((route.query.deletedVersions as string) || '').split(',').filter(Boolean)
+    const cardEl = document.querySelector(`[data-game-id="${deletedGameId}"]`) as HTMLElement | null
+    if (cardEl) {
+      playShatterEffect(cardEl)
+    }
+    await gameStore.removeGame(deletedGameId, deletedVersions)
+    message.success(t('gameDetail.deleteSuccess'))
+    router.replace({ name: 'Library' })
+    return
+  }
   gameStore.loadGames()
 })
 
@@ -561,6 +722,15 @@ const handleConfirmDraftImport = async () => {
 
 .shake {
   animation: shake 0.3s infinite;
+}
+
+.game-card-wrapper.icon-mode {
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.game-card-wrapper.icon-mode:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
 }
 
 .import-draft-form :deep(.n-form-item-label__text) {

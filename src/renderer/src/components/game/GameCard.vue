@@ -1,14 +1,18 @@
 <template>
   <n-card hoverable style="cursor: pointer" @click="handleClick" content-style="padding: 0;">
     <template #cover>
-      <div style="aspect-ratio: 16/9; width: 100%; background: var(--bz-bg-card-placeholder); display:flex; align-items:center; justify-content:center; overflow: hidden; position: relative;">
-        <GameCover :game-id="game.id" />
-        <n-icon v-if="isFavorite" :size="24" color="#d03050" style="position: absolute; top: 8px; right: 8px; filter: drop-shadow(0 0 2px rgba(0,0,0,0.5));">
+      <div
+        :style="compact ? 'aspect-ratio: 1/1;' : 'aspect-ratio: 16/9;'"
+        style="width: 100%; background: var(--bz-bg-card-placeholder); display:flex; align-items:center; justify-content:center; overflow: hidden; position: relative;"
+      >
+        <GameCover v-if="!compact" :game-id="game.id" />
+        <GameIcon v-else :game-id="game.id" :game-name="game.name" />
+        <n-icon v-if="isFavorite" :size="compact ? 18 : 24" color="#d03050" :style="compact ? 'position: absolute; top: 4px; right: 4px; filter: drop-shadow(0 0 2px rgba(0,0,0,0.5));' : 'position: absolute; top: 8px; right: 8px; filter: drop-shadow(0 0 2px rgba(0,0,0,0.5));'">
             <Heart />
         </n-icon>
       </div>
     </template>
-    <div style="padding: 12px;">
+    <div v-if="!compact" style="padding: 12px;">
       <n-ellipsis style="max-width: 100%; font-weight: bold; font-size: 16px;">
         {{ game.name }}
       </n-ellipsis>
@@ -22,11 +26,13 @@ import { computed } from 'vue'
 import { NCard, NEllipsis, NText, NIcon } from 'naive-ui'
 import { Heart } from '@vicons/ionicons5'
 import GameCover from './GameCover.vue'
+import GameIcon from './GameIcon.vue'
 import type { GameManifest } from '../../../../shared/game-manifest'
 import { useGameStore } from '../../stores/useGameStore'
 
 const props = defineProps<{
   game: GameManifest
+  compact?: boolean
 }>()
 
 const gameStore = useGameStore()

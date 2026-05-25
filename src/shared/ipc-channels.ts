@@ -24,6 +24,9 @@ export const IPC = {
   MARKET_DOWNLOAD_AND_INSTALL: "market:downloadAndInstall",
   MARKET_GET_TASK_STATE: "market:getTaskState",
   MARKET_CANCEL_TASK: "market:cancelTask",
+  MARKET_PAUSE_TASK: "market:pauseTask",
+  MARKET_RESUME_TASK: "market:resumeTask",
+  MARKET_GET_PENDING_TASKS: "market:getPendingTasks",
 
   // ── 房间管理 ──
   ROOM_CREATE: "room:create",

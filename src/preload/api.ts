@@ -3,6 +3,7 @@ import { IPC } from "../shared/ipc-channels";
 import type {
   AppSettings,
   DataHealthReport,
+  DownloadTaskSnapshot,
   MarketDirectory,
   MarketIndex,
   MarketTaskEvent,
@@ -128,6 +129,12 @@ export const electronAPI = {
       ipcRenderer.invoke(IPC.MARKET_GET_TASK_STATE, taskId),
     cancelTask: (taskId: string): Promise<boolean> =>
       ipcRenderer.invoke(IPC.MARKET_CANCEL_TASK, taskId),
+    pauseTask: (taskId: string): Promise<boolean> =>
+      ipcRenderer.invoke(IPC.MARKET_PAUSE_TASK, taskId),
+    resumeTask: (taskId: string): Promise<MarketTaskState | null> =>
+      ipcRenderer.invoke(IPC.MARKET_RESUME_TASK, taskId),
+    getPendingTasks: (): Promise<DownloadTaskSnapshot[]> =>
+      ipcRenderer.invoke(IPC.MARKET_GET_PENDING_TASKS),
     onEvent: (callback: (payload: MarketTaskEvent) => void) => {
       const handler = (_: any, payload: MarketTaskEvent) => callback(payload);
       ipcRenderer.on(IPC.MARKET_EVENT, handler);
