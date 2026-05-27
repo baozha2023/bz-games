@@ -21,6 +21,11 @@ games/
 # TypeScript 构建缓存
 *.tsbuildinfo
 
+# SQLite 数据库文件
+db/*.db
+db/*.db-shm
+db/*.db-wal
+
 # 示例游戏目录
 井字棋/
 俄罗斯方块/

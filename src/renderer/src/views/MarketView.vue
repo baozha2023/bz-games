@@ -67,6 +67,7 @@
           >
             <CachedImg
               v-if="game.iconUrl || game.coverUrl"
+              :key="`thumb-${game.id}-${refreshCounter}`"
               :src="(game.iconUrl || game.coverUrl)!"
               class="market-thumb"
             />
@@ -112,6 +113,7 @@
                 <div class="market-detail-header">
                   <CachedImg
                     v-if="game.coverUrl || game.iconUrl"
+                    :key="`cover-${game.id}-${refreshCounter}`"
                     :src="(game.coverUrl || game.iconUrl)!"
                     class="market-cover"
                   />
@@ -342,6 +344,7 @@ import type {
 import { isVersionPayloadValid } from "../../../shared/types";
 import { useSettingsStore } from "../stores/useSettingsStore";
 import CachedImg from "../components/CachedImg.vue";
+import { useImageCache } from "../composables/useImageCache";
 import { useGameStore } from "../stores/useGameStore";
 
 const { t } = useI18n();
@@ -368,6 +371,7 @@ const selectedVersions = ref<Record<string, string>>({});
 const appVersion = ref("");
 const marketName = ref("");
 const generatedAt = ref("");
+const refreshCounter = ref(0);
 const timeoutIds: number[] = [];
 const pendingDownloads = new Set<string>();
 const pendingCancels = new Set<string>();
@@ -577,9 +581,15 @@ async function syncExistingTasks(): Promise<void> {
   }
 }
 
+const { clear: clearImageCache } = useImageCache();
+
 async function loadIndex(forceRefresh = false): Promise<void> {
   isLoading.value = true;
   loadError.value = "";
+  if (forceRefresh) {
+    clearImageCache();
+    refreshCounter.value++;
+  }
   try {
     const index = await window.electronAPI.market.getIndex(sourceIdx.value, forceRefresh);
     games.value = index.games;

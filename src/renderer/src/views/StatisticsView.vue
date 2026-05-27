@@ -23,7 +23,11 @@
       </template>
     </n-page-header>
     <n-divider />
-    
+
+    <n-card style="margin-bottom: 16px;">
+      <CalendarHeatmap :daily-durations="dailyDurations" />
+    </n-card>
+
     <n-grid x-gap="12" y-gap="12" :cols="1" md="2" lg="3">
       <n-grid-item v-for="game in filteredGames" :key="game.id">
         <n-card :title="game.name" hoverable>
@@ -64,6 +68,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { SearchOutline } from '@vicons/ionicons5'
 import { useGameStore } from '../stores/useGameStore'
+import CalendarHeatmap from '../components/CalendarHeatmap.vue'
 import type { GameManifest } from '../../../shared/game-manifest'
 
 const { t } = useI18n()
@@ -73,6 +78,7 @@ const selectedVersions = ref<Record<string, string>>({})
 const manifestCache = ref<Record<string, GameManifest>>({})
 const searchKeyword = ref('')
 const isSearchExpanded = ref(false)
+const dailyDurations = ref<{ date: string; total_duration_ms: number }[]>([])
 
 const games = computed(() => gameStore.games)
 const filteredGames = computed(() => {
@@ -93,14 +99,22 @@ function handleSearchBlur() {
   }
 }
 
+async function loadStatsData() {
+  try {
+    const durations = await window.electronAPI.stats.getDailyPlayDurations(365)
+    dailyDurations.value = durations
+  } catch (e) {
+    console.error('[StatisticsView] Failed to load stats data:', e)
+  }
+}
+
 onMounted(async () => {
   await gameStore.loadGames()
+  await loadStatsData()
   
-  // Initialize selected versions to latest
   for (const game of games.value) {
     if (!selectedVersions.value[game.id]) {
       selectedVersions.value[game.id] = game.version;
-      // Cache the loaded manifest (which is the latest)
       manifestCache.value[`${game.id}@${game.version}`] = game;
     }
   }
@@ -109,7 +123,6 @@ onMounted(async () => {
 function getVersionOptions(gameId: string) {
   const record = gameStore.getGameRecord(gameId);
   if (!record || !record.versions) return [];
-  // Sort descending
   return record.versions
     .map(v => v.version)
     .sort((a, b) => b.localeCompare(a, undefined, { numeric: true, sensitivity: 'base' }))
@@ -140,7 +153,6 @@ function getManifest(gameId: string): GameManifest | undefined {
 function getStatKeys(gameId: string): string[] {
     const manifest = getManifest(gameId);
     
-    // Always include 'time' first
     const keys = ['time'];
     
     if (manifest?.statistics) {
@@ -167,7 +179,6 @@ function getValue(gameId: string, key: string): string {
     let val = 0;
     
     if (key === 'time') {
-        // Use the dedicated playtime field
         val = Math.round((gameVersion.playtime || 0) / 1000);
     } else {
         if (gameVersion.stats && gameVersion.stats[key] !== undefined) {
@@ -197,7 +208,6 @@ function formatTime(seconds: number): string {
 
 function getLabel(gameId: string, key: string): string {
     const manifest = getManifest(gameId);
-    // Try to find label in manifest first
     if (manifest?.statistics) {
         for (const stat of manifest.statistics) {
             if (typeof stat === 'object' && Object.keys(stat)[0] === key) {

@@ -175,6 +175,12 @@ export const electronAPI = {
     getData: () => ipcRenderer.invoke(IPC.SYSTEM_GET_USER_DATA),
     checkIn: () => ipcRenderer.invoke(IPC.SYSTEM_CHECK_IN),
   },
+  stats: {
+    getDailyPlayDurations: (days?: number) =>
+      ipcRenderer.invoke(IPC.STATS_GET_DAILY_PLAY_DURATIONS, days),
+    getRecentSessions: (limit?: number) =>
+      ipcRenderer.invoke(IPC.STATS_GET_RECENT_SESSIONS, limit),
+  },
 };
 
 if (process.contextIsolated) {

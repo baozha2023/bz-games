@@ -4,6 +4,7 @@ import { registerAllIpc } from "./ipc";
 import { electronApp, optimizer } from "@electron-toolkit/utils";
 import { storeService } from "./services/StoreService";
 import { marketService } from "./services/MarketService";
+import { databaseService } from "./services/DatabaseService";
 import { setCustomGamesDir } from "./utils/appPath";
 
 app.whenReady().then(async () => {
@@ -18,6 +19,7 @@ app.whenReady().then(async () => {
   );
 
   await storeService.init();
+  databaseService.init();
   const settings = storeService.getSettings();
   setCustomGamesDir(settings.gameStoragePath || null);
   app.setLoginItemSettings({
@@ -39,6 +41,7 @@ app.whenReady().then(async () => {
 });
 
 app.on("before-quit", () => {
+  databaseService.close();
   markAppQuitting();
 });
 

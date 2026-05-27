@@ -52,6 +52,7 @@
 | 包管理器         | pnpm                        | <br />                         |
 | 进程间通信        | Electron IPC（contextBridge） | <br />                         |
 | 本地数据存储       | electron-store              | v10+ (ESM)，需在构建中配置 include     |
+| SQLite 数据存储      | better-sqlite3              | 游玩会话记录、日历热力图数据查询            |
 | 客户端更新        | electron-updater            | GitHub Releases 作为更新源          |
 | WebSocket 服务 | ws                          | <br />                         |
 | 版本比较         | semver                      | 用于平台版本与游戏版本兼容性检查               |
@@ -77,6 +78,8 @@ bz-games/
 ├── tsconfig.web.json                     # 渲染进程 TS 配置
 ├── electron.vite.config.ts               # Electron-Vite 构建配置
 ├── config.json                           # 本地持久化配置（运行生成）
+├── db/                                   # SQLite 数据库目录（运行生成）
+│   └── play_sessions.db                  # 游玩会话数据库
 ├── games/                                # 默认游戏目录（运行生成）
 │   └── <id>/
 │       └── <version>/
@@ -91,8 +94,10 @@ bz-games/
 │   │   │   ├── market.ipc.ts               # 游戏市场 IPC 处理器
 │   │   │   ├── room.ipc.ts                # 房间相关 IPC 处理器
 │   │   │   ├── system.ipc.ts              # 设置/系统/更新 IPC 处理器
-│   │   │   └── storage.ipc.ts             # Web 游戏本地存储 IPC 处理器
+│   │   │   ├── storage.ipc.ts             # Web 游戏本地存储 IPC 处理器
+│   │   │   └── statistics.ipc.ts          # 统计数据查询 IPC 处理器
 │   │   ├── services/
+│   │   │   ├── DatabaseService.ts         # SQLite 游玩会话记录与日历热力图数据查询
 │   │   │   ├── GameApiServer.ts           # 游戏进程本地 WebSocket API 服务
 │   │   │   ├── GameEnvironment.ts         # 游戏启动环境变量与 bz-config.js 生成
 │   │   │   ├── GameLoader.ts              # 游戏导入、校验、扫描与记录同步
@@ -141,6 +146,7 @@ bz-games/
 │   │       │   └── useImageCache.ts        # 统一图片缓存层（本地+远程）
 │   │       ├── components/
 │   │       │   ├── CachedImg.vue           # 远程图片缓存组件（市场专用）
+│   │       │   ├── CalendarHeatmap.vue      # GitHub 风格日历热力图组件（统计页）
 │   │       │   ├── CheckInModal.vue        # 签到弹窗组件
 │   │       │   ├── game/
 │   │       │   │   ├── GameAchievementsModal.vue # 游戏成就弹窗组件
@@ -442,6 +448,8 @@ interface MarketTaskState {
 - 运行 Game API Server（每次有游戏运行时）
 - 注册并处理所有 IPC Handler
 - 广播游戏进程生命周期事件（start/end）
+- 通过 `DatabaseService` 自动记录每次游戏启动→关闭为一次"游玩会话"（写入 SQLite `play_sessions.db`）
+- 系统托盘动态菜单：游戏退出时自动刷新「最近游玩」列表，支持从托盘快速启动最近玩过的游戏
 - 更新检查、下载、安装由 `UpdateService` 统一处理
 
 #### 渲染进程 (Renderer Process)
@@ -543,6 +551,18 @@ interface AppSettings {
   `stripProcessEnv()` 过滤 `ELECTRON_`/`NODE_`/`NPM_`/`VSCODE_` 前缀的环境变量，避免平台内部环境泄漏到子进程。
 - **GameManager 生命周期**：`cleanupApiOnly()` 方法仅清理 WebSocket/HTTP 服务器资源，不终止游戏进程也不关闭窗口。当 API
   Server 超时自动停止时调用，避免误杀正在运行的游戏。
+- **游玩会话记录**：每次游戏启动（`spawnGameProcess` / `createGameWindow`）调用 `databaseService.startSession()` 在
+  `play_sessions.db` 创建一条记录（含 `game_id`、`game_name`、`version`、`start_time`）；游戏退出时（
+  `handleProcessExit` → `recordPlaytime`）调用 `databaseService.endSession()` 写入 `end_time` 和 `duration_ms`。
+  原有的 `storeService.updatePlaytime()` JSON 统计不变，SQLite 作为独立的游玩历史记录层，为日历热力图和未来统计图表提供数据支撑。
+  `handleProcessExit` 中通过动态 `import("../window")` 调用 `updateTrayMenu()` 刷新托盘快捷菜单（避免循环依赖）。
+- **DatabaseService 设计**：
+    - SQLite WAL 模式：`journal_mode = WAL` 提升并发读写性能。
+    - 表结构 `play_sessions (id TEXT PK, game_id TEXT, game_name TEXT, version TEXT, start_time INTEGER, end_time INTEGER, duration_ms INTEGER)`，对 `game_id` 和 `start_time` 建立索引。
+    - `getRecentGames(limit)`：`GROUP BY game_id` 去重，返回最近玩过的游戏列表（供托盘快捷菜单使用）。
+    - `getDailyPlayDurations(days)`：按自然日聚合 `SUM(duration_ms)`，返回日历热力图数据源。
+    - `getRecentSessions(limit)`：按 `start_time DESC` 返回最近会话。
+    - 应用退出 (`before-quit`) 必须调用 `databaseService.close()` 正常关闭 WAL 连接，否则 WAL 文件不会自动合并。
 - **MarketService 设计**：
     - **两级市场架构**：`getSources()` 拉取顶层市场目录（通过 `fetchDirectory()` 获取，主源 GitHub + 备源 OSS），
       `getIndex(sourceIdx)` 拉取指定市场源的游戏索引。sourceIdx=0 使用 `fetchIndexInternal()`（主备双源），sourceIdx>0 使用
@@ -610,6 +630,14 @@ interface AppSettings {
       URL，`ttlMs=60*60*1000` 即 1 小时，由组件内部 `MARKET_IMAGE_TTL_MS` 常量管理）。
 - **应用入口 OSS 拦截**：`index.ts` 在 `app.whenReady` 中注册 `session.defaultSession.webRequest.onBeforeSendHeaders`，对所有
   `web-bz.oss-cn-beijing.aliyuncs.com` 请求注入 `Referer` header，覆盖 `<img>` 标签等非 fetch 请求。
+- **CalendarHeatmap 日历热力图组件**：
+    - 纯 Vue 3 + CSS Grid 实现，不依赖第三方图表库，渲染 GitHub 贡献墙风格的 7×53+ 格子日历。
+    - 颜色渐变 5 档（空 → `#39d353` → `#26a641` → `#006d32` → `#0e4429`），图例标注"少 ↔ 多"。
+    - 通过 IPC `stats:getDailyPlayDurations(365)` 从 `play_sessions.db` 加载近一年每日游玩时长。
+    - `dayLabels`、`monthNames`、`formatDurationMs` 均通过 `useI18n()` 实现三语切换，
+      使用逗号分隔字符串 `t('statistics.weekDays')` / `t('statistics.monthNames')` 存储数组数据，`t('statistics.hour/minute')` 存储时间单位。
+    - 每个格子通过 `n-tooltip` 展示日期和当天游玩时长。底部显示近一年总游玩时长。
+    - 每次打开统计页面 (`onMounted`) 自动拉取最新数据。
 
 ### 5.6 CSS 变量主题系统
 
@@ -722,6 +750,8 @@ interface AppSettings {
 - `game:toggleFavorite`：切换游戏收藏状态。
 - `game:remove`：删除指定游戏或指定版本。
 - `game:launch`：启动指定游戏版本。
+- `stats:getDailyPlayDurations`：查询最近 N 天的每日游玩时长（日历热力图数据源）。
+- `stats:getRecentSessions`：查询最近 N 条游玩会话记录。
 - `market:getSources`：拉取并解析市场目录（含 sources 列表）。
 - `market:getIndex`：拉取并解析指定市场源的远程游戏市场索引。
 - `market:getCachedImage`：按需下载远程图片并返回 base64 Data URL，缓存 1 小时。供 `<CachedImg>` 组件使用。
@@ -842,7 +872,13 @@ interface AppSettings {
 - **成就弹窗版本一致性**：成就弹窗读取 Manifest 时必须使用当前运行版本，避免出现“有音效但无弹窗”。
 - **经济系统前端同步**：游戏结束事件后需刷新用户数据，确保每 10 分钟时长奖励的 BZ 币能即时反映在 UI。
 
-### 6.4 客户端更新发布规范
+### 6.4 打包与原生成模块
+
+- **原生模块编译**：`better-sqlite3` 为 C++ 原生模块，`postinstall` 脚本中的 `electron-builder install-app-deps` 会在每次 `npm install` 后自动针对当前 Electron 版本重编译 `.node` 文件。
+- **asarUnpack 必需**：原生 `.node` 文件无法从 `app.asar` 内加载，`package.json` 的 `build.asarUnpack` 必须配置 `["node_modules/better-sqlite3/**"]`，将此模块解压到 asar 外部，否则打包后运行必定崩溃。
+- **electron-rebuild 手动补充**：若开发阶段出现 `NODE_MODULE_VERSION` 不匹配错误（系统 Node.js vs Electron 内嵌 Node.js 版本不一致），执行 `npx electron-rebuild -f -w better-sqlite3` 补齐重编译。
+
+### 6.5 客户端更新发布规范
 
 - **更新源**：使用 GitHub Releases（仓库：`baozha2023/bz-games`）作为 `electron-updater` 的发布源。
 - **发布资产**：每个版本 Release 必须单独上传 `BZ-Games Setup x.x.x.exe`、`latest.yml`、`*.blockmap`，不可打包成 ZIP。

@@ -75,4 +75,8 @@ export const IPC = {
   GAME_STORAGE_REMOVE: "game:storage:remove",
   GAME_STORAGE_CLEAR: "game:storage:clear",
   GAME_STORAGE_FLUSH: "game:storage:flush",
+
+  // ── 统计 ──
+  STATS_GET_DAILY_PLAY_DURATIONS: "stats:getDailyPlayDurations",
+  STATS_GET_RECENT_SESSIONS: "stats:getRecentSessions",
 } as const;

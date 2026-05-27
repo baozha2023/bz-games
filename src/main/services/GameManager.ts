@@ -16,13 +16,14 @@ import { roomServer } from "./RoomServer";
 import { mainWindow } from "../window";
 import { IPC } from "../../shared/ipc-channels";
 import type { GameManifest } from "../../shared/game-manifest";
+import { databaseService } from "./DatabaseService";
 
 class GameManager {
   private activeProcesses: Map<string, ChildProcess> = new Map();
   private activeWindows: Map<string, BrowserWindow> = new Map();
   private activeServers: Map<string, Server> = new Map();
   private gameApiServers: Map<string, GameApiServer> = new Map();
-  private startTimes: Map<string, { start: number; version: string }> =
+  private startTimes: Map<string, { start: number; version: string; sessionId: string }> =
     new Map();
 
   constructor() {
@@ -244,9 +245,11 @@ class GameManager {
     });
 
     this.activeWindows.set(id, win);
+    const sessionId = databaseService.startSession(id, manifest.name, manifest.version);
     this.startTimes.set(id, {
       start: Date.now(),
       version: manifest.version,
+      sessionId,
     });
 
     logger.info(`[GameManager] Window started for ${id}`);
@@ -307,9 +310,11 @@ class GameManager {
 
     cp.unref();
     this.activeProcesses.set(id, cp);
+    const sessionId = databaseService.startSession(id, manifest.name, manifest.version);
     this.startTimes.set(id, {
       start: Date.now(),
       version: manifest.version,
+      sessionId,
     });
 
     logger.info(`[GameManager] Process started for ${id}`);
@@ -327,6 +332,7 @@ class GameManager {
     this.notifyRoomGameEnd(id);
     this.stop(id);
     mainWindow?.webContents.send(IPC.GAME_PROCESS_ENDED, id);
+    import("../window").then(({ updateTrayMenu }) => updateTrayMenu());
   }
 
   private recordPlaytime(id: string) {
@@ -334,6 +340,7 @@ class GameManager {
     if (startTimeData) {
       const durationMs = Date.now() - startTimeData.start;
       storeService.updatePlaytime(id, startTimeData.version, durationMs);
+      databaseService.endSession(startTimeData.sessionId);
     }
     this.startTimes.delete(id);
   }

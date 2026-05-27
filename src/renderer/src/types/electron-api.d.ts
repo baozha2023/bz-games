@@ -154,6 +154,18 @@ declare global {
         uninstall: (payload?: { deleteGames?: boolean }) => Promise<{ success: boolean; error?: string }>;
         onUpdateEvent: (callback: (payload: UpdateState) => void) => () => void;
       };
+      stats: {
+        getDailyPlayDurations: (days?: number) => Promise<{ date: string; total_duration_ms: number }[]>;
+        getRecentSessions: (limit?: number) => Promise<{
+          id: string;
+          game_id: string;
+          game_name: string;
+          version: string;
+          start_time: number;
+          end_time: number | null;
+          duration_ms: number | null;
+        }[]>;
+      };
     };
   }
 }
