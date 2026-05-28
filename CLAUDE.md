@@ -56,8 +56,7 @@
 | 客户端更新        | electron-updater            | GitHub Releases 作为更新源          |
 | WebSocket 服务 | ws                          | <br />                         |
 | 版本比较         | semver                      | 用于平台版本与游戏版本兼容性检查               |
-| ZIP 解压       | extract-zip                 | 纯 Node.js 解压，不依赖外部进程           |
-| 7Z 解压        | 7zip-bin (7za)              | 通过 `child_process.execFile` 调用 |
+| ZIP/7Z 解压     | 7zip-bin (7za)              | 通过 `child_process.spawn` 调用，统一处理 .zip 和 .7z |
 | 目标平台         | Windows 10/11 x64           | <br />                         |
 
 ***
@@ -99,7 +98,7 @@ bz-games/
 │   │   ├── services/
 │   │   │   ├── DatabaseService.ts         # SQLite 游玩会话记录与日历热力图数据查询
 │   │   │   ├── GameApiServer.ts           # 游戏进程本地 WebSocket API 服务
-│   │   │   ├── GameEnvironment.ts         # 游戏启动环境变量与 bz-config.js 生成
+│   │   │   ├── GameEnvironment.ts         # 游戏启动环境变量、bz-config.js 生成与清理
 │   │   │   ├── GameLoader.ts              # 游戏导入、校验、扫描与记录同步
 │   │   │   ├── GameManager.ts             # 游戏进程启动/停止与生命周期管理
 │   │   │   ├── MarketService.ts           # 游戏市场索引拉取、下载、校验、解压与安装
@@ -203,7 +202,7 @@ bz-games/
 | **下载任务 (Download Task)**            | 市场下载安装的一次任务实例，包含状态机、不可变元数据和 AbortController，支持暂停/恢复/取消                         |
 | **下载任务快照 (Download Task Snapshot)** | 暂停或中断时持久化到 `pending-tasks.json` 的进度数据，包含已下载字节数、下载 URL、SHA256 等，用于断点续传恢复        |
 | **断点续传 (Resume Download)**          | 利用 HTTP Range 请求头从上次断点继续下载，服务端不支持时自动降级为全量下载                                    |
-| **bz-config.js**                    | 平台在游戏启动前生成的配置文件（包含端口、Token、玩家信息、房间 ID、`isHost` 与 `isMultiple`），解决进程环境变量传递不可靠问题 |
+| **bz-config.js**                    | 平台在游戏启动前生成的配置文件（包含端口、Token、玩家信息、房间 ID、`isHost` 与 `isMultiple`），游戏退出时自动删除。 |
 | **内网穿透**                            | 由用户自备（如 SakuraFrp），将 Room Server 本地端口映射到公网地址                                   |
 | **平台 SDK**                          | 未来提供的 npm 包（`bz-launcher-sdk`），封装 Game API Server 调用，供游戏开发者使用                  |
 
@@ -218,6 +217,7 @@ bz-games/
   代表同时支持单人与联机，`networkgame` 代表网页游戏（仅启动网页，不参与房间联机流程）。
 - **网页游戏版本豁免**：`networkgame` 类型游戏导入/安装时**忽略 `version` 字段**，仅以 `id` 判断是否已存在。同一 `id` 的网页游戏不可重复导入，若需更新版本请先删除旧版再重新导入。版本号不参与 semver 校验。
 - **远程网页启动**：`entry` 新增 `url` 模式；当 `entry=url` 时，Manifest 必须提供 `web_url`（合法 URL），平台直接打开该网页地址。
+- **作者主页链接**：新增 `author_url` 可选字段（合法 URL），在游戏详情页和市场详情展开卡片的作者名称右侧显示跳转图标（`OpenOutline`），点击后通过默认浏览器打开。市场游戏的 `author_url` 可在 `gameManifest` 中覆盖，未配置时自动继承 Market Game 层级的 `author_url`。
 
 ### 4.2 游戏市场索引 JSON 规范
 
@@ -289,6 +289,7 @@ bz-games/
 | `id`            | `string`              | 是  | 游戏唯一 ID，必须与安装包内 `game.json.id` 一致，推荐使用反向域名格式。                                             |
 | `name`          | `string`              | 是  | 游戏名。                                                                                      |
 | `author`        | `string`              | 是  | 游戏作者或工作室名称。                                                                               |
+| `author_url`    | `string`              | 否  | 作者主页链接，详情页展开后作者名称旁将显示跳转图标。                                                              |
 | `type`          | `string`              | 是  | 游戏类型，取值与 `game.json.type` 一致：`singleplayer`、`multiplayer`、`singlemultiple`、`networkgame`。 |
 | `summary`       | `string`              | 是  | 游戏简介，列表卡片和详情页都使用该字段展示，建议 1~2 句话。                                                          |
 | `tags`          | `string[]`            | 否  | 游戏标签，如 `["休闲", "平台跳跃"]`。                                                                  |
@@ -315,15 +316,35 @@ bz-games/
 | `publishedAt`     | `string`  | 否  | 版本发布时间，ISO 8601 格式。                         |
 | `releaseNotes`    | `string`  | 否  | 更详细的版本更新内容。                                 |
 | `isPrerelease`    | `boolean` | 否  | 是否为预发布版本；预发布版本默认不作为 `latestVersion`。        |
+| `gameManifest`    | `object`  | 否  | Manifest 覆盖配置（`GameManifestOverride`），可覆盖/补充安装包内 `game.json` 的任意字段。当安装包内不含 `game.json` 时，该项**必填**，平台将据此自动生成完整 Manifest。 |
+
+#### GameManifestOverride 覆盖机制
+
+当市场游戏安装包内不包含 `game.json` 文件时（例如通用 HTML5 游戏包），市场维护者可通过 `gameManifest` 字段为每个版本提供 Manifest 覆盖配置。覆盖规则如下：
+
+```typescript
+// src/shared/types/market.types.ts — GameManifestOverrideSchema
+// 所有字段均为可选（覆盖粒度），结构完全对齐 GameManifestSchema
+```
+
+- **字段覆盖优先级**：`gameManifest` 中的值 > MarketGame 层级对应字段 > 默认值
+  - `name` → `gm.name || game.name`
+  - `description` → `gm.description || game.summary`
+  - `author` → `gm.author || game.author`
+  - `author_url` → `gm.author_url !== undefined ? gm.author_url : game.author_url`
+  - `type` → `gm.type || game.type`
+  - `platformVersion` → `gm.platformVersion || targetVersion.platformVersion`
+  - `entry` → `gm.entry`（若为空则自动探测 `detectEntryFile(importDir)`）
+  - `multiplayer` → `gm.multiplayer`（若不提供且类型为多人，自动从 `game.minPlayers`/`game.maxPlayers` 生成）
+- **安装流程**：`resolveExtractedImportDir()` 查找包内 `game.json`，若未找到则使用 `gameManifest` 构建完整 Manifest，写入安装目录后继续执行标准导入流程。进度模拟（`startProgressSim` / `tickProgress`）在 verify（65→69）、extract（70→94）、install（95→99）阶段以 500ms 间隔平滑推进，避免卡在固定百分比。
+- **性能考虑**：`buildManifestFromMarket()` 仅在 `game.json` 缺失时触发，对已有 Manifest 的包零额外开销。
 
 #### 安装包约束
 
-- **格式识别**：平台必须根据 `downloadUrl` 的文件后缀自动识别压缩包格式；支持 `.zip`（`extract-zip` 纯 Node.js 解压）和
-  `.7z`（`7zip-bin` 内置 `7za` 解压），不要求市场维护者额外填写格式字段。
-- **解压方式**：`.zip` 使用 `extract-zip`（纯 Node.js 实现），不依赖 PowerShell 或外部解压工具；`.7z` 使用 `7zip-bin` 内置的
-  `7za` 二进制。
+- **格式识别**：平台必须根据 `downloadUrl` 的文件后缀自动识别压缩包格式；支持 `.zip` 和 `.7z`（统一使用 `7zip-bin` 内置 `7za` 通过 `child_process.spawn` 解压），不要求市场维护者额外填写格式字段。
+- **解压方式**：`.zip` 和 `.7z` 均使用 `7zip-bin` 内置的 `7za` 二进制通过 `spawn` 调用，不依赖 PowerShell 或外部解压工具。
 - **目录约束**：压缩包解压后的根目录或第一层单子目录中必须存在 `game.json`，且整体目录结构应能直接作为一次普通"本地导入"
-  输入目录。
+  输入目录。若安装包内无 `game.json`，必须通过 `gameManifest` 字段提供完整覆盖配置，平台将自动生成并安装。
 - **一致性校验**：平台安装前必须校验下载包的 `sha256`、`size`、`game.json.id`、`game.json.version`；
   `game.json.platformVersion` 使用 `semver` 做语义化兼容性检查（支持 string 和 tuple 两种 manifest 格式），**不做字符串直接比对
   **。
@@ -341,7 +362,7 @@ type MarketTaskStatus =
     | "installing" | "completed" | "error" | "canceled"
     | "paused" | "interrupted";
 
-type MarketErrorCode = "download" | "verify" | "extract" | "install";
+type MarketErrorCode = "download" | "verify" | "extract" | "install" | "manifest";
 
 interface MarketTaskState {
     taskId: string;           // 格式: `${gameId}@${version}`
@@ -359,8 +380,7 @@ interface MarketTaskState {
 }
 ```
 
-- **错误码自动归类**：主进程 `classifyErrorCode()` 根据异常信息自动映射为 `download` / `verify` / `extract` / `install`
-  ，渲染进程通过 `MARKET_EVENT` 接收 `errorCode` 并映射 i18n 文案。
+- **错误码自动归类**：主进程 `classifyErrorCode()` 根据异常信息自动映射为 `download` / `verify` / `extract` / `install` / `manifest`，渲染进程通过 `MARKET_EVENT` 接收 `errorCode` 并映射 i18n 文案。`manifest` 错误码对应游戏包缺少 `game.json` 清单文件的情况。
 - **任务状态推送**：主进程每次更新任务状态后通过 `market:event` 推送给渲染进程。通知由根布局组件 `AppContent`
   统一处理，确保用户在任何页面都能收到安装完成/失败的通知。
 - **通知去重与生命周期**：模块级 `notifiedTaskIds` Set 防止重复弹 toast（仅在 `completed`/`error`/`canceled` 终态时写入，
@@ -541,14 +561,15 @@ interface AppSettings {
   站点隔离机制自动分配到独立的渲染进程，确保不同游戏进程不互相干扰。
 - **Web 存储可选加密**：支持通过 Manifest 字段 `encryptLocalStorage` 控制 `gamedata.json` 是否加密存储（默认关闭）。
 - **Web 联机模式标记**：平台生成的 `bz-config.js` 提供 `isMultiple` 字段，便于 `singlemultiple` 游戏在运行时区分单人模式与联机模式。
-- **远程网页模式约束**：当 `entry=url` 时，平台不生成 `bz-config.js`，也不向页面注入 `window.BZ_CONFIG`。
+- **远程网页模式约束**：当 `entry=url` 时，平台不生成 `bz-config.js`，也不向页面注入 `window.BZ_CONFIG`。游戏退出时平台自动清理生成的 `bz-config.js` 文件。
 
 ### 5.5 代码组织与内聚性
 
 - **模块化**：复杂逻辑（如 `GameLoader.loadGameFromDialog`）拆分为独立函数（`validateManifestFile`, `checkPlatformVersion`,
   `checkEntryFile` 等），提升可读性与可维护性。
-- **环境配置抽离**：游戏环境变量准备与 `bz-config.js` 生成逻辑由 `GameEnvironment` 统一处理，提高 `GameManager` 的内聚性。
+- **环境配置抽离**：游戏环境变量准备、`bz-config.js` 生成与清理逻辑由 `GameEnvironment` 统一处理，提高 `GameManager` 的内聚性。
   `stripProcessEnv()` 过滤 `ELECTRON_`/`NODE_`/`NPM_`/`VSCODE_` 前缀的环境变量，避免平台内部环境泄漏到子进程。
+  `removeConfig()` 在游戏退出时自动删除残留的 `bz-config.js` 文件。`activeVersionPaths` Map 追踪版本目录路径，确保所有退出路径（窗口关闭、进程退出、主动停止、启动失败）都能正确清理。
 - **GameManager 生命周期**：`cleanupApiOnly()` 方法仅清理 WebSocket/HTTP 服务器资源，不终止游戏进程也不关闭窗口。当 API
   Server 超时自动停止时调用，避免误杀正在运行的游戏。
 - **游玩会话记录**：每次游戏启动（`spawnGameProcess` / `createGameWindow`）调用 `databaseService.startSession()` 在
@@ -583,8 +604,10 @@ interface AppSettings {
       拉取索引后查找目标游戏，无回退逻辑。
     - `gitToRawUrl()` 从 GitHub 仓库地址推导 raw 文件
       URL：`https://raw.githubusercontent.com/{owner}/{repo}/{branch}/market.json`。
-    - `inferArchiveType()` 根据 `downloadUrl` 后缀自动识别压缩包格式（当前支持 `.zip` 和 `.7z`）。`.zip` 使用 `extract-zip`
-      纯 Node.js 解压，`.7z` 使用 `7zip-bin` 内置的 `7za` 二进制通过 `child_process.execFile` 解压。
+    - `inferArchiveType()` 根据 `downloadUrl` 后缀自动识别压缩包格式（当前支持 `.zip` 和 `.7z`）。`.zip` 和 `.7z` 统一使用 `7zip-bin` 内置的 `7za` 通过 `child_process.spawn` 解压（`maxBuffer` 无限制，避免大文件解压输出溢出）。
+    - **Electron asar 补丁防御**：`copyFolderRecursiveSync()` 在执行文件复制前设置 `process.noAsar = true`，复制完成后通过 `finally` 块恢复原值。Electron 默认将 `.asar` 文件伪装成目录，导致 `readdirSync` + `copyFileSync` 操作出错（ENOTDIR），关闭此行为后可正常复制含 `.asar` 的游戏包。
+    - **EBUSY 重试防御**：`removeIfExists()` 和 `GameLoader.installGameFiles()` 中的 `fs.rmSync` 统一使用 `{ maxRetries: 10, retryDelay: 500 }` 参数。Windows Defender 实时扫描大文件（如 `app.asar`）时会短暂锁定文件句柄，内置重试机制可避免 EBUSY/EPERM 错误。
+    - **安装包内 .asar 防御**：`GameLoader.installGameFiles()` 检查 `gameRootDir` 是否为文件（非目录），若为文件则先 `rmSync` 删除后再创建目录，防止旧版残留的 `.asar` 文件阻碍目录创建。
     - **下载管线架构**（v2.2）：下载子系统采用清晰的 **不可变元数据 + 活动任务 + 单一状态机** 三层模型。
         - `TaskMeta`（不可变元数据）：包含 `downloadUrl`、`sha256`、`size`、`downloadPath`、`archiveType`、`sourceIdx` 等固定参数。
         - `ActiveTask`：运行时对象，绑定 `state`（MarketTaskState）、`meta`（TaskMeta）、`abort`（AbortController）。
@@ -598,10 +621,10 @@ interface AppSettings {
       则静默返回（状态已由 pause/cancel 设置）；否则调用 `transition("error", ...)` + `finalize()`。
     - **断点续传**：`downloadArchive()` 下载前通过 `getPartialFileSize()` 检查已存在部分文件。若有部分文件且服务端支持
       HTTP Range（返回 `206`），以追加模式续传；若服务端返回 `200`（不支持 Range），自动删除部分文件从头下载（自动降级）。下载流通过
-      `writer.write()` 返回值判断背压，配合 `drain` 事件保证内存安全。
+      `writer.write()` 返回值判断背压，配合 `drain` 事件保证内存安全。`settled` 闭包标志位防止 `writer.on("error")` 和 `reader.read()` 异常双重 reject Promise。
     - **暂停/恢复/取消**：
         - `pauseTask()`：先将 status 设为 `paused`（同步，保证 pipeline catch 块见到"paused"而不覆盖状态），再
-          `abort.abort()`，最后将进度写入 `pending-tasks.json` 持久化快照。
+          `abort.abort()`，最后将进度写入 `pending-tasks.json` 持久化快照。仅 `downloading` / `verifying` 状态可暂停；`extracting` / `installing` 阶段暂停按钮禁用并在 hover 时提示"解压或安装过程中无法暂停"。
         - `resumeTask()`：从 `pending-tasks.json` 读取快照，重新拉取索引校验兼容性后调用 `startTask()` + `startPipeline()`
           启动新管线。
         - `cancelTask()`：对运行中任务先 `transition("canceled")` 再 `abort.abort()` + `finalize()`；对已暂停任务直接

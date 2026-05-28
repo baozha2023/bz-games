@@ -22,6 +22,7 @@ class GameManager {
   private activeProcesses: Map<string, ChildProcess> = new Map();
   private activeWindows: Map<string, BrowserWindow> = new Map();
   private activeServers: Map<string, Server> = new Map();
+  private activeVersionPaths: Map<string, string> = new Map();
   private gameApiServers: Map<string, GameApiServer> = new Map();
   private startTimes: Map<string, { start: number; version: string; sessionId: string }> =
     new Map();
@@ -56,6 +57,8 @@ class GameManager {
         id,
         version,
       );
+
+      this.activeVersionPaths.set(id, versionPath);
 
       if (manifest.entry === "url") {
         return this.launchRemoteWebGame(id, versionPath, manifest);
@@ -358,6 +361,12 @@ class GameManager {
   }
 
   private cleanup(id: string) {
+    const versionPath = this.activeVersionPaths.get(id);
+    if (versionPath) {
+      GameEnvironment.removeConfig(versionPath);
+      this.activeVersionPaths.delete(id);
+    }
+
     const cp = this.activeProcesses.get(id);
     if (cp) {
       cp.kill();

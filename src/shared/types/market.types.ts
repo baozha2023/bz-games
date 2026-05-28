@@ -1,5 +1,46 @@
 import { z } from "zod";
 
+export const GameManifestOverrideSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  description: z.string().max(500).optional(),
+  author: z.string().min(1).max(100).optional(),
+  author_url: z.string().url().optional(),
+  platformVersion: z.union([z.string(), z.tuple([z.string(), z.string()])]).optional(),
+  entry: z.string().optional(),
+  web_url: z.string().url().optional(),
+  icon: z.string().optional(),
+  cover: z.string().optional(),
+  video: z.string().optional(),
+  encryptLocalStorage: z.boolean().optional(),
+  type: z.enum(["singleplayer", "multiplayer", "singlemultiple", "networkgame"]).optional(),
+  statistics: z.array(
+    z.union([
+      z.string(),
+      z.record(z.string()),
+      z.record(
+        z.object({
+          label: z.string(),
+          mode: z.enum(["increment", "full"]).optional(),
+        }),
+      ),
+    ]),
+  ).optional(),
+  multiplayer: z.object({
+    minPlayers: z.number().int().min(1),
+    maxPlayers: z.number().int().min(1),
+  }).optional(),
+  args: z.array(z.string()).optional(),
+  env: z.record(z.string()).optional(),
+  achievements: z.array(
+    z.object({
+      id: z.string(),
+      title: z.string(),
+      description: z.string(),
+      icon: z.string().optional(),
+    }),
+  ).optional(),
+});
+
 export const MarketGameVersionSchema = z.object({
   version: z.string().regex(/^\d+\.\d+\.\d+$/),
   description: z.string().min(1),
@@ -10,6 +51,7 @@ export const MarketGameVersionSchema = z.object({
   publishedAt: z.string().datetime().optional(),
   releaseNotes: z.string().optional(),
   isPrerelease: z.boolean().optional(),
+  gameManifest: GameManifestOverrideSchema.optional(),
 });
 
 /** 运行时校验 downloadUrl 和 sha256 是否有效（不依赖 Zod，仅前端展示用） */
@@ -21,6 +63,7 @@ export const MarketGameSchema = z.object({
   id: z.string().regex(/^[a-z0-9]+(\.[a-z0-9\-]+)+$/),
   name: z.string().min(1).max(100),
   author: z.string().min(1).max(100),
+  author_url: z.string().url().optional(),
   type: z.enum([
     "singleplayer",
     "multiplayer",
@@ -64,6 +107,7 @@ export const MarketIndexSchema = z.object({
   games: z.array(MarketGameSchema),
 });
 
+export type GameManifestOverride = z.infer<typeof GameManifestOverrideSchema>;
 export type MarketSource = z.infer<typeof MarketSourceSchema>;
 export type MarketDirectory = z.infer<typeof MarketDirectorySchema>;
 export type MarketGameVersion = z.infer<typeof MarketGameVersionSchema>;
@@ -86,7 +130,8 @@ export type MarketErrorCode =
   | "download"
   | "verify"
   | "extract"
-  | "install";
+  | "install"
+  | "manifest";
 
 export interface MarketTaskState {
   taskId: string;

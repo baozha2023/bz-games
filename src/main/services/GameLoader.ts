@@ -242,7 +242,7 @@ export class GameLoader {
     return `local.game.${segment}`;
   }
 
-  private static detectEntryFile(sourcePath: string): string {
+  static detectEntryFile(sourcePath: string): string {
     const preferred = [
       "index.html",
       "main.html",
@@ -403,16 +403,18 @@ export class GameLoader {
       fs.mkdirSync(gamesDir, { recursive: true });
     }
 
-    // Target path: <AppRoot>/games/<gameId>/<version>
     const gameRootDir = path.join(gamesDir, manifest.id);
-    const targetPath = path.join(gameRootDir, manifest.version);
 
-    // Remove existing version directory if it exists
-    if (fs.existsSync(targetPath)) {
-      fs.rmSync(targetPath, { recursive: true, force: true });
+    if (fs.existsSync(gameRootDir) && !fs.statSync(gameRootDir).isDirectory()) {
+      fs.rmSync(gameRootDir, { force: true, maxRetries: 10, retryDelay: 500 });
     }
 
-    // Copy game files
+    const targetPath = path.join(gameRootDir, manifest.version);
+
+    if (fs.existsSync(targetPath)) {
+      fs.rmSync(targetPath, { recursive: true, force: true, maxRetries: 10, retryDelay: 500 });
+    }
+
     logger.info(`Copying game files from ${sourcePath} to ${targetPath}`);
     copyFolderRecursiveSync(sourcePath, targetPath);
 

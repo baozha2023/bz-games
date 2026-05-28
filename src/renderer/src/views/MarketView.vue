@@ -71,6 +71,9 @@
               :src="(game.iconUrl || game.coverUrl)!"
               class="market-thumb"
             />
+            <div v-else class="market-thumb market-thumb-placeholder">
+              {{ t("market.noImage") }}
+            </div>
             <div class="market-game-text">
               <n-space justify="space-between" align="center">
                 <n-space align="center" :size="8">
@@ -117,6 +120,9 @@
                     :src="(game.coverUrl || game.iconUrl)!"
                     class="market-cover"
                   />
+                  <div v-else class="market-cover market-cover-placeholder">
+                    {{ t("market.noImage") }}
+                  </div>
                   <div class="market-detail-meta">
                     <n-space align="center" wrap>
                       <n-tag :bordered="false">{{ typeLabel(game.type) }}</n-tag>
@@ -131,9 +137,12 @@
                         {{ t("market.deprecated") }}
                       </n-tag>
                     </n-space>
-                    <n-text depth="3">
-                      {{ t("market.author", { author: game.author }) }}
-                    </n-text>
+                    <n-space align="center" :size="4">
+                      <n-text depth="3">{{ t("market.author", { author: game.author }) }}</n-text>
+                      <n-button v-if="game.author_url" text size="tiny" @click.stop="handleOpenAuthorUrl(game.author_url!)" style="font-size: 16px;">
+                        <n-icon><OpenOutline /></n-icon>
+                      </n-button>
+                    </n-space>
                     <n-text>{{ game.summary }}</n-text>
                     <n-space size="small" wrap>
                       <n-tag
@@ -239,6 +248,15 @@
                       >
                         {{ t("market.pauseTask") }}
                       </n-button>
+                      <n-tooltip v-if="isTaskActive(game) && getCurrentTask(game) && isNonPausableRunning(getCurrentTask(game)!)" trigger="hover">
+                        <template #trigger>
+                          <n-button secondary disabled>
+                            <n-icon><CloseOutline /></n-icon>
+                            {{ t("market.pauseTask") }}
+                          </n-button>
+                        </template>
+                        {{ t("market.cannotPauseExtracting") }}
+                      </n-tooltip>
                       <n-button
                         v-if="getCurrentTask(game) && (getCurrentTask(game)!.status === 'paused' || getCurrentTask(game)!.status === 'interrupted')"
                         secondary
@@ -333,7 +351,7 @@ import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { useDialog, useMessage } from "naive-ui";
-import { ChevronBack, ChevronDown, ChevronUp, SearchOutline } from "@vicons/ionicons5";
+import { ChevronBack, ChevronDown, ChevronUp, CloseOutline, OpenOutline, SearchOutline } from "@vicons/ionicons5";
 import semver from "semver";
 import type {
   MarketGame,
@@ -390,6 +408,7 @@ const ERROR_CODE_KEYS: Record<string, string> = {
   verify: "market.verifyError",
   extract: "market.extractError",
   install: "market.installError",
+  manifest: "market.manifestMissing",
 };
 
 let cleanupMarketEvent: (() => void) | undefined;
@@ -479,11 +498,19 @@ function isTaskCancelable(game: MarketGame): boolean {
 }
 
 function canPause(task: MarketTaskState): boolean {
-  return ["downloading", "verifying", "extracting", "installing"].includes(task.status)
+  return ["downloading", "verifying"].includes(task.status)
+}
+
+function isNonPausableRunning(task: MarketTaskState): boolean {
+  return ["extracting", "installing"].includes(task.status)
 }
 
 function typeLabel(type: MarketGame["type"]): string {
   return t(TYPE_LABEL_KEYS[type]);
+}
+
+function handleOpenAuthorUrl(url: string) {
+  window.electronAPI.settings.openUrl(url);
 }
 
 function formatBytes(bytes: number): string {
@@ -727,7 +754,7 @@ onMounted(async () => {
           gameId: snap.gameId,
           version: snap.version,
           status: snap.status,
-          progress: snap.size > 0 ? Math.min(60, Math.round((snap.bytesReceived / snap.size) * 60)) : 0,
+          progress: snap.size > 0 ? Math.min(65, Math.round((snap.bytesReceived / snap.size) * 65)) : 0,
           bytesReceived: snap.bytesReceived,
           totalBytes: snap.size,
           createdAt: snap.updatedAt,
@@ -815,6 +842,17 @@ onUnmounted(() => {
   border-radius: 8px;
 }
 
+.market-thumb-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--n-color-modal);
+  border: 1px dashed var(--n-border-color);
+  color: var(--n-text-color-3);
+  font-size: 13px;
+  user-select: none;
+}
+
 .market-game-text {
   display: flex;
   flex: 1;
@@ -842,6 +880,17 @@ onUnmounted(() => {
   aspect-ratio: 16 / 9;
   object-fit: cover;
   border-radius: 12px;
+}
+
+.market-cover-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--n-color-modal);
+  border: 1px dashed var(--n-border-color);
+  color: var(--n-text-color-3);
+  font-size: 15px;
+  user-select: none;
 }
 
 .market-detail-meta {

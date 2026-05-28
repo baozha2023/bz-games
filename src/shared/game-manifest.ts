@@ -10,7 +10,7 @@ export const GameManifestSchema = z
     version: z.string().regex(/^\d+\.\d+\.\d+/),
     description: z.string().max(500).optional(),
     author: z.string().min(1).max(100),
-    website: z.string().url().optional(),
+    author_url: z.string().url().optional(),
     platformVersion: z.union([z.string(), z.tuple([z.string(), z.string()])]),
     entry: z.string(),
     web_url: z.string().url().optional(),

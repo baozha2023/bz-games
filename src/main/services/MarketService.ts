@@ -1,17 +1,15 @@
 import { app } from "electron";
-import { execFile } from "child_process";
-import { promisify } from "util";
+import { spawn } from "child_process";
 import crypto from "crypto";
 import fs from "fs";
 import fsp from "fs/promises";
 import path from "path";
 import semver from "semver";
 import { path7za } from "7zip-bin";
-import extractZip from "extract-zip";
 import {
   IPC,
 } from "../../shared/ipc-channels";
-import { GameManifestSchema } from "../../shared/game-manifest";
+import { GameManifestSchema, type GameManifest } from "../../shared/game-manifest";
 import type {
   DownloadTaskSnapshot,
   MarketErrorCode,
@@ -89,7 +87,7 @@ const ACTIVE_STATUSES: MarketTaskStatus[] = [
 ];
 
 const PAUSABLE_STATUSES: MarketTaskStatus[] = [
-  "downloading", "verifying", "extracting", "installing",
+  "downloading", "verifying",
 ];
 
 const TERMINAL_STATUSES: MarketTaskStatus[] = [
@@ -104,6 +102,9 @@ function classifyErrorCode(error: unknown): MarketErrorCode {
   const message = error instanceof Error ? error.message : String(error);
   if (message.includes("market_download_size_mismatch") || message.includes("market_download_sha256_mismatch")) {
     return "verify";
+  }
+  if (message.includes("market_manifest")) {
+    return "manifest";
   }
   if (message.includes("market_download")) {
     return "download";
@@ -128,7 +129,17 @@ async function getPartialFileSize(filePath: string): Promise<number> {
 }
 
 async function removeIfExists(targetPath: string): Promise<void> {
-  await fsp.rm(targetPath, { recursive: true, force: true });
+  try {
+    fs.rmSync(targetPath, { recursive: true, force: true, maxRetries: 10, retryDelay: 500 });
+  } catch (err: unknown) {
+    const code = (err as NodeJS.ErrnoException)?.code;
+    if (code === "ENOENT") return;
+    if (code === "EBUSY" || code === "EPERM") {
+      logger.warn(`[MarketService] could not remove ${targetPath}: ${code}`);
+      return;
+    }
+    throw err;
+  }
 }
 
 async function computeSha256(filePath: string): Promise<string> {
@@ -153,40 +164,40 @@ function inferArchiveType(downloadUrl: string): MarketArchiveType {
   throw new Error("market_archive_type_unknown");
 }
 
-async function extractZipArchive(
-  zipPath: string,
-  destinationPath: string,
-): Promise<void> {
-  await ensureDir(destinationPath);
-  await extractZip(zipPath, { dir: path.resolve(destinationPath) });
-}
-
-const execFileAsync = promisify(execFile);
-
-async function extract7zArchive(
+async function extractArchiveFile(
   archivePath: string,
   destinationPath: string,
 ): Promise<void> {
   await ensureDir(destinationPath);
-  try {
-    await execFileAsync(path7za, [
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(path7za, [
       "x",
       archivePath,
       `-o${destinationPath}`,
       "-y",
-    ]);
-  } catch (error: unknown) {
-    const err = error as NodeJS.ErrnoException;
-    if (err.code === "ENOENT") {
-      throw new Error("market_7z_not_installed");
-    }
-    throw new Error(
-      `market_extract_7z_failed:${err.message || String(error)}`,
-    );
-  }
+    ], {
+      stdio: "ignore",
+    });
+
+    child.on("error", (err: NodeJS.ErrnoException) => {
+      if (err.code === "ENOENT") {
+        reject(new Error("market_7z_not_installed"));
+      } else {
+        reject(new Error(`market_extract_7z_failed:${err.message}`));
+      }
+    });
+
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve();
+      } else {
+        reject(new Error(`market_extract_7z_failed:exit_code_${code}`));
+      }
+    });
+  });
 }
 
-async function resolveExtractedImportDir(extractRoot: string): Promise<string> {
+async function resolveExtractedImportDir(extractRoot: string): Promise<string | null> {
   const rootManifest = path.join(extractRoot, "game.json");
   if (fs.existsSync(rootManifest)) {
     return extractRoot;
@@ -202,7 +213,17 @@ async function resolveExtractedImportDir(extractRoot: string): Promise<string> {
     return dirs[0];
   }
 
-  throw new Error("market_extract_manifest_missing");
+  return null;
+}
+
+async function resolveImportRoot(extractRoot: string): Promise<string> {
+  const entries = await fsp.readdir(extractRoot, { withFileTypes: true });
+  const dirs = entries.filter((entry) => entry.isDirectory());
+  const files = entries.filter((entry) => !entry.isDirectory());
+  if (dirs.length === 1 && files.length === 0) {
+    return path.join(extractRoot, dirs[0].name);
+  }
+  return extractRoot;
 }
 
 export class MarketService {
@@ -271,6 +292,44 @@ export class MarketService {
 
   private emit(state: MarketTaskState): void {
     mainWindow?.webContents.send(IPC.MARKET_EVENT, { task: state });
+  }
+
+  private tickProgress(taskId: string, progress: number): void {
+    const task = this.tasks.get(taskId);
+    if (!task) return;
+    task.state = { ...task.state, progress, updatedAt: now() };
+    this.emit(task.state);
+  }
+
+  private startProgressSim(
+    taskId: string,
+    signal: AbortSignal,
+    from: number,
+    to: number,
+    estimatedSeconds: number,
+  ): () => void {
+    const delta = to - from;
+    const intervalMs = 500;
+    const totalSteps = (estimatedSeconds * 1000) / intervalMs;
+    const perStep = delta / totalSteps;
+    let step = 0;
+
+    const timer = setInterval(() => {
+      if (signal.aborted) {
+        clearInterval(timer);
+        return;
+      }
+      step++;
+      const pct = Math.round(from + perStep * step);
+      if (pct <= to) {
+        this.tickProgress(taskId, pct);
+      }
+      if (pct >= to) {
+        clearInterval(timer);
+      }
+    }, intervalMs);
+
+    return () => clearInterval(timer);
   }
 
   /**
@@ -424,7 +483,7 @@ export class MarketService {
         gameId: snap.gameId,
         version: snap.version,
         status: "interrupted",
-        progress: snap.size > 0 ? Math.min(60, Math.round((snap.bytesReceived / snap.size) * 60)) : 0,
+        progress: snap.size > 0 ? Math.min(65, Math.round((snap.bytesReceived / snap.size) * 65)) : 0,
         bytesReceived: snap.bytesReceived,
         totalBytes: snap.size,
         createdAt: snap.updatedAt,
@@ -693,7 +752,7 @@ export class MarketService {
     await this.extractArchive(taskId, meta, extractRoot, signal);
     signal.throwIfAborted();
 
-    await this.installGame(taskId, game, targetVersion, extractRoot);
+    await this.installGame(taskId, game, targetVersion, extractRoot, signal);
 
     await this.removeSnapshot(taskId);
     this.transition(taskId, "completed", { progress: 100 });
@@ -718,7 +777,7 @@ export class MarketService {
     }
 
     this.transition(taskId, "downloading", {
-      progress: isResuming ? Math.min(60, Math.round((partialSize / meta.size) * 60)) : 0,
+      progress: isResuming ? Math.min(65, Math.round((partialSize / meta.size) * 65)) : 0,
       error: undefined,
       totalBytes: meta.size,
       bytesReceived: isResuming ? partialSize : 0,
@@ -748,9 +807,19 @@ export class MarketService {
 
     await new Promise<void>((resolve, reject) => {
       const reader = response.body!.getReader();
+      let settled = false;
 
-      const onAbort = () => writer.destroy(new Error("market_download_aborted"));
+      const onAbort = () => {
+        writer.destroy(new Error("market_download_aborted"));
+      };
       signal.addEventListener("abort", onAbort, { once: true });
+
+      const settleReject = (err: unknown) => {
+        if (settled) return;
+        settled = true;
+        signal.removeEventListener("abort", onAbort);
+        reject(err);
+      };
 
       const pump = async (): Promise<void> => {
         try {
@@ -764,19 +833,22 @@ export class MarketService {
               await new Promise<void>((r) => writer.once("drain", r));
             }
             this.transition(taskId, "downloading", {
-              progress: meta.size ? Math.min(60, Math.round((received / meta.size) * 60)) : 0,
+              progress: meta.size ? Math.min(65, Math.round((received / meta.size) * 65)) : 0,
               bytesReceived: received,
             });
           }
-          writer.end(() => resolve());
+          writer.end(() => {
+            if (settled) return;
+            settled = true;
+            signal.removeEventListener("abort", onAbort);
+            resolve();
+          });
         } catch (error) {
-          reject(error);
-        } finally {
-          signal.removeEventListener("abort", onAbort);
+          settleReject(error);
         }
       };
 
-      writer.on("error", reject);
+      writer.on("error", (err) => settleReject(err));
       void pump();
     });
   }
@@ -787,15 +859,23 @@ export class MarketService {
     signal: AbortSignal,
   ): Promise<void> {
     signal.throwIfAborted();
-    this.transition(taskId, "verifying", { progress: 70 });
+    this.transition(taskId, "verifying", { progress: 65 });
 
-    const stat = await fsp.stat(meta.downloadPath);
-    if (stat.size !== meta.size) throw new Error("market_download_size_mismatch");
+    const stopSim = this.startProgressSim(taskId, signal, 65, 69, 5);
+    try {
+      const stat = await fsp.stat(meta.downloadPath);
+      if (stat.size !== meta.size) throw new Error("market_download_size_mismatch");
 
-    const sha256 = await computeSha256(meta.downloadPath);
-    if (sha256.toLowerCase() !== meta.sha256.toLowerCase()) {
-      throw new Error("market_download_sha256_mismatch");
+      const sha256 = await computeSha256(meta.downloadPath);
+      if (sha256.toLowerCase() !== meta.sha256.toLowerCase()) {
+        throw new Error("market_download_sha256_mismatch");
+      }
+    } finally {
+      stopSim();
     }
+
+    signal.throwIfAborted();
+    this.transition(taskId, "verifying", { progress: 70 });
   }
 
   private async extractArchive(
@@ -805,15 +885,62 @@ export class MarketService {
     signal: AbortSignal,
   ): Promise<void> {
     signal.throwIfAborted();
-    this.transition(taskId, "extracting", { progress: 80 });
+    this.transition(taskId, "extracting", { progress: 70 });
 
-    if (meta.archiveType === "zip") {
-      await extractZipArchive(meta.downloadPath, extractRoot);
-    } else if (meta.archiveType === "7z") {
-      await extract7zArchive(meta.downloadPath, extractRoot);
-    } else {
-      throw new Error("market_archive_type_not_supported");
+    const stopSim = this.startProgressSim(taskId, signal, 70, 94, 60);
+    try {
+      await extractArchiveFile(meta.downloadPath, extractRoot);
+    } finally {
+      stopSim();
     }
+
+    signal.throwIfAborted();
+    this.transition(taskId, "extracting", { progress: 95 });
+  }
+
+  private buildManifestFromMarket(
+    game: MarketGame,
+    targetVersion: MarketGameVersion,
+    importDir: string,
+  ): GameManifest {
+    const gm = targetVersion.gameManifest!;
+
+    const entry = gm.entry || (() => {
+      try { return GameLoader.detectEntryFile(importDir); }
+      catch { return ""; }
+    })();
+
+    if (!entry) {
+      throw new Error("market_manifest_entry_required");
+    }
+
+    const type = gm.type || game.type;
+    const needsMultiplayer = type === "multiplayer" || type === "singlemultiple";
+
+    return GameManifestSchema.parse({
+      id: game.id,
+      name: gm.name || game.name,
+      version: targetVersion.version,
+      description: gm.description || game.summary,
+      author: gm.author || game.author,
+      author_url: gm.author_url !== undefined ? gm.author_url : game.author_url,
+      platformVersion: gm.platformVersion || targetVersion.platformVersion,
+      entry,
+      web_url: gm.web_url,
+      icon: gm.icon,
+      cover: gm.cover,
+      video: gm.video,
+      encryptLocalStorage: gm.encryptLocalStorage,
+      type,
+      statistics: gm.statistics,
+      multiplayer: gm.multiplayer || (needsMultiplayer && game.minPlayers != null ? {
+        minPlayers: game.minPlayers,
+        maxPlayers: game.maxPlayers || game.minPlayers,
+      } : undefined),
+      args: gm.args,
+      env: gm.env,
+      achievements: gm.achievements,
+    });
   }
 
   private async installGame(
@@ -821,37 +948,59 @@ export class MarketService {
     game: MarketGame,
     targetVersion: MarketGameVersion,
     extractRoot: string,
+    signal: AbortSignal,
   ): Promise<void> {
-    this.transition(taskId, "installing", { progress: 90 });
+    this.transition(taskId, "installing", { progress: 95 });
 
-    const importDir = await resolveExtractedImportDir(extractRoot);
-    const manifestPath = path.join(importDir, "game.json");
-    const manifest = GameManifestSchema.parse(
-      JSON.parse(await fsp.readFile(manifestPath, "utf8")),
-    );
-    if (manifest.id !== game.id) {
-      throw new Error("market_manifest_mismatch");
-    }
-    if (game.type !== "networkgame" && manifest.version !== targetVersion.version) {
-      throw new Error("market_manifest_mismatch");
-    }
+    const stopSim = this.startProgressSim(taskId, signal, 95, 99, 10);
+    let importDir: string | null = null;
 
-    const currentVersion = app.getVersion();
-    let manifestVersionOk = false;
-    if (Array.isArray(manifest.platformVersion)) {
-      const [min, max] = manifest.platformVersion;
-      manifestVersionOk = semver.gte(currentVersion, min) && semver.lte(currentVersion, max);
-    } else {
-      manifestVersionOk = semver.satisfies(currentVersion, manifest.platformVersion);
-    }
-    if (!manifestVersionOk) {
-      throw new Error("market_platform_version_manifest_mismatch");
-    }
+    try {
+      importDir = await resolveExtractedImportDir(extractRoot);
 
-    const result = await GameLoader.loadGameFromPath(importDir);
-    if (!result.success || !result.manifest) {
-      throw new Error(result.error || "market_install_failed");
-    }
+      if (!importDir) {
+        if (!targetVersion.gameManifest) {
+          throw new Error("market_manifest_missing");
+        }
+        importDir = await resolveImportRoot(extractRoot);
+        const builtManifest = this.buildManifestFromMarket(game, targetVersion, importDir);
+        await fsp.writeFile(
+          path.join(importDir, "game.json"),
+          JSON.stringify(builtManifest, null, 2),
+          "utf8",
+        );
+      }
+
+      const manifestPath = path.join(importDir, "game.json");
+      const manifest = GameManifestSchema.parse(
+        JSON.parse(await fsp.readFile(manifestPath, "utf8")),
+      );
+      if (manifest.id !== game.id) {
+        throw new Error("market_manifest_mismatch");
+      }
+      if (game.type !== "networkgame" && manifest.version !== targetVersion.version) {
+        throw new Error("market_manifest_mismatch");
+      }
+
+      const currentVersion = app.getVersion();
+      let manifestVersionOk = false;
+      if (Array.isArray(manifest.platformVersion)) {
+        const [min, max] = manifest.platformVersion;
+        manifestVersionOk = semver.gte(currentVersion, min) && semver.lte(currentVersion, max);
+      } else {
+        manifestVersionOk = semver.satisfies(currentVersion, manifest.platformVersion);
+      }
+      if (!manifestVersionOk) {
+        throw new Error("market_platform_version_manifest_mismatch");
+      }
+
+      const result = await GameLoader.loadGameFromPath(importDir);
+      if (!result.success || !result.manifest) {
+        throw new Error(result.error || "market_install_failed");
+      }
+     } finally {
+       stopSim();
+     }
   }
 }
 

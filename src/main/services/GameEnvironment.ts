@@ -81,4 +81,16 @@ export class GameEnvironment {
       logger.warn(`[GameEnvironment] Failed to write config file`, e);
     }
   }
+
+  static removeConfig(versionPath: string): void {
+    try {
+      const configPath = path.join(versionPath, "bz-config.js");
+      if (fs.existsSync(configPath)) {
+        fs.unlinkSync(configPath);
+        logger.info(`[GameEnvironment] Removed config: ${configPath}`);
+      }
+    } catch (e) {
+      logger.warn(`[GameEnvironment] Failed to remove config file`, e);
+    }
+  }
 }

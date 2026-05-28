@@ -45,6 +45,7 @@ my-game/
   "version": "1.0.0",
   "description": "游戏简要介绍...",
   "author": "开发者名称",
+  "author_url": "https://github.com/developer",
   "platformVersion": ">=1.0.0",
   "entry": "index.html",
   "web_url": "https://example.com",
@@ -92,6 +93,7 @@ my-game/
 | `version` | string | 是 | 游戏版本号 (SemVer 格式，如 `1.0.0`)。`networkgame` 类型游戏版本号不参与校验与去重，仅以 `id` 判断唯一性。 |
 | `description` | string | 否 | 游戏描述 |
 | `author` | string | 否 | 作者名称 |
+| `author_url` | string | 否 | 作者主页链接，游戏详情页与市场页将在作者名称旁显示跳转图标 |
 | `platformVersion`| string/array | 是 | 兼容的平台版本范围 (如 `">=1.0.0"` 或 `["1.0.0", "2.0.0"]`) |
 | `entry` | string | 是 | 启动入口。支持本地入口文件（如 `index.html`、`game.exe`）、`serve` 或 `url` |
 | `web_url` | string | `entry=url` 时必填 | 远程网页地址（必须为合法 `https?://` URL） |

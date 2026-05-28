@@ -25,7 +25,12 @@
     <n-divider />
 
     <n-card style="margin-bottom: 16px;">
-      <CalendarHeatmap :daily-durations="dailyDurations" />
+      <div v-if="isLoadingHeatmap" class="heatmap-skeleton">
+        <n-skeleton height="20px" width="30%" style="margin-bottom: 16px;" />
+        <n-skeleton height="140px" />
+        <n-skeleton height="16px" width="40%" style="margin-top: 12px;" />
+      </div>
+      <CalendarHeatmap v-else :daily-durations="dailyDurations" />
     </n-card>
 
     <n-grid x-gap="12" y-gap="12" :cols="1" md="2" lg="3">
@@ -78,6 +83,7 @@ const selectedVersions = ref<Record<string, string>>({})
 const manifestCache = ref<Record<string, GameManifest>>({})
 const searchKeyword = ref('')
 const isSearchExpanded = ref(false)
+const isLoadingHeatmap = ref(true)
 const dailyDurations = ref<{ date: string; total_duration_ms: number }[]>([])
 
 const games = computed(() => gameStore.games)
@@ -105,13 +111,15 @@ async function loadStatsData() {
     dailyDurations.value = durations
   } catch (e) {
     console.error('[StatisticsView] Failed to load stats data:', e)
+  } finally {
+    isLoadingHeatmap.value = false
   }
 }
 
-onMounted(async () => {
-  await gameStore.loadGames()
-  await loadStatsData()
-  
+onMounted(() => {
+  gameStore.loadGames()
+  loadStatsData()
+
   for (const game of games.value) {
     if (!selectedVersions.value[game.id]) {
       selectedVersions.value[game.id] = game.version;

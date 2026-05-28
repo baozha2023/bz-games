@@ -49,7 +49,7 @@ db/*.db-wal
 小恐龙快跑/
 bird_fly/
 
-
+bz-games-third-party-market/
 bz-games-website/
 bz-games-market/
 fc-api/
@@ -60,6 +60,7 @@ resources/elevate.exe
 
 # 测试文件
 test-connect.js
+
 
 
 

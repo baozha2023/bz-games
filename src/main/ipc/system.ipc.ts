@@ -138,7 +138,7 @@ export function registerSystemIpc() {
 
   ipcMain.handle(IPC.SYSTEM_UNINSTALL, async (_, payload?: { deleteGames?: boolean }) => {
     const exeDir = path.dirname(app.getPath("exe"));
-    const uninstaller = path.join(exeDir, "uninstall.exe");
+    const uninstaller = path.join(exeDir, "Uninstall BZ-Games.exe");
     if (!fs.existsSync(uninstaller)) {
       return { success: false, error: "uninstaller_not_found" };
     }

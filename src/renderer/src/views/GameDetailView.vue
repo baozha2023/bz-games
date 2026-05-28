@@ -31,7 +31,14 @@
              <n-select v-if="versions.length > 0" v-model:value="selectedVersion" :options="versionOptions" size="small" style="width: 120px; display: inline-block; vertical-align: middle;" @update:value="handleVersionChange" />
              <span v-else>{{ game.version }}</span>
           </n-descriptions-item>
-          <n-descriptions-item :label="t('gameDetail.author')">{{ (currentManifest?.author) || (isLatestVersion ? game.author : '') }}</n-descriptions-item>
+          <n-descriptions-item :label="t('gameDetail.author')">
+            <n-space align="center" :size="4">
+              <span>{{ (currentManifest?.author) || (isLatestVersion ? game.author : '') }}</span>
+              <n-button v-if="authorUrl" text size="tiny" @click="handleOpenAuthorUrl" style="font-size: 16px;">
+                <n-icon><OpenOutline /></n-icon>
+              </n-button>
+            </n-space>
+          </n-descriptions-item>
           <n-descriptions-item :label="t('gameDetail.type')">{{ typeLabel }}</n-descriptions-item>
           <n-descriptions-item :label="t('gameDetail.description')" v-if="(currentManifest?.description) || (isLatestVersion ? game.description : '')">{{ (currentManifest?.description) || (isLatestVersion ? game.description : '') }}</n-descriptions-item>
         </n-descriptions>
@@ -90,7 +97,7 @@ import { computed, ref, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
-import { Heart, HeartOutline } from '@vicons/ionicons5'
+import { Heart, HeartOutline, OpenOutline } from '@vicons/ionicons5'
 import { useGameStore } from '../stores/useGameStore'
 import { useRoomStore } from '../stores/useRoomStore'
 import { useSettingsStore } from '../stores/useSettingsStore'
@@ -128,6 +135,19 @@ const typeLabel = computed(() => {
 const showJoinModal = ref(false)
 const joinAddress = ref('')
 const showAchievements = ref(false)
+
+const authorUrl = computed(() => {
+  if (currentManifest.value?.author_url) return currentManifest.value.author_url
+  if (isLatestVersion.value && game.value?.author_url) return game.value.author_url
+  return ''
+})
+
+const handleOpenAuthorUrl = () => {
+  const url = authorUrl.value
+  if (url) {
+    window.electronAPI.settings.openUrl(url)
+  }
+}
 
 const gameAchievements = computed(() => {
     let achievements;
