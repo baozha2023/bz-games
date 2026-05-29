@@ -6,7 +6,7 @@ import { storeService } from "../services/StoreService";
 import { updateService } from "../services/UpdateService";
 import { logger } from "../utils/logger";
 import type { AppSettings } from "../../shared/types";
-import { getAppRoot, setCustomGamesDir } from "../utils/appPath";
+import { setCustomGamesDir } from "../utils/appPath";
 
 export function registerSystemIpc() {
   updateService.init();
@@ -136,7 +136,7 @@ export function registerSystemIpc() {
 
   ipcMain.handle(IPC.SYSTEM_GET_AVATAR_FRAME_IMAGE, async (_, fileName: string) => {
     try {
-      const framePath = path.join(getAppRoot(), "resources", "avatar-frames", fileName);
+      const framePath = path.join(app.getAppPath(), "resources", "avatar-frames", fileName);
       if (!fs.existsSync(framePath)) {
         logger.warn(`[SystemIPC] Avatar frame image not found: ${framePath}`);
         return null;
