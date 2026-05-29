@@ -164,13 +164,20 @@ function inferArchiveType(downloadUrl: string): MarketArchiveType {
   throw new Error("market_archive_type_unknown");
 }
 
+function get7zaPath(): string {
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, "7za", "7za.exe");
+  }
+  return path7za;
+}
+
 async function extractArchiveFile(
   archivePath: string,
   destinationPath: string,
 ): Promise<void> {
   await ensureDir(destinationPath);
   await new Promise<void>((resolve, reject) => {
-    const child = spawn(path7za, [
+    const child = spawn(get7zaPath(), [
       "x",
       archivePath,
       `-o${destinationPath}`,

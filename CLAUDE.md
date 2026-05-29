@@ -110,7 +110,7 @@ bz-games/
 │   │   └── utils/
 │   │       ├── appPath.ts                 # 应用根路径与游戏目录路径工具
 │   │       ├── fileUtils.ts               # 文件复制等通用文件工具
-│   │       ├── logger.ts                  # 日志输出封装
+│   │       ├── logger.ts                  # 日志输出封装（生产模式下 error 日志自动写入 exe 同级目录的 bz-games-error.log）
 │   │       └── portUtils.ts               # 可用端口探测工具
 │   │
 │   ├── preload/
@@ -899,6 +899,8 @@ interface AppSettings {
 
 - **原生模块编译**：`better-sqlite3` 为 C++ 原生模块，`postinstall` 脚本中的 `electron-builder install-app-deps` 会在每次 `npm install` 后自动针对当前 Electron 版本重编译 `.node` 文件。
 - **asarUnpack 必需**：原生 `.node` 文件无法从 `app.asar` 内加载，`package.json` 的 `build.asarUnpack` 必须配置 `["node_modules/better-sqlite3/**"]`，将此模块解压到 asar 外部，否则打包后运行必定崩溃。
+- **extraResources 用于原生可执行文件**：`7zip-bin` 提供的 `7za.exe` 需要通过 `child_process.spawn()` 调用。`asarUnpack` 解压后文件路径仍在 asar 内部上下文，`spawn()` 无法执行。必须使用 `build.extraResources` 将其拷贝到 `process.resourcesPath`（asar 完全外部），代码中通过 `process.resourcesPath` 手动拼接路径。配置示例：`{ "from": "node_modules/7zip-bin/win/x64", "to": "7za", "filter": ["7za.exe"] }`。
+- **pnpm 依赖提升（hoisting）**：`electron-updater` 的传递依赖 `debug` 需要 `ms` 模块，但 pnpm 严格隔离导致 `ms` 仅存在于 `.pnpm/debug@x.x.x/node_modules/ms` 中。electron-builder 打包时不会包含 `.pnpm` 目录内的嵌套依赖，导致运行时 `Cannot find module 'ms'`。解决方案：将 `ms` 声明为项目直接依赖，pnpm 会将其提升到顶层 `node_modules`。项目中 `ms` 仅作为此兼容性占位依赖，代码不直接引用。
 - **electron-rebuild 手动补充**：若开发阶段出现 `NODE_MODULE_VERSION` 不匹配错误（系统 Node.js vs Electron 内嵌 Node.js 版本不一致），执行 `npx electron-rebuild -f -w better-sqlite3` 补齐重编译。
 
 ### 6.5 客户端更新发布规范
