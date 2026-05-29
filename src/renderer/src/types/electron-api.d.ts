@@ -19,6 +19,9 @@ declare global {
     electronAPI: {
       user: {
         getData: () => Promise<UserData>;
+        buyFrame: (frameId: string, coinCost: number) => Promise<{ success: boolean; code?: string }>;
+        equipFrame: (frameId: string) => Promise<boolean>;
+        unequipFrame: (frameId: string) => Promise<boolean>;
         checkIn: () => Promise<{
           success: boolean;
           coins: number;
@@ -131,13 +134,16 @@ declare global {
         pauseTask: (taskId: string) => Promise<boolean>;
         resumeTask: (taskId: string) => Promise<MarketTaskState | null>;
         getPendingTasks: () => Promise<DownloadTaskSnapshot[]>;
+        resolveAssetInfo: (downloadUrl: string) => Promise<{ sha256?: string; size?: number }>;
         onEvent: (callback: (payload: MarketTaskEvent) => void) => () => void;
       };
       settings: {
         get: () => Promise<AppSettings>;
         getAppVersion: () => Promise<string>;
-        save: (settings: AppSettings) => Promise<void>;
+        save: (settings: AppSettings) => Promise<boolean>;
+        ignoreUpdateVersion: (version: string) => Promise<boolean>;
         uploadAvatar: () => Promise<string | null>;
+        getAvatarFrameImage: (fileName: string) => Promise<string | null>;
         selectGameStoragePath: () => Promise<{ path: string; error?: string } | null>;
         openPath: (targetPath: string) => Promise<boolean>;
         openUrl: (url: string) => Promise<boolean>;

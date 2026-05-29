@@ -3,6 +3,7 @@ export default {
     myGames: "マイゲーム",
     market: "ゲーム市場",
     settings: "設定",
+    personalization: "カスタマイズ",
     backToRoom: "部屋に戻る",
   },
   common: {
@@ -252,6 +253,7 @@ export default {
   checkIn: {
     title: "デイリーサインイン",
     streak: "{days}日連続サインイン",
+    totalDays: "累計{days}日サインイン",
     day: "{day}日目",
     action: "サインイン",
     checked: "サインイン済み",
@@ -290,6 +292,8 @@ export default {
     autoLaunchOff: "オフ",
     gameStoragePath: "ゲーム保存先",
     gameStoragePathPlaceholder: "新しく取り込むゲームの保存先を選択",
+    githubToken: "GitHub Token",
+    githubTokenPlaceholder: "GitHub Personal Access Tokenを入力すると、API制限が5000回/時間に引き上げられます",
     browsePath: "参照",
     storagePathList: "保存済みゲームパス",
     storagePathEmpty: "利用可能なパスがありません",
@@ -377,5 +381,18 @@ export default {
     unlockedAt: "{date} に解除",
     progress: "進捗: {current}/{total}",
     locked: "未解除",
+  },
+  personalization: {
+    title: "カスタマイズ",
+    avatarFrame: "アバターフレーム",
+    noFrames: "フレームがありません",
+    equip: "装備",
+    unequip: "外す",
+    equipped: "装備中",
+    locked: "未解放",
+    unlockPlaytime: "累計プレイ時間 {hours} 時間で解放",
+    unlockConsecutiveCheckIn: "連続サインイン {days} 日で解放",
+    unlockTotalCheckIn: "累計サインイン {days} 日で解放",
+    unlockBzCoin: "{coins} BZコインで購入",
   },
 };

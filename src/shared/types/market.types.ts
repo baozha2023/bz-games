@@ -46,17 +46,25 @@ export const MarketGameVersionSchema = z.object({
   description: z.string().min(1),
   platformVersion: z.string().min(1),
   downloadUrl: z.string(),
-  sha256: z.string(),
-  size: z.number().int().nonnegative(),
+  sha256: z.string().optional(),
+  size: z.number().int().nonnegative().optional(),
   publishedAt: z.string().datetime().optional(),
   releaseNotes: z.string().optional(),
   isPrerelease: z.boolean().optional(),
   gameManifest: GameManifestOverrideSchema.optional(),
 });
 
-/** 运行时校验 downloadUrl 和 sha256 是否有效（不依赖 Zod，仅前端展示用） */
-export function isVersionPayloadValid(v: { downloadUrl: string; sha256: string }): boolean {
-  return /^https?:\/\/.+/.test(v.downloadUrl) && /^[a-fA-F0-9]{64}$/.test(v.sha256);
+/** 运行时校验版本载荷是否有效：downloadUrl 合法，sha256/size 可省略仅限 GitHub Releases 直链 */
+export function isVersionPayloadValid(v: { downloadUrl: string; sha256?: string; size?: number }): boolean {
+  if (!/^https?:\/\/.+/.test(v.downloadUrl)) return false;
+  if ((!v.sha256 || v.size == null) && !isGitHubReleaseUrl(v.downloadUrl)) return false;
+  if (v.sha256 && !/^[a-fA-F0-9]{64}$/.test(v.sha256)) return false;
+  return true;
+}
+
+/** 判断 downloadUrl 是否为 GitHub Releases 直链 */
+export function isGitHubReleaseUrl(url: string): boolean {
+  return /^https:\/\/github\.com\/[^/]+\/[^/]+\/releases\/download\//.test(url);
 }
 
 export const MarketGameSchema = z.object({

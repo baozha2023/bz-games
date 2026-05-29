@@ -5,18 +5,13 @@ import { electronApp, optimizer } from "@electron-toolkit/utils";
 import { storeService } from "./services/StoreService";
 import { marketService } from "./services/MarketService";
 import { databaseService } from "./services/DatabaseService";
+import { requestInterceptor } from "./services/MarketService";
 import { setCustomGamesDir } from "./utils/appPath";
 
 app.whenReady().then(async () => {
   electronApp.setAppUserModelId("com.bz.launcher");
 
-  session.defaultSession.webRequest.onBeforeSendHeaders(
-    { urls: ["http://cdn.bzgames.top/*"] },
-    (details, callback) => {
-      details.requestHeaders["Referer"] = "https://bz-game-client.local";
-      callback({ requestHeaders: details.requestHeaders });
-    },
-  );
+  requestInterceptor.registerSessionHandler(session.defaultSession);
 
   await storeService.init();
   databaseService.init();

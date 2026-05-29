@@ -9,18 +9,14 @@
 
       <n-form-item :label="t('settings.avatar')">
         <n-space align="center">
-          <n-avatar 
-            round 
-            size="large" 
-            :src="formValue.avatar" 
-            :key="formValue.avatar"
-            class="avatar-clickable"
-            @click="handleAvatarClick"
-          >
-            <template v-if="!formValue.avatar">
-              {{ formValue.playerName?.charAt(0)?.toUpperCase() }}
-            </template>
-          </n-avatar>
+          <div class="avatar-clickable" @click="handleAvatarClick">
+            <AvatarWithFrame
+              :src="formValue?.avatar"
+              :name="formValue?.playerName || ''"
+              :size="40"
+              :frame-file-name="settingsFrameFileName"
+            />
+          </div>
           <n-button @click="handleUploadAvatar">{{ t('settings.uploadAvatar') }}</n-button>
         </n-space>
       </n-form-item>
@@ -58,6 +54,16 @@
             <n-button @click="handlePickGameStoragePath">{{ t('settings.browsePath') }}</n-button>
           </n-input-group>
         </n-space>
+      </n-form-item>
+
+      <n-form-item :label="t('settings.githubToken')" path="githubToken">
+        <n-input
+          v-model:value="formValue.githubToken"
+          type="password"
+          :placeholder="t('settings.githubTokenPlaceholder')"
+          @copy.prevent
+          @cut.prevent
+        />
       </n-form-item>
 
       <n-form-item :label="t('settings.storagePathList')">
@@ -167,19 +173,12 @@
 
     <n-modal v-model:show="showAvatarPreview" preset="card" title="" style="width: 360px;" :bordered="false">
       <div style="display: flex; justify-content: center; align-items: center; padding: 24px;">
-        <img
-          v-if="formValue?.avatar"
-          :src="formValue.avatar"
-          style="width: 280px; height: 280px; border-radius: 50%; object-fit: cover;"
+        <AvatarWithFrame
+          :src="formValue?.avatar"
+          :name="formValue?.playerName || ''"
+          :size="280"
+          :frame-file-name="settingsFrameFileName"
         />
-        <div
-          v-else
-          style="width: 280px; height: 280px; border-radius: 50%; background: var(--bz-bg-card-placeholder); display: flex; justify-content: center; align-items: center;"
-        >
-          <span style="font-size: 120px; color: var(--bz-text-on-placeholder); line-height: 1;">
-            {{ formValue?.playerName?.charAt(0)?.toUpperCase() }}
-          </span>
-        </div>
       </div>
     </n-modal>
 
@@ -191,7 +190,9 @@ import { ref, onMounted, computed } from 'vue'
 import { useMessage, useDialog } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { useSettingsStore } from '../stores/useSettingsStore'
+import AvatarWithFrame from '../components/AvatarWithFrame.vue'
 import type { AppSettings } from '../../../shared/types'
+import { getFrameImageFileName } from '../../../shared/avatar-frames'
 
 const { t } = useI18n()
 const settingsStore = useSettingsStore()
@@ -217,6 +218,12 @@ const allStoragePaths = computed(() => {
     if (path?.trim()) set.add(path.trim())
   })
   return Array.from(set)
+})
+
+const settingsFrameFileName = computed(() => {
+  const frameId = settingsStore.userData?.equippedFrame
+  if (!frameId) return undefined
+  return getFrameImageFileName(frameId)
 })
 
 const rules = {

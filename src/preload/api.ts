@@ -135,6 +135,8 @@ export const electronAPI = {
       ipcRenderer.invoke(IPC.MARKET_RESUME_TASK, taskId),
     getPendingTasks: (): Promise<DownloadTaskSnapshot[]> =>
       ipcRenderer.invoke(IPC.MARKET_GET_PENDING_TASKS),
+    resolveAssetInfo: (downloadUrl: string): Promise<{ sha256?: string; size?: number }> =>
+      ipcRenderer.invoke(IPC.MARKET_RESOLVE_ASSET_INFO, downloadUrl),
     onEvent: (callback: (payload: MarketTaskEvent) => void) => {
       const handler = (_: any, payload: MarketTaskEvent) => callback(payload);
       ipcRenderer.on(IPC.MARKET_EVENT, handler);
@@ -146,7 +148,11 @@ export const electronAPI = {
     getAppVersion: () => ipcRenderer.invoke(IPC.SYSTEM_GET_APP_VERSION),
     save: (settings: AppSettings) =>
       ipcRenderer.invoke(IPC.SYSTEM_SAVE_SETTINGS, settings),
+    ignoreUpdateVersion: (version: string) =>
+      ipcRenderer.invoke(IPC.SYSTEM_SET_IGNORED_UPDATE_VERSION, version),
     uploadAvatar: () => ipcRenderer.invoke(IPC.SYSTEM_UPLOAD_AVATAR),
+    getAvatarFrameImage: (fileName: string) =>
+      ipcRenderer.invoke(IPC.SYSTEM_GET_AVATAR_FRAME_IMAGE, fileName),
     selectGameStoragePath: () =>
       ipcRenderer.invoke(IPC.SYSTEM_SELECT_GAME_STORAGE_PATH),
     openPath: (targetPath: string) =>
@@ -173,6 +179,12 @@ export const electronAPI = {
   },
   user: {
     getData: () => ipcRenderer.invoke(IPC.SYSTEM_GET_USER_DATA),
+    buyFrame: (frameId: string, coinCost: number) =>
+      ipcRenderer.invoke(IPC.SYSTEM_BUY_FRAME, frameId, coinCost),
+    equipFrame: (frameId: string) =>
+      ipcRenderer.invoke(IPC.SYSTEM_EQUIP_FRAME, frameId),
+    unequipFrame: (frameId: string) =>
+      ipcRenderer.invoke(IPC.SYSTEM_UNEQUIP_FRAME, frameId),
     checkIn: () => ipcRenderer.invoke(IPC.SYSTEM_CHECK_IN),
   },
   stats: {

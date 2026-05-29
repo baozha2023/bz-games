@@ -6,18 +6,13 @@
     <n-layout-header bordered style="height: 64px; padding: 16px;">
       <n-space justify="space-between" align="center">
         <h2 style="margin: 0; display: flex; align-items: center;">
-          <n-avatar 
-            round 
-            size="small" 
-            :src="settingsStore.settings?.avatar" 
-            :key="settingsStore.settings?.avatar"
-            style="margin-right: 8px; vertical-align: middle;" 
-          >
-            <template v-if="!settingsStore.settings?.avatar">
-              {{ settingsStore.settings?.playerName?.charAt(0)?.toUpperCase() || '?' }}
-            </template>
-          </n-avatar>
-          {{ settingsStore.settings?.playerName || 'BZ-Games' }}
+          <AvatarWithFrame
+            :src="settingsStore.settings?.avatar"
+            :name="settingsStore.settings?.playerName || ''"
+            :size="28"
+            :frame-file-name="topBarFrameFileName"
+          />
+          <span style="margin-left: 8px;">{{ settingsStore.settings?.playerName || 'BZ-Games' }}</span>
 
           <div 
              style="margin-left: 16px; display: flex; align-items: center; background: var(--bz-bg-panel); padding: 4px 12px; border-radius: 16px; cursor: pointer; transition: all 0.3s;" 
@@ -44,6 +39,7 @@
             <span v-if="gameStore.newAchievements.size > 0" class="red-dot"></span>
             <n-button @click="router.push('/achievements')">{{ t('achievement.title') }}</n-button>
           </div>
+          <n-button @click="router.push('/personalization')">{{ t('nav.personalization') }}</n-button>
           <n-button @click="router.push('/settings')">{{ t('nav.settings') }}</n-button>
         </n-space>
       </n-space>
@@ -82,19 +78,21 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { NAvatar, NSpace, NIcon, NModal, NText, NProgress, NButton, useDialog, useMessage } from 'naive-ui'
+import { NSpace, NIcon, NModal, NText, NProgress, NButton, useDialog, useMessage } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { useSettingsStore } from './stores/useSettingsStore'
 import { useRoomStore } from './stores/useRoomStore'
 import { useGameStore } from './stores/useGameStore'
 import { Calendar } from '@vicons/ionicons5'
 import CheckInModal from './components/CheckInModal.vue'
+import AvatarWithFrame from './components/AvatarWithFrame.vue'
 import { ref } from 'vue'
 import { AchievementNotifier } from './utils/achievementNotifier'
 import bzCoinIcon from './assets/images/bz-coin.png'
 import semver from 'semver'
 import { invalidateGameAssetCache } from './composables/useImageCache'
 import type { MarketTaskState } from '../../shared/types'
+import { getFrameImageFileName } from '../../shared/avatar-frames'
 
 const marketNotifiedTaskIds = new Set<string>()
 
@@ -107,6 +105,12 @@ const gameStore = useGameStore()
 const dialog = useDialog()
 const message = useMessage()
 const showCheckIn = ref(false)
+
+const topBarFrameFileName = computed(() => {
+  const frameId = settingsStore.userData?.equippedFrame
+  if (!frameId) return undefined
+  return getFrameImageFileName(frameId)
+})
 
 const isNotificationWindow = computed(() => {
   return route.name === 'Notification' || route.path.startsWith('/notification');

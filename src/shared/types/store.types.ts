@@ -1,10 +1,25 @@
+export type AvatarFrameUnlockMethod = "playtime" | "consecutive_checkin" | "total_checkin" | "bzcoin";
+
+export interface AvatarFrameDef {
+  id: string;
+  name: string;
+  description: string;
+  imageFileName: string;
+  rarity: "common" | "rare" | "epic" | "legendary";
+  unlockMethod: AvatarFrameUnlockMethod;
+  unlockValue: number;
+}
+
 export interface UserData {
   bzCoins: number;
   cumulativePlayTime: number; // in milliseconds
   checkIn: {
     lastCheckInDate: string; // YYYY-MM-DD
     consecutiveDays: number;
+    totalDays: number;
   };
+  ownedFrames: string[];
+  equippedFrame?: string;
 }
 
 export interface AppStore {
@@ -50,6 +65,7 @@ export interface AppSettings {
   ignoredUpdateVersion?: string;
   gameStoragePath?: string;
   gameStorageHistory?: string[];
+  githubToken?: string;
 }
 
 export type UpdateErrorCode =

@@ -5,6 +5,9 @@
         <div class="streak-info">
           {{ t('checkIn.streak', { days: userData?.checkIn?.consecutiveDays || 0 }) }}
         </div>
+        <div class="total-info">
+          {{ t('checkIn.totalDays', { days: userData?.checkIn?.totalDays || 0 }) }}
+        </div>
         <div class="coins-info">
           <img :src="bzCoinIcon" style="width: 24px; height: 24px;" />
           <span>{{ userData?.bzCoins || 0 }}</span>
@@ -181,6 +184,10 @@ const handleCheckIn = async () => {
     margin-bottom: 30px;
     font-size: 1.2rem;
     font-weight: bold;
+}
+.total-info {
+    color: var(--bz-text-secondary);
+    font-size: 0.9rem;
 }
 .coins-info {
     display: flex;

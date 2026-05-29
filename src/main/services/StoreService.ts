@@ -15,6 +15,7 @@ import type {
 } from "../../shared/types";
 import { getAppRoot } from "../utils/appPath";
 import { logger } from "../utils/logger";
+import { AVATAR_FRAMES } from "../../shared/avatar-frames";
 
 const defaultSettings: AppSettings = {
   playerName: "玩家",
@@ -36,7 +37,10 @@ const defaultUserData: UserData = {
   checkIn: {
     lastCheckInDate: "",
     consecutiveDays: 0,
+    totalDays: 0,
   },
+  ownedFrames: [],
+  equippedFrame: undefined,
 };
 
 const defaultStore: AppStore = {
@@ -280,6 +284,53 @@ class StoreService {
     return this.getStore().get("userData") || defaultUserData;
   }
 
+  performBuyFrame(frameId: string, coinCost: number): {
+    success: boolean;
+    code?: string;
+  } {
+    const store = this.getStore();
+    const userData = store.get("userData") || defaultUserData;
+
+    if (!userData.ownedFrames) userData.ownedFrames = [];
+
+    if (userData.ownedFrames.includes(frameId)) {
+      return { success: false, code: "already_owned" };
+    }
+
+    if ((userData.bzCoins || 0) < coinCost) {
+      return { success: false, code: "insufficient_coins" };
+    }
+
+    userData.bzCoins -= coinCost;
+    userData.ownedFrames.push(frameId);
+    userData.equippedFrame = frameId;
+
+    store.set("userData", userData);
+    return { success: true };
+  }
+
+  performEquipFrame(frameId: string): void {
+    const store = this.getStore();
+    const userData = store.get("userData") || defaultUserData;
+
+    if (!userData.ownedFrames) userData.ownedFrames = [];
+
+    if (!userData.ownedFrames.includes(frameId)) return;
+
+    userData.equippedFrame = frameId;
+    store.set("userData", userData);
+  }
+
+  performUnequipFrame(frameId: string): void {
+    const store = this.getStore();
+    const userData = store.get("userData") || defaultUserData;
+
+    if (userData.equippedFrame === frameId) {
+      userData.equippedFrame = undefined;
+      store.set("userData", userData);
+    }
+  }
+
   addBzCoins(amount: number): number {
     const store = this.getStore();
     const userData = store.get("userData") || defaultUserData;
@@ -310,8 +361,22 @@ class StoreService {
     }
 
     userData.cumulativePlayTime = newTime;
+
+    this.tryUnlockPlaytimeFrames(userData);
+
     store.set("userData", userData);
     return rewardCount * REWARD_AMOUNT;
+  }
+
+  private tryUnlockPlaytimeFrames(userData: UserData): void {
+    if (!userData.ownedFrames) userData.ownedFrames = [];
+    for (const f of AVATAR_FRAMES) {
+      if (userData.ownedFrames.includes(f.id)) continue;
+      if (f.unlockMethod === 'playtime' && (userData.cumulativePlayTime || 0) >= f.unlockValue) {
+        userData.ownedFrames.push(f.id);
+        logger.info(`[StoreService] Auto-unlocked frame: ${f.id} (playtime ${userData.cumulativePlayTime}ms)`);
+      }
+    }
   }
 
   private formatDate(date: Date): string {
@@ -362,7 +427,10 @@ class StoreService {
     }
 
     userData.checkIn.lastCheckInDate = todayStr;
+    userData.checkIn.totalDays = (userData.checkIn.totalDays || 0) + 1;
     userData.bzCoins = (userData.bzCoins || 0) + reward;
+
+    this.tryUnlockCheckInFrames(userData);
 
     store.set("userData", userData);
     return {
@@ -370,6 +438,21 @@ class StoreService {
       coins: reward,
       days: userData.checkIn.consecutiveDays,
     };
+  }
+
+  private tryUnlockCheckInFrames(userData: UserData): void {
+    if (!userData.ownedFrames) userData.ownedFrames = [];
+    for (const f of AVATAR_FRAMES) {
+      if (userData.ownedFrames.includes(f.id)) continue;
+      if (f.unlockMethod === 'consecutive_checkin' && (userData.checkIn?.consecutiveDays || 0) >= f.unlockValue) {
+        userData.ownedFrames.push(f.id);
+        logger.info(`[StoreService] Auto-unlocked frame: ${f.id} (consecutive ${userData.checkIn?.consecutiveDays}d)`);
+      }
+      if (f.unlockMethod === 'total_checkin' && (userData.checkIn?.totalDays || 0) >= f.unlockValue) {
+        userData.ownedFrames.push(f.id);
+        logger.info(`[StoreService] Auto-unlocked frame: ${f.id} (total ${userData.checkIn?.totalDays}d)`);
+      }
+    }
   }
 
   addGame(game: GameRecord): void {
@@ -659,6 +742,15 @@ class StoreService {
       ...settings,
       gameStoragePath: finalStoragePath,
       gameStorageHistory: nextHistory,
+    });
+  }
+
+  performIgnoreUpdateVersion(version: string): void {
+    const store = this.getStore();
+    const current = this.getSettings();
+    store.set("settings", {
+      ...current,
+      ignoredUpdateVersion: version,
     });
   }
 

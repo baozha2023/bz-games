@@ -205,7 +205,25 @@
                       {{ t("market.platformVersion", { version: getSelectedVersionInfo(game)?.platformVersion }) }}
                     </n-text>
                     <n-text depth="3">
-                      {{ t("market.packageSize", { size: formatBytes(getSelectedVersionInfo(game)?.size || 0) }) }}
+                      <n-space align="center" :size="4">
+                        <template v-if="getSelectedVersionInfo(game) && isAssetLoading(getSelectedVersionInfo(game)!)">
+                          <n-skeleton text :repeat="1" width="120px" />
+                        </template>
+                        <template v-else>
+                          <span>{{ t("market.packageSize", { size: formatSize(getSelectedVersionInfo(game)) }) }}</span>
+                        </template>
+                        <n-button
+                          v-if="getSelectedVersionInfo(game) && isAssetRefreshable(getSelectedVersionInfo(game)!)"
+                          text
+                          size="tiny"
+                          :disabled="isAssetLoading(getSelectedVersionInfo(game)!)"
+                          @click.stop="handleRefreshAsset(getSelectedVersionInfo(game)!.downloadUrl)"
+                        >
+                          <template #icon>
+                            <n-icon><RefreshOutline /></n-icon>
+                          </template>
+                        </n-button>
+                      </n-space>
                     </n-text>
                     <template v-if="getCurrentTask(game)">
                       <n-tag :type="taskTagType(getCurrentTask(game)!.status)" :bordered="false">
@@ -330,7 +348,25 @@
                             </n-text>
                             <br />
                             <n-text depth="3">
-                              {{ t("market.packageSize", { size: formatBytes(version.size) }) }}
+                              <n-space align="center" :size="4">
+                                <template v-if="isAssetLoading(version)">
+                                  <n-skeleton text :repeat="1" width="100px" />
+                                </template>
+                                <template v-else>
+                                  <span>{{ t("market.packageSize", { size: formatSize(version) }) }}</span>
+                                </template>
+                                <n-button
+                                  v-if="isAssetRefreshable(version)"
+                                  text
+                                  size="tiny"
+                                  :disabled="isAssetLoading(version)"
+                                  @click.stop="handleRefreshAsset(version.downloadUrl)"
+                                >
+                                  <template #icon>
+                                    <n-icon><RefreshOutline /></n-icon>
+                                  </template>
+                                </n-button>
+                              </n-space>
                             </n-text>
                           </div>
                         </n-space>
@@ -351,7 +387,7 @@ import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { useDialog, useMessage } from "naive-ui";
-import { ChevronBack, ChevronDown, ChevronUp, CloseOutline, OpenOutline, SearchOutline } from "@vicons/ionicons5";
+import { ChevronBack, ChevronDown, ChevronUp, CloseOutline, OpenOutline, RefreshOutline, SearchOutline } from "@vicons/ionicons5";
 import semver from "semver";
 import type {
   MarketGame,
@@ -360,6 +396,7 @@ import type {
   MarketTaskStatus,
 } from "../../../shared/types";
 import { isVersionPayloadValid } from "../../../shared/types";
+import { isGitHubReleaseUrl } from "../../../shared/types";
 import { useSettingsStore } from "../stores/useSettingsStore";
 import CachedImg from "../components/CachedImg.vue";
 import { useImageCache } from "../composables/useImageCache";
@@ -390,6 +427,8 @@ const appVersion = ref("");
 const marketName = ref("");
 const generatedAt = ref("");
 const refreshCounter = ref(0);
+const resolvedAssets = ref<Record<string, { sha256?: string; size?: number }>>({});
+const loadingAssetUrls = ref(new Set<string>());
 const timeoutIds: number[] = [];
 const pendingDownloads = new Set<string>();
 const pendingCancels = new Set<string>();
@@ -455,7 +494,60 @@ function taskKey(gameId: string, version: string): string {
 }
 
 function toggleExpand(gameId: string): void {
+  const wasExpanded = expandedGames.value[gameId];
   expandedGames.value[gameId] = !expandedGames.value[gameId];
+  if (!wasExpanded && !expandedGames.value[gameId]) return;
+  if (wasExpanded) return;
+  resolveMissingAssetInfo(gameId);
+}
+
+function resolveMissingAssetInfo(gameId: string): void {
+  const game = games.value.find((g) => g.id === gameId);
+  if (!game) return;
+  for (const version of game.versions) {
+    if ((!version.sha256 || version.size == null) && isGitHubReleaseUrl(version.downloadUrl)) {
+      loadAssetInfo(version.downloadUrl);
+    }
+  }
+}
+
+async function loadAssetInfo(downloadUrl: string, force?: boolean): Promise<void> {
+  if (force) {
+    const next = { ...resolvedAssets.value };
+    delete next[downloadUrl];
+    resolvedAssets.value = next;
+  }
+  if ((resolvedAssets.value[downloadUrl] && resolvedAssets.value[downloadUrl]!.size != null)
+    || loadingAssetUrls.value.has(downloadUrl)) return;
+  loadingAssetUrls.value = new Set(loadingAssetUrls.value).add(downloadUrl);
+  try {
+    const info = await window.electronAPI.market.resolveAssetInfo(downloadUrl);
+    if (info.sha256 || info.size != null) {
+      resolvedAssets.value = { ...resolvedAssets.value, [downloadUrl]: info };
+    }
+  } finally {
+    const next = new Set(loadingAssetUrls.value);
+    next.delete(downloadUrl);
+    loadingAssetUrls.value = next;
+  }
+}
+
+function handleRefreshAsset(downloadUrl: string): void {
+  loadAssetInfo(downloadUrl, true);
+}
+
+function getResolvedSize(version: { downloadUrl: string; size?: number }): number | null {
+  if (version.size != null) return version.size;
+  const resolved = resolvedAssets.value[version.downloadUrl];
+  return resolved?.size != null ? resolved.size : null;
+}
+
+function isAssetLoading(version: { downloadUrl: string; size?: number }): boolean {
+  return version.size == null && loadingAssetUrls.value.has(version.downloadUrl);
+}
+
+function isAssetRefreshable(version: { downloadUrl: string; sha256?: string; size?: number }): boolean {
+  return (!version.sha256 || version.size == null) && isGitHubReleaseUrl(version.downloadUrl);
 }
 
 function toggleSearch(): void {
@@ -523,6 +615,13 @@ function formatBytes(bytes: number): string {
     unitIndex += 1;
   }
   return `${value.toFixed(value >= 100 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+}
+
+function formatSize(version: { downloadUrl: string; size?: number } | null): string {
+  if (!version) return "-";
+  const resolvedSize = getResolvedSize(version);
+  if (resolvedSize != null) return formatBytes(resolvedSize);
+  return "-";
 }
 
 function taskStatusLabel(status: MarketTaskStatus): string {

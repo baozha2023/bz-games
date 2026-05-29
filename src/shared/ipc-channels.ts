@@ -27,6 +27,7 @@ export const IPC = {
   MARKET_PAUSE_TASK: "market:pauseTask",
   MARKET_RESUME_TASK: "market:resumeTask",
   MARKET_GET_PENDING_TASKS: "market:getPendingTasks",
+  MARKET_RESOLVE_ASSET_INFO: "market:resolveAssetInfo",
 
   // ── 房间管理 ──
   ROOM_CREATE: "room:create",
@@ -54,6 +55,7 @@ export const IPC = {
   SYSTEM_GET_SETTINGS: "system:getSettings",
   SYSTEM_GET_APP_VERSION: "system:getAppVersion",
   SYSTEM_SAVE_SETTINGS: "system:saveSettings",
+  SYSTEM_SET_IGNORED_UPDATE_VERSION: "system:setIgnoredUpdateVersion",
   SYSTEM_UPLOAD_AVATAR: "system:uploadAvatar",
   SYSTEM_SELECT_GAME_STORAGE_PATH: "system:selectGameStoragePath",
   SYSTEM_OPEN_PATH: "system:openPath",
@@ -62,6 +64,10 @@ export const IPC = {
   SYSTEM_UNINSTALL: "system:uninstall",
   SYSTEM_GET_USER_DATA: "system:getUserData",
   SYSTEM_CHECK_IN: "system:checkIn",
+  SYSTEM_BUY_FRAME: "system:buyFrame",
+  SYSTEM_EQUIP_FRAME: "system:equipFrame",
+  SYSTEM_UNEQUIP_FRAME: "system:unequipFrame",
+  SYSTEM_GET_AVATAR_FRAME_IMAGE: "system:getAvatarFrameImage",
   SYSTEM_DATA_HEALTH_CHECK: "system:dataHealthCheck",
   SYSTEM_CHECK_UPDATE: "system:checkUpdate",
   SYSTEM_DOWNLOAD_UPDATE: "system:downloadUpdate",

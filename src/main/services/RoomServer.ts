@@ -256,6 +256,7 @@ export class RoomServer {
       id: payload.playerId,
       name: payload.playerName,
       avatar: payload.playerAvatar,
+      avatarFrame: payload.playerAvatarFrame,
       isHost: isHost,
       isReady: isHost,
       joinedAt: Date.now(),

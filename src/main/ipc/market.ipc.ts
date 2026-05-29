@@ -41,4 +41,8 @@ export function registerMarketIpc() {
   ipcMain.handle(IPC.MARKET_GET_PENDING_TASKS, async () => {
     return marketService.getPendingTasks();
   });
+
+  ipcMain.handle(IPC.MARKET_RESOLVE_ASSET_INFO, async (_, downloadUrl: string) => {
+    return marketService.resolveAssetInfo(downloadUrl);
+  });
 }

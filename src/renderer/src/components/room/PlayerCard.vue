@@ -1,11 +1,12 @@
 <template>
   <n-list-item>
     <template #prefix>
-      <n-avatar round :size="48" :src="player.avatar" :key="player.avatar">
-        <template v-if="!player.avatar">
-          {{ player.name.charAt(0) }}
-        </template>
-      </n-avatar>
+      <AvatarWithFrame
+        :src="player.avatar"
+        :name="player.name"
+        :size="48"
+        :frame-file-name="frameImageFileName"
+      />
     </template>
     <template #suffix>
       <n-space align="center">
@@ -32,13 +33,16 @@
 </template>
 
 <script setup lang="ts">
-import { NListItem, NAvatar, NTag, NThing, NSpace, NButton } from 'naive-ui'
+import { computed } from 'vue'
+import { NListItem, NTag, NThing, NSpace, NButton } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
+import AvatarWithFrame from '../AvatarWithFrame.vue'
 import type { PlayerInRoom } from '../../../../shared/types/room.types'
+import { getFrameImageFileName } from '../../../../shared/avatar-frames'
 
 const { t } = useI18n()
 
-defineProps<{
+const props = defineProps<{
   player: PlayerInRoom
   isLocalPlayer: boolean
   showKickButton?: boolean
@@ -47,4 +51,9 @@ defineProps<{
 const emit = defineEmits<{
   kick: []
 }>()
+
+const frameImageFileName = computed(() => {
+  if (!props.player.avatarFrame) return undefined
+  return getFrameImageFileName(props.player.avatarFrame)
+})
 </script>

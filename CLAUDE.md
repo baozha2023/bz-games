@@ -31,10 +31,11 @@
 - 国际化（`zh-CN / en-US / ja-JP`）
 - 成就系统（列表、解锁、系统通知、红点提示）
 - 统计系统（支持增量/全量统计模式，游玩时长自动累计）
-- 经济系统（签到、BZ 币、累计游玩时长）
+- 经济系统（签到、BZ 币、累计游玩时长、头像框解锁与装备）
 - Game API Server（本地 `ws://127.0.0.1`，向游戏进程提供平台能力）
-- 游戏市场（远程发现、详情展示、下载并安装到默认游戏目录）
-- 系统设置（玩家信息、主题、端口、语言、更新、游戏保存路径）
+- 游戏市场（远程发现、详情展示、下载并安装到默认游戏目录，GitHub Release Asset 自动补齐 sha256/size）
+- 个性化系统（头像框解锁、装备、预览，支持多场景展示）
+- 系统设置（玩家信息、主题、端口、语言、更新、游戏保存路径、GitHub Token）
 
 ***
 
@@ -111,7 +112,8 @@ bz-games/
 │   │       ├── appPath.ts                 # 应用根路径与游戏目录路径工具
 │   │       ├── fileUtils.ts               # 文件复制等通用文件工具
 │   │       ├── logger.ts                  # 日志输出封装（生产模式下 error 日志自动写入 exe 同级目录的 bz-games-error.log）
-│   │       └── portUtils.ts               # 可用端口探测工具
+│   │       ├── portUtils.ts               # 可用端口探测工具
+│   │       └── requestInterceptor.ts      # HTTP 请求头统一注入（Referer 防盗链 + GitHub Token）
 │   │
 │   ├── preload/
 │   │   ├── api.ts                         # 暴露给渲染进程的安全 API
@@ -138,6 +140,7 @@ bz-games/
 │   │       │   ├── MarketListView.vue      # 市场列表页面（一级界面）
 │   │       │   ├── MarketView.vue          # 市场游戏详情页面（二级界面）
 │   │       │   ├── NotificationView.vue   # 通知窗口页面
+│   │       │   ├── PersonalizationView.vue # 个性化页面（头像框管理）
 │   │       │   ├── RoomView.vue           # 房间页面
 │   │       │   ├── SettingsView.vue       # 设置页面
 │   │       │   └── StatisticsView.vue     # 统计页面
@@ -147,6 +150,7 @@ bz-games/
 │   │       │   ├── CachedImg.vue           # 远程图片缓存组件（市场专用）
 │   │       │   ├── CalendarHeatmap.vue      # GitHub 风格日历热力图组件（统计页）
 │   │       │   ├── CheckInModal.vue        # 签到弹窗组件
+│   │       │   ├── AvatarWithFrame.vue     # 头像+头像框叠加组件（CSS overlay 算法）
 │   │       │   ├── game/
 │   │       │   │   ├── GameAchievementsModal.vue # 游戏成就弹窗组件
 │   │       │   │   ├── GameCard.vue        # 游戏卡片组件
@@ -169,6 +173,8 @@ bz-games/
 │   │           └── sound.ts                # 音效播放工具
 │   │
 │   └── shared/
+│       ├── avatar-frames.ts                # 头像框定义数据（5款头像框的解锁条件与图片文件名）
+│       ├── constants.ts                    # 平台常量（CDN/OSS/GitHub 基础 URL、Referer 值）
 │       ├── game-manifest.ts                # Game Manifest Schema 与类型
 │       ├── ipc-channels.ts                 # IPC 频道常量定义
 │       └── types/
@@ -179,7 +185,8 @@ bz-games/
 │           └── store.types.ts              # 本地存储模型类型
 │
 ├── resources/
-│   └── icon.png                            # 应用图标资源
+│   ├── icon.png                            # 应用图标资源
+│   └── avatar-frames/                      # 头像框图片资源（5款 PNG，平台运行时读取）
 ```
 
 ***
@@ -311,8 +318,8 @@ bz-games/
 | `description`     | `string`  | 是  | 该版本说明，可用于更新日志或版本简介。                         |
 | `platformVersion` | `string`  | 是  | 当前版本对平台版本的兼容范围，使用 `semver` 语法，如 `>=1.9.5`。  |
 | `downloadUrl`     | `string`  | 是  | 版本安装包下载地址，建议 HTTPS。                         |
-| `sha256`          | `string`  | 是  | 安装包 SHA-256 摘要，用于完整性校验。                     |
-| `size`            | `number`  | 是  | 安装包字节大小，用于展示下载体积和二次校验。                      |
+| `sha256`          | `string`  | 否* | 安装包 SHA-256 摘要，用于完整性校验。`downloadUrl` 为 GitHub Releases 直链时可省略，平台自动获取。 |
+| `size`            | `number`  | 否* | 安装包字节大小，用于展示下载体积和二次校验。`downloadUrl` 为 GitHub Releases 直链时可省略，平台自动获取。 |
 | `publishedAt`     | `string`  | 否  | 版本发布时间，ISO 8601 格式。                         |
 | `releaseNotes`    | `string`  | 否  | 更详细的版本更新内容。                                 |
 | `isPrerelease`    | `boolean` | 否  | 是否为预发布版本；预发布版本默认不作为 `latestVersion`。        |
@@ -345,7 +352,7 @@ bz-games/
 - **解压方式**：`.zip` 和 `.7z` 均使用 `7zip-bin` 内置的 `7za` 二进制通过 `spawn` 调用，不依赖 PowerShell 或外部解压工具。
 - **目录约束**：压缩包解压后的根目录或第一层单子目录中必须存在 `game.json`，且整体目录结构应能直接作为一次普通"本地导入"
   输入目录。若安装包内无 `game.json`，必须通过 `gameManifest` 字段提供完整覆盖配置，平台将自动生成并安装。
-- **一致性校验**：平台安装前必须校验下载包的 `sha256`、`size`、`game.json.id`、`game.json.version`；
+- **一致性校验**：平台安装前必须校验下载包的 `sha256`、`size`、`game.json.id`、`game.json.version`（sha256/size 为 GitHub Release 直链时由平台自动补齐）；
   `game.json.platformVersion` 使用 `semver` 做语义化兼容性检查（支持 string 和 tuple 两种 manifest 格式），**不做字符串直接比对
   **。
 - **安全约束**：压缩包内不得出现绝对路径、盘符路径或 `../` 路径穿越条目；发现后直接拒绝安装。
@@ -500,7 +507,10 @@ interface UserData {
     checkIn: {
         lastCheckInDate: string;
         consecutiveDays: number;
+        totalDays: number;
     };
+    ownedFrames: string[];
+    equippedFrame?: string;
 }
 
 interface AppStore {
@@ -546,6 +556,7 @@ interface AppSettings {
     ignoredUpdateVersion?: string;
     gameStoragePath?: string;
     gameStorageHistory?: string[];
+    githubToken?: string;
 }
 ```
 
@@ -588,7 +599,7 @@ interface AppSettings {
     - **两级市场架构**：`getSources()` 拉取顶层市场目录（通过 `fetchDirectory()` 获取，主源 GitHub + 备源 OSS），
       `getIndex(sourceIdx)` 拉取指定市场源的游戏索引。sourceIdx=0 使用 `fetchIndexInternal()`（主备双源），sourceIdx>0 使用
       `fetchIndexForSource()`（通过 `gitToRawUrl()` 推导 raw URL 直接加载，无 OSS 回退）。
-    - `fetchJson(url)` 为通用 HTTP JSON 获取器，统一注入 `Referer` 防盗链 header。`fetchDirectory()` 与
+    - `fetchJson(url)` 为通用 HTTP JSON 获取器，内部使用 `withRetry(3, 1000)` 包裹 fetch（指数退避 1s→2s→4s），解决国内网络环境下 `raw.githubusercontent.com` DNS 间歇性解析失败问题。请求头通过 `RequestInterceptor.buildHeaders()` 统一注入 `Referer` 防盗链和可选的 GitHub Token。`fetchDirectory()` 与
       `fetchIndexFromUrl()` 均基于此构建，各司其职：前者解析 `MarketDirectorySchema`，后者解析 `MarketIndexSchema` 并过滤
       `hidden` 游戏。
     - `getSources()` 与 `getIndex(sourceIdx, forceRefresh)` 均内置 1 小时内存缓存，按 sourceIdx 独立缓存，
@@ -651,8 +662,13 @@ interface AppSettings {
       store（`addGame`/`removeGame`）和 `AppContent`（市场安装完成事件）直接调用，无需 Vue setup 上下文。
     - 消费者：`GameCover.vue`（cover/video，`ttlMs=0` 永不过期）、`GameIcon.vue`（icon，`ttlMs=0` 永不过期）、`CachedImg.vue`（远程
       URL，`ttlMs=60*60*1000` 即 1 小时，由组件内部 `MARKET_IMAGE_TTL_MS` 常量管理）。
-- **应用入口 OSS 拦截**：`index.ts` 在 `app.whenReady` 中注册 `session.defaultSession.webRequest.onBeforeSendHeaders`，对所有
-  `web-bz.oss-cn-beijing.aliyuncs.com` 请求注入 `Referer` header，覆盖 `<img>` 标签等非 fetch 请求。
+- **应用入口 OSS 拦截**：`index.ts` 在 `app.whenReady` 中调用 `requestInterceptor.registerSessionHandler(session.defaultSession)`，统一注册 Electron 全局请求拦截器（Referer 防盗链）。
+- **RequestInterceptor 统一请求头注入**：
+    - 提取至 `src/main/utils/requestInterceptor.ts`，替代原先散落在 `MarketService.ts` 和 `index.ts` 中的 header 拼接代码。
+    - 构造函数注入 `getTokenFn` 回调（惰性读取 `settings.githubToken`），避免静态导入 `StoreService` 造成循环依赖。
+    - `buildHeaders(url, extra)` 方法为 fetch 请求构建 headers：CDN/OSS 域名自动加 `Referer`、GitHub API/Raw 域名检测 `githubToken` 并注入 `Authorization: Bearer <token>`。
+    - `registerSessionHandler(session)` 方法在 `app.whenReady` 中注册 Electron 全局拦截器，覆盖 `<img>` 标签等非 fetch 请求。
+    - `constants.ts` 集中定义 `CDN_BASE`、`OSS_BASE`、`GITHUB_API_BASE`、`GITHUB_RAW_BASE`、`REFERER` 五个常量，供 `MarketService` 和 `requestInterceptor` 共享。
 - **CalendarHeatmap 日历热力图组件**：
     - 纯 Vue 3 + CSS Grid 实现，不依赖第三方图表库，渲染 GitHub 贡献墙风格的 7×53+ 格子日历。
     - 颜色渐变 5 档（空 → `#39d353` → `#26a641` → `#006d32` → `#0e4429`），图例标注"少 ↔ 多"。
@@ -661,6 +677,24 @@ interface AppSettings {
       使用逗号分隔字符串 `t('statistics.weekDays')` / `t('statistics.monthNames')` 存储数组数据，`t('statistics.hour/minute')` 存储时间单位。
     - 每个格子通过 `n-tooltip` 展示日期和当天游玩时长。底部显示近一年总游玩时长。
     - 每次打开统计页面 (`onMounted`) 自动拉取最新数据。
+- **头像框系统（Avatar Frame）**：
+    - **数据定义**：`src/shared/avatar-frames.ts` 导出 `AVATAR_FRAMES` 常量数组（5 款头像框），每款定义 `id`、`name`、`imageFileName`、`rarity`、`unlockMethod`（playtime/consecutive_checkin/total_checkin/bzcoin）、`unlockValue`。同时导出 `getFrameImageFileName(id)` 工具函数。
+    - **类型定义**：`AvatarFrameDef` 和 `AvatarFrameUnlockMethod` 定义在 `src/shared/types/store.types.ts`，通过 `shared/types/index.ts` 统一导出。
+    - **渲染组件**：`AvatarWithFrame.vue` 使用 CSS absolute 叠加方案：底层 `n-avatar` (z=0)，上层 `<img>` overlay (z=1, `pointer-events: none`)。
+      - **算法**：`FRAME_MARGIN = 60`（帧图留白像素），`contentSize = w - 2*MARGIN`，`scale = w / contentSize`，`offsetPercent = -50*(scale-1)`。通过 `naturalWidth` 获取帧图原始尺寸后计算 scale/offset，适配任意帧图。
+      - **中心对称原则**：只要帧图的中心镂空区域与图片几何中心对齐，不同 margin 的帧图均可正确叠加，无需调整算法。
+      - **帧图加载**：通过 IPC `system:getAvatarFrameImage` 从 `resources/avatar-frames/` 读取 PNG → base64 Data URL，组件内 `Image()` 解码获取 `naturalWidth`。
+    - **主进程原子操作**（`StoreService`）：
+        - `performBuyFrame(frameId, coinCost)`：校验已拥有 / BZ 币余额 → 扣币 → 写入 `ownedFrames[]` → 自动装备 → 返回结果对象。
+        - `performEquipFrame(frameId)`：仅校验 `ownedFrames[]` 含此 frame → `equippedFrame = frameId`。
+        - `performUnequipFrame(frameId)`：仅当 `equippedFrame === frameId` 时 → `equippedFrame = undefined`。
+    - **自动解锁**：`tryUnlockPlaytimeFrames()` 和 `tryUnlockCheckInFrames()` 为 `StoreService` 私有方法，分别在 `addPlayTime()` 和 `performCheckIn()` 写盘前调用。扫描 `AVATAR_FRAMES` 数组，满足条件且不在 `ownedFrames[]` 中时自动 push 并记录日志。
+    - **单一真相源**：`ownedFrames[]` 是头像框解锁状态的唯一权威数据源。所有解锁逻辑（签到/时长/BZ币购买）均在主进程中写入此数组，前端 `isUnlocked()` **仅检查 `ownedFrames.includes(frameId)`**，不做任何条件比较。
+    - **个性化页面**（`PersonalizationView.vue`）：网格布局展示 5 款头像框卡片，每张卡片包含预览（`AvatarWithFrame` 96px）、名称、解锁条件文字+图标、操作按钮（装备/卸下/购买/未解锁）。购买成功后自动装备并刷新用户数据。路由 `/personalization`。
+    - **应用入口展示**：`AppContent.vue` 顶栏头像使用 `AvatarWithFrame`（28px）替代原始 `n-avatar`，绑定 `userData.equippedFrame`。
+    - **设置页展示**：`SettingsView.vue` 头像上传区小头像（40px）和头像预览弹窗（280px）均使用 `AvatarWithFrame`。
+    - **联机传递**：`RoomJoinPayload` 和 `PlayerInRoom` 新增 `playerAvatarFrame` / `avatarFrame` 字段。房主 `RoomServer` 创建玩家对象时写入，客机 `RoomClient` 加入时携带。`PlayerCard.vue` 使用 `AvatarWithFrame` 渲染。
+    - **签到累计天数**：`UserData.checkIn.totalDays` 记录累计签到总天数，在 `performCheckIn` 中自增。签到弹窗新增"累计签到 N 天"展示行。
 
 ### 5.6 CSS 变量主题系统
 
@@ -690,10 +724,7 @@ interface AppSettings {
   `market.json`。用户可点击"刷新"按钮强制重新拉取。应用重启后缓存自动失效（仅内存缓存，不落盘）。
 - **市场索引更新时间展示**：`MarketView` 从 `index.generatedAt` 读取时间戳，在标题"游戏市场"右侧以小字展示（格式
   `YYYY-MM-DD HH:mm`），使用 `updatedAtLabel` computed 实现，三语 i18n 支持。
-- **OSS 防盗链 Referer**：所有指向 `web-bz.oss-cn-beijing.aliyuncs.com` 的请求（市场索引拉取、游戏包下载、封面/图标/截图
-  `<img>` 标签）均携带 `Referer: https://bz-game-client.local`。实现分两层：`fetch` 请求在 `fetchIndexFromUrl()` 和
-  `downloadArchive()` 中显式设置 header；`<img>` 标签等渲染层请求由 `index.ts` 中
-  `session.defaultSession.webRequest.onBeforeSendHeaders` 全局拦截注入。
+- **OSS 防盗链 Referer**：所有指向 `web-bz.oss-cn-beijing.aliyuncs.com` 的请求均携带 `Referer: https://bz-game-client.local`。实现分两层：`fetch` 请求通过 `RequestInterceptor.buildHeaders()` 统一注入；`<img>` 标签等渲染层请求由 `RequestInterceptor.registerSessionHandler()` 注册的 Electron 全局拦截器注入。
 - **市场下载暂存**：市场安装包应先下载到应用可控的临时目录（如 `.market-cache/`）中，校验通过后再解压并导入。
 - **市场安装统一导入**：市场下载成功后，解压目录必须复用现有 `GameLoader` 导入链路，避免形成独立且不一致的安装逻辑。
 - **市场安装失败保护**：下载、校验、解压或导入任一步失败时，不得破坏已有游戏记录；仅清理当前失败任务产生的临时文件（`finally`
@@ -785,6 +816,7 @@ interface AppSettings {
 - `market:pauseTask`：暂停正在进行的下载任务，进度持久化到本地快照文件。
 - `market:resumeTask`：从暂停快照恢复下载任务，重新拉取索引校验兼容性后启动新管线续传。
 - `market:getPendingTasks`：读取本地快照文件，返回所有未完成的暂停/中断任务。
+- `market:resolveAssetInfo`：通过 GitHub REST API 解析 Release Asset 的 sha256/size（5次指数退避重试，1小时缓存）。
 - `room:create`：创建房间并在本地启动房间服务。
 - `room:join`：加入指定房主地址的房间。
 - `room:leave`：离开房间（房主离开会解散房间）。
@@ -808,6 +840,11 @@ interface AppSettings {
   ），随后打开系统卸载程序并退出应用。返回 `{ success: boolean; error?: string }`。
 - `system:getUserData`：读取用户经济与签到数据。
 - `system:checkIn`：执行每日签到并返回奖励结果。
+- `system:buyFrame`：原子购买头像框（校验余额 + 已拥有，成功自动装备）。
+- `system:equipFrame`：原子装备头像框（仅校验已拥有）。
+- `system:unequipFrame`：原子卸下头像框（仅当前装备时生效）。
+- `system:getAvatarFrameImage`：从 `resources/avatar-frames/` 读取帧图返回 base64 Data URL。
+- `system:setIgnoredUpdateVersion`：原子设置忽略的更新版本号。
 - `system:dataHealthCheck`：执行本地数据健康检查，返回结构化报告（错误/警告/摘要）。
 - `system:getUpdateStatus`：获取当前更新状态。
 - `system:checkUpdate`：检查是否有可用更新。
@@ -875,12 +912,13 @@ interface AppSettings {
 - **设置页卸载入口**：设置页底部（与保存按钮同行，`justify-content: space-between`）提供"卸载客户端"按钮（
   `type="error" secondary`）。点击后弹出 NaiveUI 自定义确认弹窗，包含不可撤销的警告文案、是否同时删除所有游戏库目录的勾选项、以及删除路径列表预览。确认后调用
   `system:uninstall` IPC 执行卸载。若处于开发模式或卸载程序不可用，弹出友好提示。
-- **设置页头像预览**：点击设置页头像缩略图（`n-avatar` 添加 `class="avatar-clickable"` hover 缩放+阴影），弹出
-  `n-modal preset="card"` 模态框，280×280 圆形大图预览；无头像时显示玩家名首字母大字（使用 `--bz-bg-card-placeholder` 和
+- **设置页头像预览**：点击设置页头像缩略图（`AvatarWithFrame` 组件，40px），弹出
+  `n-modal preset="card"` 模态框，280×280 圆形大图预览（含头像框）；无头像时显示玩家名首字母大字（使用 `--bz-bg-card-placeholder` 和
   `--bz-text-on-placeholder` CSS 变量适配暗/亮主题）。
 - **设置页主题跟随系统**：主题选择器新增"跟随系统"选项（`themeAuto`）。当选择 `auto` 时，平台自动跟随操作系统亮/暗模式切换，无需用户手动调整。
 - **设置页官网链接**：设置页需展示官方网址 `http://www.bzgames.top/`，使用 NaiveUI `n-a` 组件渲染为可点击链接，`
   @click.prevent` 拦截默认跳转后通过 `system:openUrl` IPC 调用 `shell.openExternal` 打开系统默认浏览器。
+- **GitHub Token 设置**：设置页提供 `githubToken` 字段（`n-input type="password"`，`@copy.prevent` + `@cut.prevent` 防剪贴板泄漏）。填写有效的 GitHub Personal Access Token 后，平台所有 GitHub API 请求自动携带 `Authorization: Bearer <token>`，将 API 限流从 60 次/小时提升至 5000 次/小时（用于 Release Asset 解析）。
 - **设置页数据自检**：设置页需提供"数据自检"按钮，展示 `config.json`、游戏目录、版本路径、Manifest 完整性等检查结果。
 - **更新错误诊断**：更新失败时前端必须展示归类后的错误码文案与技术摘要，避免仅显示底层原始错误。
 - **设置页游戏目录管理**：
@@ -902,6 +940,16 @@ interface AppSettings {
 - **extraResources 用于原生可执行文件**：`7zip-bin` 提供的 `7za.exe` 需要通过 `child_process.spawn()` 调用。`asarUnpack` 解压后文件路径仍在 asar 内部上下文，`spawn()` 无法执行。必须使用 `build.extraResources` 将其拷贝到 `process.resourcesPath`（asar 完全外部），代码中通过 `process.resourcesPath` 手动拼接路径。配置示例：`{ "from": "node_modules/7zip-bin/win/x64", "to": "7za", "filter": ["7za.exe"] }`。
 - **pnpm 依赖提升（hoisting）**：`electron-updater` 的传递依赖 `debug` 需要 `ms` 模块，但 pnpm 严格隔离导致 `ms` 仅存在于 `.pnpm/debug@x.x.x/node_modules/ms` 中。electron-builder 打包时不会包含 `.pnpm` 目录内的嵌套依赖，导致运行时 `Cannot find module 'ms'`。解决方案：将 `ms` 声明为项目直接依赖，pnpm 会将其提升到顶层 `node_modules`。项目中 `ms` 仅作为此兼容性占位依赖，代码不直接引用。
 - **electron-rebuild 手动补充**：若开发阶段出现 `NODE_MODULE_VERSION` 不匹配错误（系统 Node.js vs Electron 内嵌 Node.js 版本不一致），执行 `npx electron-rebuild -f -w better-sqlite3` 补齐重编译。
+- **GitHub Release Asset 自动校验**：
+  - `sha256` 和 `size` 已改为可选字段。若 `downloadUrl` 为 GitHub Releases 直链且这两个字段缺失，平台会在**用户展开游戏卡片时**（而非下载时）预先解析。
+  - 数据流：`MarketView.toggleExpand()` → `resolveMissingAssetInfo()` → `loadAssetInfo()` → IPC `market:resolveAssetInfo` → `MarketService.resolveAssetInfo()`。
+  - `resolveGitHubAssetInfo()` 调用 GitHub REST API `GET /repos/{owner}/{repo}/releases/tags/{tag}`，从 `assets[].digest` 提取 SHA256（去除 `sha256:` 前缀），从 `assets[].size` 提取文件大小。`parseGitHubReleaseUrl()` 从 `downloadUrl` 解析出 owner/repo/tag/assetName。
+  - **自动重试**：`withRetry()` 通用工具，使用指数退避（1s → 2s → 4s → 8s → 16s），最多重试 5 次（含首次共 6 次尝试）。失败结果**不写入缓存**，避免永久阻塞。
+  - **缓存**：`MarketService.resolvedAssets` Map，TTL 1 小时（`CACHE_TTL_MS`），与市场索引缓存一致。
+  - **前端骨架屏**：展开卡片后 sha256/size 尚未返回时，size 区域显示 `<n-skeleton>` 骨架；返回后自动更新为实际值。
+  - **手动刷新**：GitHub Release 游戏的 size 右侧显示 🔄 刷新图标（`RefreshOutline`），点击可强制清除前端缓存后重新请求（同样走 5 次重试逻辑）。`isAssetRefreshable()` 控制按钮出现条件。
+  - **下载阶段**：`downloadAndInstall()` 仅从 `resolvedAssets` 缓存读取，不再发起新的 API 调用。缓存未命中（sha256/size 仍缺失）则直接拒绝下载（`market_missing_sha256_or_size`）。
+  - **前端校验**：`isVersionPayloadValid()` 增加第三步判断：sha256/size 缺失 + 非 GitHub 直链 → 返回 false，前端显示"版本异常"红色标签。GitHub 直链即使缺失也不会触发。
 
 ### 6.5 客户端更新发布规范
 

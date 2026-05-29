@@ -55,26 +55,9 @@ export const useSettingsStore = defineStore("settings", () => {
   }
 
   async function ignoreUpdateVersion(version: string) {
-    if (!settings.value) {
-      await loadSettings();
-    }
-    if (!settings.value) {
-      throw new Error("settings_not_loaded");
-    }
-
-    const previousSettings = settings.value;
-    const nextSettings: AppSettings = {
-      ...previousSettings,
-      ignoredUpdateVersion: version,
-    };
-
-    settings.value = nextSettings;
-
-    try {
-      await window.electronAPI.settings.save(nextSettings);
-    } catch (error) {
-      settings.value = previousSettings;
-      throw error;
+    await window.electronAPI.settings.ignoreUpdateVersion(version);
+    if (settings.value) {
+      settings.value = { ...settings.value, ignoredUpdateVersion: version };
     }
   }
 

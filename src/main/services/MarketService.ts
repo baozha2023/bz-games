@@ -20,23 +20,32 @@ import type {
   MarketTaskState,
   MarketTaskStatus,
 } from "../../shared/types";
-import { MarketDirectorySchema, MarketIndexSchema } from "../../shared/types";
+import { isGitHubReleaseUrl, MarketDirectorySchema, MarketIndexSchema } from "../../shared/types";
 import { GameLoader } from "./GameLoader";
 import { logger } from "../utils/logger";
+import { storeService } from "./StoreService";
 import { mainWindow } from "../window";
+import { GITHUB_API_BASE, GITHUB_RAW_BASE, OSS_BASE } from "../../shared/constants";
+import { RequestInterceptor } from "../utils/requestInterceptor";
 
 const PRIMARY_MARKET_INDEX_URL =
-  "https://raw.githubusercontent.com/baozha2023/bz-games-market/master/market.json";
+  `${GITHUB_RAW_BASE}baozha2023/bz-games-market/master/market.json`;
 const FALLBACK_MARKET_INDEX_URL =
-  "https://web-bz.oss-cn-beijing.aliyuncs.com/market.json";
+  `${OSS_BASE}market.json`;
 
 function gitToRawUrl(repository: string, branch: string): string {
   const match = repository.match(/github\.com\/(.+?)\/(.+?)(?:\.git)?$/);
   if (!match) throw new Error(`market_unsupported_repo:${repository}`);
-  return `https://raw.githubusercontent.com/${match[1]}/${match[2]}/${branch}/market.json`;
+  return `${GITHUB_RAW_BASE}${match[1]}/${match[2]}/${branch}/market.json`;
 }
 
-const REFERER = "https://bz-game-client.local";
+export const requestInterceptor = new RequestInterceptor(() => {
+  try {
+    return storeService.getSettings().githubToken?.trim() ?? null;
+  } catch {
+    return null;
+  }
+});
 
 interface TaskMeta {
   gameId: string;
@@ -57,26 +66,6 @@ interface ActiveTask {
 }
 
 type MarketArchiveType = "zip" | "7z";
-
-function buildMeta(
-  game: MarketGame,
-  targetVersion: MarketGameVersion,
-  downloadPath: string,
-  archiveType: MarketArchiveType,
-  sourceIdx: number,
-): TaskMeta {
-  return {
-    gameId: game.id,
-    version: targetVersion.version,
-    gameName: game.name,
-    downloadUrl: targetVersion.downloadUrl,
-    sha256: targetVersion.sha256,
-    size: targetVersion.size,
-    downloadPath,
-    archiveType,
-    sourceIdx,
-  };
-}
 
 function toTaskId(gameId: string, version: string): string {
   return `${gameId}@${version}`;
@@ -164,6 +153,72 @@ function inferArchiveType(downloadUrl: string): MarketArchiveType {
   throw new Error("market_archive_type_unknown");
 }
 
+function parseGitHubReleaseUrl(url: string): { owner: string; repo: string; tag: string; assetName: string } | null {
+  const match = url.match(
+    /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/releases\/download\/([^/]+)\/(.+)$/,
+  );
+  if (!match) return null;
+  return {
+    owner: match[1],
+    repo: match[2],
+    tag: match[3],
+    assetName: decodeURIComponent(match[4]),
+  };
+}
+
+async function resolveGitHubAssetInfo(
+  downloadUrl: string,
+): Promise<{ sha256: string; size: number }> {
+  const parsed = parseGitHubReleaseUrl(downloadUrl);
+  if (!parsed) throw new Error("market_not_github_release_url");
+
+  const apiUrl = `${GITHUB_API_BASE}repos/${parsed.owner}/${parsed.repo}/releases/tags/${parsed.tag}`;
+  const response = await fetch(apiUrl, {
+    headers: requestInterceptor.buildHeaders(apiUrl, {
+      Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28",
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`market_github_api_failed:${response.status}`);
+  }
+
+  const release = (await response.json()) as {
+    assets?: Array<{ name: string; size: number; digest?: string }>;
+  };
+
+  const asset = release.assets?.find((a) => a.name === parsed.assetName);
+  if (!asset) throw new Error("market_github_asset_not_found");
+
+  const sha256 = asset.digest?.replace(/^sha256:/i, "") || "";
+  if (!sha256 || sha256.length !== 64) {
+    throw new Error("market_github_digest_invalid");
+  }
+
+  return { sha256, size: asset.size };
+}
+
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  maxRetries: number,
+  baseDelayMs: number,
+): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      if (attempt < maxRetries) {
+        const delay = baseDelayMs * Math.pow(2, attempt);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+  }
+  throw lastError;
+}
+
 function get7zaPath(): string {
   if (app.isPackaged) {
     return path.join(process.resourcesPath, "7za", "7za.exe");
@@ -239,6 +294,7 @@ export class MarketService {
   private cachedSources: MarketDirectory | null = null;
   private cachedSourcesAt = 0;
   private cachedImages = new Map<string, { dataUrl: string; at: number }>();
+  private resolvedAssets = new Map<string, { sha256: string; size: number; at: number }>();
   private static readonly CACHE_TTL_MS = 60 * 60 * 1000;
   private static readonly IMAGE_FETCH_TIMEOUT_MS = 15_000;
 
@@ -417,6 +473,25 @@ export class MarketService {
     return this.loadSnapshots();
   }
 
+  async resolveAssetInfo(downloadUrl: string): Promise<{ sha256?: string; size?: number }> {
+    const cached = this.resolvedAssets.get(downloadUrl);
+    if (cached && Date.now() - cached.at < MarketService.CACHE_TTL_MS) {
+      return { sha256: cached.sha256, size: cached.size };
+    }
+    if (!isGitHubReleaseUrl(downloadUrl)) return {};
+    try {
+      const info = await withRetry(
+        () => resolveGitHubAssetInfo(downloadUrl),
+        5,
+        1000,
+      );
+      this.resolvedAssets.set(downloadUrl, { ...info, at: Date.now() });
+      return info;
+    } catch {
+      return {};
+    }
+  }
+
   // ── Public API: pause / resume / cancel ──
 
   async pauseTask(taskId: string): Promise<boolean> {
@@ -470,11 +545,17 @@ export class MarketService {
       throw new Error("market_platform_version_mismatch");
     }
 
-    const meta = buildMeta(
-      game, targetVersion,
-      snap.downloadPath, snap.archiveType,
-      snap.sourceIdx,
-    );
+    const meta: TaskMeta = {
+      gameId: game.id,
+      version: targetVersion.version,
+      gameName: game.name,
+      downloadUrl: snap.downloadUrl,
+      sha256: snap.sha256,
+      size: snap.size,
+      downloadPath: snap.downloadPath,
+      archiveType: snap.archiveType,
+      sourceIdx: snap.sourceIdx,
+    };
 
     const state = this.startTask(taskId, meta);
     this.startPipeline(taskId, game, targetVersion);
@@ -559,20 +640,49 @@ export class MarketService {
     const archiveType = inferArchiveType(targetVersion.downloadUrl);
     const downloadPath = path.join(cacheRoot, "downloads", `${game.id}-${targetVersion.version}.${archiveType}`);
 
-    const meta = buildMeta(game, targetVersion, downloadPath, archiveType, sourceIdx);
+    let sha256 = targetVersion.sha256;
+    let size = targetVersion.size;
+
+    if (!sha256 || size == null) {
+      const cached = this.resolvedAssets.get(targetVersion.downloadUrl);
+      if (cached && Date.now() - cached.at < MarketService.CACHE_TTL_MS) {
+        sha256 = sha256 ?? cached.sha256;
+        size = size ?? cached.size;
+      }
+    }
+
+    if (!sha256 || size == null) {
+      throw new Error("market_missing_sha256_or_size");
+    }
+
+    const meta: TaskMeta = {
+      gameId: game.id,
+      version: targetVersion.version,
+      gameName: game.name,
+      downloadUrl: targetVersion.downloadUrl,
+      sha256,
+      size,
+      downloadPath,
+      archiveType,
+      sourceIdx,
+    };
     const state = this.startTask(taskId, meta);
     this.startPipeline(taskId, game, targetVersion);
     return state;
   }
 
   private async fetchJson(url: string): Promise<unknown> {
-    const response = await fetch(url, {
-      headers: {
-        Accept: "application/json",
-        "Cache-Control": "no-cache",
-        Referer: REFERER,
-      },
-    });
+    const response = await withRetry(
+      () =>
+        fetch(url, {
+          headers: requestInterceptor.buildHeaders(url, {
+            Accept: "application/json",
+            "Cache-Control": "no-cache",
+          }),
+        }),
+      3,
+      1000,
+    );
     if (!response.ok) {
       throw new Error(`market_index_request_failed:${response.status}`);
     }
@@ -702,7 +812,7 @@ export class MarketService {
 
     try {
       const response = await fetch(url, {
-        headers: { Referer: REFERER },
+        headers: requestInterceptor.buildHeaders(url),
         signal: controller.signal,
       });
       if (!response.ok) {
@@ -772,10 +882,9 @@ export class MarketService {
     signal: AbortSignal,
     partialSize: number,
   ): Promise<void> {
-    const headers: Record<string, string> = {
+    const headers: Record<string, string> = requestInterceptor.buildHeaders(meta.downloadUrl, {
       "Cache-Control": "no-cache",
-      Referer: REFERER,
-    };
+    });
 
     let isResuming = false;
     if (partialSize > 0 && partialSize < meta.size) {

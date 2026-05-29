@@ -107,10 +107,12 @@ export class RoomClient {
       `[RoomClient] Connected to ${this.address}, sending join request...`,
     );
     const settings = storeService.getSettings();
+    const userData = storeService.getUserData();
     const joinPayload: RoomJoinPayload = {
       playerId: settings.playerId,
       playerName: settings.playerName,
-      playerAvatar: settings.avatar, // Added avatar
+      playerAvatar: settings.avatar,
+      playerAvatarFrame: userData.equippedFrame,
       gameId: this.gameId,
       gameVersion: this.gameVersion,
     };

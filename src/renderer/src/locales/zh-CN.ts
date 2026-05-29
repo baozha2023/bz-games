@@ -3,6 +3,7 @@ export default {
     myGames: "我的游戏库",
     market: "游戏市场",
     settings: "设置",
+    personalization: "个性化",
     backToRoom: "返回房间",
   },
   common: {
@@ -244,6 +245,7 @@ export default {
   checkIn: {
     title: "每日签到",
     streak: "已连续签到 {days} 天",
+    totalDays: "累计签到 {days} 天",
     day: "第 {day} 天",
     action: "签到",
     checked: "已签到",
@@ -282,6 +284,8 @@ export default {
     autoLaunchOff: "关闭",
     gameStoragePath: "游戏保存路径",
     gameStoragePathPlaceholder: "选择用于保存新导入游戏的目录",
+    githubToken: "GitHub Token",
+    githubTokenPlaceholder: "输入 GitHub Personal Access Token，可提升 API 限流上限至 5000 次/小时",
     browsePath: "选择路径",
     storagePathList: "已保存游戏路径",
     storagePathEmpty: "暂无可用路径",
@@ -366,5 +370,18 @@ export default {
     unlockedAt: "解锁于 {date}",
     progress: "进度：{current}/{total}",
     locked: "未解锁",
+  },
+  personalization: {
+    title: "个性化",
+    avatarFrame: "头像框",
+    noFrames: "暂无头像框",
+    equip: "装备",
+    unequip: "卸下",
+    equipped: "已装备",
+    locked: "未解锁",
+    unlockPlaytime: "累计游玩 {hours} 小时解锁",
+    unlockConsecutiveCheckIn: "连续签到 {days} 天解锁",
+    unlockTotalCheckIn: "累计签到 {days} 天解锁",
+    unlockBzCoin: "花费 {coins} BZ币购买",
   },
 };

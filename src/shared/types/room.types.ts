@@ -49,6 +49,7 @@ export interface PlayerInRoom {
   id: string;
   name: string;
   avatar?: string;
+  avatarFrame?: string;
   isHost: boolean;
   isReady: boolean;
   joinedAt: number;
@@ -59,6 +60,7 @@ export interface RoomJoinPayload {
   playerId: string;
   playerName: string;
   playerAvatar?: string;
+  playerAvatarFrame?: string;
   gameId: string;
   gameVersion: string;
 }

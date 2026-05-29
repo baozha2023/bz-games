@@ -3,6 +3,7 @@ export default {
     myGames: "My Games",
     market: "Market",
     settings: "Settings",
+    personalization: "Personalize",
     backToRoom: "Back to Room",
   },
   common: {
@@ -251,6 +252,7 @@ export default {
   checkIn: {
     title: "Daily Check-in",
     streak: "Streak {days} days",
+    totalDays: "Total {days} days",
     day: "Day {day}",
     action: "Check in",
     checked: "Checked in",
@@ -289,6 +291,8 @@ export default {
     autoLaunchOff: "Off",
     gameStoragePath: "Game Storage Path",
     gameStoragePathPlaceholder: "Select directory for newly imported games",
+    githubToken: "GitHub Token",
+    githubTokenPlaceholder: "Enter GitHub Personal Access Token to raise API limit to 5000 req/hour",
     browsePath: "Browse",
     storagePathList: "Saved Game Paths",
     storagePathEmpty: "No saved path",
@@ -374,5 +378,18 @@ export default {
     unlockedAt: "Unlocked at {date}",
     progress: "Progress: {current}/{total}",
     locked: "Locked",
+  },
+  personalization: {
+    title: "Personalization",
+    avatarFrame: "Avatar Frame",
+    noFrames: "No frames available",
+    equip: "Equip",
+    unequip: "Unequip",
+    equipped: "Equipped",
+    locked: "Locked",
+    unlockPlaytime: "Play {hours} hours to unlock",
+    unlockConsecutiveCheckIn: "Check in {days} consecutive days to unlock",
+    unlockTotalCheckIn: "Check in {days} total days to unlock",
+    unlockBzCoin: "Purchase with {coins} BZ Coins",
   },
 };

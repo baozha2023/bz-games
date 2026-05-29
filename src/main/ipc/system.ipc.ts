@@ -6,7 +6,7 @@ import { storeService } from "../services/StoreService";
 import { updateService } from "../services/UpdateService";
 import { logger } from "../utils/logger";
 import type { AppSettings } from "../../shared/types";
-import { setCustomGamesDir } from "../utils/appPath";
+import { getAppRoot, setCustomGamesDir } from "../utils/appPath";
 
 export function registerSystemIpc() {
   updateService.init();
@@ -32,6 +32,11 @@ export function registerSystemIpc() {
       logger.error("[SystemIPC] Failed to save settings:", error);
       throw error;
     }
+  });
+
+  ipcMain.handle(IPC.SYSTEM_SET_IGNORED_UPDATE_VERSION, async (_, version: string) => {
+    storeService.performIgnoreUpdateVersion(version);
+    return true;
   });
 
   ipcMain.handle(IPC.SYSTEM_UPLOAD_AVATAR, async () => {
@@ -111,8 +116,40 @@ export function registerSystemIpc() {
     return storeService.getUserData();
   });
 
+  ipcMain.handle(IPC.SYSTEM_BUY_FRAME, async (_, frameId: string, coinCost: number) => {
+    return storeService.performBuyFrame(frameId, coinCost);
+  });
+
+  ipcMain.handle(IPC.SYSTEM_EQUIP_FRAME, async (_, frameId: string) => {
+    storeService.performEquipFrame(frameId);
+    return true;
+  });
+
+  ipcMain.handle(IPC.SYSTEM_UNEQUIP_FRAME, async (_, frameId: string) => {
+    storeService.performUnequipFrame(frameId);
+    return true;
+  });
+
   ipcMain.handle(IPC.SYSTEM_CHECK_IN, async () => {
     return storeService.performCheckIn();
+  });
+
+  ipcMain.handle(IPC.SYSTEM_GET_AVATAR_FRAME_IMAGE, async (_, fileName: string) => {
+    try {
+      const framePath = path.join(getAppRoot(), "resources", "avatar-frames", fileName);
+      if (!fs.existsSync(framePath)) {
+        logger.warn(`[SystemIPC] Avatar frame image not found: ${framePath}`);
+        return null;
+      }
+      const buffer = fs.readFileSync(framePath);
+      const ext = path.extname(fileName).toLowerCase();
+      const mimeType = ext === ".png" ? "image/png" : ext === ".webp" ? "image/webp" : "image/png";
+      const dataUrl = `data:${mimeType};base64,${buffer.toString("base64")}`;
+      return dataUrl;
+    } catch (e) {
+      logger.error("[SystemIPC] Failed to load avatar frame image:", e);
+      return null;
+    }
   });
 
   ipcMain.handle(IPC.SYSTEM_DATA_HEALTH_CHECK, async () => {
