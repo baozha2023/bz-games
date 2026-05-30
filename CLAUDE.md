@@ -176,7 +176,7 @@ bz-games/
 │   │           └── sound.ts                # 音效播放工具
 │   │
 │   └── shared/
-│       ├── avatar-frames.ts                # 头像框定义数据（5款头像框的解锁条件与图片文件名）
+│       ├── avatar-frames.ts                # 头像框定义数据（8款头像框的解锁条件与图片文件名）
 │       ├── constants.ts                    # 平台常量（CDN/OSS/GitHub 基础 URL、Referer 值）
 │       ├── game-manifest.ts                # Game Manifest Schema 与类型
 │       ├── ipc-channels.ts                 # IPC 频道常量定义
@@ -189,7 +189,7 @@ bz-games/
 │
 ├── resources/
 │   ├── icon.png                            # 应用图标资源
-│   └── avatar-frames/                      # 头像框图片资源（5款 PNG，平台运行时读取）
+│   └── avatar-frames/                      # 头像框图片资源（8款 PNG，平台运行时读取）
 ```
 
 ***
@@ -321,8 +321,8 @@ bz-games/
 | `description`     | `string`  | 是  | 该版本说明，可用于更新日志或版本简介。                         |
 | `platformVersion` | `string`  | 是  | 当前版本对平台版本的兼容范围，使用 `semver` 语法，如 `>=1.9.5`。  |
 | `downloadUrl`     | `string`  | 是  | 版本安装包下载地址，建议 HTTPS。                         |
-| `sha256`          | `string`  | 否* | 安装包 SHA-256 摘要，用于完整性校验。`downloadUrl` 为 GitHub Releases 直链时可省略，平台自动获取。 |
-| `size`            | `number`  | 否* | 安装包字节大小，用于展示下载体积和二次校验。`downloadUrl` 为 GitHub Releases 直链时可省略，平台自动获取。 |
+| `sha256`          | `string`  | 否  | 安装包 SHA-256 摘要，用于完整性校验。全可选（任何 downloadUrl 均可省略），若提供则格式必须为 64 位 hex。 |
+| `size`            | `number`  | 否* | 安装包字节大小，用于展示下载体积和二次校验。`downloadUrl` 为 GitHub Releases 直链时可省略，平台下载时自动获取。非 GitHub 直链时**必填**。 |
 | `publishedAt`     | `string`  | 否  | 版本发布时间，ISO 8601 格式。                         |
 | `releaseNotes`    | `string`  | 否  | 更详细的版本更新内容。                                 |
 | `isPrerelease`    | `boolean` | 否  | 是否为预发布版本；预发布版本默认不作为 `latestVersion`。        |
@@ -355,9 +355,7 @@ bz-games/
 - **解压方式**：`.zip` 和 `.7z` 均使用 `7zip-bin` 内置的 `7za` 二进制通过 `spawn` 调用，不依赖 PowerShell 或外部解压工具。
 - **目录约束**：压缩包解压后的根目录或第一层单子目录中必须存在 `game.json`，且整体目录结构应能直接作为一次普通"本地导入"
   输入目录。若安装包内无 `game.json`，必须通过 `gameManifest` 字段提供完整覆盖配置，平台将自动生成并安装。
-- **一致性校验**：平台安装前必须校验下载包的 `sha256`、`size`、`game.json.id`、`game.json.version`（sha256/size 为 GitHub Release 直链时由平台自动补齐）；
-  `game.json.platformVersion` 使用 `semver` 做语义化兼容性检查（支持 string 和 tuple 两种 manifest 格式），**不做字符串直接比对
-  **。
+- **一致性校验**：平台安装前校验下载包的 `size`、`game.json.id`、`game.json.version`。`sha256` 仅在校验值存在时才执行比对；若未提供 sha256，平台会跳过哈希校验。`size` 为 GitHub Release 直链时可由平台下载阶段自动补齐。`game.json.platformVersion` 使用 `semver` 做语义化兼容性检查（支持 string 和 tuple 两种 manifest 格式），**不做字符串直接比对**。
 - **安全约束**：压缩包内不得出现绝对路径、盘符路径或 `../` 路径穿越条目；发现后直接拒绝安装。
 - **覆盖策略**：若本地已存在相同 `id + version`，默认视为"已安装"，不重复覆盖；后续若要支持"重新安装"，需单独增加明确交互。**网页游戏（`networkgame`）仅以 `id` 判断**，同一 `id` 不可重复导入，若需更新请先删除旧版。
 - **落盘路径**：市场安装目标目录优先使用当前设置中的 `gameStoragePath`；若未设置，则回退到应用根目录下的默认 `games/` 目录。
@@ -469,6 +467,7 @@ interface MarketTaskState {
 #### 主进程 (Main Process)
 
 - BrowserWindow 生命周期管理
+- **单实例锁**：`app.requestSingleInstanceLock()` 确保同一时间仅运行一个平台实例；第二实例启动时自动聚焦并恢复已有主窗口（最小化时恢复，不可见时显示）
 - 读写本地存储（electron-store），**配置与数据均存储于应用根目录**
 - 调用系统 API（文件对话框、环境变量、子进程）
 - 游戏进程启动 / 管理 / 终止（`child_process.spawn`，支持 Windows 隐藏窗口）
@@ -605,8 +604,7 @@ interface AppSettings {
       `getIndex(sourceIdx)` 拉取指定市场源的游戏索引。sourceIdx=0 使用 `fetchIndexInternal()`（主备双源），sourceIdx>0 使用
       `fetchIndexForSource()`（通过 `gitToRawUrl()` 推导 raw URL 直接加载，无 OSS 回退）。
     - `fetchJson(url)` 为通用 HTTP JSON 获取器，内部使用 `withRetry(3, 1000)` 包裹 fetch（指数退避 1s→2s→4s），解决国内网络环境下 `raw.githubusercontent.com` DNS 间歇性解析失败问题。请求头通过 `RequestInterceptor.buildHeaders()` 统一注入 `Referer` 防盗链和可选的 GitHub Token。`fetchDirectory()` 与
-      `fetchIndexFromUrl()` 均基于此构建，各司其职：前者解析 `MarketDirectorySchema`，后者解析 `MarketIndexSchema` 并过滤
-      `hidden` 游戏。
+      `fetchIndexFromUrl()` 均基于此构建，各司其职：前者解析 `MarketDirectorySchema`，后者使用**容错解析**（`parseGameTolerant()`）逐游戏校验并过滤 `hidden` 游戏。单个游戏或版本数据异常不会导致整个市场索引加载失败，跳过无效数据并记录警告日志。
     - `getSources()` 与 `getIndex(sourceIdx, forceRefresh)` 均内置 1 小时内存缓存，按 sourceIdx 独立缓存，
       `forceRefresh=true` 或缓存过期时重新拉取，应用重启后自动失效。同时，`forceRefresh=true` 时一并清除全部图片缓存（
       `cachedImages`），保证封面/图标数据与索引数据同步刷新。
@@ -649,6 +647,9 @@ interface AppSettings {
       `restorePendingTasks()` 读取快照重建 `interrupted` 状态任务，前端通过 `getPendingTasks` 在 `onMounted` 时同步到 UI。
     - **文件生命周期**：`finalize()` 在终态（completed/error/canceled）时删除临时下载文件与解压目录。暂停/中断时**保留**
       部分文件以便续传。
+    - **容错解析**：`parseGameTolerant(rawGame)` 提供两层容错机制：先尝试 `MarketGameSchema.safeParse()` 严格解析，成功则直接返回；失败后分别校验游戏元数据（宽松版 `GameMetaSchema`，ID 只需非空即可）和版本列表（`MarketGameVersionSchema.safeParse` 逐个版本校验），跳过无效版本但保留有效版本。至少有一个有效版本的游戏才会被展示，全部无效则记录警告并跳过该游戏。
+    - **sha256 全可选 + 下载时懒解析**：版本对象的 `sha256` 字段已变为全可选。下载阶段 `downloadAndInstall()` 按优先级获取 sha256/size：① 版本对象直接提供 → ② `resolvedAssets` 缓存（1小时 TTL）→ ③ GitHub Releases 直链时通过 `resolveGitHubAssetInfo()` 实时从 GitHub API 获取（`parseGitHubReleaseUrl()` 解析 owner/repo/tag/assetName，调用 `GET /repos/{owner}/{repo}/releases/tags/{tag}` 获取 asset 的 digest/size）。GitHub API 返回值中的 digest 必须同时满足 64 位长度和纯 hex 格式才被接受为 sha256，否则置 undefined。若 size 最终仍为 null，拒绝下载（`market_missing_size`）；sha256 为 undefined 时仅跳过校验不拒绝。
+    - **下载校验条件化**：`verifyArchive()` 中 size 校验仅当 `meta.size > 0` 时执行，sha256 校验仅当 `meta.sha256` 存在时执行。若版本未提供 sha256 且 GitHub API 也未返回有效 sha256，则跳过哈希校验直接进入解压阶段。
     - 错误分类由 `classifyErrorCode()` 统一处理，根据错误消息自动归类为四种错误码（download/verify/extract/install）。
     - `tasks` Map 维护任务全生命周期，`finalize()` 在清理临时文件后延迟 30 秒删除 Map 条目，确保 UI 能读到终态。
 - **useImageCache 统一图片缓存层**：
@@ -683,7 +684,7 @@ interface AppSettings {
     - 每个格子通过 `n-tooltip` 展示日期和当天游玩时长。底部显示近一年总游玩时长。
     - 每次打开统计页面 (`onMounted`) 自动拉取最新数据。
 - **头像框系统（Avatar Frame）**：
-    - **数据定义**：`src/shared/avatar-frames.ts` 导出 `AVATAR_FRAMES` 常量数组（5 款头像框），每款定义 `id`、`name`、`imageFileName`、`rarity`、`unlockMethod`（playtime/consecutive_checkin/total_checkin/bzcoin）、`unlockValue`。同时导出 `getFrameImageFileName(id)` 工具函数。
+    - **数据定义**：`src/shared/avatar-frames.ts` 导出 `AVATAR_FRAMES` 常量数组（8 款头像框），每款定义 `id`、`name`、`imageFileName`、`rarity`、`unlockMethod`（playtime/consecutive_checkin/total_checkin/bzcoin）、`unlockValue`。同时导出 `getFrameImageFileName(id)` 工具函数。
     - **类型定义**：`AvatarFrameDef` 和 `AvatarFrameUnlockMethod` 定义在 `src/shared/types/store.types.ts`，通过 `shared/types/index.ts` 统一导出。
     - **渲染组件**：`AvatarWithFrame.vue` 使用 CSS absolute 叠加方案：底层 `n-avatar` (z=0)，上层 `<img>` overlay (z=1, `pointer-events: none`)。
       - **算法**：`FRAME_MARGIN = 60`（帧图留白像素），`contentSize = w - 2*MARGIN`，`scale = w / contentSize`，`offsetPercent = -50*(scale-1)`。通过 `naturalWidth` 获取帧图原始尺寸后计算 scale/offset，适配任意帧图。
@@ -695,7 +696,7 @@ interface AppSettings {
         - `performUnequipFrame(frameId)`：仅当 `equippedFrame === frameId` 时 → `equippedFrame = undefined`。
     - **自动解锁**：`tryUnlockPlaytimeFrames()` 和 `tryUnlockCheckInFrames()` 为 `StoreService` 私有方法，分别在 `addPlayTime()` 和 `performCheckIn()` 写盘前调用。扫描 `AVATAR_FRAMES` 数组，满足条件且不在 `ownedFrames[]` 中时自动 push 并记录日志。
     - **单一真相源**：`ownedFrames[]` 是头像框解锁状态的唯一权威数据源。所有解锁逻辑（签到/时长/BZ币购买）均在主进程中写入此数组，前端 `isUnlocked()` **仅检查 `ownedFrames.includes(frameId)`**，不做任何条件比较。
-    - **个性化页面**（`PersonalizationView.vue`）：网格布局展示 5 款头像框卡片，每张卡片包含预览（`AvatarWithFrame` 96px）、名称、解锁条件文字+图标、操作按钮（装备/卸下/购买/未解锁）。购买成功后自动装备并刷新用户数据。路由 `/personalization`。
+    - **个性化页面**（`PersonalizationView.vue`）：网格布局展示 8 款头像框卡片，每张卡片包含预览（`AvatarWithFrame` 96px）、名称、解锁条件文字+图标、操作按钮（装备/卸下/购买/未解锁）。购买成功后自动装备并刷新用户数据。路由 `/personalization`。
     - **应用入口展示**：`AppContent.vue` 顶栏头像使用 `AvatarWithFrame`（28px）替代原始 `n-avatar`，绑定 `userData.equippedFrame`。
     - **设置页展示**：`SettingsView.vue` 头像上传区小头像（40px）和头像预览弹窗（280px）均使用 `AvatarWithFrame`。
     - **联机传递**：`RoomJoinPayload` 和 `PlayerInRoom` 新增 `playerAvatarFrame` / `avatarFrame` 字段。房主 `RoomServer` 创建玩家对象时写入，客机 `RoomClient` 加入时携带。`PlayerCard.vue` 使用 `AvatarWithFrame` 渲染。
@@ -917,7 +918,9 @@ interface AppSettings {
     - 弹窗输入框使用原生 `<textarea>` 替代 `<n-input>`，支持 Shift+Enter 换行、Enter 发送。
     - 输入框底部拖动条（`.chat-resize-handle`）可调整输入区高度（60px~260px），高度持久化到 `chatInputHeight`。
 - **聊天图片消息**：
-    - 弹窗聊天框支持 Ctrl+V 粘贴图片和拖拽图片文件发送，单张限制 5MB。
+    - 弹窗聊天框支持 Ctrl+V 粘贴图片、拖拽图片文件和点击"发送图片"按钮选择图片发送，单张限制 5MB。
+    - 点击"发送图片"按钮（📷 图标）触发隐藏的 `<input type="file" accept="image/*" multiple>`，支持批量选择。选择后和粘贴/拖拽统一走 `addImageFromFile()` 处理。
+    - 录音过程中图片发送按钮禁用。
     - 图片以缩略图（max 240×200px）展示在输入框上方预览区，发送前可删除。
     - 文字和图片打包为一条消息（`images[]` 数组），消息展示时图片在上、文字在下。
     - 消息列表中图片使用自定义放大镜光标（黑色 SVG data URI），点击弹出全屏预览。
@@ -971,15 +974,14 @@ interface AppSettings {
 - **pnpm 依赖提升（hoisting）**：`electron-updater` 的传递依赖 `debug` 需要 `ms` 模块，但 pnpm 严格隔离导致 `ms` 仅存在于 `.pnpm/debug@x.x.x/node_modules/ms` 中。electron-builder 打包时不会包含 `.pnpm` 目录内的嵌套依赖，导致运行时 `Cannot find module 'ms'`。解决方案：将 `ms` 声明为项目直接依赖，pnpm 会将其提升到顶层 `node_modules`。项目中 `ms` 仅作为此兼容性占位依赖，代码不直接引用。
 - **electron-rebuild 手动补充**：若开发阶段出现 `NODE_MODULE_VERSION` 不匹配错误（系统 Node.js vs Electron 内嵌 Node.js 版本不一致），执行 `npx electron-rebuild -f -w better-sqlite3` 补齐重编译。
 - **GitHub Release Asset 自动校验**：
-  - `sha256` 和 `size` 已改为可选字段。若 `downloadUrl` 为 GitHub Releases 直链且这两个字段缺失，平台会在**用户展开游戏卡片时**（而非下载时）预先解析。
-  - 数据流：`MarketView.toggleExpand()` → `resolveMissingAssetInfo()` → `loadAssetInfo()` → IPC `market:resolveAssetInfo` → `MarketService.resolveAssetInfo()`。
-  - `resolveGitHubAssetInfo()` 调用 GitHub REST API `GET /repos/{owner}/{repo}/releases/tags/{tag}`，从 `assets[].digest` 提取 SHA256（去除 `sha256:` 前缀），从 `assets[].size` 提取文件大小。`parseGitHubReleaseUrl()` 从 `downloadUrl` 解析出 owner/repo/tag/assetName。
+  - `sha256` 和 `size` 已改为可选字段（`sha256` 全可选，`size` 仅 GitHub 直链时可省略）。
+  - **双重解析路径**：① **前端预解析**（展开卡片时）：`MarketView.toggleExpand()` → `resolveMissingAssetInfo()` → `loadAssetInfo()` → IPC `market:resolveAssetInfo` → `MarketService.resolveAssetInfo()`。展开后 sha256/size 尚未返回时，size 区域显示 `<n-skeleton>` 骨架；返回后自动更新。② **下载时懒解析**：`downloadAndInstall()` 阶段若 sha256/size 仍缺失，对 GitHub 直链实时调用 `resolveGitHubAssetInfo()` 从 GitHub API 获取并缓存。
+  - `resolveGitHubAssetInfo()` 调用 GitHub REST API `GET /repos/{owner}/{repo}/releases/tags/{tag}`，从 `assets[].digest` 提取 SHA256（去除 `sha256:` 前缀），从 `assets[].size` 提取文件大小。**digest 校验**：必须同时满足 64 位长度和纯 hex 字符才被接受；不满足则 sha256 置 `undefined`（不阻断下载）。`parseGitHubReleaseUrl()` 从 `downloadUrl` 解析出 owner/repo/tag/assetName。
   - **自动重试**：`withRetry()` 通用工具，使用指数退避（1s → 2s → 4s → 8s → 16s），最多重试 5 次（含首次共 6 次尝试）。失败结果**不写入缓存**，避免永久阻塞。
-  - **缓存**：`MarketService.resolvedAssets` Map，TTL 1 小时（`CACHE_TTL_MS`），与市场索引缓存一致。
-  - **前端骨架屏**：展开卡片后 sha256/size 尚未返回时，size 区域显示 `<n-skeleton>` 骨架；返回后自动更新为实际值。
-  - **手动刷新**：GitHub Release 游戏的 size 右侧显示 🔄 刷新图标（`RefreshOutline`），点击可强制清除前端缓存后重新请求（同样走 5 次重试逻辑）。`isAssetRefreshable()` 控制按钮出现条件。
-  - **下载阶段**：`downloadAndInstall()` 仅从 `resolvedAssets` 缓存读取，不再发起新的 API 调用。缓存未命中（sha256/size 仍缺失）则直接拒绝下载（`market_missing_sha256_or_size`）。
-  - **前端校验**：`isVersionPayloadValid()` 增加第三步判断：sha256/size 缺失 + 非 GitHub 直链 → 返回 false，前端显示"版本异常"红色标签。GitHub 直链即使缺失也不会触发。
+  - **缓存**：`MarketService.resolvedAssets` Map（`{ sha256?: string; size: number; at: number }`），TTL 1 小时（`CACHE_TTL_MS`），与市场索引缓存一致。
+  - **手动刷新**：GitHub Release 游戏的 size 右侧显示 🔄 刷新图标（`RefreshOutline`），点击可强制清除前端缓存后重新请求。`isAssetRefreshable()` 控制按钮出现条件。
+  - **版本完整性分级**：前端使用 `getVersionIntegrity()` 返回五档结果：`"ok"`（一切正常）、`"missingSha256"`（缺 sha256，黄色警告标签）、`"missingSize"`（缺 size，黄色警告标签）、`"invalid"`（下载链接非法或非 GitHub 直链缺少 size，红色错误标签）、`null`（GitHub 直链 Asset 信息尚未解析，不显示标签）。`isVersionDownloadable()` 仅用于下载按钮禁用判断：非 GitHub 直链缺 size 时禁用。
+  - **下载阶段**：`downloadAndInstall()` 按优先级获取 sha256/size：① 版本对象 → ② `resolvedAssets` 缓存 → ③ GitHub 直链实时 API。size 缺失则拒绝下载（`market_missing_size`），sha256 缺失仅跳过哈希校验不拒绝。
 
 ### 6.5 客户端更新发布规范
 

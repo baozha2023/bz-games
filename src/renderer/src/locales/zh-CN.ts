@@ -128,6 +128,8 @@ export default {
     installError: "安装失败",
     manifestMissing: "游戏包缺少 game.json 清单文件，无法安装",
     versionInvalid: "当前版本异常",
+    missingSha256: "缺失sha256",
+    missingSize: "缺失size",
     noImage: "暂无图片",
     platformIncompatible: "平台版本不兼容",
     installSuccess: "{name} {version} 安装完成",
@@ -248,6 +250,7 @@ export default {
     sendFailed: "发送失败",
     imageTooLarge: "图片不能超过5MB",
     dropHere: "松手添加图片",
+    importImage: "发送图片",
   },
   checkIn: {
     title: "每日签到",

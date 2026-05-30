@@ -84,6 +84,25 @@
         @paste="handlePaste"
       />
       <div class="chat-input-actions">
+        <input
+          ref="fileInputRef"
+          type="file"
+          accept="image/*"
+          multiple
+          style="display: none"
+          @change="handleFileInputChange"
+        />
+        <n-button
+          size="small"
+          quaternary
+          :title="t('chat.importImage')"
+          @click="handleImportImage"
+          :disabled="isRecording"
+        >
+          <template #icon>
+            <n-icon><Image /></n-icon>
+          </template>
+        </n-button>
         <n-button
           :type="isRecording ? 'error' : 'default'"
           @mousedown="startRecording"
@@ -108,7 +127,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { NButton, NIcon, useMessage } from 'naive-ui'
-import { Mic, MusicalNote, Contract, CloseCircle } from '@vicons/ionicons5'
+import { Mic, MusicalNote, Contract, CloseCircle, Image } from '@vicons/ionicons5'
 import { useI18n } from 'vue-i18n'
 import type { ChatPayload, RoomEvent } from '../../../shared/types'
 import ImageViewer from '../components/room/ImageViewer.vue'
@@ -131,6 +150,7 @@ let currentAudio: HTMLAudioElement | null = null
 let cleanupEvent: (() => void) | undefined
 
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
+const fileInputRef = ref<HTMLInputElement | null>(null)
 
 const inputHeight = ref(204)
 const MIN_INPUT_HEIGHT = 60
@@ -350,6 +370,20 @@ function handleDrop(e: DragEvent) {
   }
 }
 
+function handleImportImage() {
+  fileInputRef.value?.click()
+}
+
+function handleFileInputChange(e: Event) {
+  const input = e.target as HTMLInputElement
+  const files = input.files
+  if (!files) return
+  for (let i = 0; i < files.length; i++) {
+    addImageFromFile(files[i])
+  }
+  input.value = ''
+}
+
 const handleRoomEvent = (event: RoomEvent) => {
   if (event.type === 'room:chat') {
     chatMessages.value.push(event.payload as ChatPayload)
@@ -553,7 +587,7 @@ onUnmounted(() => {
   font-size: 13px;
   font-family: inherit;
   line-height: 1.5;
-  padding: 8px 88px 8px 8px;
+  padding: 8px 110px 8px 8px;
   box-sizing: border-box;
 }
 

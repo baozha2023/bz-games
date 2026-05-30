@@ -48,6 +48,9 @@
             <n-tag v-if="source.marketId === 'official'" size="small" type="info">
               {{ t('marketList.official') }}
             </n-tag>
+            <n-tag v-if="source.marketId === 'github-release-market'" size="small" type="success">
+              GitHub
+            </n-tag>
             <n-tag v-if="source.featured" size="small" type="warning">
               {{ t('market.featured') }}
             </n-tag>

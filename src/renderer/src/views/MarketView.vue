@@ -185,12 +185,28 @@
                         {{ t("market.prerelease") }}
                       </n-tag>
                       <n-tag
-                        v-if="getSelectedVersionInfo(game) && !isVersionPayloadValid(getSelectedVersionInfo(game)!)"
+                        v-if="getSelectedVersionInfo(game) && getVersionIntegrity(getSelectedVersionInfo(game)!) === 'invalid'"
                         size="small"
                         type="error"
                         :bordered="false"
                       >
                         {{ t("market.versionInvalid") }}
+                      </n-tag>
+                      <n-tag
+                        v-if="getSelectedVersionInfo(game) && getVersionIntegrity(getSelectedVersionInfo(game)!) === 'missingSha256'"
+                        size="small"
+                        type="warning"
+                        :bordered="false"
+                      >
+                        {{ t("market.missingSha256") }}
+                      </n-tag>
+                      <n-tag
+                        v-if="getSelectedVersionInfo(game) && getVersionIntegrity(getSelectedVersionInfo(game)!) === 'missingSize'"
+                        size="small"
+                        type="warning"
+                        :bordered="false"
+                      >
+                        {{ t("market.missingSize") }}
                       </n-tag>
                       <n-tag
                         v-if="getSelectedVersionInfo(game) && isInstalled(game.id, getSelectedVersionInfo(game)!.version, game.type)"
@@ -334,12 +350,28 @@
                                 {{ t("market.installed") }}
                               </n-tag>
                               <n-tag
-                                v-if="!isVersionPayloadValid(version)"
+                                v-if="getVersionIntegrity(version) === 'invalid'"
                                 size="small"
                                 type="error"
                                 :bordered="false"
                               >
                                 {{ t("market.versionInvalid") }}
+                              </n-tag>
+                              <n-tag
+                                v-if="getVersionIntegrity(version) === 'missingSha256'"
+                                size="small"
+                                type="warning"
+                                :bordered="false"
+                              >
+                                {{ t("market.missingSha256") }}
+                              </n-tag>
+                              <n-tag
+                                v-if="getVersionIntegrity(version) === 'missingSize'"
+                                size="small"
+                                type="warning"
+                                :bordered="false"
+                              >
+                                {{ t("market.missingSize") }}
                               </n-tag>
                             </n-space>
                             <div class="market-version-desc">{{ version.description }}</div>
@@ -395,8 +427,7 @@ import type {
   MarketTaskState,
   MarketTaskStatus,
 } from "../../../shared/types";
-import { isVersionPayloadValid } from "../../../shared/types";
-import { isGitHubReleaseUrl } from "../../../shared/types";
+import { isGitHubReleaseUrl, isMissingSha256, isMissingSize, isValidDownloadUrl, isValidSha256Format, isVersionDownloadable } from "../../../shared/types";
 import { useSettingsStore } from "../stores/useSettingsStore";
 import CachedImg from "../components/CachedImg.vue";
 import { useImageCache } from "../composables/useImageCache";
@@ -663,9 +694,34 @@ function isInstalled(gameId: string, version: string, gameType?: string): boolea
   );
 }
 
+type VersionIntegrity = "ok" | "missingSha256" | "missingSize" | "invalid";
+
+function getVersionIntegrity(v: { downloadUrl: string; sha256?: string; size?: number }): VersionIntegrity | null {
+  if (!isValidDownloadUrl(v.downloadUrl)) return "invalid";
+  if (!isValidSha256Format(v.sha256)) return "invalid";
+
+  const isGitHub = isGitHubReleaseUrl(v.downloadUrl);
+
+  if (!isGitHub) {
+    const noSha = isMissingSha256(v);
+    const noSize = isMissingSize(v);
+    if (noSha && noSize) return "invalid";
+    if (noSha) return "missingSha256";
+    if (noSize) return "missingSize";
+    return "ok";
+  }
+
+  const resolved = resolvedAssets.value[v.downloadUrl];
+  if (!resolved || resolved.size == null) return null;
+
+  const noSha = !resolved.sha256;
+  if (noSha) return "missingSha256";
+  return "ok";
+}
+
 function isSelectedVersionInvalid(game: MarketGame): boolean {
   const version = getSelectedVersionInfo(game);
-  return version ? !isVersionPayloadValid(version) : false;
+  return version ? !isVersionDownloadable(version) : false;
 }
 
 function friendlyLoadError(raw: string): string {

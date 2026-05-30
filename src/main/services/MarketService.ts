@@ -20,7 +20,8 @@ import type {
   MarketTaskState,
   MarketTaskStatus,
 } from "../../shared/types";
-import { isGitHubReleaseUrl, MarketDirectorySchema, MarketIndexSchema } from "../../shared/types";
+import { isGitHubReleaseUrl, MarketDirectorySchema, MarketGameSchema, MarketGameVersionSchema } from "../../shared/types";
+import { z } from "zod";
 import { GameLoader } from "./GameLoader";
 import { logger } from "../utils/logger";
 import { storeService } from "./StoreService";
@@ -52,7 +53,7 @@ interface TaskMeta {
   version: string;
   gameName: string;
   downloadUrl: string;
-  sha256: string;
+  sha256: string | undefined;
   size: number;
   downloadPath: string;
   archiveType: MarketArchiveType;
@@ -176,7 +177,7 @@ function parseGitHubReleaseUrl(url: string): { owner: string; repo: string; tag:
 
 async function resolveGitHubAssetInfo(
   downloadUrl: string,
-): Promise<{ sha256: string; size: number }> {
+): Promise<{ sha256?: string; size: number }> {
   const parsed = parseGitHubReleaseUrl(downloadUrl);
   if (!parsed) throw new Error("market_not_github_release_url");
 
@@ -199,10 +200,8 @@ async function resolveGitHubAssetInfo(
   const asset = release.assets?.find((a) => a.name === parsed.assetName);
   if (!asset) throw new Error("market_github_asset_not_found");
 
-  const sha256 = asset.digest?.replace(/^sha256:/i, "") || "";
-  if (!sha256 || sha256.length !== 64) {
-    throw new Error("market_github_digest_invalid");
-  }
+  const digest = asset.digest?.replace(/^sha256:/i, "") || "";
+  const sha256 = digest.length === 64 && /^[a-fA-F0-9]+$/.test(digest) ? digest : undefined;
 
   return { sha256, size: asset.size };
 }
@@ -302,7 +301,7 @@ export class MarketService {
   private cachedSources: MarketDirectory | null = null;
   private cachedSourcesAt = 0;
   private cachedImages = new Map<string, { dataUrl: string; at: number }>();
-  private resolvedAssets = new Map<string, { sha256: string; size: number; at: number }>();
+  private resolvedAssets = new Map<string, { sha256?: string; size: number; at: number }>();
   private static readonly CACHE_TTL_MS = 60 * 60 * 1000;
   private static readonly IMAGE_FETCH_TIMEOUT_MS = 15_000;
 
@@ -659,8 +658,19 @@ export class MarketService {
       }
     }
 
-    if (!sha256 || size == null) {
-      throw new Error("market_missing_sha256_or_size");
+    const isGitHub = isGitHubReleaseUrl(targetVersion.downloadUrl);
+
+    if (size == null && isGitHub) {
+      try {
+        const info = await resolveGitHubAssetInfo(targetVersion.downloadUrl);
+        size = info.size;
+        sha256 = sha256 ?? info.sha256;
+        this.resolvedAssets.set(targetVersion.downloadUrl, { sha256: info.sha256, size: info.size, at: Date.now() });
+      } catch { /* ignore resolution failure, will be caught below */ }
+    }
+
+    if (size == null) {
+      throw new Error("market_missing_size");
     }
 
     const meta: TaskMeta = {
@@ -698,11 +708,116 @@ export class MarketService {
   }
 
   private async fetchIndexFromUrl(url: string): Promise<MarketIndex> {
-    const raw = await this.fetchJson(url);
-    const parsed = MarketIndexSchema.parse(raw);
+    const raw = (await this.fetchJson(url)) as Record<string, unknown>;
+    const TopLevelSchema = z.object({
+      schemaVersion: z.string().min(1),
+      marketId: z.string().min(1),
+      marketName: z.string().min(1),
+      generatedAt: z.string().datetime(),
+      games: z.array(z.unknown()),
+    });
+    const top = TopLevelSchema.parse(raw);
+    const rawGames = Array.isArray(raw.games) ? raw.games : [];
+
+    const validGames: z.infer<typeof MarketGameSchema>[] = [];
+    let skippedCount = 0;
+
+    for (const rawGame of rawGames) {
+      const parsed = this.parseGameTolerant(rawGame);
+      if (parsed) {
+        validGames.push(parsed);
+      } else {
+        skippedCount++;
+      }
+    }
+
+    if (skippedCount > 0) {
+      logger.warn(
+        `[MarketService] Skipped ${skippedCount} invalid game(s) while loading market index from ${url}`,
+      );
+    }
+
     return {
-      ...parsed,
-      games: parsed.games.filter((game) => game.visibility !== "hidden"),
+      schemaVersion: top.schemaVersion,
+      marketId: top.marketId,
+      marketName: top.marketName,
+      generatedAt: top.generatedAt,
+      games: validGames.filter((game) => game.visibility !== "hidden"),
+    };
+  }
+
+  private parseGameTolerant(rawGame: unknown): z.infer<typeof MarketGameSchema> | null {
+    const fullResult = MarketGameSchema.safeParse(rawGame);
+    if (fullResult.success) return fullResult.data;
+
+    if (!rawGame || typeof rawGame !== "object") return null;
+    const g = rawGame as Record<string, unknown>;
+    const gameId = typeof g.id === "string" ? g.id : "(unknown)";
+
+    const GameMetaSchema = z.object({
+      id: z.string().min(1),
+      name: z.string().min(1).max(100),
+      author: z.string().min(1).max(100),
+      author_url: z.string().url().optional(),
+      type: z.enum(["singleplayer", "multiplayer", "singlemultiple", "networkgame"]),
+      summary: z.string().min(1).max(200),
+      tags: z.array(z.string().min(1)).optional(),
+      iconUrl: z.string().url().optional(),
+      coverUrl: z.string().url().optional(),
+      screenshots: z.array(z.string().url()).optional(),
+      featured: z.boolean().optional(),
+      visibility: z.enum(["public", "hidden", "deprecated"]).optional(),
+      minPlayers: z.number().int().min(1).optional(),
+      maxPlayers: z.number().int().min(1).optional(),
+      latestVersion: z.string().min(1),
+      versions: z.array(z.unknown()),
+    });
+
+    const metaResult = GameMetaSchema.safeParse(rawGame);
+    if (!metaResult.success) {
+      logger.warn(`[MarketService] Skipping game "${gameId}": invalid metadata`, metaResult.error.issues.map((i) => i.path.join(".")));
+      return null;
+    }
+
+    const rawVersions = Array.isArray(metaResult.data.versions) ? metaResult.data.versions : [];
+    const validVersions: z.infer<typeof MarketGameVersionSchema>[] = [];
+    for (const rv of rawVersions) {
+      const vr = MarketGameVersionSchema.safeParse(rv);
+      if (vr.success) {
+        validVersions.push(vr.data);
+      } else if (rv && typeof rv === "object" && "version" in rv) {
+        logger.warn(
+          `[MarketService] Skipping invalid version "${rv.version}" for game "${gameId}"`,
+          vr.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`),
+        );
+      }
+    }
+
+    if (validVersions.length === 0) {
+      logger.warn(`[MarketService] Skipping game "${gameId}": no valid versions`);
+      return null;
+    }
+
+    const latestVersion = validVersions.find((v) => v.version === metaResult.data.latestVersion)?.version
+      || validVersions[0].version;
+
+    return {
+      id: metaResult.data.id,
+      name: metaResult.data.name,
+      author: metaResult.data.author,
+      author_url: metaResult.data.author_url,
+      type: metaResult.data.type,
+      summary: metaResult.data.summary,
+      tags: metaResult.data.tags,
+      iconUrl: metaResult.data.iconUrl,
+      coverUrl: metaResult.data.coverUrl,
+      screenshots: metaResult.data.screenshots,
+      featured: metaResult.data.featured,
+      visibility: metaResult.data.visibility,
+      minPlayers: metaResult.data.minPlayers,
+      maxPlayers: metaResult.data.maxPlayers,
+      latestVersion,
+      versions: validVersions,
     };
   }
 
@@ -988,11 +1103,13 @@ export class MarketService {
     const stopSim = this.startProgressSim(taskId, signal, 65, 69, 5);
     try {
       const stat = await fsp.stat(meta.downloadPath);
-      if (stat.size !== meta.size) throw new Error("market_download_size_mismatch");
+      if (meta.size > 0 && stat.size !== meta.size) throw new Error("market_download_size_mismatch");
 
-      const sha256 = await computeSha256(meta.downloadPath);
-      if (sha256.toLowerCase() !== meta.sha256.toLowerCase()) {
-        throw new Error("market_download_sha256_mismatch");
+      if (meta.sha256) {
+        const computed = await computeSha256(meta.downloadPath);
+        if (computed.toLowerCase() !== meta.sha256.toLowerCase()) {
+          throw new Error("market_download_sha256_mismatch");
+        }
       }
     } finally {
       stopSim();

@@ -1,0 +1,196 @@
+[
+  {
+    "repo": "SimonLarsen/duckmarines",
+    "status": "HAS_WIN",
+    "tag": "v1.0b",
+    "asset": "duckmarines-1.0-love.zip",
+    "size": "8.7MB",
+    "download": "https://github.com/SimonLarsen/duckmarines/releases/download/v1.0b/duckmarines-1.0-love.zip"
+  },
+  {
+    "repo": "colobot/colobot",
+    "status": "NO_WIN",
+    "tag": "colobot-gold-0.2.2-alpha",
+    "assets": "none"
+  },
+  {
+    "repo": "miki151/keeperrl",
+    "status": "NO_WIN",
+    "tag": "1_0_hotfix_19",
+    "assets": "none"
+  },
+  {
+    "repo": "OpenDungeons/OpenDungeons",
+    "status": "NO_WIN",
+    "tag": "0.7.1",
+    "assets": "opendungeons-0.7.1.tar.xz"
+  },
+  {
+    "repo": "the3dfxdude/7kaa",
+    "status": "HAS_WIN",
+    "tag": "v2.15.5",
+    "asset": "7kaa-install-win32-2.15.5.exe",
+    "size": "63.8MB",
+    "download": "https://github.com/the3dfxdude/7kaa/releases/download/v2.15.5/7kaa-install-win32-2.15.5.exe"
+  },
+  {
+    "repo": "Blackvoxel/Blackvoxel",
+    "status": "NO_WIN",
+    "tag": "2.5",
+    "assets": "none"
+  },
+  {
+    "repo": "arx/ArxLibertatis",
+    "status": "HAS_WIN",
+    "tag": "1.2.1",
+    "asset": "arx-libertatis-1.2.1-windows-debug.tar.xz",
+    "size": "9.5MB",
+    "download": "https://github.com/arx/ArxLibertatis/releases/download/1.2.1/arx-libertatis-1.2.1-windows-debug.tar.xz"
+  },
+  {
+    "repo": "CorsixTH/CorsixTH",
+    "status": "HAS_WIN",
+    "tag": "v0.69.2",
+    "asset": "CorsixTH-0.69.2-windows-x86_64.zip",
+    "size": "28.6MB",
+    "download": "https://github.com/CorsixTH/CorsixTH/releases/download/v0.69.2/CorsixTH-0.69.2-windows-x86_64.zip"
+  },
+  {
+    "repo": "OpenFodder/openfodder",
+    "status": "HAS_WIN",
+    "tag": "2.0.0",
+    "asset": "OpenFodder-Installer.exe",
+    "size": "15.6MB",
+    "download": "https://github.com/OpenFodder/openfodder/releases/download/2.0.0/OpenFodder-Installer.exe"
+  },
+  {
+    "repo": "XProger/OpenLara",
+    "status": "HAS_WIN",
+    "tag": "latest",
+    "asset": "OpenLara_win.zip",
+    "size": "0.3MB",
+    "download": "https://github.com/XProger/OpenLara/releases/download/latest/OpenLara_win.zip"
+  },
+  {
+    "repo": "OpenMW/openmw",
+    "status": "HAS_WIN",
+    "tag": "openmw-51-rc2",
+    "asset": "OpenMW-0.51.0-RC2-Windows-x64.exe",
+    "size": "69.9MB",
+    "download": "https://github.com/OpenMW/openmw/releases/download/openmw-51-rc2/OpenMW-0.51.0-RC2-Windows-x64.exe"
+  },
+  {
+    "repo": "OpenRA/OpenRA",
+    "status": "HAS_WIN",
+    "tag": "playtest-20260222",
+    "asset": "OpenRA-playtest-20260222-x64-winportable.zip",
+    "size": "69.5MB",
+    "download": "https://github.com/OpenRA/OpenRA/releases/download/playtest-20260222/OpenRA-playtest-20260222-x64-winportable.zip"
+  },
+  {
+    "repo": "OpenRCT2/OpenRCT2",
+    "status": "HAS_WIN",
+    "tag": "v0.5.1",
+    "asset": "OpenRCT2-v0.5.1-windows-installer-arm64.exe",
+    "size": "74.5MB",
+    "download": "https://github.com/OpenRCT2/OpenRCT2/releases/download/v0.5.1/OpenRCT2-v0.5.1-windows-installer-arm64.exe"
+  },
+  {
+    "repo": "opentomb/OpenTomb",
+    "status": "HAS_WIN",
+    "tag": "win32-2018-02-03_alpha",
+    "asset": "OpenTomb-win32-2018-02-03_alpha.7z",
+    "size": "5.5MB",
+    "download": "https://github.com/opentomb/OpenTomb/releases/download/win32-2018-02-03_alpha/OpenTomb-win32-2018-02-03_alpha.7z"
+  },
+  {
+    "repo": "SupSuper/OpenXcom",
+    "status": "ERR_301"
+  },
+  {
+    "repo": "Wargus/wargus",
+    "status": "HAS_WIN",
+    "tag": "v3.3.2",
+    "asset": "Wargus-3.3.2.exe",
+    "size": "44.8MB",
+    "download": "https://github.com/Wargus/wargus/releases/download/v3.3.2/Wargus-3.3.2.exe"
+  },
+  {
+    "repo": "0ad/0ad",
+    "status": "NO_WIN",
+    "tag": "A26",
+    "assets": "none"
+  },
+  {
+    "repo": "OpenTTD/OpenTTD",
+    "status": "NO_WIN",
+    "tag": "15.3",
+    "assets": "none"
+  },
+  {
+    "repo": "wesnoth/wesnoth",
+    "status": "NO_RELEASES"
+  },
+  {
+    "repo": "hedgewars/hw",
+    "status": "NO_RELEASES"
+  },
+  {
+    "repo": "frogatto/frogatto",
+    "status": "NO_WIN",
+    "tag": "4.0.0",
+    "assets": "none"
+  },
+  {
+    "repo": "blinry/gish",
+    "status": "NO_RELEASES"
+  },
+  {
+    "repo": "riksweeney/edgar",
+    "status": "HAS_WIN",
+    "tag": "1.38",
+    "asset": "edgar-1.38-1.installer64.exe",
+    "size": "90.6MB",
+    "download": "https://github.com/riksweeney/edgar/releases/download/1.38/edgar-1.38-1.installer64.exe"
+  },
+  {
+    "repo": "gerstrong/Commander-Genius",
+    "status": "NO_WIN",
+    "tag": "refs/pull/358/merge",
+    "assets": "none"
+  },
+  {
+    "repo": "Secretchronicles/TSC",
+    "status": "HAS_WIN",
+    "tag": "v2.2.0-beta1",
+    "asset": "bookworm-raspi-build-deb.zip",
+    "size": "1.2MB",
+    "download": "https://github.com/Secretchronicles/TSC/releases/download/v2.2.0-beta1/bookworm-raspi-build-deb.zip"
+  },
+  {
+    "repo": "arianne/stendhal",
+    "status": "NO_RELEASES"
+  },
+  {
+    "repo": "clintbellanger/flare-game",
+    "status": "NO_RELEASES"
+  },
+  {
+    "repo": "NetHack/NetHack",
+    "status": "HAS_WIN",
+    "tag": "NetHack-3.6.6_Released",
+    "asset": "NetHack-3.6.6_Released.x86.zip",
+    "size": "11.7MB",
+    "download": "https://github.com/NetHack/NetHack/releases/download/NetHack-3.6.6_Released/NetHack-3.6.6_Released.x86.zip"
+  },
+  {
+    "repo": "OpenMeridian/Meridian59",
+    "status": "NO_RELEASES"
+  },
+  {
+    "repo": "SFTtech/openage",
+    "status": "NO_WIN",
+    "tag": "v0.6.0",
+    "assets": "none"
+  }
+]

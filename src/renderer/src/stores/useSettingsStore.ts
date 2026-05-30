@@ -20,7 +20,6 @@ export const useSettingsStore = defineStore("settings", () => {
   const showUpdateModal = ref(false);
   let cleanupUpdateEvent: (() => void) | undefined;
   let updateInited = false;
-  let suppressUpdateModal = false;
 
   async function loadSettings() {
     settings.value = await window.electronAPI.settings.get();
@@ -74,15 +73,6 @@ export const useSettingsStore = defineStore("settings", () => {
         ...updateState.value,
         ...payload,
       };
-      if (
-        ["checking", "available", "downloading", "downloaded", "error"].includes(
-          payload.status,
-        )
-      ) {
-        if (!suppressUpdateModal) {
-          showUpdateModal.value = true;
-        }
-      }
     });
   }
 
@@ -93,6 +83,7 @@ export const useSettingsStore = defineStore("settings", () => {
   }
 
   async function checkUpdate() {
+    initUpdateEvents();
     showUpdateModal.value = true;
     const state = await window.electronAPI.settings.checkUpdate();
     updateState.value = state;
@@ -103,10 +94,8 @@ export const useSettingsStore = defineStore("settings", () => {
   }
 
   async function checkUpdateOnly() {
-    suppressUpdateModal = true;
     const state = await window.electronAPI.settings.checkUpdate();
     updateState.value = state;
-    suppressUpdateModal = false;
     return state;
   }
 

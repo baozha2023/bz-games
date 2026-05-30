@@ -133,6 +133,8 @@ export default {
     installError: "インストール失敗",
     manifestMissing: "ゲームパッケージに game.json マニフェストがありません。インストールできません",
     versionInvalid: "バージョンデータ異常",
+    missingSha256: "SHA256欠落",
+    missingSize: "サイズ欠落",
     noImage: "画像なし",
     platformIncompatible: "プラットフォームバージョン非互換",
     installSuccess: "{name} {version} のインストールが完了しました",
@@ -256,6 +258,7 @@ export default {
     sendFailed: "送信に失敗しました",
     imageTooLarge: "画像は5MB以下にしてください",
     dropHere: "画像をここにドロップ",
+    importImage: "画像を送信",
   },
   checkIn: {
     title: "デイリーサインイン",

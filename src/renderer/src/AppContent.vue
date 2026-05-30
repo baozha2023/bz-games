@@ -190,7 +190,6 @@ const shouldPromptUpdate = (latestVersion?: string) => {
 const handleAutoUpdateCheck = async () => {
   if (isPopupWindow.value) return
   await settingsStore.loadSettings()
-  settingsStore.initUpdateEvents()
   const state = await settingsStore.checkUpdateOnly()
   if (state.status !== 'available') return
   if (!shouldPromptUpdate(state.latestVersion)) return

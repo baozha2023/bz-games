@@ -46,6 +46,33 @@ export const AVATAR_FRAMES: AvatarFrameDef[] = [
     unlockMethod: "playtime",
     unlockValue: 180000000,
   },
+  {
+    id: "ocean_pearl_ring",
+    name: "海洋珍珠",
+    description: "深海珍珠闪烁，海洋的神秘与纯净之美",
+    imageFileName: "Ocean_Pearl_Ring.png",
+    rarity: "common",
+    unlockMethod: "total_checkin",
+    unlockValue: 10,
+  },
+  {
+    id: "astrology_moon_phase",
+    name: "星象月相",
+    description: "星辰轨迹环绕，宇宙的奥秘在头像间流转",
+    imageFileName: "Astrology_Moon_Phase.png",
+    rarity: "rare",
+    unlockMethod: "bzcoin",
+    unlockValue: 300,
+  },
+  {
+    id: "autumn_maple_twig",
+    name: "秋枫如火",
+    description: "秋日枫叶飘落，岁月静好的温柔色彩",
+    imageFileName: "Autumn_Maple_Twig.png",
+    rarity: "epic",
+    unlockMethod: "playtime",
+    unlockValue: 72000000,
+  },
 ];
 
 export function getFrameImageFileName(frameId: string): string | undefined {

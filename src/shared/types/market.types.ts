@@ -54,11 +54,32 @@ export const MarketGameVersionSchema = z.object({
   gameManifest: GameManifestOverrideSchema.optional(),
 });
 
-/** 运行时校验版本载荷是否有效：downloadUrl 合法，sha256/size 可省略仅限 GitHub Releases 直链 */
-export function isVersionPayloadValid(v: { downloadUrl: string; sha256?: string; size?: number }): boolean {
-  if (!/^https?:\/\/.+/.test(v.downloadUrl)) return false;
-  if ((!v.sha256 || v.size == null) && !isGitHubReleaseUrl(v.downloadUrl)) return false;
-  if (v.sha256 && !/^[a-fA-F0-9]{64}$/.test(v.sha256)) return false;
+/** 校验下载链接格式 */
+export function isValidDownloadUrl(url: string): boolean {
+  return /^https?:\/\/.+/.test(url);
+}
+
+/** 校验 sha256 格式（64 位 hex），允许为空 */
+export function isValidSha256Format(sha256: string | undefined): boolean {
+  if (!sha256) return true;
+  return /^[a-fA-F0-9]{64}$/.test(sha256);
+}
+
+/** 版本是否缺少 sha256 */
+export function isMissingSha256(v: { sha256?: string }): boolean {
+  return !v.sha256;
+}
+
+/** 版本是否缺少 size */
+export function isMissingSize(v: { size?: number }): boolean {
+  return v.size == null;
+}
+
+/** 运行时校验版本是否可下载：downloadUrl 合法，sha256 格式合法（若有），非 GitHub 直链时 size 必填 */
+export function isVersionDownloadable(v: { downloadUrl: string; sha256?: string; size?: number }): boolean {
+  if (!isValidDownloadUrl(v.downloadUrl)) return false;
+  if (!isValidSha256Format(v.sha256)) return false;
+  if (isMissingSize(v) && !isGitHubReleaseUrl(v.downloadUrl)) return false;
   return true;
 }
 
@@ -167,7 +188,7 @@ export interface DownloadTaskSnapshot {
   version: string;
   sourceIdx: number;
   downloadUrl: string;
-  sha256: string;
+  sha256: string | undefined;
   size: number;
   downloadPath: string;
   archiveType: "zip" | "7z";

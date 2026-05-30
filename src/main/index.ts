@@ -1,5 +1,5 @@
 import { app, BrowserWindow, session } from "electron";
-import { createWindow, markAppQuitting } from "./window";
+import { createWindow, markAppQuitting, mainWindow } from "./window";
 import { registerAllIpc } from "./ipc";
 import { electronApp, optimizer } from "@electron-toolkit/utils";
 import { storeService } from "./services/StoreService";
@@ -8,32 +8,46 @@ import { databaseService } from "./services/DatabaseService";
 import { requestInterceptor } from "./services/MarketService";
 import { setCustomGamesDir } from "./utils/appPath";
 
-app.whenReady().then(async () => {
-  electronApp.setAppUserModelId("com.bz.launcher");
+const gotTheLock = app.requestSingleInstanceLock();
 
-  requestInterceptor.registerSessionHandler(session.defaultSession);
-
-  await storeService.init();
-  databaseService.init();
-  const settings = storeService.getSettings();
-  setCustomGamesDir(settings.gameStoragePath || null);
-  app.setLoginItemSettings({
-    openAtLogin: settings.autoLaunch,
+if (!gotTheLock) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      if (!mainWindow.isVisible()) mainWindow.show();
+      mainWindow.focus();
+    }
   });
 
-  app.on("browser-window-created", (_, window) => {
-    optimizer.watchWindowShortcuts(window);
+  app.whenReady().then(async () => {
+    electronApp.setAppUserModelId("com.bz.launcher");
+
+    requestInterceptor.registerSessionHandler(session.defaultSession);
+
+    await storeService.init();
+    databaseService.init();
+    const settings = storeService.getSettings();
+    setCustomGamesDir(settings.gameStoragePath || null);
+    app.setLoginItemSettings({
+      openAtLogin: settings.autoLaunch,
+    });
+
+    app.on("browser-window-created", (_, window) => {
+      optimizer.watchWindowShortcuts(window);
+    });
+
+    registerAllIpc();
+    createWindow();
+
+    marketService.restorePendingTasks();
+
+    app.on("activate", function () {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    });
   });
-
-  registerAllIpc();
-  createWindow();
-
-  marketService.restorePendingTasks();
-
-  app.on("activate", function () {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
-  });
-});
+}
 
 app.on("before-quit", () => {
   databaseService.close();

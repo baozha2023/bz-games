@@ -132,6 +132,8 @@ export default {
     installError: "Installation failed",
     manifestMissing: "Game package is missing game.json manifest, cannot install",
     versionInvalid: "Version data invalid",
+    missingSha256: "Missing SHA256",
+    missingSize: "Missing size",
     noImage: "No Image",
     platformIncompatible: "Platform version incompatible",
     installSuccess: "{name} {version} installed",
@@ -255,6 +257,7 @@ export default {
     sendFailed: "Send failed",
     imageTooLarge: "Image must be under 5MB",
     dropHere: "Drop image here",
+    importImage: "Send image",
   },
   checkIn: {
     title: "Daily Check-in",
