@@ -48,6 +48,7 @@ db/*.db-wal
 大海世界/
 小恐龙快跑/
 bird_fly/
+黑白棋/
 
 bz-games-third-party-market/
 bz-games-github-release-market/
@@ -61,6 +62,7 @@ resources/elevate.exe
 
 # 测试文件
 test-connect.js
+
 
 
 

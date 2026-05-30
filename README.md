@@ -21,6 +21,21 @@
 - **🔄 版本管理**：支持同一游戏的多版本共存与切换。
 - **🌍 国际化**：支持简体中文、英文、日文三语。
 
+## 📸 界面预览
+
+<p align="center">
+  <img src="docs/screenshots/game-library.png" alt="游戏库" width="405">
+  <img src="docs/screenshots/game-market.png" alt="游戏市场" width="405">
+</p>
+<p align="center">
+  <img src="docs/screenshots/achievements.png" alt="成就系统" width="405">
+  <img src="docs/screenshots/game-statistics.png" alt="游戏统计" width="405">
+</p>
+<p align="center">
+  <img src="docs/screenshots/personalization.png" alt="个性化装扮" width="405">
+  <img src="docs/screenshots/settings.png" alt="设置页" width="405">
+</p>
+
 ## 🛠️ 技术栈
 
 - **Core**: Electron, TypeScript

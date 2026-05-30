@@ -16,6 +16,25 @@
 - **🌐 柔軟な NAT 越え**：標準 TCP ポートでルームを公開し、SakuraFrp などの任意の NAT 越えツールと互換性があります。
 - **🚀 プロセス管理**：ゲームプロセスの起動/終了を自動化し、異常終了にも対応します。
 - **🔄 バージョン管理**：同一ゲームの複数バージョンの共存と切り替えをサポートします。
+- **🏪 ゲームマーケット**：リモートでのゲーム発見、閲覧、ダウンロード、インストールが可能。`.zip` と `.7z` 形式に対応。
+- **🏆 実績・統計システム**：各ゲームで実績リストと統計データを定義可能、プラットフォームが自動追跡・表示します。
+- **🪙 経済システム**：毎日のチェックインで BZ コインを獲得、累計プレイ時間に応じた自動報酬。
+- **🌍 国際化**：中国語、英語、日本語に対応。
+
+## 📸 スクリーンショット
+
+<p align="center">
+  <img src="docs/screenshots/game-library.png" alt="ゲームライブラリ" width="405">
+  <img src="docs/screenshots/game-market.png" alt="ゲームマーケット" width="405">
+</p>
+<p align="center">
+  <img src="docs/screenshots/achievements.png" alt="実績" width="405">
+  <img src="docs/screenshots/game-statistics.png" alt="ゲーム統計" width="405">
+</p>
+<p align="center">
+  <img src="docs/screenshots/personalization.png" alt="パーソナライズ" width="405">
+  <img src="docs/screenshots/settings.png" alt="設定" width="405">
+</p>
 
 ## 🛠️ 技術スタック
 
@@ -24,6 +43,8 @@
 - **Build**: Electron-Vite, Electron-Builder
 - **Storage**: electron-store (ローカル JSON)
 - **Communication**: WebSocket (Room Server/Client), Electron IPC
+- **Archive**: extract-zip (ZIP), 7zip-bin / 7za (7Z)
+- **Update**: electron-updater (GitHub Releases)
 
 ## 🚀 クイックスタート
 
@@ -66,9 +87,13 @@ bz-launcher/
 │   ├── main/              # Electron メインプロセス (Node.js)
 │   │   ├── services/      # コアビジネスロジック (GameManager, RoomServer など)
 │   │   └── ipc/           # IPC 通信ハンドラー
+│   ├── preload/           # Preload スクリプト (安全な API の公開)
 │   ├── renderer/          # レンダラープロセス (Vue 3 UI)
 │   └── shared/            # メイン・レンダラー共有の型定義
+├── resources/             # アプリアイコンと静的リソース
 └── electron.vite.config.ts
 ```
+
+> マーケットインデックスデータは独立した [bz-games-market](https://github.com/baozha2023/bz-games-market) リポジトリで管理され、二層マーケットアーキテクチャで配信されます。
 
 詳細については、`CLAUDE.md` の開発ガイドラインを参照してください。

@@ -16,6 +16,25 @@
 - **🌐 Flexible NAT Traversal**: Exposes rooms via standard TCP ports, compatible with any NAT traversal tools such as SakuraFrp.
 - **🚀 Process Management**: Automatically launches/closes game processes and handles abnormal exits.
 - **🔄 Version Management**: Supports coexistence and switching of multiple versions of the same game.
+- **🏪 Game Market**: Built-in game market for remote game discovery, browsing, downloading and installation. Supports `.zip` and `.7z` formats.
+- **🏆 Achievements & Statistics**: Each game can define achievement lists and statistics, automatically tracked and displayed by the platform.
+- **🪙 Economy System**: Daily check-in rewards with BZ Coins, automatic rewards for cumulative playtime.
+- **🌍 Internationalization**: Supports Chinese, English, and Japanese.
+
+## 📸 Screenshots
+
+<p align="center">
+  <img src="docs/screenshots/game-library.png" alt="Game Library" width="405">
+  <img src="docs/screenshots/game-market.png" alt="Game Market" width="405">
+</p>
+<p align="center">
+  <img src="docs/screenshots/achievements.png" alt="Achievements" width="405">
+  <img src="docs/screenshots/game-statistics.png" alt="Game Statistics" width="405">
+</p>
+<p align="center">
+  <img src="docs/screenshots/personalization.png" alt="Personalization" width="405">
+  <img src="docs/screenshots/settings.png" alt="Settings" width="405">
+</p>
 
 ## 🛠️ Tech Stack
 
@@ -24,6 +43,8 @@
 - **Build**: Electron-Vite, Electron-Builder
 - **Storage**: electron-store (Local JSON)
 - **Communication**: WebSocket (Room Server/Client), Electron IPC
+- **Archive**: extract-zip (ZIP), 7zip-bin / 7za (7Z)
+- **Update**: electron-updater (GitHub Releases)
 
 ## 🚀 Quick Start
 
@@ -66,9 +87,13 @@ bz-launcher/
 │   ├── main/              # Electron main process (Node.js)
 │   │   ├── services/      # Core business logic (GameManager, RoomServer, etc.)
 │   │   └── ipc/           # IPC communication handlers
+│   ├── preload/           # Preload scripts (expose secure API)
 │   ├── renderer/          # Renderer process (Vue 3 UI)
 │   └── shared/            # Shared type definitions for main & renderer
+├── resources/             # App icons and static resources
 └── electron.vite.config.ts
 ```
+
+> Market index data is maintained in the independent [bz-games-market](https://github.com/baozha2023/bz-games-market) repository, distributed via a two-tier market architecture.
 
 For more details, refer to the development guidelines in `CLAUDE.md`.
