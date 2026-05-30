@@ -95,11 +95,12 @@ export const useRoomStore = defineStore("room", () => {
 
   async function sendChatMessage(
     content: string,
-    type: "text" | "audio" = "text",
+    type: "text" | "audio" | "image" = "text",
+    images?: string[],
   ) {
-    if (!content.trim() && type === "text") return;
+    if (!content.trim() && type === "text" && (!images || images.length === 0)) return;
     if (!room.value) return;
-    await window.electronAPI.room.sendChat(content, type);
+    await window.electronAPI.room.sendChat(content, type, images);
   }
 
   async function kickPlayer(playerId: string) {

@@ -29,6 +29,7 @@ const defaultSettings: AppSettings = {
   ignoredUpdateVersion: "",
   gameStoragePath: "",
   gameStorageHistory: [],
+  chatInputHeight: 204,
 };
 
 const defaultUserData: UserData = {

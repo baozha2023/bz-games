@@ -190,6 +190,14 @@ class UpdateService {
       metadata.gameRoots.push(defaultGamesRoot);
     } catch {}
 
+    const dbPath = path.resolve(path.join(appRoot, "db"));
+    const dbLabel = this.toSnapshotLabel(dbPath);
+    try {
+      await fs.cp(dbPath, path.join(targetDir, `db_${dbLabel}`), {
+        recursive: true,
+      });
+    } catch {}
+
     try {
       await fs.writeFile(
         path.join(targetDir, "snapshot-meta.json"),

@@ -1,5 +1,5 @@
 <template>
-  <template v-if="isNotificationWindow">
+  <template v-if="isPopupWindow">
     <router-view />
   </template>
   <n-layout v-else position="absolute">
@@ -112,8 +112,8 @@ const topBarFrameFileName = computed(() => {
   return getFrameImageFileName(frameId)
 })
 
-const isNotificationWindow = computed(() => {
-  return route.name === 'Notification' || route.path.startsWith('/notification');
+const isPopupWindow = computed(() => {
+  return route.name === 'Notification' || route.name === 'ChatPopout';
 })
 
 const handleBackToRoom = () => {
@@ -188,7 +188,7 @@ const shouldPromptUpdate = (latestVersion?: string) => {
 }
 
 const handleAutoUpdateCheck = async () => {
-  if (isNotificationWindow.value) return
+  if (isPopupWindow.value) return
   await settingsStore.loadSettings()
   settingsStore.initUpdateEvents()
   const state = await settingsStore.checkUpdateOnly()
@@ -220,10 +220,12 @@ const hideUpdateModal = () => {
 }
 
 const MARKET_ERROR_KEYS: Record<string, string> = {
+  network: "market.networkError",
   download: "market.downloadError",
   verify: "market.verifyError",
   extract: "market.extractError",
   install: "market.installError",
+  manifest: "market.manifestMissing",
 }
 
 function marketErrorMessage(task: MarketTaskState): string {
@@ -234,6 +236,8 @@ function marketErrorMessage(task: MarketTaskState): string {
 }
 
 onMounted(() => {
+  if (isPopupWindow.value) return
+
   if (window.electronAPI?.room?.onEvent) {
     cleanup = window.electronAPI.room.onEvent((event) => {
       roomStore.handleRoomEvent(event)

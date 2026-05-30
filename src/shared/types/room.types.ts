@@ -15,6 +15,7 @@ export type RoomMessageType =
   | "room:player:kicked" // Server → All：玩家被踢通知
   | "room:connection-status"
   | "room:chat" // 双向：房间内聊天消息
+  | "room:chat:history:sync" // 主→聊天窗口：聊天历史同步
   | "game:message:relay"
   | "game:broadcast:relay";
 
@@ -28,7 +29,8 @@ export interface ChatPayload {
   senderId: string;
   senderName: string;
   content: string;
-  contentType?: "text" | "audio";
+  contentType?: "text" | "audio" | "image";
+  images?: string[];
   timestamp: number;
   isSystem?: boolean;
 }

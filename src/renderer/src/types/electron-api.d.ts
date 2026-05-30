@@ -115,9 +115,13 @@ declare global {
         start: () => Promise<void>;
         setAddress: (address: string) => Promise<void>;
         getState: () => Promise<RoomInfo | null>;
-        sendChat: (content: string, type?: "text" | "audio") => Promise<void>;
+        sendChat: (content: string, type?: "text" | "audio" | "image", images?: string[]) => Promise<void>;
         kickPlayer: (playerId: string) => Promise<boolean>;
         reconnect: () => Promise<void>;
+        popOutChat: (chatHistory: unknown) => Promise<void>;
+        popInChat: () => Promise<void>;
+        getChatHistory: () => Promise<unknown[]>;
+        onChatWindowClosed: (callback: () => void) => () => void;
         onEvent: (callback: (event: RoomEvent) => void) => () => void;
       };
       market: {
@@ -141,6 +145,7 @@ declare global {
         get: () => Promise<AppSettings>;
         getAppVersion: () => Promise<string>;
         save: (settings: AppSettings) => Promise<boolean>;
+        savePartialSettings: (partial: Partial<AppSettings>) => Promise<void>;
         ignoreUpdateVersion: (version: string) => Promise<boolean>;
         uploadAvatar: () => Promise<string | null>;
         getAvatarFrameImage: (fileName: string) => Promise<string | null>;

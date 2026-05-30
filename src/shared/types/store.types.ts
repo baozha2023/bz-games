@@ -55,7 +55,7 @@ export interface GameRecord {
 export interface AppSettings {
   playerName: string;
   playerId: string;
-  avatar?: string; // 玩家头像路径
+  avatar?: string;
   lastJoinRoomAddress?: string;
   language: "zh-CN" | "en-US" | "ja-JP";
   theme: "dark" | "light" | "auto";
@@ -66,6 +66,8 @@ export interface AppSettings {
   gameStoragePath?: string;
   gameStorageHistory?: string[];
   githubToken?: string;
+  chatWindowBounds?: { x: number; y: number; width: number; height: number };
+  chatInputHeight?: number;
 }
 
 export type UpdateErrorCode =

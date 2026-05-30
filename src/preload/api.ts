@@ -104,12 +104,23 @@ export const electronAPI = {
     setAddress: (address: string) =>
       ipcRenderer.invoke(IPC.ROOM_SET_ADDRESS, address),
     getState: () => ipcRenderer.invoke(IPC.ROOM_GET_STATE),
-    sendChat: (content: string, type?: "text" | "audio") =>
-      ipcRenderer.invoke(IPC.ROOM_SEND_CHAT, content, type),
+    sendChat: (content: string, type?: "text" | "audio" | "image", images?: string[]) =>
+      ipcRenderer.invoke(IPC.ROOM_SEND_CHAT, content, type, images),
     kickPlayer: (playerId: string) =>
       ipcRenderer.invoke(IPC.ROOM_KICK_PLAYER, playerId),
     reconnect: () =>
       ipcRenderer.invoke(IPC.ROOM_RECONNECT),
+    popOutChat: (chatHistory: unknown) =>
+      ipcRenderer.invoke(IPC.ROOM_POP_OUT_CHAT, chatHistory),
+    popInChat: () =>
+      ipcRenderer.invoke(IPC.ROOM_POP_IN_CHAT),
+    getChatHistory: () =>
+      ipcRenderer.invoke(IPC.ROOM_GET_CHAT_HISTORY),
+    onChatWindowClosed: (callback: () => void) => {
+      const handler = () => callback();
+      ipcRenderer.on(IPC.ROOM_CHAT_WINDOW_CLOSED, handler);
+      return () => ipcRenderer.removeListener(IPC.ROOM_CHAT_WINDOW_CLOSED, handler);
+    },
     onEvent: (callback: (event: RoomEvent) => void) => {
       const handler = (_: any, event: RoomEvent) => callback(event);
       ipcRenderer.on(IPC.ROOM_EVENT, handler);
@@ -148,6 +159,8 @@ export const electronAPI = {
     getAppVersion: () => ipcRenderer.invoke(IPC.SYSTEM_GET_APP_VERSION),
     save: (settings: AppSettings) =>
       ipcRenderer.invoke(IPC.SYSTEM_SAVE_SETTINGS, settings),
+    savePartialSettings: (partial: Partial<AppSettings>) =>
+      ipcRenderer.invoke(IPC.SYSTEM_SAVE_PARTIAL_SETTINGS, partial),
     ignoreUpdateVersion: (version: string) =>
       ipcRenderer.invoke(IPC.SYSTEM_SET_IGNORED_UPDATE_VERSION, version),
     uploadAvatar: () => ipcRenderer.invoke(IPC.SYSTEM_UPLOAD_AVATAR),

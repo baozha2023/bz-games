@@ -52,6 +52,11 @@ const router = createRouter({
       component: () => import("../views/NotificationView.vue"),
     },
     {
+      path: "/chat-popout",
+      name: "ChatPopout",
+      component: () => import("../views/ChatPopoutView.vue"),
+    },
+    {
       path: "/personalization",
       name: "Personalization",
       component: () => import("../views/PersonalizationView.vue"),

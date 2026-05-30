@@ -10,6 +10,7 @@ import type {
 import { logger } from "../utils/logger";
 import { storeService } from "./StoreService";
 import { mainWindow } from "../window";
+import { sendRoomEventToChat } from "../chat-window";
 import { IPC } from "../../shared/ipc-channels";
 
 type ConnectResult = { success: boolean; error?: string; message?: string };
@@ -164,6 +165,10 @@ export class RoomClient {
       type: "room:disconnected",
       payload: {},
     });
+    sendRoomEventToChat({
+      type: "room:disconnected",
+      payload: {},
+    });
   }
 
   private handleIncomingMessage(data: any) {
@@ -192,6 +197,7 @@ export class RoomClient {
 
     // 3. Forward to renderer
     mainWindow?.webContents.send(IPC.ROOM_EVENT, msg);
+    sendRoomEventToChat(msg);
 
     // 4. Handle game lifecycle
     this.handleGameLifecycle(msg);
@@ -211,6 +217,10 @@ export class RoomClient {
       });
       this.resolveConnection({ success: true });
       mainWindow?.webContents.send(IPC.ROOM_EVENT, {
+        type: "room:state:sync",
+        payload: ack.room,
+      });
+      sendRoomEventToChat({
         type: "room:state:sync",
         payload: ack.room,
       });
@@ -293,6 +303,10 @@ export class RoomClient {
       type: "room:disconnected",
       payload: {},
     });
+    sendRoomEventToChat({
+      type: "room:disconnected",
+      payload: {},
+    });
   }
 
   private cleanup() {
@@ -362,6 +376,10 @@ export class RoomClient {
 
   private emitConnectionStatus(payload: RoomConnectionStatusPayload) {
     mainWindow?.webContents.send(IPC.ROOM_EVENT, {
+      type: "room:connection-status",
+      payload,
+    });
+    sendRoomEventToChat({
       type: "room:connection-status",
       payload,
     });

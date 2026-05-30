@@ -45,6 +45,12 @@ export const IPC = {
   // ── 房间事件推送（主→渲染，使用 ipcRenderer.on）──
   ROOM_EVENT: "room:event",
 
+  // ── 聊天弹出窗口 ──
+  ROOM_POP_OUT_CHAT: "room:popOutChat",
+  ROOM_POP_IN_CHAT: "room:popInChat",
+  ROOM_CHAT_WINDOW_CLOSED: "room:chatWindowClosed",
+  ROOM_GET_CHAT_HISTORY: "room:getChatHistory",
+
   // ── 游戏进程事件（主→渲染）──
   GAME_PROCESS_STARTED: "game:process:started",
   GAME_PROCESS_ENDED: "game:process:ended",
@@ -55,6 +61,7 @@ export const IPC = {
   SYSTEM_GET_SETTINGS: "system:getSettings",
   SYSTEM_GET_APP_VERSION: "system:getAppVersion",
   SYSTEM_SAVE_SETTINGS: "system:saveSettings",
+  SYSTEM_SAVE_PARTIAL_SETTINGS: "system:savePartialSettings",
   SYSTEM_SET_IGNORED_UPDATE_VERSION: "system:setIgnoredUpdateVersion",
   SYSTEM_UPLOAD_AVATAR: "system:uploadAvatar",
   SYSTEM_SELECT_GAME_STORAGE_PATH: "system:selectGameStoragePath",

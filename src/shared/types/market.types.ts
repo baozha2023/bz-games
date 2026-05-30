@@ -135,6 +135,7 @@ export type MarketTaskStatus =
   | "interrupted";
 
 export type MarketErrorCode =
+  | "network"
   | "download"
   | "verify"
   | "extract"

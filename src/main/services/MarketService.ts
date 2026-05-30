@@ -89,11 +89,19 @@ function now(): number {
 
 function classifyErrorCode(error: unknown): MarketErrorCode {
   const message = error instanceof Error ? error.message : String(error);
+  if (message.includes("fetch failed") || message.includes("getaddrinfo") ||
+      message.includes("ECONNREFUSED") || message.includes("ETIMEDOUT") ||
+      message.includes("ENOTFOUND")) {
+    return "network";
+  }
   if (message.includes("market_download_size_mismatch") || message.includes("market_download_sha256_mismatch")) {
     return "verify";
   }
   if (message.includes("market_manifest")) {
     return "manifest";
+  }
+  if (message.includes("market_download_aborted")) {
+    return "download";
   }
   if (message.includes("market_download")) {
     return "download";

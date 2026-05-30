@@ -88,6 +88,7 @@ bz-games/
 │   ├── main/                              # Electron 主进程
 │   │   ├── index.ts                       # 主进程入口与应用生命周期初始化
 │   │   ├── window.ts                      # 主窗口创建与管理
+│   │   ├── chat-window.ts                 # 聊天弹窗窗口创建、关闭与事件转发
 │   │   ├── ipc/
 │   │   │   ├── index.ts                   # IPC 统一注册入口
 │   │   │   ├── game.ipc.ts                # 游戏相关 IPC 处理器
@@ -139,6 +140,7 @@ bz-games/
 │   │       │   ├── LibraryView.vue        # 游戏库首页
 │   │       │   ├── MarketListView.vue      # 市场列表页面（一级界面）
 │   │       │   ├── MarketView.vue          # 市场游戏详情页面（二级界面）
+│   │       │   ├── ChatPopoutView.vue    # 聊天弹窗独立窗口页面
 │   │       │   ├── NotificationView.vue   # 通知窗口页面
 │   │       │   ├── PersonalizationView.vue # 个性化页面（头像框管理）
 │   │       │   ├── RoomView.vue           # 房间页面
@@ -160,7 +162,8 @@ bz-games/
 │   │       │   └── room/
 │   │       │       ├── PlayerCard.vue      # 房间玩家卡片组件
 │   │       │       ├── PlayerList.vue      # 房间玩家列表组件
-│   │       │       └── RoomChat.vue        # 房间聊天组件
+│   │       │       ├── RoomChat.vue        # 房间聊天组件
+│   │       │       └── ImageViewer.vue      # 图片预览器（全屏蒙层，点击空白退出，自定义光标）
 │   │       ├── locales/
 │   │       │   ├── en-US.ts                # 英文文案
 │   │       │   ├── ja-JP.ts                # 日文文案
@@ -369,7 +372,7 @@ type MarketTaskStatus =
     | "installing" | "completed" | "error" | "canceled"
     | "paused" | "interrupted";
 
-type MarketErrorCode = "download" | "verify" | "extract" | "install" | "manifest";
+type MarketErrorCode = "network" | "download" | "verify" | "extract" | "install" | "manifest";
 
 interface MarketTaskState {
     taskId: string;           // 格式: `${gameId}@${version}`
@@ -387,7 +390,7 @@ interface MarketTaskState {
 }
 ```
 
-- **错误码自动归类**：主进程 `classifyErrorCode()` 根据异常信息自动映射为 `download` / `verify` / `extract` / `install` / `manifest`，渲染进程通过 `MARKET_EVENT` 接收 `errorCode` 并映射 i18n 文案。`manifest` 错误码对应游戏包缺少 `game.json` 清单文件的情况。
+- **错误码自动归类**：主进程 `classifyErrorCode()` 根据异常信息自动映射为 `network`（fetch failed/ECONNREFUSED/ETIMEDOUT/ENOTFOUND）/ `download` / `verify` / `extract` / `install` / `manifest`，渲染进程通过 `MARKET_EVENT` 接收 `errorCode` 并映射 i18n 文案。`manifest` 错误码对应游戏包缺少 `game.json` 清单文件的情况。
 - **任务状态推送**：主进程每次更新任务状态后通过 `market:event` 推送给渲染进程。通知由根布局组件 `AppContent`
   统一处理，确保用户在任何页面都能收到安装完成/失败的通知。
 - **通知去重与生命周期**：模块级 `notifiedTaskIds` Set 防止重复弹 toast（仅在 `completed`/`error`/`canceled` 终态时写入，
@@ -557,6 +560,8 @@ interface AppSettings {
     gameStoragePath?: string;
     gameStorageHistory?: string[];
     githubToken?: string;
+    chatWindowBounds?: { x: number; y: number; width: number; height: number };
+    chatInputHeight?: number;
 }
 ```
 
@@ -825,12 +830,17 @@ interface AppSettings {
 - `room:start`：由房主触发房间开始游戏。
 - `room:setAddress`：设置并广播房主公网地址。
 - `room:getState`：获取当前房间状态快照。
-- `room:sendChat`：发送文本或语音聊天消息。
+- `room:sendChat`：发送文本、语音或图片聊天消息（支持文字+图片打包发送）。
 - `room:kickPlayer`：房主踢出指定玩家。
 - `room:reconnect`：客机游戏进程崩溃后重新启动游戏（要求 room.state === "playing"）。
+- `room:popOutChat`：将聊天弹出到独立窗口，传递当前聊天历史。
+- `room:popInChat`：关闭独立聊天窗口，聊天回到主窗口。
+- `room:getChatHistory`：获取缓存的聊天历史记录。
+- `room:chatWindowClosed`：主进程 → 渲染进程事件，通知主窗口聊天弹窗已关闭。
 - `system:getSettings`：读取当前应用设置。
 - `system:getAppVersion`：获取当前平台版本号（供渲染进程进行平台兼容性判断）。
 - `system:saveSettings`：保存应用设置并应用相关系统行为。
+- `system:savePartialSettings`：保存部分应用设置（合并写入，不会覆盖未传入的字段）。
 - `system:uploadAvatar`：选择并处理玩家头像。
 - `system:selectGameStoragePath`：弹窗选择默认游戏保存路径。返回 `{ path: string }` 或
   `{ path: string; error: "directory_not_empty" }`，要求所选目录为空（防止卸载时误删其他文件），若非空则由前端弹出友好提示。
@@ -891,13 +901,33 @@ interface AppSettings {
     - 支持 **长按** 游戏封面进入编辑模式，此时可拖动调整游戏排序。
     - 支持将任意游戏文件夹直接拖拽到游戏库窗口导入；缺少 `game.json` 时弹出补录表单。
     - 排序结果需持久化存储。
-    - 聊天消息：当前用户发送的消息，名字显示为绿色，使用 `--bz-green` CSS 变量。
+    - 聊天消息：当前用户发送的消息，名字显示为绿色，使用 `--bz-green` CSS 变量。文字使用 `white-space: pre-wrap` 保留换行符。
     - 语音消息：录制采用 Opus 编码（`audio/webm;codecs=opus`），采样率 24kHz、码率 32kbps，通过 `MediaRecorder` API 实现。语音消息最长
       10 秒，过短（<0.5s）不予发送。
     - 语音播放：点击语音消息气泡触发播放，文字切换为"播放中..."带三个依次闪烁的圆点动画（`dot-blink` @keyframes，
       `animation-delay` 错位 0s/0.2s/0.4s）。再次点击停止播放（`audio.pause()` + 状态清除）。`audio.onended` 自动恢复文字。
       `currentAudio` 引用确保停止行为确实终止音频播放。
     - 收藏游戏：特别喜欢的游戏在封面右上角展示爱心图标。
+- **聊天弹窗窗口**：
+    - 房间聊天支持弹出为独立窗口，点击 RoomChat 标题栏右侧展开按钮触发。
+    - 弹窗窗口尺寸和位置自动持久化到 `config.json`（`chatWindowBounds`），下次打开恢复。
+    - 弹窗关闭时自动通知主窗口恢复聊天显示；主窗口显示"聊天已弹出到独立窗口"提示与收回按钮。
+    - 弹窗窗口通过加载同一 Vue 应用的路由 `/chat-popout` 渲染，`AppContent` 通过 `isPopupWindow` 判断跳过主菜单渲染。
+    - 主进程 `sendRoomEventToChat()` 统一转发所有房间事件（聊天消息、状态同步、连接状态等）给弹窗。
+    - 弹窗输入框使用原生 `<textarea>` 替代 `<n-input>`，支持 Shift+Enter 换行、Enter 发送。
+    - 输入框底部拖动条（`.chat-resize-handle`）可调整输入区高度（60px~260px），高度持久化到 `chatInputHeight`。
+- **聊天图片消息**：
+    - 弹窗聊天框支持 Ctrl+V 粘贴图片和拖拽图片文件发送，单张限制 5MB。
+    - 图片以缩略图（max 240×200px）展示在输入框上方预览区，发送前可删除。
+    - 文字和图片打包为一条消息（`images[]` 数组），消息展示时图片在上、文字在下。
+    - 消息列表中图片使用自定义放大镜光标（黑色 SVG data URI），点击弹出全屏预览。
+- **图片预览器**：
+    - `ImageViewer.vue` 组件使用 `<teleport to="body">` 渲染全屏半透明蒙层（z-index: 9999）。
+    - 无边框、无关闭按钮、无 NaiveUI Modal 依赖；点击蒙层空白处退出。
+    - 图片最大 92vw×92vh，`object-fit: contain`。
+    - 蒙层使用自定义缩小光标（白色 SVG data URI），图片区域 `cursor: default`。
+- **内嵌聊天自适应高度**：
+    - RoomChat 使用完整 flex 布局链，`.chat-messages` 从固定 `height:200px` 改为 `flex:1; min-height:200px`，随窗口大小自动调整。
 - **游戏详情页**：
     - 删除游戏功能升级为模态框，支持多选版本进行删除，默认选中当前版本。
     - 若 Manifest 配置了 `video` 字段，详情页进入后自动播放预览视频；视频结束后自动回退显示封面。
@@ -959,7 +989,7 @@ interface AppSettings {
 - **生效条件**：自动更新仅在打包后的生产环境可用；开发模式（`pnpm dev`）下应提示不支持。
 - **本地数据保护**：
     - 在下载更新与安装更新前，`UpdateService` 必须创建数据快照目录（`.update-snapshots/<timestamp-stage>`）。
-    - 快照至少包含 `config.json` 备份文件与所有游戏保存根目录副本（支持多路径）。
+    - 快照至少包含 `config.json` 备份文件、SQLite `db/` 目录副本与所有游戏保存根目录副本（支持多路径）。
     - 快照写入失败时需要记录日志，且不得删除现有 `config.json` 与任何游戏目录。
 
 ***
@@ -1057,7 +1087,8 @@ Room Server 与 Room Client 之间使用 **WebSocket + JSON** 通信。
 | `room:disbanded`       | Server → All    | 房间已解散                                                           |
 | `room:kicked`          | Server → Target | 被踢通知（仅目标玩家）                                                     |
 | `room:player:kicked`   | Server → All    | 广播玩家被踢事件                                                        |
-| `room:chat`            | Bidirectional   | 聊天消息                                                            |
+| `room:chat`            | Bidirectional   | 聊天消息（支持文字、语音、图片，文字和图片可打包为一条消息）                          |
+| `room:chat:history:sync`| Server → ChatWin| 主进程向聊天弹窗同步历史消息                                              |
 | `game:message:relay`   | Bidirectional   | 游戏内单播消息中继                                                       |
 | `game:broadcast:relay` | Bidirectional   | 游戏内广播消息中继                                                       |
 

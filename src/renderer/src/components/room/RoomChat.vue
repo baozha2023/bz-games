@@ -1,6 +1,16 @@
 <template>
   <div class="room-chat">
-    <n-card :title="t('chat.title')" size="small">
+    <n-card size="small" style="height: 100%; display: flex; flex-direction: column;" :content-style="{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }">
+      <template #header>
+        <span>{{ t('chat.title') }}</span>
+      </template>
+      <template #header-extra>
+        <n-button text @click="$emit('popOut')" :title="t('chat.popOut')">
+          <template #icon>
+            <n-icon size="18"><Expand /></n-icon>
+          </template>
+        </n-button>
+      </template>
       <div class="chat-messages" ref="scrollContainer">
         <div v-if="roomStore.chatMessages.length === 0" class="no-message">
           {{ t('chat.noMessage') }}
@@ -15,21 +25,35 @@
               <span class="time">{{ formatTime(msg.timestamp) }}</span>
             </div>
             <div class="message-content">
-              <template v-if="msg.contentType === 'audio' || (msg.content && msg.content.startsWith('data:audio/'))">
+              <div v-if="msg.images && msg.images.length > 0" class="message-images">
+                <img
+                  v-for="(imgSrc, idx) in msg.images"
+                  :key="idx"
+                  :src="imgSrc"
+                  class="chat-image"
+                  @click="openImageViewer(imgSrc)"
+                />
+              </div>
+              <div v-if="isImageContent(msg) && (!msg.images || msg.images.length === 0)">
+                <img
+                  :src="msg.content"
+                  class="chat-image"
+                  @click="openImageViewer(msg.content)"
+                />
+              </div>
+              <div v-if="msg.content && !isAudioOrImageContent(msg)" class="message-text">{{ msg.content }}</div>
+              <div v-if="msg.contentType === 'audio' || (msg.content && msg.content.startsWith('data:audio/'))">
                 <div class="audio-msg" @click="playAudio(msg.id, msg.content)">
                   <n-icon size="16"><MusicalNote /></n-icon>
                   <span v-if="playingAudioId === msg.id" class="playing-text">{{ t('chat.playing') }}<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></span>
                   <span v-else>{{ t('chat.audioMsg') }}</span>
                 </div>
-              </template>
-              <template v-else>
-                {{ msg.content }}
-              </template>
+              </div>
             </div>
           </template>
         </div>
       </div>
-      <n-input-group style="margin-top: 12px;">
+      <n-input-group style="margin-top: 12px; flex-shrink: 0;">
         <n-button 
           :type="isRecording ? 'error' : 'default'"
           @mousedown="startRecording" 
@@ -52,25 +76,34 @@
         </n-button>
       </n-input-group>
     </n-card>
+    <ImageViewer :show="viewerShow" :src="viewerSrc" @close="viewerShow = false" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, nextTick, watch } from 'vue'
 import { NCard, NInput, NInputGroup, NButton, NIcon, useMessage } from 'naive-ui'
-import { Mic, MusicalNote } from '@vicons/ionicons5'
+import { Mic, MusicalNote, Expand } from '@vicons/ionicons5'
 import { useI18n } from 'vue-i18n'
 import { useRoomStore } from '../../stores/useRoomStore'
 import { useSettingsStore } from '../../stores/useSettingsStore'
+import ImageViewer from './ImageViewer.vue'
+import type { ChatPayload } from '../../../../shared/types'
 
 const { t } = useI18n()
 const roomStore = useRoomStore()
 const settingsStore = useSettingsStore()
+
+defineEmits<{
+  popOut: []
+}>()
 const message = useMessage()
 const inputValue = ref('')
 const scrollContainer = ref<HTMLElement | null>(null)
 const isRecording = ref(false)
 const playingAudioId = ref<string | null>(null)
+const viewerShow = ref(false)
+const viewerSrc = ref('')
 
 let mediaRecorder: MediaRecorder | null = null;
 let audioChunks: Blob[] = [];
@@ -179,6 +212,24 @@ const formatTime = (ts: number) => {
   return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
+function isImageContent(msg: ChatPayload): boolean {
+  if (msg.contentType === 'image') return true
+  if (msg.content && msg.content.startsWith('data:image/')) return true
+  return false
+}
+
+function isAudioOrImageContent(msg: ChatPayload): boolean {
+  if (isImageContent(msg)) return true
+  if (msg.contentType === 'audio') return true
+  if (msg.content && msg.content.startsWith('data:audio/')) return true
+  return false
+}
+
+function openImageViewer(src: string) {
+  viewerSrc.value = src
+  viewerShow.value = true
+}
+
 watch(() => roomStore.chatMessages.length, () => {
   nextTick(() => {
     if (scrollContainer.value) {
@@ -189,8 +240,12 @@ watch(() => roomStore.chatMessages.length, () => {
 </script>
 
 <style scoped>
+.room-chat {
+  height: 100%;
+}
 .chat-messages {
-  height: 200px;
+  flex: 1;
+  min-height: 200px;
   overflow-y: auto;
   padding: 8px;
   background: var(--bz-bg-subtle);
@@ -231,6 +286,27 @@ watch(() => roomStore.chatMessages.length, () => {
 }
 .message-content {
   word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.message-text {
+  white-space: pre-wrap;
+}
+
+.message-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.chat-image {
+  max-width: 240px;
+  max-height: 200px;
+  object-fit: contain;
+  border-radius: 6px;
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Ccircle cx='10' cy='10' r='6.5' fill='none' stroke='%23222' stroke-width='1.8' opacity='.9'/%3E%3Cline x1='14.6' y1='14.6' x2='21' y2='21' stroke='%23222' stroke-width='2' stroke-linecap='round' opacity='.9'/%3E%3Cpath d='M7 10h6M10 7v6' fill='none' stroke='%23222' stroke-width='1.8' stroke-linecap='round' opacity='.9'/%3E%3C/svg%3E") 12 12, pointer;
+  display: block;
+  transition: filter 0.15s;
 }
 .audio-msg {
   display: inline-flex;

@@ -1,6 +1,6 @@
 <template>
-  <div style="padding: 24px;" v-if="roomStore.room">
-    <n-page-header :title="t('room.titlePrefix') + roomStore.room.gameId" @back="handleBack">
+  <div style="padding: 24px; display: flex; flex-direction: column; height: calc(100vh - 64px); box-sizing: border-box; overflow: hidden;" v-if="roomStore.room">
+    <n-page-header :title="t('room.titlePrefix') + roomStore.room.gameId" @back="handleBack" style="flex-shrink: 0;">
     <template #extra>
       <n-button type="error" @click="handleLeaveRoom">
         {{ roomStore.isHost ? t('room.disbandRoom') : t('room.leaveRoom') }}
@@ -11,26 +11,39 @@
     <n-alert
       v-if="showConnectionAlert"
       :type="connectionAlertType"
-      style="margin-top: 16px;"
+      style="margin-top: 16px; flex-shrink: 0;"
     >
       {{ connectionStatusText }}
     </n-alert>
 
-    <n-grid x-gap="24" :cols="1" md="2" style="margin-top: 24px;">
-      <n-grid-item span="2">
+    <n-grid x-gap="24" :cols="1" md="2" style="margin-top: 24px; flex: 1; min-height: 0;">
+      <n-grid-item span="2" style="display: flex; flex-direction: column; min-height: 0;">
         <PlayerList 
           :players="roomStore.room.players" 
           :max-players="roomStore.room.maxPlayers"
           :local-player-id="settingsStore.settings?.playerId || ''"
           :is-host="roomStore.isHost"
           @kick="handleKickPlayer"
+          style="flex-shrink: 0;"
         />
         <n-divider />
-        <RoomChat />
+        <div style="flex: 1; min-height: 0;">
+        <template v-if="isChatPoppedOut">
+          <n-alert type="info" style="margin-top: 8px;">
+            <template #header>
+              {{ t('chat.poppedOutTitle') }}
+            </template>
+            <n-button size="small" type="primary" @click="handlePopInChat">
+              {{ t('chat.popIn') }}
+            </n-button>
+          </n-alert>
+        </template>
+        <RoomChat v-else @pop-out="handlePopOutChat" />
+        </div>
       </n-grid-item>
     </n-grid>
 
-    <div style="margin-top: 32px; text-align: center;">
+    <div style="margin-top: 32px; text-align: center; flex-shrink: 0;">
       <template v-if="roomStore.isHost">
         <n-tooltip trigger="hover" :disabled="canStart">
           <template #trigger>
@@ -64,7 +77,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, computed } from 'vue'
+import { onMounted, onUnmounted, computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessage, useDialog } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
@@ -84,6 +97,28 @@ const gameStore = useGameStore()
 
 let cleanupLaunch: (() => void) | undefined
 let cleanupRoomEvent: (() => void) | undefined
+let cleanupChatWindowClosed: (() => void) | undefined
+
+const isChatPoppedOut = ref(false)
+
+const handlePopOutChat = async () => {
+  try {
+    const history = JSON.parse(JSON.stringify(roomStore.chatMessages))
+    await window.electronAPI.room.popOutChat(history)
+    isChatPoppedOut.value = true
+  } catch (e) {
+    message.error(String((e as Error)?.message || e))
+  }
+}
+
+const handlePopInChat = async () => {
+  try {
+    await window.electronAPI.room.popInChat()
+    isChatPoppedOut.value = false
+  } catch (e) {
+    message.error(String((e as Error)?.message || e))
+  }
+}
 
 const minPlayers = computed(() => {
   if (!roomStore.room) return 1
@@ -179,11 +214,18 @@ onMounted(async () => {
       }
     });
   }
+
+  if (window.electronAPI?.room?.onChatWindowClosed) {
+    cleanupChatWindowClosed = window.electronAPI.room.onChatWindowClosed(() => {
+      isChatPoppedOut.value = false
+    })
+  }
 })
 
 onUnmounted(() => {
   if (cleanupLaunch) cleanupLaunch()
   if (cleanupRoomEvent) cleanupRoomEvent()
+  if (cleanupChatWindowClosed) cleanupChatWindowClosed()
 })
 
 const handleBack = () => {

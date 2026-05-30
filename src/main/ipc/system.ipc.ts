@@ -34,6 +34,13 @@ export function registerSystemIpc() {
     }
   });
 
+  ipcMain.handle(
+    IPC.SYSTEM_SAVE_PARTIAL_SETTINGS,
+    async (_, partial: Partial<AppSettings>) => {
+      storeService.saveSettings(partial);
+    },
+  );
+
   ipcMain.handle(IPC.SYSTEM_SET_IGNORED_UPDATE_VERSION, async (_, version: string) => {
     storeService.performIgnoreUpdateVersion(version);
     return true;

@@ -5,6 +5,7 @@ import { roomClient } from "../services/RoomClient";
 import { storeService } from "../services/StoreService";
 import { gameManager } from "../services/GameManager";
 import { mainWindow } from "../window";
+import { createChatWindow, closeChatWindow, sendRoomEventToChat, getCachedChatHistory } from "../chat-window";
 import crypto from "crypto";
 import type { RoomMessage, ChatPayload } from "../../shared/types";
 
@@ -79,7 +80,7 @@ export function registerRoomIpc() {
 
   ipcMain.handle(
     IPC.ROOM_SEND_CHAT,
-    async (_, content: string, type: "text" | "audio" = "text") => {
+    async (_, content: string, type: "text" | "audio" | "image" = "text", images?: string[]) => {
       const settings = storeService.getSettings();
       const msg: RoomMessage<ChatPayload> = {
         type: "room:chat",
@@ -89,6 +90,7 @@ export function registerRoomIpc() {
           senderName: settings.playerName,
           content,
           contentType: type,
+          images: images && images.length > 0 ? images : undefined,
           timestamp: Date.now(),
         },
       };
@@ -97,6 +99,7 @@ export function registerRoomIpc() {
         const hostSocket = roomServer.getSocketByPlayerId(settings.playerId);
         roomServer.broadcast(msg, hostSocket);
         mainWindow?.webContents.send(IPC.ROOM_EVENT, msg);
+        sendRoomEventToChat(msg);
       } else {
         roomClient.send(msg);
       }
@@ -115,5 +118,20 @@ export function registerRoomIpc() {
         roomClient.room.gameVersion,
       );
     }
+  });
+
+  ipcMain.handle(
+    IPC.ROOM_POP_OUT_CHAT,
+    async (_, chatHistory: ChatPayload[]) => {
+      createChatWindow(chatHistory);
+    },
+  );
+
+  ipcMain.handle(IPC.ROOM_POP_IN_CHAT, async () => {
+    closeChatWindow();
+  });
+
+  ipcMain.handle(IPC.ROOM_GET_CHAT_HISTORY, async () => {
+    return getCachedChatHistory();
   });
 }
