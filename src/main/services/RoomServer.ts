@@ -1,6 +1,5 @@
 import { WebSocketServer, WebSocket } from "ws";
 import crypto from "crypto";
-import net from "net";
 import type {
   RoomInfo,
   RoomMessage,
@@ -9,12 +8,14 @@ import type {
   RoomJoinRefusedPayload,
   PlayerInRoom,
   RoomKickedPayload,
+  GameRelayPayload,
+  GameMessageAckPayload,
 } from "../../shared/types";
 import { storeService } from "./StoreService";
-import { logger } from "../utils/logger";
 import { GameLoader } from "./GameLoader";
 
 export class RoomServer {
+  private static readonly MAX_RECENT_MESSAGE_IDS = 1000;
   private wss: WebSocketServer | null = null;
   public room: RoomInfo | null = null;
   private playerConnections: Map<string, WebSocket> = new Map();
@@ -23,6 +24,9 @@ export class RoomServer {
   private localRelayHandler:
     | ((gameId: string, msg: RoomMessage) => void)
     | null = null;
+  private recentMessageIds: string[] = [];
+  private recentMessageIdSet: Set<string> = new Set();
+  private orderedSeqBySenderChannel: Map<string, number> = new Map();
 
   async start(gameId: string, version?: string): Promise<number> {
     const port = storeService.getSettings().defaultRoomPort;
@@ -31,10 +35,17 @@ export class RoomServer {
 
     this.initializeRoom(gameId, gameVersion, maxPlayers);
     this.kickedPlayers.clear();
+    this.resetRelayState();
 
     const startedPort = await this.startWebSocketServer(port);
     this.startHeartbeat();
     return startedPort;
+  }
+
+  private resetRelayState() {
+    this.recentMessageIds = [];
+    this.recentMessageIdSet.clear();
+    this.orderedSeqBySenderChannel.clear();
   }
 
   async stop(): Promise<void> {
@@ -51,7 +62,6 @@ export class RoomServer {
 
       await new Promise<void>((resolve) => {
         this.wss?.close(() => {
-          logger.info("[RoomServer] Stopped");
           this.wss = null;
           resolve();
         });
@@ -119,15 +129,7 @@ export class RoomServer {
       try {
         this.wss = new WebSocketServer({ port });
 
-        this.wss.on("headers", (_headers, req) => {
-          logger.info(
-            `[RoomServer] Incoming connection request from ${req.socket.remoteAddress}`,
-          );
-        });
-
         this.wss.on("listening", () => {
-          logger.info(`[RoomServer] Started on port ${port}`);
-          this.performSelfCheck(port);
           resolve(port);
         });
 
@@ -141,33 +143,14 @@ export class RoomServer {
     });
   }
 
-  private performSelfCheck(port: number) {
-    const socket = net.connect(port, "127.0.0.1");
-    socket.on("connect", () => {
-      logger.info(`[RoomServer] Self-check: 127.0.0.1:${port} is reachable.`);
-      socket.end();
-    });
-    socket.on("error", (err) => {
-      logger.error(
-        `[RoomServer] Self-check FAILED: Cannot connect to 127.0.0.1:${port}`,
-        err,
-      );
-      logger.warn(
-        `[RoomServer] This may cause issues with local proxies like SakuraFrp.`,
-      );
-    });
-  }
-
   private handleServerError(
     err: any,
     port: number,
     reject: (reason?: any) => void,
   ) {
     if (err.code === "EADDRINUSE") {
-      logger.error(`[RoomServer] Port ${port} is already in use`);
       reject(new Error(`端口 ${port} 被占用，请检查是否有其他房间正在运行`));
     } else {
-      logger.error("[RoomServer] Server error", err);
       reject(err);
     }
   }
@@ -182,15 +165,11 @@ export class RoomServer {
       try {
         const msg = JSON.parse(data.toString()) as RoomMessage;
         this.handleMessage(ws, msg);
-      } catch (e) {
-        logger.error("[RoomServer] Failed to parse message", e);
-      }
+      } catch {}
     });
 
     ws.on("close", () => this.handleDisconnect(ws));
-    ws.on("error", (err) =>
-      logger.error("[RoomServer] Client connection error", err),
-    );
+    ws.on("error", () => {});
   }
 
   private startHeartbeat() {
@@ -227,13 +206,13 @@ export class RoomServer {
       case "game:message:relay":
         this.relayMessage(
           this.getPlayerIdByWs(ws),
-          msg.payload as Record<string, unknown>,
+          msg.payload as GameRelayPayload,
         );
         break;
       case "game:broadcast:relay":
         this.relayBroadcast(
           this.getPlayerIdByWs(ws),
-          msg.payload as Record<string, unknown>,
+          msg.payload as GameRelayPayload,
         );
         break;
     }
@@ -415,7 +394,7 @@ export class RoomServer {
 
   private normalizeRelayPayload(
     senderId: string | undefined,
-    payload: Record<string, unknown>,
+    payload: GameRelayPayload,
   ) {
     const senderIdFromPayload =
       typeof payload.senderId === "string" ? payload.senderId : undefined;
@@ -438,10 +417,15 @@ export class RoomServer {
 
   private relayMessage(
     senderId: string | undefined,
-    payload: Record<string, unknown>,
+    payload: GameRelayPayload,
   ) {
     if (!this.room) return;
+    if (!senderId) return;
+    if (this.hasProcessedMessage(payload.messageId)) return;
+    this.rememberMessageId(payload.messageId);
     const normalizedPayload = this.normalizeRelayPayload(senderId, payload);
+    const shouldRelay = this.trackDelivery(normalizedPayload);
+    if (!shouldRelay) return;
     const targetPlayerId = this.resolveTargetPlayerId(normalizedPayload);
     if (!targetPlayerId) {
       this.relayBroadcast(senderId, normalizedPayload);
@@ -453,6 +437,7 @@ export class RoomServer {
         type: "game:message:relay",
         payload: normalizedPayload,
       });
+      this.sendAckToSender(senderId, normalizedPayload);
       return;
     }
     const targetSocket = this.getSocketByPlayerId(targetPlayerId);
@@ -461,14 +446,23 @@ export class RoomServer {
       type: "game:message:relay",
       payload: normalizedPayload,
     });
+    this.sendAckToSender(senderId, normalizedPayload);
   }
 
   private relayBroadcast(
     senderId: string | undefined,
-    payload: Record<string, unknown>,
+    payload: GameRelayPayload,
   ) {
     if (!this.room) return;
+    if (!senderId) return;
+    if (this.hasProcessedMessage(payload.messageId)) return;
+    this.rememberMessageId(payload.messageId);
     const normalizedPayload = this.normalizeRelayPayload(senderId, payload);
+    const shouldRelay = this.trackDelivery(normalizedPayload);
+    if (!shouldRelay) return;
+    const batchMessages = Array.isArray(normalizedPayload.messages)
+      ? (normalizedPayload.messages as GameRelayPayload[])
+      : undefined;
     const senderSocket = this.getSocketByPlayerId(senderId);
     if (senderId !== this.room.hostId) {
       this.localRelayHandler?.(this.room.gameId, {
@@ -483,18 +477,83 @@ export class RoomServer {
       },
       senderSocket,
     );
+    if (batchMessages) {
+      for (const message of batchMessages) {
+        this.rememberMessageId(message.messageId);
+      }
+    }
+    this.sendAckToSender(senderId, normalizedPayload);
+  }
+
+  private relayAck(payload: GameMessageAckPayload) {
+    if (!this.room) return;
+    if (payload.to === this.room.hostId) {
+      this.localRelayHandler?.(this.room.gameId, {
+        type: "game:message:ack",
+        payload,
+      });
+      return;
+    }
+    const targetSocket = this.getSocketByPlayerId(payload.to);
+    if (targetSocket) {
+      this.send(targetSocket, { type: "game:message:ack", payload });
+    }
+  }
+
+  private sendAckToSender(senderId: string | undefined, payload: GameRelayPayload) {
+    if (
+      !senderId ||
+      (payload.reliable !== true && payload.delivery !== "reliable") ||
+      !payload.messageId
+    ) {
+      return;
+    }
+    const ackPayload: GameMessageAckPayload = {
+      messageId: payload.messageId,
+      senderId: payload.senderId,
+      to: senderId,
+      sentAt: Date.now(),
+    };
+    this.relayAck(ackPayload);
+  }
+
+  private hasProcessedMessage(messageId: string | undefined) {
+    return !!messageId && this.recentMessageIdSet.has(messageId);
+  }
+
+  private rememberMessageId(messageId: string | undefined) {
+    if (!messageId || this.recentMessageIdSet.has(messageId)) return;
+    this.recentMessageIds.push(messageId);
+    this.recentMessageIdSet.add(messageId);
+    while (this.recentMessageIds.length > RoomServer.MAX_RECENT_MESSAGE_IDS) {
+      const expired = this.recentMessageIds.shift();
+      if (expired) this.recentMessageIdSet.delete(expired);
+    }
+  }
+
+  private trackDelivery(payload: GameRelayPayload) {
+    if (payload.delivery !== "ordered" || !payload.channel || typeof payload.seq !== "number") {
+      return true;
+    }
+    const key = `${payload.senderId}:${payload.channel}`;
+    const lastSeq = this.orderedSeqBySenderChannel.get(key);
+    if (typeof lastSeq === "number" && payload.seq <= lastSeq) {
+      return false;
+    }
+    this.orderedSeqBySenderChannel.set(key, payload.seq);
+    return true;
   }
 
   public relayMessageFromLocal(
     senderId: string,
-    payload: Record<string, unknown>,
+    payload: GameRelayPayload,
   ) {
     this.relayMessage(senderId, payload);
   }
 
   public relayBroadcastFromLocal(
     senderId: string,
-    payload: Record<string, unknown>,
+    payload: GameRelayPayload,
   ) {
     this.relayBroadcast(senderId, payload);
   }

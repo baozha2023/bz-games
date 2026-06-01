@@ -17,7 +17,8 @@ export type RoomMessageType =
   | "room:chat" // 双向：房间内聊天消息
   | "room:chat:history:sync" // 主→聊天窗口：聊天历史同步
   | "game:message:relay"
-  | "game:broadcast:relay";
+  | "game:broadcast:relay"
+  | "game:message:ack";
 
 export interface RoomMessage<T = unknown> {
   type: RoomMessageType;
@@ -33,6 +34,33 @@ export interface ChatPayload {
   images?: string[];
   timestamp: number;
   isSystem?: boolean;
+}
+
+export type GameRelayMode = "direct" | "broadcast" | "publish" | "batch";
+export type GameRelayDelivery = "reliable" | "ordered" | "latest" | "unreliable";
+
+export interface GameRelayPayload {
+  senderId: string;
+  messageId: string;
+  sentAt: number;
+  data?: unknown;
+  to?: string;
+  targetPlayerId?: string;
+  channel?: string;
+  seq?: number;
+  reliable?: boolean;
+  mode?: GameRelayMode;
+  delivery?: GameRelayDelivery;
+  contentType?: "text" | "audio" | "binary" | "json";
+  messages?: GameRelayPayload[];
+  [key: string]: unknown;
+}
+
+export interface GameMessageAckPayload {
+  messageId: string;
+  senderId: string;
+  to: string;
+  sentAt: number;
 }
 
 export interface RoomInfo {

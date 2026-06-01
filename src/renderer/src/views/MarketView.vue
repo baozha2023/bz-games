@@ -66,9 +66,9 @@
             @click="toggleExpand(game.id)"
           >
             <CachedImg
-              v-if="game.iconUrl || game.coverUrl"
+              v-if="game.iconUrl"
               :key="`thumb-${game.id}-${refreshCounter}`"
-              :src="(game.iconUrl || game.coverUrl)!"
+              :src="game.iconUrl!"
               class="market-thumb"
             />
             <div v-else class="market-thumb market-thumb-placeholder">
@@ -115,9 +115,9 @@
               <n-space vertical size="large">
                 <div class="market-detail-header">
                   <CachedImg
-                    v-if="game.coverUrl || game.iconUrl"
+                    v-if="game.coverUrl"
                     :key="`cover-${game.id}-${refreshCounter}`"
-                    :src="(game.coverUrl || game.iconUrl)!"
+                    :src="game.coverUrl!"
                     class="market-cover"
                   />
                   <div v-else class="market-cover market-cover-placeholder">

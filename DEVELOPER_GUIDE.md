@@ -144,7 +144,7 @@ window.BZ_CONFIG = {
 2. `bz-config.js` / `bz-config` / `bz-config.json`
 3. URL 参数
 
-**备选方案**：如果上述配置都不存在（例如调试模式），游戏应尝试从 URL 参数获取配置：
+**备选方案**：如果上述配置都不存在，游戏应尝试从 URL 参数获取配置：
 `index.html?apiPort=12345&token=...&playerId=...&playerAvatar=...&roomId=...&isHost=1&isMultiple=1`
 **注意**：
 - `entry=serve` 时，游戏平台会使用静态托管方式启动并访问本地 `index.html`。
@@ -317,7 +317,11 @@ Web 游戏通常使用 `localStorage` 或 `IndexedDB` 存储本地数据（如�
   }
   ```
 
-#### `message.broadcast` (广播消息)
+#### v1 基础通信 API
+
+v1 API 是所有联机游戏的最低接入层，适合聊天、回合制、棋牌、轻量对战和低频事件同步。已接入 v1 的游戏不需要理解 v2 字段也可以正常运行。
+
+##### `message.broadcast` (广播消息)
 
 向房间内**除自己以外**的所有玩家发送消息。支持发送文本或语音（音频数据）。
 
@@ -333,7 +337,7 @@ Web 游戏通常使用 `localStorage` 或 `IndexedDB` 存储本地数据（如�
     - 平台不会把这条广播回传给发送者自己（避免本地重复处理）。
     - 平台会自动补齐 `senderId`、`messageId`、`sentAt` 字段到中继消息中。
 
-#### `message.send` (单播消息)
+##### `message.send` (单播消息)
 
 向指定玩家发送消息。支持发送文本或语音。
 
@@ -349,6 +353,110 @@ Web 游戏通常使用 `localStorage` 或 `IndexedDB` 存储本地数据（如�
 * **参数要求**：
     - 必须提供 `to` 或 `targetPlayerId` 其中之一。
     - 不允许把目标设置为自己。
+
+#### v2 增强通信 API
+
+v2 API 是 v1 的增强层，适合高频同步、频道过滤、可靠确认等场景。游戏可通过 `auth` 响应中的 `capabilities` 判断平台是否支持这些能力。
+
+##### `auth.capabilities` (能力声明)
+
+v2 平台会在 `auth` 成功响应中返回能力声明：
+
+```json
+{
+  "success": true,
+  "player": { "id": "p-123", "name": "PlayerName", "isHost": true },
+  "capabilities": {
+    "protocolVersion": 2,
+    "protocolName": "bz-game-api-v2",
+    "maxMessageBytes": 65536,
+    "maxBatchMessages": 32,
+    "supportsPublish": true,
+    "supportsBatch": true,
+    "supportsAck": true,
+    "supportsSubscribe": true,
+    "supportsDelivery": true,
+    "supportsBinaryContentType": true
+  }
+}
+```
+
+##### v2 `message.send` 严格校验
+
+v2 在 v1 单播基础上增加目标在线校验：目标玩家必须仍在当前房间中，否则返回结构化错误 `TARGET_NOT_FOUND`。这不会改变 v1 的请求格式，只是让错误更明确。
+
+##### `message.publish` (频道广播消息)
+
+面向高频或分频道同步场景的广播接口。它仍会投递为 `event.message`，并保持与 `message.broadcast` 相同的旧协议兼容性；新增的 `channel`、`seq`、`reliable` 字段可用于游戏侧做频道过滤、时序判断和可靠消息确认。
+
+* **Request Payload**:
+  ```json
+  {
+    "channel": "state",
+    "seq": 1024,
+    "delivery": "latest",
+    "data": { "type": "position", "x": 10, "y": 20 },
+    "contentType": "json"
+  }
+  ```
+* **Response Payload**: `{ "success": true }`
+* **行为说明**：
+    - 平台会自动补齐 `senderId`、`messageId`、`sentAt`、`mode: "publish"`。
+    - `delivery` 支持 `reliable`、`ordered`、`latest`、`unreliable`：可靠事件用 `reliable`，输入流用 `ordered`，状态同步用 `latest`。
+    - 适合位置、状态、帧同步等可以按频道处理的消息。
+
+##### `message.batch` (批量广播消息)
+
+将多条游戏消息打包为一次平台请求，减少高频同步时的 JSON 编解码和 WebSocket 发送次数。平台会在目标游戏侧拆分为多条 `event.message` 投递，因此旧的消息处理器仍可按单条消息处理。
+
+* **Request Payload**:
+  ```json
+  {
+    "channel": "frame",
+    "messages": [
+      { "seq": 1, "data": { "type": "input", "key": "left" } },
+      { "seq": 2, "data": { "type": "input", "key": "jump" } }
+    ]
+  }
+  ```
+* **Response Payload**: `{ "success": true }`
+* **限制**：
+    - 单批最多 32 条消息。
+    - 单条本地 API 消息最大约 64KB，超过会被平台丢弃或拒绝。
+
+##### `message.subscribe` / `message.unsubscribe` (频道订阅)
+
+游戏可按频道过滤 `event.message`，减少不关心的实时流进入游戏逻辑。默认订阅 `"*"`，表示接收所有频道。
+
+* **Request Payload**:
+  ```json
+  { "channels": ["state", "input"] }
+  ```
+* **Response Payload**:
+  ```json
+  { "success": true, "channels": ["state", "input"] }
+  ```
+
+##### 状态快照
+
+平台暂不提供内置状态快照缓存 API。需要重连恢复或最新状态缓存的游戏，应在游戏自身协议中通过 `message.publish`、`message.batch` 或自定义存档逻辑实现。
+
+##### 结构化错误
+
+v2 通信 API 的失败响应会优先返回结构化错误，旧游戏仍可按字符串展示错误。
+
+```json
+{
+  "id": "req-1",
+  "type": "response",
+  "action": "message.send",
+  "error": {
+    "code": "TARGET_NOT_FOUND",
+    "message": "Target player is not in room",
+    "detail": { "targetPlayerId": "p-404" }
+  }
+}
+```
 
 ### 5.3 成就系统
 
@@ -421,9 +529,11 @@ Web 游戏通常使用 `localStorage` 或 `IndexedDB` 存储本地数据（如�
 
 游戏需监听 WebSocket 的 `message` 事件来处理以下通知：
 
-#### `event.message` (收到消息)
+#### v1 事件
 
-当其他玩家调用 `broadcast` 或 `send` 时触发。
+##### `event.message` (收到消息)
+
+当其他玩家调用 v1 `message.broadcast` 或 `message.send` 时触发。
 
 * **Payload**:
   ```json
@@ -431,13 +541,38 @@ Web 游戏通常使用 `localStorage` 或 `IndexedDB` 存储本地数据（如�
     "senderId": "sender-player-id",
     "messageId": "uuid-message-id",
     "sentAt": 1713333333333,
+    "channel": "default",
+    "mode": "broadcast",
+    "delivery": "reliable",
+    "contentType": "json",
+    "seq": 1,
     "data": { ... } // 对方发送的数据
   }
   ```
 * **幂等建议**：
     - 建议游戏侧用 `messageId` 做去重，防止网络重试或重连场景下重复处理同一消息。
 
-#### `event.playerJoined` (玩家加入)
+#### v2 事件增强
+
+v2 的 `event.message` 会在 v1 字段基础上额外携带 `channel`、`mode`、`delivery`、`contentType`、`seq` 等字段。高频同步建议使用 `channel` 区分状态流、输入流、聊天流，并使用 `seq` 判断乱序或跳帧。
+
+##### `event.messageAck` (可靠消息确认)
+
+当游戏发送的消息 payload 中包含 `reliable: true` 时，平台在中继成功后会向发送方游戏推送确认事件。
+
+* **Payload**:
+  ```json
+  {
+    "messageId": "uuid-message-id",
+    "senderId": "sender-player-id",
+    "to": "sender-player-id",
+    "sentAt": 1713333333444
+  }
+  ```
+
+#### 房间生命周期事件
+
+##### `event.playerJoined` (玩家加入)
 
 > ⚠️ **预留接口**：事件类型已定义，当前版本尚未实际推送此事件。
 > 游戏可通过 `room.getInfo` API 获取最新的玩家列表。
@@ -451,7 +586,7 @@ Web 游戏通常使用 `localStorage` 或 `IndexedDB` 存储本地数据（如�
   }
   ```
 
-#### `event.playerLeft` (玩家离开)
+##### `event.playerLeft` (玩家离开)
 
 > ⚠️ **预留接口**：事件类型已定义，当前版本尚未实际推送此事件。
 > 游戏可通过 `room.getInfo` API 获取最新的玩家列表。
@@ -460,7 +595,7 @@ Web 游戏通常使用 `localStorage` 或 `IndexedDB` 存储本地数据（如�
 
 * **Payload**: `{ "playerId": "..." }`
 
-#### `event.gameEnd` (游戏结束通知)
+##### `event.gameEnd` (游戏结束通知)
 
 > ⚠️ **预留接口**：事件类型已定义，当前版本尚未实际推送此事件。
 > 未来将在房间游戏结束时（Host 进程退出或房间解散）向游戏进程发送此事件，允许游戏做退出前的清理工作（保存状态、播放结束动画等）。

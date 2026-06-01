@@ -1036,6 +1036,8 @@ interface AppSettings {
       投递，避免再经房主本地 `RoomClient` 走一跳 WebSocket 回环。
     - **Host 聊天本地投递**：房主发送聊天消息时，直接通过 `mainWindow.webContents.send` + `roomServer.broadcast`
       （排除自己）推送，不经过 WebSocket 本地回环。
+    - **游戏中继 UI 隔离**：`game:message:relay` / `game:broadcast:relay` / `game:message:ack` 只进入 `GameManager.relayToGame()`，不再转发到房间 UI 或聊天窗口 IPC，减少无意义渲染进程消息。
+    - **中继幂等缓存**：`RoomServer` 和 `RoomClient` 使用最近 `messageId` 缓存过滤重复游戏中继消息，默认缓存最近 1000 条。
 5. **游戏结束语义**：
     - `game.end` API：游戏主动调用，平台仅回复 `{success: true}`，不改变房间状态、不杀死进程、不通知他人。为未来战绩展示预留。
     - 游戏真正结束仅由 **Host 进程退出** 触发：`handleProcessExit` → `notifyRoomGameEnd` → state 变 `"waiting"` + 广播
@@ -1119,12 +1121,18 @@ Room Server 与 Room Client 之间使用 **WebSocket + JSON** 通信。
 | `room:chat:history:sync`| Server → ChatWin| 主进程向聊天弹窗同步历史消息                                              |
 | `game:message:relay`   | Bidirectional   | 游戏内单播消息中继                                                       |
 | `game:broadcast:relay` | Bidirectional   | 游戏内广播消息中继                                                       |
+| `game:message:ack`     | Bidirectional   | 可靠游戏消息的中继确认                                                     |
 
 #### 消息中继约束
 
-- `message.broadcast` 默认仅转发给其他玩家，不会回环给发送者。
-- `message.send` 必须提供目标玩家（`to` 或 `targetPlayerId`），否则返回错误。
-- 中继层会自动补齐 `senderId`、`messageId`、`sentAt` 字段，便于游戏侧幂等处理与时序判断。
+- **v1 基础通信 API**：`message.broadcast` 默认仅转发给其他玩家，不会回环给发送者；`message.send` 必须提供目标玩家（`to` 或 `targetPlayerId`），否则返回错误；中继层会自动补齐 `senderId`、`messageId`、`sentAt` 字段，便于游戏侧幂等处理与时序判断。
+- **v2 增强通信 API**：v2 是 v1 的增强层，游戏通过 `auth.payload.capabilities.protocolVersion === 2` 判断是否可用。v2 `message.send` 会校验目标玩家仍在当前房间中；目标不存在时返回结构化错误 `TARGET_NOT_FOUND`。
+- **v2 频道与批量**：`message.publish` 是频道化广播接口，会额外补齐 `channel`、`mode: "publish"`；`message.batch` 是批量广播接口，单批最多 32 条，平台会在投递到游戏前拆分为多条 `event.message`，保持旧事件处理器兼容。
+- **v2 订阅与投递语义**：`message.subscribe` / `message.unsubscribe` 在本机 `GameApiServer` 内过滤投递给游戏进程的 `event.message`，默认 `"*"` 表示接收所有频道。`delivery` 支持 `reliable / ordered / latest / unreliable`：`ordered` 在 RoomServer 按 sender+channel+seq 丢弃倒序包。
+- **v2 可靠确认**：`reliable: true` 或 `delivery: "reliable"` 会启用平台级确认，发送方游戏收到 `event.messageAck` 可用于清理本地等待队列；平台当前提供确认和去重，不提供无限重发保证。平台暂不提供内置状态快照缓存，开发者如需重连恢复或最新状态缓存，应在游戏自身协议中实现。
+- **v2 上限与内容类型**：游戏本地 API 单条请求最大约 64KB，超过限制会被平台丢弃或拒绝；`contentType: "binary"` 仅表示 JSON payload 中承载的是二进制内容编码，不代表底层 WebSocket 已切换为 binary frame。
+- **v2 中继安全边界**：`RoomServer` 只接受已加入房间的 WebSocket 发送游戏中继消息，并以连接绑定的 `playerId` 覆盖 payload 内的 `senderId`；`game:message:ack` 只能由平台中继层生成并转发，客户端上行 ACK 会被忽略，避免伪造确认事件。
+- **v2 中继状态生命周期**：`RoomServer.start()` / `RoomClient.connect()` / `RoomClient.disconnect()` 会重置 v2 引入的 `messageId` 去重缓存与 `ordered` seq 缓存，避免上一轮房间或上一次连接的状态影响新房间的合法消息（特别是 `delivery: "ordered"` 在新房间从更小的 seq 起始时不会被错误丢弃）。
 - Host 处理来自客机、且目标为房主本机游戏的 `game:message:relay` / `game:broadcast:relay` 时，应优先直接投递给本机
   `GameApiServer`，不要通过房主本地 `RoomClient` 再走一次 WebSocket。
 - `RoomClient` 需通过 `room:event` 向渲染层同步连接状态变化，包括
@@ -1173,7 +1181,9 @@ function send(msg) {
 }
 ```
 
-### 8.2 API 列表
+### 8.2 v1 API 列表
+
+v1 是稳定兼容层，已有游戏应优先按 v1 接入。
 
 **请求格式**：`{ id, type: 'request', action, payload }`
 **响应格式**：`{ id, type: 'response', action, payload, error? }`
@@ -1191,11 +1201,25 @@ function send(msg) {
 | `achievement.unlock` | `{ achievementId, playerId }`                   | `{ success: true, new: boolean }`                    | 解锁成就。`playerId` 必须为当前玩家 ID。                   |
 | `stats.report`       | `Record<string, number>`                        | `{ success: true }`                                  | 上报统计数据；平台根据 Manifest 配置按增量/全量写入。              |
 
-### 8.3 事件列表 (Event)
+### 8.3 v2 API 列表
+
+v2 是增强层，适合实时同步、频道过滤和可靠确认。游戏应先读取 `auth` 响应中的 `capabilities` 再使用 v2 API。
+
+| Action               | Payload (Request)                               | Returns (Response Payload)                           | Description                                   |
+|:---------------------|:------------------------------------------------|:-----------------------------------------------------|:----------------------------------------------|
+| `message.publish`    | `{ channel?, seq?, reliable?, data, ... }`      | `{ success: true }`                                  | 频道化广播消息，适合实时状态/输入流。                           |
+| `message.batch`      | `{ channel?, messages: [] }`                    | `{ success: true }`                                  | 批量广播消息，平台拆分为多条 `event.message` 投递。              |
+| `message.subscribe`  | `{ channel?: string, channels?: string[] }`     | `{ success: true, channels: string[] }`              | 订阅指定消息频道。                                      |
+| `message.unsubscribe`| `{ channel?: string, channels?: string[] }`     | `{ success: true, channels: string[] }`              | 取消订阅指定消息频道。                                    |
+
+平台暂不提供 `state.snapshot` / `state.getSnapshot`。开发者如需重连恢复或最新状态缓存，应通过游戏自身协议实现。
+
+### 8.4 事件列表 (Event)
 
 平台会主动推送以下事件给游戏进程：
 
 - `event.message`: 收到其他玩家的消息（Payload 至少包含 `{ senderId, messageId, sentAt, ... }`）
+- `event.messageAck`: 可靠消息中继确认（Payload 包含 `{ messageId, senderId, to, sentAt }`）
 - `event.playerJoined`: 有新玩家加入房间
 - `event.playerLeft`: 有玩家离开房间
 - `event.gameEnd`: 游戏被强制结束（如房间解散）

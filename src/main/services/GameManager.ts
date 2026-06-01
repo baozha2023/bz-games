@@ -9,8 +9,11 @@ import { GameLoader } from "./GameLoader";
 import { GameApiServer } from "./GameApiServer";
 import { storeService } from "./StoreService";
 import { GameEnvironment } from "./GameEnvironment";
-import { logger } from "../utils/logger";
-import type { RoomMessage } from "../../shared/types";
+import type {
+  GameMessageAckPayload,
+  GameRelayPayload,
+  RoomMessage,
+} from "../../shared/types";
 import { roomClient } from "./RoomClient";
 import { roomServer } from "./RoomServer";
 import { mainWindow } from "../window";
@@ -43,12 +46,7 @@ class GameManager {
   }
 
   async launch(id: string, version?: string): Promise<boolean> {
-    logger.info(
-      `[GameManager] Launching game: ${id} (version: ${version || "latest"})`,
-    );
-
     if (this.isGameRunning(id)) {
-      logger.info(`[GameManager] Game ${id} is already running`);
       return false;
     }
 
@@ -79,7 +77,6 @@ class GameManager {
         return this.spawnGameProcess(id, versionPath, manifest, env);
       }
     } catch (error: any) {
-      logger.error(`[GameManager] Launch failed for ${id}:`, error);
       this.notifyLaunchFailure(id, error.message || "Unknown error");
       this.cleanup(id);
       return false;
@@ -93,7 +90,19 @@ class GameManager {
   relayToGame(gameId: string, msg: RoomMessage) {
     const api = this.gameApiServers.get(gameId);
     if (api) {
-      api.sendEvent("event.message", msg.payload);
+      if (msg.type === "game:message:ack") {
+        api.sendMessageAck(msg.payload as GameMessageAckPayload);
+        return;
+      }
+      const payload = msg.payload as GameRelayPayload;
+      if (payload.mode === "batch" && Array.isArray(payload.messages)) {
+        for (const message of payload.messages as GameRelayPayload[]) {
+          if (payload.channel && !message.channel) message.channel = payload.channel;
+          api.sendEvent("event.message", message);
+        }
+        return;
+      }
+      api.sendEvent("event.message", payload);
     }
   }
 
@@ -125,7 +134,6 @@ class GameManager {
     const apiServer = new GameApiServer();
 
     apiServer.setOnStop(() => {
-      logger.info(`[GameManager] API Server stopped for ${id}`);
       this.cleanupApiOnly(id);
     });
 
@@ -164,11 +172,7 @@ class GameManager {
       });
     });
 
-    server.listen(port, () => {
-      logger.info(
-        `[GameManager] Static server running at http://localhost:${port}`,
-      );
-    });
+    server.listen(port);
 
     this.activeServers.set(id, server);
 
@@ -255,7 +259,6 @@ class GameManager {
       sessionId,
     });
 
-    logger.info(`[GameManager] Window started for ${id}`);
     mainWindow?.webContents.send(IPC.GAME_PROCESS_STARTED, id);
 
     win.on("closed", () => {
@@ -320,7 +323,6 @@ class GameManager {
       sessionId,
     });
 
-    logger.info(`[GameManager] Process started for ${id}`);
     mainWindow?.webContents.send(IPC.GAME_PROCESS_STARTED, id);
 
     cp.on("exit", (code) => this.handleProcessExit(id, code));
@@ -328,9 +330,7 @@ class GameManager {
     return true;
   }
 
-  private handleProcessExit(id: string, code: number | null) {
-    logger.info(`[GameManager] Game ${id} exited with code ${code}`);
-
+  private handleProcessExit(id: string, _code: number | null) {
     this.recordPlaytime(id);
     this.notifyRoomGameEnd(id);
     this.stop(id);

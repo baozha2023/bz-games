@@ -6,8 +6,8 @@ import type {
   RoomJoinRefusedPayload,
   RoomInfo,
   RoomConnectionStatusPayload,
+  GameRelayPayload,
 } from "../../shared/types";
-import { logger } from "../utils/logger";
 import { storeService } from "./StoreService";
 import { mainWindow } from "../window";
 import { sendRoomEventToChat } from "../chat-window";
@@ -16,6 +16,7 @@ import { IPC } from "../../shared/ipc-channels";
 type ConnectResult = { success: boolean; error?: string; message?: string };
 
 export class RoomClient {
+  private static readonly MAX_RECENT_MESSAGE_IDS = 1000;
   private ws: WebSocket | null = null;
   public address = "";
   public room: RoomInfo | null = null;
@@ -31,6 +32,8 @@ export class RoomClient {
   private connectionResolver: ((result: ConnectResult) => void) | null = null;
   private msgHandler: ((gameId: string, msg: RoomMessage) => void) | null =
     null;
+  private recentMessageIds: string[] = [];
+  private recentMessageIdSet: Set<string> = new Set();
   private onGameStart: ((gameId: string, version?: string) => void) | null =
     null;
   private onGameStop: ((gameId: string) => void) | null = null;
@@ -43,6 +46,7 @@ export class RoomClient {
     this.manuallyDisconnected = true;
     this.shouldReconnect = false;
     this.cleanup();
+    this.resetRelayState();
 
     let url = address.trim();
     if (!url.startsWith("ws://") && !url.startsWith("wss://")) {
@@ -67,7 +71,6 @@ export class RoomClient {
       this.openSocket();
       setTimeout(() => {
         if (this.connectionResolver) {
-          logger.error(`[RoomClient] Connection timed out to ${this.address}`);
           this.emitConnectionStatus({
             status: "failed",
             attempts: this.reconnectAttempts,
@@ -86,8 +89,7 @@ export class RoomClient {
       const options = { rejectUnauthorized: false };
       this.ws = new WebSocket(this.address, options);
       this.setupWebSocketListeners();
-    } catch (e) {
-      logger.error(`[RoomClient] Failed to connect`, e);
+    } catch {
       this.resolveConnection({ success: false, error: "连接异常" });
       this.scheduleReconnect();
     }
@@ -104,9 +106,6 @@ export class RoomClient {
 
   private handleOpen() {
     this.clearReconnectTimer();
-    logger.info(
-      `[RoomClient] Connected to ${this.address}, sending join request...`,
-    );
     const settings = storeService.getSettings();
     const userData = storeService.getUserData();
     const joinPayload: RoomJoinPayload = {
@@ -121,7 +120,6 @@ export class RoomClient {
   }
 
   private handleError(err: Error) {
-    logger.error(`[RoomClient] Error`, err);
     if (this.connectionResolver) {
       this.emitConnectionStatus({
         status: "failed",
@@ -137,7 +135,6 @@ export class RoomClient {
   }
 
   private handleClose() {
-    logger.info(`[RoomClient] Disconnected`);
     const shouldReconnect =
       !this.manuallyDisconnected && this.shouldReconnect && this.hasJoinedRoom;
 
@@ -175,9 +172,7 @@ export class RoomClient {
     try {
       const msg = JSON.parse(data.toString()) as RoomMessage;
       this.processMessage(msg);
-    } catch (e) {
-      logger.error(`[RoomClient] Failed to parse message`, e);
-    }
+    } catch {}
   }
 
   private processMessage(msg: RoomMessage) {
@@ -195,17 +190,20 @@ export class RoomClient {
       this.handleHandshake(msg);
     }
 
-    // 3. Forward to renderer
+    if (this.isGameRelayMessage(msg)) {
+      if (this.shouldDropDuplicateRelay(msg)) return;
+      this.handleGameLifecycle(msg);
+      return;
+    }
+
     mainWindow?.webContents.send(IPC.ROOM_EVENT, msg);
     sendRoomEventToChat(msg);
 
-    // 4. Handle game lifecycle
     this.handleGameLifecycle(msg);
   }
 
   private handleHandshake(msg: RoomMessage) {
     if (msg.type === "room:join:ack") {
-      logger.info("[RoomClient] Join accepted");
       const ack = msg.payload as RoomJoinAckPayload;
       this.room = ack.room;
       this.hasJoinedRoom = true;
@@ -230,7 +228,6 @@ export class RoomClient {
       const joined = state.players.some((p) => p.id === localPlayerId);
       const sameGame = state.gameId === this.gameId;
       if (joined && sameGame) {
-        logger.info("[RoomClient] Join accepted via state sync");
         this.room = state;
         this.hasJoinedRoom = true;
         this.reconnectAttempts = 0;
@@ -243,7 +240,6 @@ export class RoomClient {
       }
     } else if (msg.type === "room:join:refused") {
       const payload = msg.payload as RoomJoinRefusedPayload;
-      logger.warn("[RoomClient] Join refused:", payload.reason);
       this.shouldReconnect = false;
       this.hasJoinedRoom = false;
       this.emitConnectionStatus({
@@ -262,17 +258,53 @@ export class RoomClient {
 
   private handleGameLifecycle(msg: RoomMessage) {
     if (msg.type === "room:game:start") {
-      logger.info(`[RoomClient] Game start signal for ${this.gameId}`);
       this.onGameStart?.(this.gameId, this.room?.gameVersion);
     } else if (msg.type === "room:game:end") {
-      logger.info(`[RoomClient] Game stop signal for ${this.gameId}`);
       this.onGameStop?.(this.gameId);
     } else if (
       msg.type === "game:message:relay" ||
-      msg.type === "game:broadcast:relay"
+      msg.type === "game:broadcast:relay" ||
+      msg.type === "game:message:ack"
     ) {
       this.msgHandler?.(this.gameId, msg);
     }
+  }
+
+  private isGameRelayMessage(msg: RoomMessage) {
+    return (
+      msg.type === "game:message:relay" ||
+      msg.type === "game:broadcast:relay" ||
+      msg.type === "game:message:ack"
+    );
+  }
+
+  private shouldDropDuplicateRelay(msg: RoomMessage) {
+    if (msg.type === "game:message:ack") return false;
+    const payload = msg.payload as GameRelayPayload;
+    if (!payload.messageId) return false;
+    if (this.recentMessageIdSet.has(payload.messageId)) return true;
+    this.rememberMessageId(payload.messageId);
+    if (Array.isArray(payload.messages)) {
+      for (const message of payload.messages as GameRelayPayload[]) {
+        this.rememberMessageId(message.messageId);
+      }
+    }
+    return false;
+  }
+
+  private rememberMessageId(messageId: string | undefined) {
+    if (!messageId || this.recentMessageIdSet.has(messageId)) return;
+    this.recentMessageIds.push(messageId);
+    this.recentMessageIdSet.add(messageId);
+    while (this.recentMessageIds.length > RoomClient.MAX_RECENT_MESSAGE_IDS) {
+      const expired = this.recentMessageIds.shift();
+      if (expired) this.recentMessageIdSet.delete(expired);
+    }
+  }
+
+  private resetRelayState() {
+    this.recentMessageIds = [];
+    this.recentMessageIdSet.clear();
   }
 
   private resolveConnection(result: ConnectResult) {
@@ -293,6 +325,7 @@ export class RoomClient {
     this.shouldReconnect = false;
     this.hasJoinedRoom = false;
     this.cleanup();
+    this.resetRelayState();
     this.room = null;
     this.emitConnectionStatus({
       status: "disconnected",
@@ -323,9 +356,6 @@ export class RoomClient {
     if (!this.shouldReconnect || !this.hasJoinedRoom) return;
     if (this.connectionResolver) return;
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      logger.warn(
-        `[RoomClient] Reconnect failed after ${this.maxReconnectAttempts} attempts`,
-      );
       this.shouldReconnect = false;
       this.hasJoinedRoom = false;
       this.room = null;
@@ -340,9 +370,6 @@ export class RoomClient {
     this.clearReconnectTimer();
     this.reconnectAttempts += 1;
     const delay = Math.min(this.reconnectAttempts * 2000, 10000);
-    logger.info(
-      `[RoomClient] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`,
-    );
     this.emitConnectionStatus({
       status: "reconnecting",
       attempts: this.reconnectAttempts,
