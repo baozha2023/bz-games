@@ -152,13 +152,20 @@ class StoreService {
 
   private async restoreDataFromSnapshotIfNeeded(dataRoot: string): Promise<void> {
     const configPath = path.join(dataRoot, "config.json");
-    if (await pathExists(configPath)) {
+    const defaultGamesPath = path.join(dataRoot, "games");
+    const dbPath = path.join(dataRoot, "db");
+
+    const needConfig = !(await pathExists(configPath));
+    const needGames = !(await pathExists(defaultGamesPath));
+    const needDb = !(await pathExists(dbPath));
+
+    if (!needConfig && !needGames && !needDb) {
       return;
     }
 
-    const defaultGamesPath = path.join(dataRoot, "games");
     const configBackupName = `config_${toSnapshotLabel(configPath)}.backup`;
     const gamesBackupName = `games_${toSnapshotLabel(defaultGamesPath)}`;
+    const dbBackupName = `db_${toSnapshotLabel(dbPath)}`;
     const snapshotRoot = path.join(app.getPath("userData"), ".update-snapshots");
 
     let snapshots: string[] = [];
@@ -174,36 +181,43 @@ class StoreService {
 
     for (const dirName of snapshots) {
       const dirPath = path.join(snapshotRoot, dirName);
-      const configBackups = [
-        path.join(dirPath, configBackupName),
-        path.join(dirPath, "config.json.backup"),
-      ];
 
-      let restoredConfig = false;
-      for (const backupPath of configBackups) {
-        if (await pathExists(backupPath)) {
-          await fs.copyFile(backupPath, configPath);
-          restoredConfig = true;
-          logger.info(
-            `[StoreService] Restored config.json from snapshot: ${dirPath}`,
-          );
-          break;
+      if (needConfig) {
+        const configBackups = [
+          path.join(dirPath, configBackupName),
+          path.join(dirPath, "config.json.backup"),
+        ];
+        for (const backupPath of configBackups) {
+          if (await pathExists(backupPath)) {
+            await fs.copyFile(backupPath, configPath);
+            logger.info(
+              `[StoreService] Restored config.json from snapshot: ${dirPath}`,
+            );
+            break;
+          }
         }
       }
 
-      if (!restoredConfig) {
-        continue;
-      }
-
-      if (!(await pathExists(defaultGamesPath))) {
+      if (needGames) {
         const gamesBackupPath = path.join(dirPath, gamesBackupName);
         if (await pathExists(gamesBackupPath)) {
           await fs.cp(gamesBackupPath, defaultGamesPath, { recursive: true });
           logger.info(
-            `[StoreService] Restored default games dir from snapshot: ${dirPath}`,
+            `[StoreService] Restored games dir from snapshot: ${dirPath}`,
           );
         }
       }
+
+      if (needDb) {
+        const dbBackupPath = path.join(dirPath, dbBackupName);
+        if (await pathExists(dbBackupPath)) {
+          await fs.cp(dbBackupPath, dbPath, { recursive: true });
+          logger.info(
+            `[StoreService] Restored db dir from snapshot: ${dirPath}`,
+          );
+        }
+      }
+
       return;
     }
   }

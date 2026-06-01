@@ -54,6 +54,7 @@ class UpdateService {
     });
 
     autoUpdater.on("update-downloaded", (info) => {
+      this.createDataSnapshot("update-downloaded").catch(() => {});
       this.setState({
         status: "downloaded",
         latestVersion: info.version,
