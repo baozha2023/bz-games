@@ -4,6 +4,7 @@ import type {
   AppSettings,
   DataHealthReport,
   DownloadTaskSnapshot,
+  FloatBallProgress,
   MarketDirectory,
   MarketIndex,
   MarketTaskEvent,
@@ -153,6 +154,18 @@ export const electronAPI = {
       ipcRenderer.on(IPC.MARKET_EVENT, handler);
       return () => ipcRenderer.removeListener(IPC.MARKET_EVENT, handler);
     },
+    getAllTaskStates: (): Promise<MarketTaskState[]> =>
+      ipcRenderer.invoke(IPC.MARKET_GET_ALL_TASK_STATES),
+    onFloatBallEvent: (callback: (progress: FloatBallProgress) => void) => {
+      const handler = (_: any, progress: FloatBallProgress) => callback(progress);
+      ipcRenderer.on(IPC.MARKET_FLOAT_BALL_EVENT, handler);
+      return () => ipcRenderer.removeListener(IPC.MARKET_FLOAT_BALL_EVENT, handler);
+    },
+    onDragState: (callback: (dragging: boolean) => void) => {
+      const handler = (_: any, dragging: boolean) => callback(dragging);
+      ipcRenderer.on(IPC.FLOAT_BALL_DRAG_STATE, handler);
+      return () => ipcRenderer.removeListener(IPC.FLOAT_BALL_DRAG_STATE, handler);
+    },
   },
   settings: {
     get: () => ipcRenderer.invoke(IPC.SYSTEM_GET_SETTINGS),
@@ -182,6 +195,8 @@ export const electronAPI = {
     installUpdate: () => ipcRenderer.invoke(IPC.SYSTEM_INSTALL_UPDATE),
     uninstall: (payload?: { deleteGames?: boolean }): Promise<{ success: boolean; error?: string }> =>
       ipcRenderer.invoke(IPC.SYSTEM_UNINSTALL, payload),
+    clearCache: (): Promise<{ totalSize: number; clearedSize: number }> =>
+      ipcRenderer.invoke(IPC.SYSTEM_CLEAR_CACHE),
     onUpdateEvent: (
       callback: (payload: UpdateState) => void,
     ) => {

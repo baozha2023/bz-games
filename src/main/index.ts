@@ -1,5 +1,5 @@
 import { app, BrowserWindow, session } from "electron";
-import { createWindow, markAppQuitting, mainWindow } from "./window";
+import { createWindow, markAppQuitting, mainWindow, createFloatBallWindow } from "./window";
 import { registerAllIpc } from "./ipc";
 import { electronApp, optimizer } from "@electron-toolkit/utils";
 import { storeService } from "./services/StoreService";
@@ -40,6 +40,10 @@ if (!gotTheLock) {
 
     registerAllIpc();
     createWindow();
+
+    if (settings.downloadFloatBall) {
+      createFloatBallWindow();
+    }
 
     marketService.restorePendingTasks();
 

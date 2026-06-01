@@ -142,6 +142,7 @@ bz-games/
 │   │       │   ├── MarketView.vue          # 市场游戏详情页面（二级界面）
 │   │       │   ├── ChatPopoutView.vue    # 聊天弹窗独立窗口页面
 │   │       │   ├── NotificationView.vue   # 通知窗口页面
+│   │       │   ├── FloatBallView.vue       # 下载悬浮球独立窗口页面
 │   │       │   ├── PersonalizationView.vue # 个性化页面（头像框管理）
 │   │       │   ├── RoomView.vue           # 房间页面
 │   │       │   ├── SettingsView.vue       # 设置页面
@@ -386,6 +387,13 @@ interface MarketTaskState {
     createdAt: number;
     updatedAt: number;
 }
+
+interface FloatBallProgress {
+    totalProgress: number;
+    activeTaskCount: number;
+    completedTaskCount: number;
+    totalTaskCount: number;
+}
 ```
 
 - **错误码自动归类**：主进程 `classifyErrorCode()` 根据异常信息自动映射为 `network`（fetch failed/ECONNREFUSED/ETIMEDOUT/ENOTFOUND）/ `download` / `verify` / `extract` / `install` / `manifest`，渲染进程通过 `MARKET_EVENT` 接收 `errorCode` 并映射 i18n 文案。`manifest` 错误码对应游戏包缺少 `game.json` 清单文件的情况。
@@ -561,6 +569,8 @@ interface AppSettings {
     githubToken?: string;
     chatWindowBounds?: { x: number; y: number; width: number; height: number };
     chatInputHeight?: number;
+    downloadFloatBall?: boolean;
+    floatBallPosition?: { x: number; y: number };
 }
 ```
 
@@ -652,6 +662,7 @@ interface AppSettings {
     - **下载校验条件化**：`verifyArchive()` 中 size 校验仅当 `meta.size > 0` 时执行，sha256 校验仅当 `meta.sha256` 存在时执行。若版本未提供 sha256 且 GitHub API 也未返回有效 sha256，则跳过哈希校验直接进入解压阶段。
     - 错误分类由 `classifyErrorCode()` 统一处理，根据错误消息自动归类为四种错误码（download/verify/extract/install）。
     - `tasks` Map 维护任务全生命周期，`finalize()` 在清理临时文件后延迟 30 秒删除 Map 条目，确保 UI 能读到终态。
+    - **下载悬浮球进度推送**（v2.2）：`emitFloatBallProgress(force)` 方法在每次 `emit()` 状态变更时自动调用，将加权合并进度通过 `market:floatBall:event` 推送给悬浮球窗口。推送速率由 `FLOAT_BALL_THROTTLE_MS`（1 秒）节流控制，`force` 参数用于关键事件（恢复、取消、暂停、终态清理）立即推送。`computeTotalProgress()` 使用任务文件大小加权平均算法计算整体进度百分比，同时统计活跃/已完成/总任务数。有活跃任务时自动显示悬浮球（`showInactive()`），全部完成后自动隐藏（`hide()`）。`getAllTaskStates()` 返回所有当前任务状态快照，供悬浮球窗口挂载时初始同步。
 - **useImageCache 统一图片缓存层**：
     - 模块级 `Map<string, CacheEntry>` 跨所有组件共享，一份 data URL 在整个渲染进程中只加载一次，消除视图切换导致的重复
       IPC
@@ -701,6 +712,16 @@ interface AppSettings {
     - **设置页展示**：`SettingsView.vue` 头像上传区小头像（40px）和头像预览弹窗（280px）均使用 `AvatarWithFrame`。
     - **联机传递**：`RoomJoinPayload` 和 `PlayerInRoom` 新增 `playerAvatarFrame` / `avatarFrame` 字段。房主 `RoomServer` 创建玩家对象时写入，客机 `RoomClient` 加入时携带。`PlayerCard.vue` 使用 `AvatarWithFrame` 渲染。
     - **签到累计天数**：`UserData.checkIn.totalDays` 记录累计签到总天数，在 `performCheckIn` 中自增。签到弹窗新增"累计签到 N 天"展示行。
+
+- **下载悬浮球系统（Float Ball — v2.2）**：
+    - **独立窗口架构**：悬浮球运行在独立的 `BrowserWindow` 中（透明无边框、置顶、72×72px），通过 `/float-ball` 路由加载 `FloatBallView.vue` 组件。`AppContent` 将其识别为弹窗窗口（`isPopupWindow`），跳过主菜单渲染。
+    - **窗口生命周期**：`createFloatBallWindow()` 在用户开启"下载悬浮球"设置时调用（应用启动时检查设置、保存设置时同步开关）。`destroyFloatBallWindow()` 在关闭设置时调用。窗口关闭时自动保存最后位置到 `floatBallPosition`。
+    - **位置管理**：创建时从 `settings.floatBallPosition` 恢复上次位置（默认主屏右下角），`clampFloatBallToScreen()` 确保悬浮球在多显示器环境下始终可见。拖动时通过 300ms 节流的 `saveFloatBallPositionThrottled()` 持久化位置。注册 `display-metrics-changed` 监听器，显示器配置变更时自动校验并修正位置。
+    - **拖拽状态**：`will-move` 事件触发时推送 `floatBall:dragState=true`，停止移动后 150ms 防抖推送 `false`。前端根据拖拽状态应用缩放/透明度动画。
+    - **进度数据流**：挂载时通过 `market:getAllTaskStates` IPC 获取所有任务状态快照并计算初始进度，之后通过 `market:floatBall:event` 实时接收主进程 `MarketService.emitFloatBallProgress()` 推送的合并进度（`FloatBallProgress`：`totalProgress`、`activeTaskCount`、`completedTaskCount`、`totalTaskCount`）。有活跃任务时自动显示，全部完成后自动隐藏。
+    - **进度环渲染**：使用 CSS `conic-gradient` 绘制环形进度条，颜色根据进度分段（<30% 蓝色 → <70% 橙色 → 高绿色）。`will-change: transform, opacity` 优化渲染性能。
+    - **交互行为**：双击悬浮球打开主窗口（`system:openUrl` 传入空字符串即恢复主窗口）。`-webkit-app-region: drag` 支持拖动。`active`/`dragging` 伪状态应用缩放和阴影效果。
+    - **类型定义**：`FloatBallProgress` 接口定义在 `src/shared/types/market.types.ts`，包含 `totalProgress`、`activeTaskCount`、`completedTaskCount`、`totalTaskCount`。
 
 ### 5.6 CSS 变量主题系统
 
@@ -823,6 +844,9 @@ interface AppSettings {
 - `market:resumeTask`：从暂停快照恢复下载任务，重新拉取索引校验兼容性后启动新管线续传。
 - `market:getPendingTasks`：读取本地快照文件，返回所有未完成的暂停/中断任务。
 - `market:resolveAssetInfo`：通过 GitHub REST API 解析 Release Asset 的 sha256/size（5次指数退避重试，1小时缓存）。
+- `market:getAllTaskStates`：获取所有当前下载任务的状态快照（供悬浮球窗口初始同步）。
+- `market:floatBall:event`：主进程 → 悬浮球渲染进程，推送合并后的下载进度数据（`FloatBallProgress`），节流 1 秒。
+- `floatBall:dragState`：主进程 → 悬浮球渲染进程，通知拖拽状态（拖动中/停止）。
 - `room:create`：创建房间并在本地启动房间服务。
 - `room:join`：加入指定房主地址的房间。
 - `room:leave`：离开房间（房主离开会解散房间）。
@@ -849,6 +873,7 @@ interface AppSettings {
 - `system:removeGameStoragePath`：删除保存路径及其内部已导入游戏数据。仅删除含 `game.json` 清单的一级子目录，不删除存储根目录下的其他文件或子目录。
 - `system:uninstall`：卸载客户端。先检查 `uninstall.exe` 存在性，可选删除所有游戏库目录（`deleteGames: boolean`
   ），随后打开系统卸载程序并退出应用。返回 `{ success: boolean; error?: string }`。
+- `system:clearCache`：清除应用 C 盘缓存目录（`Roaming\bz-launcher` 和 `Local\bz-launcher-updater`），逐项删除并静默跳过锁定文件。返回 `{ totalSize: number; clearedSize: number }`。
 - `system:getUserData`：读取用户经济与签到数据。
 - `system:checkIn`：执行每日签到并返回奖励结果。
 - `system:buyFrame`：原子购买头像框（校验余额 + 已拥有，成功自动装备）。
@@ -943,8 +968,9 @@ interface AppSettings {
 - **统计界面**：卡片右上角需展示该游戏的所有版本号，使用自动换行布局。
 - **设置页更新入口**：设置页需提供「检查更新」按钮，点击后弹出更新状态弹层，显示下载进度与安装按钮。
 - **设置页卸载入口**：设置页底部（与保存按钮同行，`justify-content: space-between`）提供"卸载客户端"按钮（
-  `type="error" secondary`）。点击后弹出 NaiveUI 自定义确认弹窗，包含不可撤销的警告文案、是否同时删除所有游戏库目录的勾选项、以及删除路径列表预览。确认后调用
+  `type="error" secondary`），右侧提供"清除缓存"按钮。点击卸载弹出 NaiveUI 自定义确认弹窗，包含不可撤销的警告文案、是否同时删除所有游戏库目录的勾选项、以及删除路径列表预览。确认后调用
   `system:uninstall` IPC 执行卸载。若处于开发模式或卸载程序不可用，弹出友好提示。
+- **设置页清除缓存入口**（v2.2）：设置页底部"卸载客户端"按钮右侧提供"清除缓存"按钮（`secondary`）。点击后弹出 `n-modal preset="card"` 弹窗（400px），展示确认文案。点击"清除缓存"后启动模拟进度条（200ms 间隔随机递增 5-20%，最高到 90%），同时通过 `system:clearCache` IPC 调用主进程执行实际清理。主进程清理 `AppData\Roaming\bz-launcher` 和 `AppData\Local\bz-launcher-updater` 两个缓存目录，逐项删除并静默跳过锁定文件（`force: true, maxRetries: 3`），返回已清理的空间大小。IPC 完成后进度条跳至 100%，展示释放空间结果。取消/确认按钮统一在弹窗右下角（`#action` slot + `justify="end"`）。
 - **设置页头像预览**：点击设置页头像缩略图（`AvatarWithFrame` 组件，40px），弹出
   `n-modal preset="card"` 模态框，280×280 圆形大图预览（含头像框）；无头像时显示玩家名首字母大字（使用 `--bz-bg-card-placeholder` 和
   `--bz-text-on-placeholder` CSS 变量适配暗/亮主题）。
@@ -1114,7 +1140,7 @@ Room Server 与 Room Client 之间使用 **WebSocket + JSON** 通信。
 ## 八、平台 API 规范（面向游戏开发者）
 
 > 游戏进程通过连接 `ws://127.0.0.1:{BZ_API_PORT}` 使用平台能力。
-> 连接后必须**立刻发送** **`auth`** **请求**，否则 **30 秒**后连接将被服务端主动断开。
+> 连接后必须**立刻发送** **`auth`** **请求**，否则 **60 秒**后连接将被服务端主动断开。
 
 ### 8.1 连接与认证
 

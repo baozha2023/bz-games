@@ -79,7 +79,7 @@ export class GameApiServer {
         logger.warn(`[GameApiServer] Unauthenticated local client timeout.`);
         ws.close();
       }
-    }, 30000);
+    }, 60000);
 
     ws.on("ping", () => ws.pong());
 

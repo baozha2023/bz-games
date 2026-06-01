@@ -56,6 +56,9 @@ export const IPC = {
   GAME_PROCESS_ENDED: "game:process:ended",
   GAME_LAUNCH_FAILED: "game:launch:failed",
   MARKET_EVENT: "market:event",
+  MARKET_FLOAT_BALL_EVENT: "market:floatBall:event",
+  MARKET_GET_ALL_TASK_STATES: "market:getAllTaskStates",
+  FLOAT_BALL_DRAG_STATE: "floatBall:dragState",
 
   // ── 系统 ──
   SYSTEM_GET_SETTINGS: "system:getSettings",
@@ -81,6 +84,7 @@ export const IPC = {
   SYSTEM_INSTALL_UPDATE: "system:installUpdate",
   SYSTEM_GET_UPDATE_STATUS: "system:getUpdateStatus",
   SYSTEM_UPDATE_EVENT: "system:update:event",
+  SYSTEM_CLEAR_CACHE: "system:clearCache",
 
   // ── 游戏数据存储 (Preload → Main) ──
   GAME_STORAGE_INIT: "game:storage:init",

@@ -113,7 +113,7 @@ const topBarFrameFileName = computed(() => {
 })
 
 const isPopupWindow = computed(() => {
-  return route.name === 'Notification' || route.name === 'ChatPopout';
+  return route.name === 'Notification' || route.name === 'ChatPopout' || route.name === 'FloatBall';
 })
 
 const handleBackToRoom = () => {

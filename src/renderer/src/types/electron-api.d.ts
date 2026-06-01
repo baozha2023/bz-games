@@ -2,6 +2,7 @@ import type {
   AppSettings,
   DataHealthReport,
   DownloadTaskSnapshot,
+  FloatBallProgress,
   RoomInfo,
   RoomEvent,
   GameRecord,
@@ -140,6 +141,9 @@ declare global {
         getPendingTasks: () => Promise<DownloadTaskSnapshot[]>;
         resolveAssetInfo: (downloadUrl: string) => Promise<{ sha256?: string; size?: number }>;
         onEvent: (callback: (payload: MarketTaskEvent) => void) => () => void;
+        getAllTaskStates: () => Promise<MarketTaskState[]>;
+        onFloatBallEvent: (callback: (progress: FloatBallProgress) => void) => () => void;
+        onDragState: (callback: (dragging: boolean) => void) => () => void;
       };
       settings: {
         get: () => Promise<AppSettings>;
@@ -163,6 +167,7 @@ declare global {
         downloadUpdate: () => Promise<UpdateState>;
         installUpdate: () => Promise<boolean>;
         uninstall: (payload?: { deleteGames?: boolean }) => Promise<{ success: boolean; error?: string }>;
+        clearCache: () => Promise<{ totalSize: number; clearedSize: number }>;
         onUpdateEvent: (callback: (payload: UpdateState) => void) => () => void;
       };
       stats: {

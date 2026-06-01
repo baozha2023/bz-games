@@ -432,6 +432,7 @@ import { useSettingsStore } from "../stores/useSettingsStore";
 import CachedImg from "../components/CachedImg.vue";
 import { useImageCache } from "../composables/useImageCache";
 import { useGameStore } from "../stores/useGameStore";
+import { formatBytes } from "../utils/format";
 
 const { t } = useI18n();
 const message = useMessage();
@@ -634,18 +635,6 @@ function typeLabel(type: MarketGame["type"]): string {
 
 function handleOpenAuthorUrl(url: string) {
   window.electronAPI.settings.openUrl(url);
-}
-
-function formatBytes(bytes: number): string {
-  if (!bytes) return "0 B";
-  const units = ["B", "KB", "MB", "GB"];
-  let value = bytes;
-  let unitIndex = 0;
-  while (value >= 1024 && unitIndex < units.length - 1) {
-    value /= 1024;
-    unitIndex += 1;
-  }
-  return `${value.toFixed(value >= 100 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
 }
 
 function formatSize(version: { downloadUrl: string; size?: number } | null): string {

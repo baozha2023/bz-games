@@ -68,6 +68,8 @@ export interface AppSettings {
   githubToken?: string;
   chatWindowBounds?: { x: number; y: number; width: number; height: number };
   chatInputHeight?: number;
+  downloadFloatBall?: boolean;
+  floatBallPosition?: { x: number; y: number };
 }
 
 export type UpdateErrorCode =

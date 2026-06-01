@@ -30,6 +30,7 @@ const defaultSettings: AppSettings = {
   gameStoragePath: "",
   gameStorageHistory: [],
   chatInputHeight: 204,
+  downloadFloatBall: true,
 };
 
 const defaultUserData: UserData = {

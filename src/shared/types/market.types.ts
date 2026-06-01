@@ -182,6 +182,13 @@ export interface MarketTaskEvent {
   task: MarketTaskState;
 }
 
+export interface FloatBallProgress {
+  totalProgress: number;
+  activeTaskCount: number;
+  completedTaskCount: number;
+  totalTaskCount: number;
+}
+
 export interface DownloadTaskSnapshot {
   taskId: string;
   gameId: string;

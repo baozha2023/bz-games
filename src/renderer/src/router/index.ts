@@ -61,6 +61,11 @@ const router = createRouter({
       name: "Personalization",
       component: () => import("../views/PersonalizationView.vue"),
     },
+    {
+      path: "/float-ball",
+      name: "FloatBall",
+      component: () => import("../views/FloatBallView.vue"),
+    },
   ],
 });
 

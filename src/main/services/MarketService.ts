@@ -12,6 +12,7 @@ import {
 import { GameManifestSchema, type GameManifest } from "../../shared/game-manifest";
 import type {
   DownloadTaskSnapshot,
+  FloatBallProgress,
   MarketErrorCode,
   MarketDirectory,
   MarketGame,
@@ -25,7 +26,7 @@ import { z } from "zod";
 import { GameLoader } from "./GameLoader";
 import { logger } from "../utils/logger";
 import { storeService } from "./StoreService";
-import { mainWindow } from "../window";
+import { mainWindow, floatBallWindow } from "../window";
 import { GITHUB_API_BASE, GITHUB_RAW_BASE, OSS_BASE } from "../../shared/constants";
 import { RequestInterceptor } from "../utils/requestInterceptor";
 
@@ -358,16 +359,82 @@ export class MarketService {
     }
   }
 
+  private lastFloatBallEmitTime = 0;
+  private static readonly FLOAT_BALL_THROTTLE_MS = 1000;
+
   // ── State transitions (single source of truth) ──
 
   private emit(state: MarketTaskState): void {
     mainWindow?.webContents.send(IPC.MARKET_EVENT, { task: state });
+    this.emitFloatBallProgress(false);
+  }
+
+  private emitFloatBallProgress(force = false): void {
+    if (!floatBallWindow || floatBallWindow.isDestroyed()) return;
+    const now_ = now();
+    if (!force && now_ - this.lastFloatBallEmitTime < MarketService.FLOAT_BALL_THROTTLE_MS) return;
+    this.lastFloatBallEmitTime = now_;
+    const progress = this.computeTotalProgress();
+    floatBallWindow.webContents.send(IPC.MARKET_FLOAT_BALL_EVENT, progress);
+
+    if (progress.activeTaskCount > 0) {
+      if (!floatBallWindow.isVisible()) floatBallWindow.showInactive();
+    } else {
+      if (floatBallWindow.isVisible()) floatBallWindow.hide();
+    }
+  }
+
+  private getTaskWeight(task: ActiveTask): number {
+    return task.state.totalBytes || task.meta.size || 0;
+  }
+
+  computeTotalProgress(): FloatBallProgress {
+    let weightedProgressSum = 0;
+    let totalWeight = 0;
+    let activeTaskCount = 0;
+    let completedTaskCount = 0;
+    let totalTaskCount = 0;
+
+    for (const task of this.tasks.values()) {
+      if (TERMINAL_STATUSES.includes(task.state.status)) {
+        if (task.state.status === "completed") {
+          completedTaskCount++;
+        }
+        totalTaskCount++;
+        continue;
+      }
+      totalTaskCount++;
+      activeTaskCount++;
+      const weight = this.getTaskWeight(task);
+      if (weight > 0) {
+        weightedProgressSum += Math.max(0, Math.min(100, task.state.progress)) * weight;
+        totalWeight += weight;
+      }
+    }
+
+    const totalProgress =
+      totalWeight === 0 ? 0 : Math.min(100, Math.round(weightedProgressSum / totalWeight));
+
+    return {
+      totalProgress,
+      activeTaskCount,
+      completedTaskCount,
+      totalTaskCount,
+    };
+  }
+
+  getAllTaskStates(): MarketTaskState[] {
+    const states: MarketTaskState[] = [];
+    for (const task of this.tasks.values()) {
+      states.push({ ...task.state });
+    }
+    return states;
   }
 
   private tickProgress(taskId: string, progress: number): void {
     const task = this.tasks.get(taskId);
     if (!task) return;
-    task.state = { ...task.state, progress, updatedAt: now() };
+    task.state = { ...task.state, progress: Math.max(task.state.progress, progress), updatedAt: now() };
     this.emit(task.state);
   }
 
@@ -426,11 +493,12 @@ export class MarketService {
 
   // ── Task lifecycle ──
 
-  private startTask(taskId: string, meta: TaskMeta): MarketTaskState {
+  private startTask(taskId: string, meta: TaskMeta, initial?: Partial<MarketTaskState>): MarketTaskState {
     const timestamp = now();
     const state: MarketTaskState = {
       taskId, gameId: meta.gameId, version: meta.version,
       status: "idle", progress: 0,
+      ...initial,
       createdAt: timestamp, updatedAt: timestamp,
     };
     const abort = new AbortController();
@@ -455,21 +523,31 @@ export class MarketService {
     });
   }
 
-  /**
-   * Clean up temp files for terminal states, then remove task from memory.
-   */
-  private async finalize(taskId: string): Promise<void> {
+  private async finalize(taskId: string, removeTaskImmediately = false): Promise<void> {
     const task = this.tasks.get(taskId);
     if (!task) return;
     const { downloadPath } = task.meta;
     const cacheRoot = path.join(app.getPath("userData"), ".market-cache");
     const extractRoot = path.join(cacheRoot, "extract", `${task.meta.gameId}-${task.meta.version}`);
+    if (removeTaskImmediately) {
+      this.tasks.delete(taskId);
+      this.emitFloatBallProgress(true);
+      await Promise.all([
+        removeIfExists(downloadPath).catch(() => undefined),
+        removeIfExists(extractRoot).catch(() => undefined),
+      ]);
+      return;
+    }
+
     await Promise.all([
       removeIfExists(downloadPath).catch(() => undefined),
       removeIfExists(extractRoot).catch(() => undefined),
     ]);
-    // Keep in memory 30s for UI to read final state, then drop
-    setTimeout(() => { this.tasks.delete(taskId); }, 30_000);
+
+    setTimeout(() => {
+      this.tasks.delete(taskId);
+      this.emitFloatBallProgress(true);
+    }, 30_000);
   }
 
   getTaskState(taskId: string): MarketTaskState | null {
@@ -510,7 +588,11 @@ export class MarketService {
 
     // CRITICAL: set status BEFORE abort, so the pipeline's catch block
     // sees "paused" and silently returns without overwriting state.
-    this.transition(taskId, "paused", { bytesReceived });
+    this.transition(taskId, "paused", {
+      bytesReceived,
+      totalBytes: task.state.totalBytes || task.meta.size,
+    });
+    this.emitFloatBallProgress(true);
     task.abort.abort();
 
     await this.writeSnapshot(taskId, bytesReceived, "paused");
@@ -564,7 +646,11 @@ export class MarketService {
       sourceIdx: snap.sourceIdx,
     };
 
-    const state = this.startTask(taskId, meta);
+    const state = this.startTask(taskId, meta, {
+      progress: snap.size > 0 ? Math.min(65, Math.round((snap.bytesReceived / snap.size) * 65)) : 0,
+      bytesReceived: snap.bytesReceived,
+      totalBytes: snap.size,
+    });
     this.startPipeline(taskId, game, targetVersion);
     return state;
   }
@@ -603,7 +689,7 @@ export class MarketService {
     if (task.state.status === "paused" || task.state.status === "interrupted") {
       this.removeSnapshot(taskId).catch(() => undefined);
       this.transition(taskId, "canceled");
-      this.finalize(taskId);
+      this.finalize(taskId, true);
       return true;
     }
 
@@ -611,7 +697,7 @@ export class MarketService {
 
     this.transition(taskId, "canceled");
     task.abort.abort();
-    this.finalize(taskId);
+    this.finalize(taskId, true);
     return true;
   }
 

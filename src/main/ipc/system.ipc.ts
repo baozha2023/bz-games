@@ -7,9 +7,19 @@ import { updateService } from "../services/UpdateService";
 import { logger } from "../utils/logger";
 import type { AppSettings } from "../../shared/types";
 import { setCustomGamesDir } from "../utils/appPath";
+import { createFloatBallWindow, destroyFloatBallWindow } from "../window";
 
 export function registerSystemIpc() {
   updateService.init();
+
+  function applyFloatBallSetting(settings: AppSettings | Partial<AppSettings>) {
+    if (!("downloadFloatBall" in settings)) return;
+    if (settings.downloadFloatBall) {
+      createFloatBallWindow();
+    } else {
+      destroyFloatBallWindow();
+    }
+  }
 
   ipcMain.handle(IPC.SYSTEM_GET_SETTINGS, async () => {
     return storeService.getSettings();
@@ -27,6 +37,7 @@ export function registerSystemIpc() {
       app.setLoginItemSettings({
         openAtLogin: settings.autoLaunch,
       });
+      applyFloatBallSetting(settings);
       return true;
     } catch (error) {
       logger.error("[SystemIPC] Failed to save settings:", error);
@@ -38,6 +49,7 @@ export function registerSystemIpc() {
     IPC.SYSTEM_SAVE_PARTIAL_SETTINGS,
     async (_, partial: Partial<AppSettings>) => {
       storeService.saveSettings(partial);
+      applyFloatBallSetting(partial);
     },
   );
 
@@ -200,5 +212,60 @@ export function registerSystemIpc() {
     shell.openPath(uninstaller);
     app.quit();
     return { success: true };
+  });
+
+  ipcMain.handle(IPC.SYSTEM_CLEAR_CACHE, async () => {
+    const targets: string[] = [
+      path.join(app.getPath("appData"), "bz-launcher"),
+      path.join(app.getPath("home"), "AppData", "Local", "bz-launcher-updater"),
+    ];
+
+    let totalSize = 0;
+    let clearedSize = 0;
+
+    function calcDirSize(dirPath: string): number {
+      let size = 0;
+      try {
+        const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+        for (const entry of entries) {
+          const fullPath = path.join(dirPath, entry.name);
+          try {
+            if (entry.isDirectory()) {
+              size += calcDirSize(fullPath);
+            } else {
+              size += fs.statSync(fullPath).size;
+            }
+          } catch { /* skip */ }
+        }
+      } catch { /* skip */ }
+      return size;
+    }
+
+    for (const target of targets) {
+      if (fs.existsSync(target)) {
+        totalSize += calcDirSize(target);
+      }
+    }
+
+    for (const target of targets) {
+      if (!fs.existsSync(target)) continue;
+      try {
+        const entries = fs.readdirSync(target, { withFileTypes: true });
+        for (const entry of entries) {
+          const fullPath = path.join(target, entry.name);
+          try {
+            const entrySize = entry.isDirectory() ? calcDirSize(fullPath) : fs.statSync(fullPath).size;
+            fs.rmSync(fullPath, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 });
+            clearedSize += entrySize;
+          } catch {
+            logger.warn(`[SystemIPC] Cache clear skipped: ${fullPath}`);
+          }
+        }
+      } catch {
+        logger.warn(`[SystemIPC] Cache clear failed to read: ${target}`);
+      }
+    }
+
+    return { totalSize, clearedSize };
   });
 }

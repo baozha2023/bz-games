@@ -47,6 +47,13 @@
         </n-radio-group>
       </n-form-item>
 
+      <n-form-item :label="t('settings.downloadFloatBall')" path="downloadFloatBall">
+        <n-radio-group v-model:value="formValue.downloadFloatBall">
+          <n-radio :value="true">{{ t('settings.downloadFloatBallOn') }}</n-radio>
+          <n-radio :value="false">{{ t('settings.downloadFloatBallOff') }}</n-radio>
+        </n-radio-group>
+      </n-form-item>
+
       <n-form-item :label="t('settings.gameStoragePath')" path="gameStoragePath">
         <n-space vertical style="width: 100%;">
           <n-input-group>
@@ -144,9 +151,14 @@
       </n-form-item>
 
       <div style="display: flex; justify-content: space-between; align-items: center;">
-        <n-button type="error" secondary @click="showUninstallModal = true">
-          {{ t('settings.uninstallClient') }}
-        </n-button>
+        <n-space>
+          <n-button type="error" secondary @click="showUninstallModal = true">
+            {{ t('settings.uninstallClient') }}
+          </n-button>
+          <n-button secondary @click="handleClearCache">
+            {{ t('settings.clearCache') }}
+          </n-button>
+        </n-space>
         <n-button type="primary" @click="handleSave">{{ t('settings.save') }}</n-button>
       </div>
     </n-form>
@@ -167,6 +179,25 @@
         <n-space>
           <n-button @click="showUninstallModal = false">{{ t('common.cancel') }}</n-button>
           <n-button type="error" @click="confirmUninstall">{{ t('settings.uninstallClient') }}</n-button>
+        </n-space>
+      </template>
+    </n-modal>
+
+    <n-modal v-model:show="showClearCacheModal" preset="card" :title="t('settings.clearCache')" style="width: 400px;" :closable="!isClearingCache" :mask-closable="!isClearingCache">
+      <n-space vertical :size="16" style="width: 100%;">
+        <n-text v-if="!isClearingCache && !clearCacheResult">{{ t('settings.clearCacheConfirm') }}</n-text>
+        <template v-if="isClearingCache">
+          <n-progress type="line" :percentage="clearCacheProgress" :indicator-placement="'inside'" processing />
+          <n-text depth="3">{{ t('settings.clearCacheProcessing') }}</n-text>
+        </template>
+        <template v-if="clearCacheResult">
+          <n-text>{{ t('settings.clearCacheSuccess', { size: formatBytes(clearCacheResult.clearedSize) }) }}</n-text>
+        </template>
+      </n-space>
+      <template #action>
+        <n-space v-if="!isClearingCache" justify="end">
+          <n-button @click="showClearCacheModal = false">{{ clearCacheResult ? t('common.confirm') : t('common.cancel') }}</n-button>
+          <n-button v-if="!clearCacheResult" type="warning" @click="confirmClearCache">{{ t('settings.clearCache') }}</n-button>
         </n-space>
       </template>
     </n-modal>
@@ -193,6 +224,7 @@ import { useSettingsStore } from '../stores/useSettingsStore'
 import AvatarWithFrame from '../components/AvatarWithFrame.vue'
 import type { AppSettings } from '../../../shared/types'
 import { getFrameImageFileName } from '../../../shared/avatar-frames'
+import { formatBytes } from '../utils/format'
 
 const { t } = useI18n()
 const settingsStore = useSettingsStore()
@@ -203,6 +235,10 @@ const formRef = ref(null)
 const formValue = ref<AppSettings | null>(null)
 const showUninstallModal = ref(false)
 const showAvatarPreview = ref(false)
+const showClearCacheModal = ref(false)
+const isClearingCache = ref(false)
+const clearCacheProgress = ref(0)
+const clearCacheResult = ref<{ totalSize: number; clearedSize: number } | null>(null)
 const uninstallDeleteGames = ref(false)
 const updateState = computed(() => settingsStore.updateState)
 const dataHealthReport = computed(() => settingsStore.dataHealthReport)
@@ -411,6 +447,38 @@ const confirmUninstall = async () => {
   })
   if (!result.success && result.error === "uninstaller_not_found") {
     message.warning(t('settings.uninstallNotAvailable'))
+  }
+}
+
+const handleClearCache = () => {
+  clearCacheResult.value = null
+  clearCacheProgress.value = 0
+  isClearingCache.value = false
+  showClearCacheModal.value = true
+}
+
+const confirmClearCache = async () => {
+  isClearingCache.value = true
+  clearCacheProgress.value = 0
+
+  const progressInterval = setInterval(() => {
+    if (clearCacheProgress.value < 90) {
+      clearCacheProgress.value += Math.random() * 15 + 5
+      if (clearCacheProgress.value > 90) clearCacheProgress.value = 90
+    }
+  }, 200)
+
+  try {
+    const result = await window.electronAPI.settings.clearCache()
+    clearInterval(progressInterval)
+    clearCacheProgress.value = 100
+    clearCacheResult.value = result
+  } catch {
+    clearInterval(progressInterval)
+    clearCacheProgress.value = 100
+    clearCacheResult.value = { totalSize: 0, clearedSize: 0 }
+  } finally {
+    isClearingCache.value = false
   }
 }
 
