@@ -190,6 +190,8 @@ const shouldPromptUpdate = (latestVersion?: string) => {
 const handleAutoUpdateCheck = async () => {
   if (isPopupWindow.value) return
   await settingsStore.loadSettings()
+  const promptedStorage = await handleGameStorageStartupPrompt()
+  if (promptedStorage) return
   const state = await settingsStore.checkUpdateOnly()
   if (state.status !== 'available') return
   if (!shouldPromptUpdate(state.latestVersion)) return
@@ -208,6 +210,42 @@ const handleAutoUpdateCheck = async () => {
       })
     }
   })
+}
+
+const handleGameStorageStartupPrompt = async (): Promise<boolean> => {
+  const status = await window.electronAPI.settings.getDefaultGamesMigrationStatus()
+  if (!status.shouldPrompt) return false
+
+  dialog.warning({
+    title: t('settings.defaultGamesMigrationTitle'),
+    content: t('settings.defaultGamesMigrationContent', { path: status.defaultGamesPath }),
+    positiveText: t('settings.migrateNow'),
+    negativeText: t('settings.doNotRemind'),
+    onPositiveClick: async () => {
+      const result = await window.electronAPI.settings.selectGameStoragePathRelaxed()
+      if (!result) return false
+      const migrated = await window.electronAPI.settings.migrateDefaultGamesLibrary({ targetPath: result.path })
+      if (!migrated.success) {
+        message.error(t('settings.defaultGamesMigrationFailed'))
+        return false
+      }
+      await settingsStore.loadSettings()
+      await gameStore.loadGames()
+      message.success(t('settings.defaultGamesMigrationSuccess', {
+        gameCount: migrated.migratedGames || 0,
+        versionCount: migrated.migratedVersions || 0
+      }))
+      return true
+    },
+    onNegativeClick: () => {
+      void window.electronAPI.settings.migrateDefaultGamesLibrary({ ignore: true })
+        .then(() => settingsStore.loadSettings())
+        .catch((error: any) => {
+          message.error(`${t('settings.saveFail')}: ${error?.message || error}`)
+        })
+    }
+  })
+  return true
 }
 
 const handleInstallUpdate = async () => {

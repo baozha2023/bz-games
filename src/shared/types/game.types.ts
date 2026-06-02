@@ -1,3 +1,10 @@
+export enum GameType {
+  Singleplayer = "singleplayer",
+  Multiplayer = "multiplayer",
+  SingleMultiple = "singlemultiple",
+  NetworkGame = "networkgame",
+}
+
 export type GameApiAction =
   | "auth"
   | "player.getInfo"

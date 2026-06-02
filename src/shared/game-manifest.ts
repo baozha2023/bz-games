@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { GameType } from "./types/game.types";
 
 export const GameManifestSchema = z
   .object({
@@ -18,12 +19,7 @@ export const GameManifestSchema = z
     cover: z.string().optional(),
     video: z.string().optional(),
     encryptLocalStorage: z.boolean().optional(),
-    type: z.enum([
-      "singleplayer",
-      "multiplayer",
-      "singlemultiple",
-      "networkgame",
-    ]),
+    type: z.nativeEnum(GameType),
     statistics: z
       .array(
         z.union([

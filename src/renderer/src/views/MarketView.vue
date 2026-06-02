@@ -427,7 +427,7 @@ import type {
   MarketTaskState,
   MarketTaskStatus,
 } from "../../../shared/types";
-import { isGitHubReleaseUrl, isMissingSha256, isMissingSize, isValidDownloadUrl, isValidSha256Format, isVersionDownloadable } from "../../../shared/types";
+import { GameType, isGitHubReleaseUrl, isMissingSha256, isMissingSize, isValidDownloadUrl, isValidSha256Format, isVersionDownloadable } from "../../../shared/types";
 import { useSettingsStore } from "../stores/useSettingsStore";
 import CachedImg from "../components/CachedImg.vue";
 import { useImageCache } from "../composables/useImageCache";
@@ -468,10 +468,10 @@ const pendingPauses = new Set<string>();
 const pendingResumes = new Set<string>();
 
 const TYPE_LABEL_KEYS: Record<MarketGame["type"], string> = {
-  singleplayer: "gameDetail.typeSingleplayer",
-  multiplayer: "gameDetail.typeMultiplayer",
-  singlemultiple: "gameDetail.typeSingleMultiple",
-  networkgame: "gameDetail.typeNetworkGame",
+  [GameType.Singleplayer]: "gameDetail.typeSingleplayer",
+  [GameType.Multiplayer]: "gameDetail.typeMultiplayer",
+  [GameType.SingleMultiple]: "gameDetail.typeSingleMultiple",
+  [GameType.NetworkGame]: "gameDetail.typeNetworkGame",
 };
 
 const ERROR_CODE_KEYS: Record<string, string> = {
@@ -675,7 +675,7 @@ function isPlatformIncompatible(game: MarketGame): boolean {
 }
 
 function isInstalled(gameId: string, version: string, gameType?: string): boolean {
-  if (gameType === "networkgame") {
+  if (gameType === GameType.NetworkGame) {
     return Boolean(gameStore.getGameRecord(gameId));
   }
   return Boolean(

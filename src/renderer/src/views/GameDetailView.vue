@@ -44,17 +44,17 @@
         </n-descriptions>
         
         <div style="margin-top: 24px;">
-          <template v-if="resolvedType === 'singleplayer'">
+          <template v-if="resolvedType === GameType.Singleplayer">
             <n-button type="primary" size="large" @click="handleLaunch" :disabled="isRunning">
               {{ isRunning ? t('gameDetail.gameRunning') : t('gameDetail.launchGame') }}
             </n-button>
           </template>
-          <template v-else-if="resolvedType === 'networkgame'">
+          <template v-else-if="resolvedType === GameType.NetworkGame">
             <n-button type="primary" size="large" @click="handleLaunch" :disabled="isRunning">
               {{ isRunning ? t('gameDetail.gameRunning') : t('gameDetail.launchGame') }}
             </n-button>
           </template>
-          <template v-else-if="resolvedType === 'multiplayer'">
+          <template v-else-if="resolvedType === GameType.Multiplayer">
             <n-space>
               <n-button type="primary" size="large" @click="createRoom">{{ t('gameDetail.createRoom') }}</n-button>
               <n-button size="large" @click="showJoinModal = true">{{ t('gameDetail.joinRoom') }}</n-button>
@@ -105,6 +105,7 @@ import GameCover from '../components/game/GameCover.vue'
 import GameAchievementsModal from '../components/game/GameAchievementsModal.vue'
 import GameDeleteModal from '../components/game/GameDeleteModal.vue'
 import type { GameManifest } from '../../../shared/game-manifest'
+import { GameType } from '../../../shared/types'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -123,12 +124,12 @@ const selectedVersion = ref('')
 const currentManifest = ref<GameManifest | null>(null)
 const versionOptions = computed(() => versions.value.map(v => ({ label: v, value: v })))
 const isLatestVersion = computed(() => !game.value || selectedVersion.value === game.value.version)
-const isNetworkGame = computed(() => resolvedType.value === 'networkgame')
-const resolvedType = computed(() => (currentManifest.value?.type) || (isLatestVersion.value ? game.value?.type : '') || 'singleplayer')
+const isNetworkGame = computed(() => resolvedType.value === GameType.NetworkGame)
+const resolvedType = computed(() => (currentManifest.value?.type) || (isLatestVersion.value ? game.value?.type : '') || GameType.Singleplayer)
 const typeLabel = computed(() => {
-    if (resolvedType.value === 'networkgame') return t('gameDetail.typeNetworkGame')
-    if (resolvedType.value === 'multiplayer') return t('gameDetail.typeMultiplayer')
-    if (resolvedType.value === 'singlemultiple') return t('gameDetail.typeSingleMultiple')
+    if (resolvedType.value === GameType.NetworkGame) return t('gameDetail.typeNetworkGame')
+    if (resolvedType.value === GameType.Multiplayer) return t('gameDetail.typeMultiplayer')
+    if (resolvedType.value === GameType.SingleMultiple) return t('gameDetail.typeSingleMultiple')
     return t('gameDetail.typeSingleplayer')
 })
 

@@ -54,15 +54,6 @@
         </n-radio-group>
       </n-form-item>
 
-      <n-form-item :label="t('settings.gameStoragePath')" path="gameStoragePath">
-        <n-space vertical style="width: 100%;">
-          <n-input-group>
-            <n-input v-model:value="formValue.gameStoragePath" :placeholder="t('settings.gameStoragePathPlaceholder')" />
-            <n-button @click="handlePickGameStoragePath">{{ t('settings.browsePath') }}</n-button>
-          </n-input-group>
-        </n-space>
-      </n-form-item>
-
       <n-form-item :label="t('settings.githubToken')" path="githubToken">
         <n-input
           v-model:value="formValue.githubToken"
@@ -84,6 +75,17 @@
             >
               {{ item }}
             </n-button>
+            <n-tag v-if="isDefaultStoragePath(item)" type="success" size="small" class="storage-path-default-tag">
+              {{ t('settings.defaultStoragePath') }}
+            </n-tag>
+            <n-button
+              v-else
+              tertiary
+              size="small"
+              @click="handleSetDefaultStoragePath(item)"
+            >
+              {{ t('settings.setDefaultStoragePath') }}
+            </n-button>
             <n-button
               tertiary
               type="error"
@@ -94,6 +96,9 @@
               ×
             </n-button>
           </div>
+          <n-button dashed block @click="handleAddGameStoragePath">
+            {{ t('settings.addStoragePath') }}
+          </n-button>
         </n-space>
       </n-form-item>
 
@@ -158,6 +163,9 @@
           <n-button secondary @click="handleClearCache">
             {{ t('settings.clearCache') }}
           </n-button>
+          <n-button secondary @click="handleOpenMigrateStorageModal">
+            {{ t('settings.migrateStorage') }}
+          </n-button>
         </n-space>
         <n-button type="primary" @click="handleSave">{{ t('settings.save') }}</n-button>
       </div>
@@ -202,6 +210,39 @@
       </template>
     </n-modal>
 
+    <n-modal v-model:show="showMigrateStorageModal" preset="card" :title="t('settings.migrateStorage')" style="width: 520px;" :closable="!isMigratingStorage" :mask-closable="!isMigratingStorage">
+      <n-space vertical :size="16" style="width: 100%;">
+        <n-text>{{ t('settings.migrateStorageDescription') }}</n-text>
+        <n-select
+          v-model:value="selectedMigrationSourcePath"
+          :options="migrationStorageOptions"
+          :placeholder="t('settings.selectSourceStoragePath')"
+          :disabled="isMigratingStorage"
+        />
+        <n-input-group>
+          <n-input
+            v-model:value="selectedMigrationTargetPath"
+            :placeholder="t('settings.selectTargetStoragePath')"
+            readonly
+          />
+          <n-button :disabled="isMigratingStorage" @click="handlePickMigrationTargetPath">
+            {{ t('settings.browsePath') }}
+          </n-button>
+        </n-input-group>
+        <n-alert v-if="selectedMigrationSourcePath" type="warning">
+          {{ t('settings.migrateStorageWarning', { path: selectedMigrationSourcePath }) }}
+        </n-alert>
+      </n-space>
+      <template #action>
+        <n-space justify="end">
+          <n-button :disabled="isMigratingStorage" @click="showMigrateStorageModal = false">{{ t('common.cancel') }}</n-button>
+          <n-button type="primary" :loading="isMigratingStorage" @click="confirmMigrateStorage">
+            {{ t('settings.migrateStorage') }}
+          </n-button>
+        </n-space>
+      </template>
+    </n-modal>
+
     <n-modal v-model:show="showAvatarPreview" preset="card" title="" style="width: 360px;" :bordered="false">
       <div style="display: flex; justify-content: center; align-items: center; padding: 24px;">
         <AvatarWithFrame
@@ -221,6 +262,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useMessage, useDialog } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { useSettingsStore } from '../stores/useSettingsStore'
+import { useGameStore } from '../stores/useGameStore'
 import AvatarWithFrame from '../components/AvatarWithFrame.vue'
 import type { AppSettings } from '../../../shared/types'
 import { getFrameImageFileName } from '../../../shared/avatar-frames'
@@ -228,6 +270,7 @@ import { formatBytes } from '../utils/format'
 
 const { t } = useI18n()
 const settingsStore = useSettingsStore()
+const gameStore = useGameStore()
 const message = useMessage()
 const dialog = useDialog()
 
@@ -236,25 +279,31 @@ const formValue = ref<AppSettings | null>(null)
 const showUninstallModal = ref(false)
 const showAvatarPreview = ref(false)
 const showClearCacheModal = ref(false)
+const showMigrateStorageModal = ref(false)
 const isClearingCache = ref(false)
+const isMigratingStorage = ref(false)
 const clearCacheProgress = ref(0)
 const clearCacheResult = ref<{ totalSize: number; clearedSize: number } | null>(null)
 const uninstallDeleteGames = ref(false)
+const selectedMigrationSourcePath = ref('')
+const selectedMigrationTargetPath = ref('')
+const registeredStoragePaths = ref<Array<{ path: string; isDefault: boolean }>>([])
 const updateState = computed(() => settingsStore.updateState)
 const dataHealthReport = computed(() => settingsStore.dataHealthReport)
 const isCheckingUpdate = ref(false)
 const isCheckingHealth = ref(false)
 const removingPath = ref('')
 const allStoragePaths = computed(() => {
-  const current = formValue.value?.gameStoragePath?.trim()
-  const history = formValue.value?.gameStorageHistory || []
   const set = new Set<string>()
-  if (current) set.add(current)
-  history.forEach(path => {
-    if (path?.trim()) set.add(path.trim())
+  registeredStoragePaths.value.forEach(item => {
+    if (item.path?.trim()) set.add(item.path.trim())
   })
   return Array.from(set)
 })
+
+const migrationStorageOptions = computed(() =>
+  allStoragePaths.value.map(path => ({ label: path, value: path }))
+)
 
 const settingsFrameFileName = computed(() => {
   const frameId = settingsStore.userData?.equippedFrame
@@ -264,8 +313,7 @@ const settingsFrameFileName = computed(() => {
 
 const rules = {
   playerName: { required: true, message: () => t('settings.enterName'), trigger: 'blur' },
-  defaultRoomPort: { required: true, type: 'number', message: () => t('settings.enterPort'), trigger: ['blur', 'change'] },
-  gameStoragePath: { required: true, message: () => t('settings.enterStoragePath'), trigger: ['blur', 'change'] }
+  defaultRoomPort: { required: true, type: 'number', message: () => t('settings.enterPort'), trigger: ['blur', 'change'] }
 }
 
 const themeOptions = computed(() => [
@@ -297,8 +345,24 @@ const updateErrorText = (errorCode?: string, rawMessage?: string) => {
   return translated === key ? rawMessage || t('settings.updateErrors.unknown') : translated
 }
 
+const storageErrorText = (error: any) => {
+  const message = error?.error || error?.message || String(error || '')
+  const key = message ? `settings.storageErrors.${message}` : 'settings.storageErrors.unknown'
+  const translated = t(key)
+  return translated === key ? message || t('settings.storageErrors.unknown') : translated
+}
+
+const refreshStoragePaths = async () => {
+  registeredStoragePaths.value = await window.electronAPI.settings.getGameStoragePaths()
+}
+
+const isDefaultStoragePath = (targetPath: string) => {
+  return registeredStoragePaths.value.some(item => item.path === targetPath && item.isDefault)
+}
+
 onMounted(async () => {
   await settingsStore.loadSettings()
+  await refreshStoragePaths()
   if (settingsStore.settings) {
     formValue.value = JSON.parse(JSON.stringify(settingsStore.settings))
   }
@@ -331,9 +395,9 @@ const handleAvatarClick = () => {
   showAvatarPreview.value = true
 }
 
-const handlePickGameStoragePath = async () => {
+const handleAddGameStoragePath = async () => {
   const result = await window.electronAPI.settings.selectGameStoragePath()
-  if (!result || !formValue.value) return
+  if (!result) return
   if (result.error === "directory_not_empty") {
     dialog.warning({
       title: t('settings.storagePathNotEmptyTitle'),
@@ -341,7 +405,23 @@ const handlePickGameStoragePath = async () => {
     })
     return
   }
-  formValue.value.gameStoragePath = result.path
+  await window.electronAPI.settings.addGameStoragePath(result.path)
+  await settingsStore.loadSettings()
+  await refreshStoragePaths()
+  if (settingsStore.settings) {
+    formValue.value = JSON.parse(JSON.stringify(settingsStore.settings))
+  }
+  message.success(t('settings.saveSuccess'))
+}
+
+const handleSetDefaultStoragePath = async (targetPath: string) => {
+  await window.electronAPI.settings.setDefaultGameStoragePath(targetPath)
+  await settingsStore.loadSettings()
+  await refreshStoragePaths()
+  if (settingsStore.settings) {
+    formValue.value = JSON.parse(JSON.stringify(settingsStore.settings))
+  }
+  message.success(t('settings.saveSuccess'))
 }
 
 const handleOpenPath = async (targetPath: string) => {
@@ -361,7 +441,12 @@ const handleRemovePath = async (targetPath: string) => {
       try {
         removingPath.value = targetPath
         const result = await window.electronAPI.settings.removeGameStoragePath(targetPath)
+        if (!result.success) {
+          message.error(`${t('settings.removeStoragePathFailed')}: ${storageErrorText(result)}`)
+          return
+        }
         await settingsStore.loadSettings()
+        await refreshStoragePaths()
         if (settingsStore.settings) {
           formValue.value = JSON.parse(JSON.stringify(settingsStore.settings))
         }
@@ -372,7 +457,7 @@ const handleRemovePath = async (targetPath: string) => {
           })
         )
       } catch (error: any) {
-        message.error(`${t('settings.removeStoragePathFailed')}: ${error?.message || error}`)
+        message.error(`${t('settings.removeStoragePathFailed')}: ${storageErrorText(error)}`)
       } finally {
         removingPath.value = ''
       }
@@ -457,6 +542,68 @@ const handleClearCache = () => {
   showClearCacheModal.value = true
 }
 
+const handleOpenMigrateStorageModal = () => {
+  if (allStoragePaths.value.length === 0) {
+    message.warning(t('settings.storagePathEmpty'))
+    return
+  }
+  selectedMigrationSourcePath.value = allStoragePaths.value[0]
+  selectedMigrationTargetPath.value = ''
+  isMigratingStorage.value = false
+  showMigrateStorageModal.value = true
+}
+
+const handlePickMigrationTargetPath = async () => {
+  const result = await window.electronAPI.settings.selectGameStoragePath()
+  if (!result) return
+  if (result.error === "directory_not_empty") {
+    dialog.warning({
+      title: t('settings.storagePathNotEmptyTitle'),
+      content: t('settings.storagePathNotEmptyContent'),
+    })
+    return
+  }
+  selectedMigrationTargetPath.value = result.path
+}
+
+const confirmMigrateStorage = async () => {
+  if (!selectedMigrationSourcePath.value) {
+    message.warning(t('settings.selectSourceStoragePath'))
+    return
+  }
+  if (!selectedMigrationTargetPath.value) {
+    message.warning(t('settings.selectTargetStoragePath'))
+    return
+  }
+
+  isMigratingStorage.value = true
+  try {
+    const result = await window.electronAPI.settings.migrateGameStorageLibrary({
+      sourcePath: selectedMigrationSourcePath.value,
+      targetPath: selectedMigrationTargetPath.value,
+    })
+    if (!result.success) {
+      message.error(`${t('settings.migrateStorageFailed')}: ${storageErrorText(result)}`)
+      return
+    }
+    await settingsStore.loadSettings()
+    await refreshStoragePaths()
+    if (settingsStore.settings) {
+      formValue.value = JSON.parse(JSON.stringify(settingsStore.settings))
+    }
+    await gameStore.loadGames()
+    showMigrateStorageModal.value = false
+    message.success(t('settings.migrateStorageSuccess', {
+      gameCount: result.migratedGames || 0,
+      versionCount: result.migratedVersions || 0,
+    }))
+  } catch (error: any) {
+    message.error(`${t('settings.migrateStorageFailed')}: ${storageErrorText(error)}`)
+  } finally {
+    isMigratingStorage.value = false
+  }
+}
+
 const confirmClearCache = async () => {
   isClearingCache.value = true
   clearCacheProgress.value = 0
@@ -489,6 +636,10 @@ const confirmClearCache = async () => {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+.storage-path-default-tag {
+  height: 28px;
+  align-items: center;
 }
 .avatar-clickable {
   cursor: pointer;

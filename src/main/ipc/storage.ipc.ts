@@ -3,16 +3,14 @@ import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import { IPC } from "../../shared/ipc-channels";
-import { getGamesDir } from "../utils/appPath";
+import { storeService } from "../services/StoreService";
 
 function getStoragePath(gameId: string, version: string): string {
-  const ver = version || "latest";
-  return path.join(getGamesDir(), gameId, ver, "gamedata.json");
+  return path.join(storeService.getGameVersionStoragePath(gameId, version), "gamedata.json");
 }
 
 function getManifestPath(gameId: string, version: string): string {
-  const ver = version || "latest";
-  return path.join(getGamesDir(), gameId, ver, "game.json");
+  return path.join(storeService.getGameVersionStoragePath(gameId, version), "game.json");
 }
 
 function isEncryptedStorageEnabled(gameId: string, version: string): boolean {

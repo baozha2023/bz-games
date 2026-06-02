@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { GameType } from "./game.types";
 
 export const GameManifestOverrideSchema = z.object({
   name: z.string().min(1).max(100).optional(),
@@ -12,7 +13,7 @@ export const GameManifestOverrideSchema = z.object({
   cover: z.string().optional(),
   video: z.string().optional(),
   encryptLocalStorage: z.boolean().optional(),
-  type: z.enum(["singleplayer", "multiplayer", "singlemultiple", "networkgame"]).optional(),
+  type: z.nativeEnum(GameType).optional(),
   statistics: z.array(
     z.union([
       z.string(),
@@ -93,12 +94,7 @@ export const MarketGameSchema = z.object({
   name: z.string().min(1).max(100),
   author: z.string().min(1).max(100),
   author_url: z.string().url().optional(),
-  type: z.enum([
-    "singleplayer",
-    "multiplayer",
-    "singlemultiple",
-    "networkgame",
-  ]),
+  type: z.nativeEnum(GameType),
   summary: z.string().min(1).max(200),
   tags: z.array(z.string().min(1)).optional(),
   iconUrl: z.string().url().optional(),

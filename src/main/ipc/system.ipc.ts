@@ -6,7 +6,6 @@ import { storeService } from "../services/StoreService";
 import { updateService } from "../services/UpdateService";
 import { logger } from "../utils/logger";
 import type { AppSettings } from "../../shared/types";
-import { setCustomGamesDir } from "../utils/appPath";
 import { createFloatBallWindow, destroyFloatBallWindow } from "../window";
 
 export function registerSystemIpc() {
@@ -33,7 +32,6 @@ export function registerSystemIpc() {
     logger.info("[SystemIPC] Saving settings:", settings);
     try {
       storeService.saveSettings(settings);
-      setCustomGamesDir(settings.gameStoragePath || null);
       app.setLoginItemSettings({
         openAtLogin: settings.autoLaunch,
       });
@@ -106,6 +104,79 @@ export function registerSystemIpc() {
     return { path: selectedPath };
   });
 
+  ipcMain.handle(IPC.SYSTEM_SELECT_GAME_STORAGE_PATH_RELAXED, async () => {
+    const { canceled, filePaths } = await dialog.showOpenDialog({
+      title: "Select Game Storage Directory",
+      properties: ["openDirectory", "createDirectory"],
+    });
+    if (canceled || filePaths.length === 0) {
+      return null;
+    }
+    return { path: filePaths[0] };
+  });
+
+  ipcMain.handle(IPC.SYSTEM_GET_DEFAULT_GAMES_MIGRATION_STATUS, async () => {
+    return storeService.getDefaultGamesMigrationStatus();
+  });
+
+  ipcMain.handle(IPC.SYSTEM_GET_GAME_STORAGE_PATHS, async () => {
+    return storeService.getGameStoragePathItems();
+  });
+
+  ipcMain.handle(IPC.SYSTEM_ADD_GAME_STORAGE_PATH, async (_, targetPath: string) => {
+    return storeService.addGameStoragePath(targetPath);
+  });
+
+  ipcMain.handle(IPC.SYSTEM_SET_DEFAULT_GAME_STORAGE_PATH, async (_, targetPath: string) => {
+    return storeService.setDefaultGameStoragePath(targetPath);
+  });
+
+  ipcMain.handle(
+    IPC.SYSTEM_MIGRATE_DEFAULT_GAMES_LIBRARY,
+    async (_, payload?: { targetPath?: string; ignore?: boolean }) => {
+      try {
+        if (payload?.ignore) {
+          storeService.ignoreDefaultGamesMigrationPrompt();
+          return { success: true, ignored: true };
+        }
+
+        if (!payload?.targetPath) {
+          return { success: false, error: "target_path_required" };
+        }
+
+        const result = await storeService.migrateDefaultGamesLibrary(payload.targetPath);
+        return { success: true, ...result };
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+    },
+  );
+
+  ipcMain.handle(
+    IPC.SYSTEM_MIGRATE_GAME_STORAGE_LIBRARY,
+    async (_, payload?: { sourcePath?: string; targetPath?: string }) => {
+      try {
+        if (!payload?.sourcePath || !payload?.targetPath) {
+          return { success: false, error: "migration_path_required" };
+        }
+
+        const result = await storeService.migrateGameStorageLibrary(
+          payload.sourcePath,
+          payload.targetPath,
+        );
+        return { success: true, ...result };
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+    },
+  );
+
   ipcMain.handle(IPC.SYSTEM_OPEN_PATH, async (_, targetPath: string) => {
     if (!targetPath || typeof targetPath !== "string") {
       return false;
@@ -125,9 +196,15 @@ export function registerSystemIpc() {
   ipcMain.handle(
     IPC.SYSTEM_REMOVE_GAME_STORAGE_PATH,
     async (_, targetPath: string) => {
-      const result = await storeService.removeGameStoragePath(targetPath);
-      setCustomGamesDir(result.nextStoragePath || null);
-      return result;
+      try {
+        const result = await storeService.removeGameStoragePath(targetPath);
+        return { success: true, ...result };
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
     },
   );
 

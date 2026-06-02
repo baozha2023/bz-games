@@ -1,7 +1,7 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
 import type { GameManifest } from "../../../shared/game-manifest";
-import type { GameRecord, UnlockedAchievement } from "../../../shared/types";
+import type { GameRecord, GameType, UnlockedAchievement } from "../../../shared/types";
 import { useSettingsStore } from "./useSettingsStore";
 import { invalidateGameAssetCache } from "../composables/useImageCache";
 
@@ -50,11 +50,7 @@ export const useGameStore = defineStore("game", () => {
       platformVersion?: string;
       icon?: string;
       cover?: string;
-      type:
-        | "singleplayer"
-        | "multiplayer"
-        | "singlemultiple"
-        | "networkgame";
+      type: GameType;
       minPlayers?: number;
       maxPlayers?: number;
     },

@@ -6,7 +6,6 @@ import { storeService } from "./services/StoreService";
 import { marketService } from "./services/MarketService";
 import { databaseService } from "./services/DatabaseService";
 import { requestInterceptor } from "./services/MarketService";
-import { setCustomGamesDir } from "./utils/appPath";
 
 const gotTheLock = app.requestSingleInstanceLock();
 
@@ -29,7 +28,6 @@ if (!gotTheLock) {
     await storeService.init();
     databaseService.init();
     const settings = storeService.getSettings();
-    setCustomGamesDir(settings.gameStoragePath || null);
     app.setLoginItemSettings({
       openAtLogin: settings.autoLaunch,
     });
@@ -54,6 +52,7 @@ if (!gotTheLock) {
 }
 
 app.on("before-quit", () => {
+  storeService.recordAppClosed();
   databaseService.close();
   markAppQuitting();
 });

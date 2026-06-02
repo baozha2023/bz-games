@@ -238,6 +238,7 @@ import { useGameStore } from '../stores/useGameStore'
 import GameCard from '../components/game/GameCard.vue'
 import GameDeleteModal from '../components/game/GameDeleteModal.vue'
 import { playShatterEffect } from '../utils/deleteEffect'
+import { GameType } from '../../../shared/types'
 
 const { t } = useI18n()
 const gameStore = useGameStore()
@@ -278,21 +279,21 @@ const draftForm = ref({
   web_url: '',
   icon: '',
   cover: '',
-  type: 'singleplayer' as 'singleplayer' | 'multiplayer' | 'singlemultiple' | 'networkgame',
+  type: GameType.Singleplayer as GameType,
   minPlayers: 2,
   maxPlayers: 4
 })
 
 const draftTypeOptions = computed(() => [
-  { label: t('gameDetail.typeSingleplayer'), value: 'singleplayer' },
-  { label: t('gameDetail.typeMultiplayer'), value: 'multiplayer' },
-  { label: t('gameDetail.typeSingleMultiple'), value: 'singlemultiple' },
-  { label: t('gameDetail.typeNetworkGame'), value: 'networkgame' }
+  { label: t('gameDetail.typeSingleplayer'), value: GameType.Singleplayer },
+  { label: t('gameDetail.typeMultiplayer'), value: GameType.Multiplayer },
+  { label: t('gameDetail.typeSingleMultiple'), value: GameType.SingleMultiple },
+  { label: t('gameDetail.typeNetworkGame'), value: GameType.NetworkGame }
 ])
 
 const isUrlEntry = computed(() => draftForm.value.entry.trim().toLowerCase() === 'url')
 const needsMultiplayerConfig = computed(
-  () => draftForm.value.type === 'multiplayer' || draftForm.value.type === 'singlemultiple'
+  () => draftForm.value.type === GameType.Multiplayer || draftForm.value.type === GameType.SingleMultiple
 )
 
 const isRightClickedFavorite = computed(() => {
@@ -578,7 +579,7 @@ const openImportDraftModal = async (sourcePath: string) => {
     web_url: '',
     icon: '',
     cover: '',
-    type: 'singleplayer',
+    type: GameType.Singleplayer,
     minPlayers: 2,
     maxPlayers: 4
   }

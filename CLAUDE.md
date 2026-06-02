@@ -33,9 +33,9 @@
 - 统计系统（支持增量/全量统计模式，游玩时长自动累计）
 - 经济系统（签到、BZ 币、累计游玩时长、头像框解锁与装备）
 - Game API Server（本地 `ws://127.0.0.1`，向游戏进程提供平台能力）
-- 游戏市场（远程发现、详情展示、下载并安装到默认游戏目录，GitHub Release Asset 自动补齐 sha256/size）
+- 游戏市场（远程发现、详情展示、下载并安装到默认游戏库，GitHub Release Asset 自动补齐 sha256/size）
 - 个性化系统（头像框解锁、装备、预览，支持多场景展示）
-- 系统设置（玩家信息、主题、端口、语言、更新、游戏保存路径、GitHub Token）
+- 系统设置（玩家信息、主题、端口、语言、更新、游戏库列表、GitHub Token）
 
 ***
 
@@ -80,7 +80,7 @@ bz-games/
 ├── config.json                           # 本地持久化配置（运行生成）
 ├── db/                                   # SQLite 数据库目录（运行生成）
 │   └── play_sessions.db                  # 游玩会话数据库
-├── games/                                # 默认游戏目录（运行生成）
+├── games/                                # 首次初始化的默认游戏库目录（运行生成，可由用户迁移）
 │   └── <id>/
 │       └── <version>/
 │
@@ -110,7 +110,7 @@ bz-games/
 │   │   │   ├── StoreService.ts            # 本地数据读写与业务数据维护
 │   │   │   └── UpdateService.ts           # 客户端更新检查/下载/安装服务
 │   │   └── utils/
-│   │       ├── appPath.ts                 # 应用根路径与游戏目录路径工具
+│   │       ├── appPath.ts                 # 应用根路径工具
 │   │       ├── fileUtils.ts               # 文件复制等通用文件工具
 │   │       ├── logger.ts                  # 日志输出封装（生产模式下 error 日志自动写入 exe 同级目录的 bz-games-error.log）
 │   │       ├── portUtils.ts               # 可用端口探测工具
@@ -209,13 +209,21 @@ bz-games/
 | **Game API Server**                 | 平台在本机运行的本地 WebSocket 服务（`127.0.0.1`），供游戏进程调用平台能力                               |
 | **游戏市场目录 (Market Directory)**       | 顶层 `market.json` 文件，`sources` 数组列出所有可用市场源，平台一级界面展示                             |
 | **游戏市场索引 (Market Index)**           | 远程 `market.json` 文件（每个市场源仓库中），描述该市场内可展示和可下载的游戏及其版本信息                           |
-| **市场安装包 (Market Package)**          | 市场游戏某个版本对应的下载产物，平台下载后校验并安装到默认游戏目录                                              |
+| **市场安装包 (Market Package)**          | 市场游戏某个版本对应的下载产物，平台下载后校验并安装到默认游戏库                                              |
 | **下载任务 (Download Task)**            | 市场下载安装的一次任务实例，包含状态机、不可变元数据和 AbortController，支持暂停/恢复/取消                         |
 | **下载任务快照 (Download Task Snapshot)** | 暂停或中断时持久化到 `pending-tasks.json` 的进度数据，包含已下载字节数、下载 URL、SHA256 等，用于断点续传恢复        |
 | **断点续传 (Resume Download)**          | 利用 HTTP Range 请求头从上次断点继续下载，服务端不支持时自动降级为全量下载                                    |
 | **bz-config.js**                    | 平台在游戏启动前生成的配置文件（包含端口、Token、玩家信息、房间 ID、`isHost` 与 `isMultiple`），游戏退出时自动删除。 |
 | **内网穿透**                            | 由用户自备（如 SakuraFrp），将 Room Server 本地端口映射到公网地址                                   |
 | **平台 SDK**                          | 未来提供的 npm 包（`bz-launcher-sdk`），封装 Game API Server 调用，供游戏开发者使用                  |
+
+### 4.0 游戏库路径体系
+
+- **游戏库列表**：`settings.gameStorageHistory` 是用户维护的游戏库列表；首次初始化时自动写入 exe 同级 `games/`，避免新用户首次打开即被要求配置路径。
+- **默认游戏库**：`settings.gameStoragePath` 仅表示当前默认项，必须存在于 `gameStorageHistory` 中；设置页不再提供独立“游戏保存路径”输入项。
+- **路径获取边界**：业务模块只能通过 `StoreService.getDefaultGameStoragePath()` / `getGameStoragePath()` 获取默认游戏库，禁止重新引入全局 `getGamesDir()` 或模块级自定义路径缓存。
+- **迁移与删除安全**：迁移游戏库时迁移源游戏库中的全部文件，全部复制成功后删除原游戏库；如果迁移失败，必须提示用户并清空目标目录内已迁移成功的部分数据，但保留目标文件夹本身。若失败原因是文件被占用或锁定，前端只提示“当前有文件正在打开，无法迁移，已回退”，不展示 EBUSY/EPERM 等底层错误。删除游戏库时才判断 `gameId/version/game.json`，只删除可确认的游戏内容并保留用户自行放入的非游戏文件。删除单个游戏时按游戏根目录递归删除，不做 `game.json` 判断。
+- **旧默认库迁移提示**：`settings.lastOpenedAt` 用于判断是否首次打开；非首次打开且游戏库列表中存在 exe 同级 `games/` 时，提示用户迁移或选择不再提醒。提示条件以游戏库列表为准，不依赖是否已安装游戏记录。
 
 ### 4.1 Game Manifest 规范
 
@@ -224,8 +232,7 @@ bz-games/
   ，平台也会正常处理。
 - **详情媒体扩展**：`video` 字段为可选项，指向游戏目录内预览视频（`mp4/webm/ogv/mov/m4v`），仅用于详情页展示。
 - **本地存储加密开关**：`encryptLocalStorage` 为可选布尔字段，仅作用于 Web 游戏 `localStorage` 对应的 `gamedata.json` 持久化。
-- **游戏类型扩展**：`type` 支持 `singleplayer`、`multiplayer`、`singlemultiple`、`networkgame`，其中 `singlemultiple`
-  代表同时支持单人与联机，`networkgame` 代表网页游戏（仅启动网页，不参与房间联机流程）。
+- **游戏类型扩展**：`type` 支持 `singleplayer`、`multiplayer`、`singlemultiple`、`networkgame`，代码实现统一通过 `src/shared/types/game.types.ts` 中的 `GameType` 枚举维护；新增或调整类型时必须先更新该枚举，再同步 Schema、业务判断和 UI 文案。其中 `singlemultiple` 代表同时支持单人与联机，`networkgame` 代表网页游戏（仅启动网页，不参与房间联机流程）。
 - **网页游戏版本豁免**：`networkgame` 类型游戏导入/安装时**忽略 `version` 字段**，仅以 `id` 判断是否已存在。同一 `id` 的网页游戏不可重复导入，若需更新版本请先删除旧版再重新导入。版本号不参与 semver 校验。
 - **远程网页启动**：`entry` 新增 `url` 模式；当 `entry=url` 时，Manifest 必须提供 `web_url`（合法 URL），平台直接打开该网页地址。
 - **作者主页链接**：新增 `author_url` 可选字段（合法 URL），在游戏详情页和市场详情展开卡片的作者名称右侧显示跳转图标（`OpenOutline`），点击后通过默认浏览器打开。市场游戏的 `author_url` 可在 `gameManifest` 中覆盖，未配置时自动继承 Market Game 层级的 `author_url`。
@@ -359,7 +366,7 @@ bz-games/
 - **一致性校验**：平台安装前校验下载包的 `size`、`game.json.id`、`game.json.version`。`sha256` 仅在校验值存在时才执行比对；若未提供 sha256，平台会跳过哈希校验。`size` 为 GitHub Release 直链时可由平台下载阶段自动补齐。`game.json.platformVersion` 使用 `semver` 做语义化兼容性检查（支持 string 和 tuple 两种 manifest 格式），**不做字符串直接比对**。
 - **安全约束**：压缩包内不得出现绝对路径、盘符路径或 `../` 路径穿越条目；发现后直接拒绝安装。
 - **覆盖策略**：若本地已存在相同 `id + version`，默认视为"已安装"，不重复覆盖；后续若要支持"重新安装"，需单独增加明确交互。**网页游戏（`networkgame`）仅以 `id` 判断**，同一 `id` 不可重复导入，若需更新请先删除旧版。
-- **落盘路径**：市场安装目标目录优先使用当前设置中的 `gameStoragePath`；若未设置，则回退到应用根目录下的默认 `games/` 目录。
+- **落盘路径**：市场安装目标目录必须通过 `StoreService.getDefaultGameStoragePath()` 获取当前默认游戏库；若列表为空，`StoreService.getSettings()` 会初始化 exe 同级 `games/` 作为首个游戏库。
 
 #### 市场任务状态与错误码类型
 
@@ -566,6 +573,8 @@ interface AppSettings {
     ignoredUpdateVersion?: string;
     gameStoragePath?: string;
     gameStorageHistory?: string[];
+    lastOpenedAt?: number;
+    ignoreDefaultGamesMigrationPrompt?: boolean;
     githubToken?: string;
     chatWindowBounds?: { x: number; y: number; width: number; height: number };
     chatInputHeight?: number;
@@ -804,15 +813,15 @@ interface AppSettings {
 - **卸载数据清理**：`installer.nsh` 的 `customUnInstall` 钩子在卸载时清理 `%APPDATA%\BZ-Games` 目录，确保卸载后无残留数据。
 - **仅 Windows**：`installer.nsh` 为 NSIS 专用脚本，仅对 Windows 平台打包生效，不影响 macOS/Linux 构建。
 
-### 6.1.2 游戏保存路径管理
+### 6.1.2 游戏库列表管理
 
 - **空目录约束**：`system:selectGameStoragePath` 通过 `fs.readdirSync` 检查所选目录是否为空。若非空，返回
   `{ path, error: "directory_not_empty" }`，由前端通过 `dialog.warning()` 弹出友好提示（使用三语 i18n
-  文案），阻止选择。防止未来卸载时误删该目录中的其他文件。
-- **精确清理**：`system:removeGameStoragePath` 删除保存路径时，仅删除路径下含 `game.json` 清单的一级子目录（
-  `removeEmptyGameDirs`），不删除存储根目录下的其他文件或子目录。避免用户将游戏库目录与其他用途文件混放时误删数据。
-- **单层检测**：`removeEmptyGameDirs` 仅检查存储根目录的一级子目录，不递归检测嵌套目录。符合"游戏库根目录 → gameId 子目录 →
-  version 子目录"的标准目录结构。
+  文案），阻止选择。防止未来迁移或删除时误处理用户自有文件。
+- **默认项约束**：默认游戏库由 `settings.gameStoragePath` 表示，且必须存在于 `settings.gameStorageHistory`；设置页仅维护“游戏库列表”，不再提供独立保存路径输入项。
+- **精确清理**：`system:removeGameStoragePath` 删除游戏库时，仅删除标准结构 `gameId/version` 下存在 `game.json` 的版本目录，并在游戏根目录或库根目录为空时再删除空目录。
+- **迁移语义**：迁移游戏库不做游戏内容判断，而是复制源游戏库中的全部文件；复制全部成功后删除原游戏库并更新游戏记录和游戏库列表。迁移失败时主进程返回结构化错误，并删除目标目录中已复制的部分数据，避免残留半迁移目录。
+- **单游戏删除**：`game:remove` 删除单个游戏时沿用游戏根目录递归删除策略，不通过 `game.json` 二次确认。
 
 ### 6.2 IPC 接口清单
 
@@ -836,7 +845,7 @@ interface AppSettings {
 - `market:getSources`：拉取并解析市场目录（含 sources 列表）。
 - `market:getIndex`：拉取并解析指定市场源的远程游戏市场索引。
 - `market:getCachedImage`：按需下载远程图片并返回 base64 Data URL，缓存 1 小时。供 `<CachedImg>` 组件使用。
-- `market:downloadAndInstall`：下载指定市场游戏版本、执行完整性校验并安装到默认游戏目录。支持断点续传（HTTP
+- `market:downloadAndInstall`：下载指定市场游戏版本、执行完整性校验并安装到默认游戏库。支持断点续传（HTTP
   Range），服务端不支持时自动降级为全量下载。
 - `market:getTaskState`：获取市场下载/安装任务状态与进度。
 - `market:cancelTask`：取消指定市场下载/安装任务（含已暂停和中断的任务）。
@@ -867,10 +876,16 @@ interface AppSettings {
 - `system:saveSettings`：保存应用设置并应用相关系统行为。
 - `system:savePartialSettings`：保存部分应用设置（合并写入，不会覆盖未传入的字段）。
 - `system:uploadAvatar`：选择并处理玩家头像。
-- `system:selectGameStoragePath`：弹窗选择默认游戏保存路径。返回 `{ path: string }` 或
+- `system:selectGameStoragePath`：弹窗选择新的游戏库路径。返回 `{ path: string }` 或
   `{ path: string; error: "directory_not_empty" }`，要求所选目录为空（防止卸载时误删其他文件），若非空则由前端弹出友好提示。
+- `system:selectGameStoragePathRelaxed`：弹窗选择迁移目标路径，路径合法性和空目录约束由主进程迁移逻辑再次校验。
+- `system:getGameStoragePaths`：返回游戏库列表及默认项标记。
+- `system:addGameStoragePath`：添加新的空游戏库目录。
+- `system:setDefaultGameStoragePath`：将游戏库列表中的指定路径设为默认游戏库。
+- `system:migrateDefaultGamesLibrary`：迁移 exe 同级默认 `games/` 中的全部文件并同步已记录游戏版本路径，支持“不再提醒”。
+- `system:migrateGameStorageLibrary`：迁移任意已配置游戏库中的全部文件并同步游戏库列表；失败时返回结构化错误并清理目标目录中的部分迁移数据。
 - `system:openPath`：在系统文件管理器中打开路径。
-- `system:removeGameStoragePath`：删除保存路径及其内部已导入游戏数据。仅删除含 `game.json` 清单的一级子目录，不删除存储根目录下的其他文件或子目录。
+- `system:removeGameStoragePath`：删除游戏库列表项及其内部已导入游戏数据。仅删除标准 `gameId/version/game.json` 可确认的游戏版本目录，不删除存储根目录下的用户自有文件或子目录。
 - `system:uninstall`：卸载客户端。先检查 `uninstall.exe` 存在性，可选删除所有游戏库目录（`deleteGames: boolean`
   ），随后打开系统卸载程序并退出应用。返回 `{ success: boolean; error?: string }`。
 - `system:clearCache`：清除应用 C 盘缓存目录（`Roaming\bz-launcher` 和 `Local\bz-launcher-updater`），逐项删除并静默跳过锁定文件。返回 `{ totalSize: number; clearedSize: number }`。
@@ -918,7 +933,7 @@ interface AppSettings {
 - **市场列表容器**：市场页不应再额外包一层无业务意义的“市场游戏”外层卡片；应直接展示游戏列表项，减少视觉嵌套。
 - **市场展开交互**：市场列表需支持手动展开/收起动画，默认全部收起；已展开项不得因为用户点击其他游戏而自动收回，必须由用户主动收起。展开/收起箭头按钮使用
   `@click.stop` 阻止事件冒泡，避免点击箭头时因父级 div 也绑定了 `@click` 导致双重 toggle。
-- **市场安装目录提示**：市场页需明确提示当前安装目标目录；若用户未设置 `gameStoragePath`，需提示将安装到默认 `games/` 目录。
+- **市场安装目录提示**：市场页需明确提示当前默认游戏库；若游戏库列表为空，应由主进程初始化 exe 同级 `games/` 后再展示。
 - **市场版本状态**：对于已安装版本、当前最新版本、预发布版本，需要在版本列表中展示不同状态标记，避免重复安装或误装测试版。
 - **成就展示**：成就列表支持按游戏版本筛选，支持展开/收起，默认收起。若当前版本无成就，显示空列表。
 - **动态元数据**：游戏详情页切换版本时，应优先展示当前选中版本的元数据（如简介、成就），若为空则直接展示为空，不应回退到最新版本数据。
@@ -970,7 +985,7 @@ interface AppSettings {
 - **设置页卸载入口**：设置页底部（与保存按钮同行，`justify-content: space-between`）提供"卸载客户端"按钮（
   `type="error" secondary`），右侧提供"清除缓存"按钮。点击卸载弹出 NaiveUI 自定义确认弹窗，包含不可撤销的警告文案、是否同时删除所有游戏库目录的勾选项、以及删除路径列表预览。确认后调用
   `system:uninstall` IPC 执行卸载。若处于开发模式或卸载程序不可用，弹出友好提示。
-- **设置页清除缓存入口**（v2.2）：设置页底部"卸载客户端"按钮右侧提供"清除缓存"按钮（`secondary`）。点击后弹出 `n-modal preset="card"` 弹窗（400px），展示确认文案。点击"清除缓存"后启动模拟进度条（200ms 间隔随机递增 5-20%，最高到 90%），同时通过 `system:clearCache` IPC 调用主进程执行实际清理。主进程清理 `AppData\Roaming\bz-launcher` 和 `AppData\Local\bz-launcher-updater` 两个缓存目录，逐项删除并静默跳过锁定文件（`force: true, maxRetries: 3`），返回已清理的空间大小。IPC 完成后进度条跳至 100%，展示释放空间结果。取消/确认按钮统一在弹窗右下角（`#action` slot + `justify="end"`）。
+- **设置页清除缓存入口**（v2.2）：设置页底部"卸载客户端"按钮右侧提供"清除缓存"按钮（`secondary`），旁边提供"迁移游戏库"按钮。点击"清除缓存"后弹出 `n-modal preset="card"` 弹窗（400px），展示确认文案。点击"清除缓存"后启动模拟进度条（200ms 间隔随机递增 5-20%，最高到 90%），同时通过 `system:clearCache` IPC 调用主进程执行实际清理。主进程清理 `AppData\Roaming\bz-launcher` 和 `AppData\Local\bz-launcher-updater` 两个缓存目录，逐项删除并静默跳过锁定文件（`force: true, maxRetries: 3`），返回已清理的空间大小。IPC 完成后进度条跳至 100%，展示释放空间结果。取消/确认按钮统一在弹窗右下角（`#action` slot + `justify="end"`）。
 - **设置页头像预览**：点击设置页头像缩略图（`AvatarWithFrame` 组件，40px），弹出
   `n-modal preset="card"` 模态框，280×280 圆形大图预览（含头像框）；无头像时显示玩家名首字母大字（使用 `--bz-bg-card-placeholder` 和
   `--bz-text-on-placeholder` CSS 变量适配暗/亮主题）。
@@ -980,11 +995,13 @@ interface AppSettings {
 - **GitHub Token 设置**：设置页提供 `githubToken` 字段（`n-input type="password"`，`@copy.prevent` + `@cut.prevent` 防剪贴板泄漏）。填写有效的 GitHub Personal Access Token 后，平台所有 GitHub API 请求自动携带 `Authorization: Bearer <token>`，将 API 限流从 60 次/小时提升至 5000 次/小时（用于 Release Asset 解析）。
 - **设置页数据自检**：设置页需提供"数据自检"按钮，展示 `config.json`、游戏目录、版本路径、Manifest 完整性等检查结果。
 - **更新错误诊断**：更新失败时前端必须展示归类后的错误码文案与技术摘要，避免仅显示底层原始错误。
-- **设置页游戏目录管理**：
-    - 支持维护多游戏保存路径（路径池）。
-    - 当前选择路径仅影响后续新导入游戏，不改动已导入游戏所在目录。
+- **设置页游戏库列表管理**：
+    - 支持维护多个游戏库路径，并为每个项提供默认游戏库切换、打开路径和删除入口。
+    - 默认游戏库仅影响后续新导入或市场下载安装的游戏，不改动已导入游戏所在目录。
+    - 删除游戏库时必须阻止删除最后一个路径，并通过 i18n 展示结构化错误文案。
+    - 迁移游戏库时先选择源游戏库，再选择新的空目录；迁移源目录中的全部文件，成功后删除源目录，并同步更新游戏记录和游戏库列表。
     - 支持展示“当前 + 历史”路径列表、打开路径、删除路径。
-    - 删除路径时会删除该路径目录及其已导入游戏数据，并更新本地记录。
+    - 删除路径时只删除该路径中平台可识别的游戏版本目录，并更新本地记录；用户自行放入的非游戏文件必须保留。
 - **房间管理增强**：
     - Host 可在玩家列表中踢人，被踢玩家收到弹窗并自动离开房间。
     - 被踢玩家在同一房间生命周期内禁止重新加入。

@@ -29,6 +29,8 @@ const defaultSettings: AppSettings = {
   ignoredUpdateVersion: "",
   gameStoragePath: "",
   gameStorageHistory: [],
+  lastOpenedAt: undefined,
+  ignoreDefaultGamesMigrationPrompt: false,
   chatInputHeight: 204,
   downloadFloatBall: true,
 };
@@ -570,27 +572,50 @@ class StoreService {
     }
   }
 
-  private async removeEmptyGameDirs(storageRoot: string): Promise<void> {
-    let entries: fsSync.Dirent[];
+  private async removeManifestGameVersionDirsInStorageRoot(storageRoot: string): Promise<void> {
+    let gameDirs: fsSync.Dirent[];
     try {
-      entries = fsSync.readdirSync(storageRoot, { withFileTypes: true });
+      gameDirs = fsSync.readdirSync(storageRoot, { withFileTypes: true });
     } catch {
       return;
     }
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      const dirPath = path.join(storageRoot, entry.name);
-      if (fsSync.existsSync(path.join(dirPath, "game.json"))) {
-        await fs.rm(dirPath, { recursive: true, force: true });
-        logger.info(`[StoreService] Removed game dir with manifest: ${dirPath}`);
+
+    for (const gameDir of gameDirs) {
+      if (!gameDir.isDirectory()) continue;
+      const gameRoot = path.join(storageRoot, gameDir.name);
+      let versionDirs: fsSync.Dirent[];
+      try {
+        versionDirs = fsSync.readdirSync(gameRoot, { withFileTypes: true });
+      } catch {
+        continue;
       }
+
+      for (const versionDir of versionDirs) {
+        if (!versionDir.isDirectory()) continue;
+        const versionPath = path.join(gameRoot, versionDir.name);
+        if (!fsSync.existsSync(path.join(versionPath, "game.json"))) continue;
+        await fs.rm(versionPath, { recursive: true, force: true });
+        logger.info(`[StoreService] Removed game version directory by manifest: ${versionPath}`);
+      }
+
+      await this.removeDirectoryIfEmpty(gameRoot);
     }
   }
 
-  private async removeGameRootByVersionPath(
-    versionPath: string | undefined,
-    level: "warn" | "error",
-  ): Promise<void> {
+  private async removeDirectoryIfEmpty(dirPath: string): Promise<boolean> {
+    try {
+      const entries = await fs.readdir(dirPath);
+      if (entries.length > 0) return false;
+      await fs.rmdir(dirPath);
+      logger.info(`[StoreService] Removed empty directory: ${dirPath}`);
+      return true;
+    } catch (e) {
+      logger.warn(`[StoreService] Failed to remove empty directory: ${dirPath}`, e);
+      return false;
+    }
+  }
+
+  private async removeGameRootByVersionPath(versionPath: string | undefined): Promise<void> {
     if (!versionPath) return;
     const parentDir = path.dirname(versionPath);
 
@@ -598,8 +623,7 @@ class StoreService {
       await fs.rm(parentDir, { recursive: true, force: true });
       logger.info(`[StoreService] Removed game root directory: ${parentDir}`);
     } catch (e) {
-      const log = level === "error" ? logger.error : logger.warn;
-      log(`[StoreService] Failed to remove game root directory`, e);
+      logger.error(`[StoreService] Failed to remove game root directory`, e);
     }
   }
 
@@ -634,10 +658,7 @@ class StoreService {
     await this.removeVersionDirectories(id, removing);
 
     if (remaining.length === 0) {
-      await this.removeGameRootByVersionPath(
-        game.versions[0]?.path,
-        versions === undefined ? "error" : "warn",
-      );
+      await this.removeGameRootByVersionPath(game.versions[0]?.path);
       const newGames = games.filter((g) => g.id !== id);
       store.set("games", newGames);
       return;
@@ -655,13 +676,29 @@ class StoreService {
 
     const merged = { ...defaultSettings, ...settings };
     const defaultGamesPath = path.join(getAppRoot(), "games");
-    if (!merged.gameStoragePath?.trim()) {
+    let shouldPersist = false;
+
+    if (!merged.gameStorageHistory?.length) {
       merged.gameStoragePath = defaultGamesPath;
+      merged.gameStorageHistory = [defaultGamesPath];
+      shouldPersist = true;
     }
+
+    const previousDefaultPath = merged.gameStoragePath || "";
+    const previousHistory = JSON.stringify(merged.gameStorageHistory || []);
     merged.gameStorageHistory = this.toStorageHistory(
       merged.gameStorageHistory,
-      merged.gameStoragePath,
+      merged.gameStoragePath || "",
     );
+    if (!merged.gameStoragePath?.trim()) {
+      merged.gameStoragePath = merged.gameStorageHistory[0] || defaultGamesPath;
+    }
+    if (
+      previousDefaultPath !== merged.gameStoragePath ||
+      previousHistory !== JSON.stringify(merged.gameStorageHistory)
+    ) {
+      shouldPersist = true;
+    }
 
     if (!merged.playerId) {
       merged.playerId = crypto.randomUUID();
@@ -680,33 +717,59 @@ class StoreService {
         // File not found or not readable, keep default language
       }
 
+      shouldPersist = true;
+    }
+
+    if (shouldPersist) {
       store.set("settings", merged);
     }
 
     return merged;
   }
 
-  getGameStoragePath(): string {
-    const configured = this.getSettings().gameStoragePath?.trim();
-    if (configured) {
-      return configured;
-    }
-    return path.join(getAppRoot(), "games");
+  isFirstOpen(): boolean {
+    return !this.getSettings().lastOpenedAt;
   }
 
-  getGameStorageRoots(): string[] {
+  recordAppClosed(): void {
+    const store = this.getStore();
+    const current = this.getSettings();
+    store.set("settings", {
+      ...current,
+      lastOpenedAt: Date.now(),
+    });
+  }
+
+  getGameStoragePath(): string {
+    return this.getDefaultGameStoragePath();
+  }
+
+  getDefaultGameStoragePath(): string {
     const settings = this.getSettings();
-    const roots = new Set<string>();
-    const defaultRoot = path.join(getAppRoot(), "games");
-    roots.add(defaultRoot);
-    if (settings.gameStoragePath?.trim()) {
-      roots.add(settings.gameStoragePath.trim());
+    const roots = this.getConfiguredGameStoragePaths(settings);
+    const preferred = settings.gameStoragePath?.trim();
+    if (preferred && roots.some((root) => path.resolve(root) === path.resolve(preferred))) {
+      return preferred;
     }
+    const first = roots[0];
+    if (!first) {
+      throw new Error("game_storage_path_not_configured");
+    }
+    return first;
+  }
+
+  private getConfiguredGameStoragePaths(settings = this.getSettings()): string[] {
+    const roots = new Set<string>();
     for (const p of settings.gameStorageHistory || []) {
       if (typeof p === "string" && p.trim()) {
         roots.add(p.trim());
       }
     }
+    return Array.from(roots);
+  }
+
+  getGameStorageRoots(): string[] {
+    const roots = new Set<string>(this.getConfiguredGameStoragePaths());
     for (const game of this.getGamesList()) {
       for (const version of game.versions) {
         if (typeof version.path !== "string" || !version.path.trim()) continue;
@@ -716,8 +779,55 @@ class StoreService {
     return Array.from(roots);
   }
 
-  getAllGameStoragePaths(): string[] {
-    return this.getGameStorageRoots();
+  getGameStoragePathItems(): { path: string; isDefault: boolean }[] {
+    const defaultPath = this.getDefaultGameStoragePath();
+    return this.getConfiguredGameStoragePaths().map((storagePath) => ({
+      path: storagePath,
+      isDefault: path.resolve(storagePath) === path.resolve(defaultPath),
+    }));
+  }
+
+  addGameStoragePath(storagePath: string): AppSettings {
+    const normalizedPath = this.normalizeStoragePath(storagePath);
+    this.ensureStorageDirectoryEmpty(normalizedPath);
+    const store = this.getStore();
+    const current = this.getSettings();
+    const nextHistory = this.toStorageHistory(current.gameStorageHistory, normalizedPath);
+    const nextDefault = current.gameStoragePath?.trim() || normalizedPath;
+    const nextSettings = {
+      ...current,
+      gameStoragePath: nextDefault,
+      gameStorageHistory: nextHistory,
+    };
+    store.set("settings", nextSettings);
+    return nextSettings;
+  }
+
+  setDefaultGameStoragePath(storagePath: string): AppSettings {
+    const normalizedPath = this.normalizeStoragePath(storagePath);
+    const store = this.getStore();
+    const current = this.getSettings();
+    if (!this.getConfiguredGameStoragePaths(current).some((item) => path.resolve(item) === normalizedPath)) {
+      throw new Error("storage_path_not_registered");
+    }
+    const nextHistory = this.toStorageHistory(current.gameStorageHistory, normalizedPath);
+    const nextSettings = {
+      ...current,
+      gameStoragePath: normalizedPath,
+      gameStorageHistory: nextHistory,
+    };
+    store.set("settings", nextSettings);
+    return nextSettings;
+  }
+
+  getGameVersionStoragePath(gameId: string, version: string): string {
+    const targetVersion = version || "latest";
+    const record = this.getGamesList().find((game) => game.id === gameId);
+    const versionRecord = record?.versions.find((item) => item.version === targetVersion);
+    if (versionRecord?.path?.trim()) {
+      return versionRecord.path;
+    }
+    return path.join(this.getDefaultGameStoragePath(), gameId, targetVersion);
   }
 
   private normalizeStoragePath(input: string): string {
@@ -728,12 +838,103 @@ class StoreService {
     return normalized;
   }
 
+  private ensureStorageDirectoryEmpty(storagePath: string): void {
+    if (!fsSync.existsSync(storagePath)) {
+      fsSync.mkdirSync(storagePath, { recursive: true });
+      return;
+    }
+    if (!fsSync.statSync(storagePath).isDirectory()) {
+      throw new Error("storage_path_not_directory");
+    }
+    const entries = fsSync.readdirSync(storagePath);
+    if (entries.length > 0) {
+      throw new Error("directory_not_empty");
+    }
+  }
+
+  private assertMigrationTargetAllowed(sourceRoot: string, targetRoot: string): void {
+    if (sourceRoot === targetRoot) {
+      throw new Error("target_is_source_path");
+    }
+
+    const targetRelativeToSource = path.relative(sourceRoot, targetRoot);
+    if (
+      targetRelativeToSource &&
+      !targetRelativeToSource.startsWith("..") &&
+      !path.isAbsolute(targetRelativeToSource)
+    ) {
+      throw new Error("target_inside_source_path");
+    }
+
+    const sourceRelativeToTarget = path.relative(targetRoot, sourceRoot);
+    if (
+      sourceRelativeToTarget &&
+      !sourceRelativeToTarget.startsWith("..") &&
+      !path.isAbsolute(sourceRelativeToTarget)
+    ) {
+      throw new Error("source_inside_target_path");
+    }
+  }
+
+  private async migrateStorageDirectory(sourceRoot: string, targetRoot: string): Promise<void> {
+    if (!fsSync.existsSync(sourceRoot)) {
+      throw new Error("source_storage_path_not_found");
+    }
+    if (!fsSync.statSync(sourceRoot).isDirectory()) {
+      throw new Error("source_storage_path_not_directory");
+    }
+
+    try {
+      await fs.cp(sourceRoot, targetRoot, { recursive: true, force: true });
+      await fs.rm(sourceRoot, { recursive: true, force: true });
+    } catch (error) {
+      try {
+        await this.clearDirectoryContents(targetRoot);
+      } catch (cleanupError) {
+        logger.warn(
+          `[StoreService] Failed to clean partial migrated storage: ${targetRoot}`,
+          cleanupError,
+        );
+      }
+      if (this.isFileBusyError(error)) {
+        throw new Error("storage_migration_file_busy");
+      }
+      throw error;
+    }
+  }
+
+  private async clearDirectoryContents(dirPath: string): Promise<void> {
+    let entries: fsSync.Dirent[];
+    try {
+      entries = await fs.readdir(dirPath, { withFileTypes: true });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+      throw error;
+    }
+
+    for (const entry of entries) {
+      await fs.rm(path.join(dirPath, entry.name), {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 200,
+      });
+    }
+  }
+
+  private isFileBusyError(error: unknown): boolean {
+    const code = (error as NodeJS.ErrnoException | undefined)?.code;
+    return code === "EBUSY" || code === "EPERM";
+  }
+
   private toStorageHistory(
     currentHistory: string[] | undefined,
     nextPath: string,
   ): string[] {
     const history = new Set<string>();
-    history.add(nextPath);
+    if (nextPath.trim()) {
+      history.add(nextPath.trim());
+    }
     for (const p of currentHistory || []) {
       if (typeof p === "string" && p.trim()) {
         history.add(p.trim());
@@ -746,11 +947,12 @@ class StoreService {
   saveSettings(settings: Partial<AppSettings>): void {
     const store = this.getStore();
     const current = this.getSettings();
-    const nextStoragePath = settings.gameStoragePath?.trim();
-    const finalStoragePath = nextStoragePath || current.gameStoragePath || "";
-    const nextHistory = finalStoragePath
-      ? this.toStorageHistory(current.gameStorageHistory, finalStoragePath)
-      : current.gameStorageHistory || [];
+    const incomingHistory = settings.gameStorageHistory || current.gameStorageHistory || [];
+    const incomingDefault = settings.gameStoragePath?.trim() || current.gameStoragePath || "";
+    const nextHistory = this.toStorageHistory(incomingHistory, incomingDefault);
+    const finalStoragePath = incomingDefault && nextHistory.some((item) => path.resolve(item) === path.resolve(incomingDefault))
+      ? incomingDefault
+      : nextHistory[0] || "";
 
     logger.info(`[StoreService] Updating settings`);
     store.set("settings", {
@@ -759,6 +961,140 @@ class StoreService {
       gameStoragePath: finalStoragePath,
       gameStorageHistory: nextHistory,
     });
+  }
+
+  getDefaultGamesMigrationStatus(): {
+    shouldPrompt: boolean;
+    defaultGamesPath: string;
+  } {
+    const settings = this.getSettings();
+    const defaultGamesPath = path.join(getAppRoot(), "games");
+    const defaultGamesRoot = path.resolve(defaultGamesPath);
+    const hasDefaultGamesStoragePath = this.getConfiguredGameStoragePaths(settings).some(
+      (storagePath) => path.resolve(storagePath) === defaultGamesRoot,
+    );
+
+    return {
+      shouldPrompt:
+        !this.isFirstOpen() &&
+        !settings.ignoreDefaultGamesMigrationPrompt &&
+        hasDefaultGamesStoragePath,
+      defaultGamesPath,
+    };
+  }
+
+  ignoreDefaultGamesMigrationPrompt(): void {
+    const store = this.getStore();
+    const current = this.getSettings();
+    store.set("settings", {
+      ...current,
+      ignoreDefaultGamesMigrationPrompt: true,
+    });
+  }
+
+  async migrateDefaultGamesLibrary(targetRoot: string): Promise<{
+    migratedGames: number;
+    migratedVersions: number;
+    gameStoragePath: string;
+  }> {
+    const normalizedTarget = this.normalizeStoragePath(targetRoot);
+    const defaultRoot = path.resolve(path.join(getAppRoot(), "games"));
+
+    if (normalizedTarget === defaultRoot) {
+      throw new Error("target_is_default_games_path");
+    }
+    return this.migrateGameStorageLibraryCore(defaultRoot, normalizedTarget, {
+      forceDefault: true,
+      ignoreDefaultGamesMigrationPrompt: true,
+    });
+  }
+
+  async migrateGameStorageLibrary(sourceRoot: string, targetRoot: string): Promise<{
+    migratedGames: number;
+    migratedVersions: number;
+    gameStoragePath: string;
+  }> {
+    const normalizedSource = this.normalizeStoragePath(sourceRoot);
+    const normalizedTarget = this.normalizeStoragePath(targetRoot);
+    const configuredPaths = this.getConfiguredGameStoragePaths();
+    const isRegisteredPath = configuredPaths.some(
+      (item) => path.resolve(item) === normalizedSource,
+    );
+    if (!isRegisteredPath) {
+      throw new Error("storage_path_not_registered");
+    }
+    return this.migrateGameStorageLibraryCore(normalizedSource, normalizedTarget);
+  }
+
+  private async migrateGameStorageLibraryCore(
+    normalizedSource: string,
+    normalizedTarget: string,
+    options: {
+      forceDefault?: boolean;
+      ignoreDefaultGamesMigrationPrompt?: boolean;
+    } = {},
+  ): Promise<{
+    migratedGames: number;
+    migratedVersions: number;
+    gameStoragePath: string;
+  }> {
+    this.assertMigrationTargetAllowed(normalizedSource, normalizedTarget);
+    this.ensureStorageDirectoryEmpty(normalizedTarget);
+
+    await fs.mkdir(normalizedTarget, { recursive: true });
+
+    const store = this.getStore();
+    const games = this.getGamesList();
+    let migratedGames = 0;
+    let migratedVersions = 0;
+
+    for (const game of games) {
+      const versionCount = game.versions.filter((version) => {
+        if (!version.path?.trim()) return false;
+        return path.resolve(path.dirname(path.dirname(version.path))) === normalizedSource;
+      }).length;
+      if (versionCount > 0) {
+        migratedGames += 1;
+        migratedVersions += versionCount;
+      }
+    }
+
+    await this.migrateStorageDirectory(normalizedSource, normalizedTarget);
+
+    for (const game of games) {
+      for (const version of game.versions) {
+        if (!version.path?.trim()) continue;
+        const versionRoot = path.resolve(path.dirname(path.dirname(version.path)));
+        if (versionRoot !== normalizedSource) continue;
+        version.path = path.join(normalizedTarget, game.id, version.version);
+      }
+    }
+
+    const currentSettings = this.getSettings();
+    const currentPath = currentSettings.gameStoragePath?.trim() || "";
+    const nextStoragePath = options.forceDefault || (currentPath && path.resolve(currentPath) === normalizedSource)
+      ? normalizedTarget
+      : currentPath;
+    const filteredHistory = (currentSettings.gameStorageHistory || [])
+      .map((item) => item.trim())
+      .filter((item) => item && path.resolve(item) !== normalizedSource);
+    const nextHistory = this.toStorageHistory(filteredHistory, normalizedTarget);
+
+    store.set("games", games);
+    store.set("settings", {
+      ...currentSettings,
+      gameStoragePath: nextStoragePath,
+      gameStorageHistory: nextHistory,
+      ignoreDefaultGamesMigrationPrompt: options.ignoreDefaultGamesMigrationPrompt
+        ? true
+        : currentSettings.ignoreDefaultGamesMigrationPrompt,
+    });
+
+    return {
+      migratedGames,
+      migratedVersions,
+      gameStoragePath: nextStoragePath,
+    };
   }
 
   performIgnoreUpdateVersion(version: string): void {
@@ -777,6 +1113,18 @@ class StoreService {
   }> {
     const normalizedTarget = this.normalizeStoragePath(storagePath);
     const store = this.getStore();
+    const currentSettings = this.getSettings();
+    const configuredPaths = this.getConfiguredGameStoragePaths(currentSettings);
+    const isRegisteredPath = configuredPaths.some(
+      (item) => path.resolve(item) === normalizedTarget,
+    );
+    if (!isRegisteredPath) {
+      throw new Error("storage_path_not_registered");
+    }
+    if (configuredPaths.length <= 1) {
+      throw new Error("cannot_remove_last_storage_path");
+    }
+
     const games = this.getGamesList();
     const nextGames: GameRecord[] = [];
     let removedGames = 0;
@@ -784,6 +1132,7 @@ class StoreService {
 
     for (const game of games) {
       const versionsInPath = game.versions.filter((version) => {
+        if (!version.path?.trim()) return false;
         const versionRoot = path.dirname(path.dirname(version.path));
         return path.resolve(versionRoot) === normalizedTarget;
       });
@@ -808,26 +1157,17 @@ class StoreService {
       nextGames.push(game);
     }
 
-    try {
-      await this.removeEmptyGameDirs(normalizedTarget);
-      logger.info(`[StoreService] Cleaned up empty game dirs in: ${normalizedTarget}`);
-    } catch (e) {
-      logger.warn(
-        `[StoreService] Failed to clean up storage path directory: ${normalizedTarget}`,
-        e,
-      );
-    }
+    await this.removeManifestGameVersionDirsInStorageRoot(normalizedTarget);
+    await this.removeDirectoryIfEmpty(normalizedTarget);
 
-    const currentSettings = this.getSettings();
     const filteredHistory = (currentSettings.gameStorageHistory || [])
       .map((item) => item.trim())
       .filter((item) => item && path.resolve(item) !== normalizedTarget);
 
-    const defaultRoot = path.join(getAppRoot(), "games");
-    const currentPath = currentSettings.gameStoragePath?.trim() || defaultRoot;
+    const currentPath = currentSettings.gameStoragePath?.trim() || "";
     const nextStoragePath =
-      path.resolve(currentPath) === normalizedTarget
-        ? filteredHistory[0] || defaultRoot
+      currentPath && path.resolve(currentPath) === normalizedTarget
+        ? filteredHistory[0] || ""
         : currentPath;
     const nextHistory = this.toStorageHistory(filteredHistory, nextStoragePath);
 

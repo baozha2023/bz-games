@@ -1,8 +1,6 @@
 import { app } from "electron";
 import path from "path";
 
-let customGamesDir: string | null = null;
-
 /**
  * Get the application root directory.
  * - Development: The project root directory (where package.json is).
@@ -20,15 +18,4 @@ export function getAppRoot(): string {
     return getExecutableDir();
   }
   return process.cwd();
-}
-
-export function setCustomGamesDir(dir: string | null): void {
-  customGamesDir = dir?.trim() || null;
-}
-
-export function getGamesDir(): string {
-  if (customGamesDir) {
-    return customGamesDir;
-  }
-  return path.join(getAppRoot(), "games");
 }

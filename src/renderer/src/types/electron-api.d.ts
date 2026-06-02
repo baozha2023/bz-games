@@ -7,6 +7,7 @@ import type {
   RoomEvent,
   GameRecord,
   MarketDirectory,
+  GameType,
   MarketIndex,
   MarketTaskEvent,
   MarketTaskState,
@@ -59,11 +60,7 @@ declare global {
             platformVersion?: string;
             icon?: string;
             cover?: string;
-            type:
-              | "singleplayer"
-              | "multiplayer"
-              | "singlemultiple"
-              | "networkgame";
+            type: GameType;
             minPlayers?: number;
             maxPlayers?: number;
           },
@@ -154,12 +151,37 @@ declare global {
         uploadAvatar: () => Promise<string | null>;
         getAvatarFrameImage: (fileName: string) => Promise<string | null>;
         selectGameStoragePath: () => Promise<{ path: string; error?: string } | null>;
+        selectGameStoragePathRelaxed: () => Promise<{ path: string } | null>;
+        getDefaultGamesMigrationStatus: () => Promise<{
+          shouldPrompt: boolean;
+          defaultGamesPath: string;
+        }>;
+        getGameStoragePaths: () => Promise<Array<{ path: string; isDefault: boolean }>>;
+        addGameStoragePath: (targetPath: string) => Promise<AppSettings>;
+        setDefaultGameStoragePath: (targetPath: string) => Promise<AppSettings>;
+        migrateDefaultGamesLibrary: (payload: { targetPath?: string; ignore?: boolean }) => Promise<{
+          success: boolean;
+          ignored?: boolean;
+          migratedGames?: number;
+          migratedVersions?: number;
+          gameStoragePath?: string;
+          error?: string;
+        }>;
+        migrateGameStorageLibrary: (payload: { sourcePath: string; targetPath: string }) => Promise<{
+          success: boolean;
+          migratedGames?: number;
+          migratedVersions?: number;
+          gameStoragePath?: string;
+          error?: string;
+        }>;
         openPath: (targetPath: string) => Promise<boolean>;
         openUrl: (url: string) => Promise<boolean>;
         removeGameStoragePath: (targetPath: string) => Promise<{
+          success: boolean;
           removedGames: number;
           removedVersions: number;
           nextStoragePath: string;
+          error?: string;
         }>;
         dataHealthCheck: () => Promise<DataHealthReport>;
         getUpdateStatus: () => Promise<UpdateState>;

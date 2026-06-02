@@ -65,11 +65,18 @@ export interface AppSettings {
   ignoredUpdateVersion?: string;
   gameStoragePath?: string;
   gameStorageHistory?: string[];
+  lastOpenedAt?: number;
   githubToken?: string;
   chatWindowBounds?: { x: number; y: number; width: number; height: number };
   chatInputHeight?: number;
   downloadFloatBall?: boolean;
   floatBallPosition?: { x: number; y: number };
+  ignoreDefaultGamesMigrationPrompt?: boolean;
+}
+
+export interface DefaultGamesMigrationStatus {
+  shouldPrompt: boolean;
+  defaultGamesPath: string;
 }
 
 export type UpdateErrorCode =

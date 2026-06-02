@@ -10,18 +10,22 @@ import {
   IPC,
 } from "../../shared/ipc-channels";
 import { GameManifestSchema, type GameManifest } from "../../shared/game-manifest";
-import type {
-  DownloadTaskSnapshot,
-  FloatBallProgress,
-  MarketErrorCode,
-  MarketDirectory,
-  MarketGame,
-  MarketGameVersion,
-  MarketIndex,
-  MarketTaskState,
-  MarketTaskStatus,
+import {
+  GameType,
+  isGitHubReleaseUrl,
+  MarketDirectorySchema,
+  MarketGameSchema,
+  MarketGameVersionSchema,
+  type DownloadTaskSnapshot,
+  type FloatBallProgress,
+  type MarketErrorCode,
+  type MarketDirectory,
+  type MarketGame,
+  type MarketGameVersion,
+  type MarketIndex,
+  type MarketTaskState,
+  type MarketTaskStatus,
 } from "../../shared/types";
-import { isGitHubReleaseUrl, MarketDirectorySchema, MarketGameSchema, MarketGameVersionSchema } from "../../shared/types";
 import { z } from "zod";
 import { GameLoader } from "./GameLoader";
 import { logger } from "../utils/logger";
@@ -619,7 +623,7 @@ export class MarketService {
     }
 
     const record = await GameLoader.getGameRecord(snap.gameId);
-    if (game.type === "networkgame") {
+    if (game.type === GameType.NetworkGame) {
       if (record) {
         await this.removeSnapshot(taskId);
         throw new Error("market_version_already_installed");
@@ -721,7 +725,7 @@ export class MarketService {
     }
 
     const record = await GameLoader.getGameRecord(gameId);
-    if (game.type === "networkgame") {
+    if (game.type === GameType.NetworkGame) {
       if (record) {
         throw new Error("market_version_already_installed");
       }
@@ -845,7 +849,7 @@ export class MarketService {
       name: z.string().min(1).max(100),
       author: z.string().min(1).max(100),
       author_url: z.string().url().optional(),
-      type: z.enum(["singleplayer", "multiplayer", "singlemultiple", "networkgame"]),
+      type: z.nativeEnum(GameType),
       summary: z.string().min(1).max(200),
       tags: z.array(z.string().min(1)).optional(),
       iconUrl: z.string().url().optional(),
@@ -1242,7 +1246,7 @@ export class MarketService {
     }
 
     const type = gm.type || game.type;
-    const needsMultiplayer = type === "multiplayer" || type === "singlemultiple";
+    const needsMultiplayer = type === GameType.Multiplayer || type === GameType.SingleMultiple;
 
     return GameManifestSchema.parse({
       id: game.id,
@@ -1305,7 +1309,7 @@ export class MarketService {
       if (manifest.id !== game.id) {
         throw new Error("market_manifest_mismatch");
       }
-      if (game.type !== "networkgame" && manifest.version !== targetVersion.version) {
+      if (game.type !== GameType.NetworkGame && manifest.version !== targetVersion.version) {
         throw new Error("market_manifest_mismatch");
       }
 

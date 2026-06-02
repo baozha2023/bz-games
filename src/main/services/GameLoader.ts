@@ -7,10 +7,9 @@ import {
   type GameManifest,
 } from "../../shared/game-manifest";
 import { storeService } from "./StoreService";
-import type { GameRecord } from "../../shared/types";
+import { GameType, type GameRecord } from "../../shared/types";
 import { logger } from "../utils/logger";
 import { copyFolderRecursiveSync } from "../utils/fileUtils";
-import { getGamesDir } from "../utils/appPath";
 
 export interface ImportPreparationResult {
   sourcePath: string;
@@ -32,7 +31,7 @@ export interface ManualManifestDraft {
   platformVersion?: string;
   icon?: string;
   cover?: string;
-  type: "singleplayer" | "multiplayer" | "singlemultiple" | "networkgame";
+  type: GameType;
   minPlayers?: number;
   maxPlayers?: number;
 }
@@ -92,7 +91,7 @@ export class GameLoader {
       this.verifyManifestVersion(manifest);
       this.checkPlatformVersion(manifest);
       this.checkEntryFile(resolvedSourcePath, manifest);
-      if (manifest.type === "networkgame") {
+      if (manifest.type === GameType.NetworkGame) {
         await this.ensureGameIdNotExists(manifest.id);
       } else {
         await this.ensureVersionNotExists(manifest.id, manifest.version);
@@ -164,7 +163,7 @@ export class GameLoader {
       this.checkOptionalFile(resolvedSourcePath, manifest.icon, "iconNotFound");
       this.checkOptionalFile(resolvedSourcePath, manifest.cover, "coverNotFound");
       await this.ensureGameIdNotExists(manifest.id);
-      if (manifest.type !== "networkgame") {
+      if (manifest.type !== GameType.NetworkGame) {
         await this.ensureVersionNotExists(manifest.id, manifest.version);
       }
 
@@ -280,7 +279,7 @@ export class GameLoader {
     const minPlayers = draft.minPlayers || 2;
     const maxPlayers = draft.maxPlayers || Math.max(minPlayers, 4);
     const needsMultiplayerConfig =
-      draft.type === "multiplayer" || draft.type === "singlemultiple";
+      draft.type === GameType.Multiplayer || draft.type === GameType.SingleMultiple;
     if (
       needsMultiplayerConfig &&
       (!Number.isInteger(minPlayers) ||
@@ -313,7 +312,7 @@ export class GameLoader {
   }
 
   private static verifyManifestVersion(manifest: GameManifest): void {
-    if (manifest.type === "networkgame") return;
+    if (manifest.type === GameType.NetworkGame) return;
     if (!semver.valid(manifest.version)) {
       throw { code: "versionInvalid" };
     }
@@ -398,7 +397,7 @@ export class GameLoader {
     sourcePath: string,
     manifest: GameManifest,
   ): string {
-    const gamesDir = getGamesDir();
+    const gamesDir = storeService.getGameStoragePath();
     if (!fs.existsSync(gamesDir)) {
       fs.mkdirSync(gamesDir, { recursive: true });
     }
@@ -428,7 +427,7 @@ export class GameLoader {
     const games = await storeService.getGames();
     let record = games.find((g) => g.id === manifest.id);
 
-    if (manifest.type === "networkgame") {
+    if (manifest.type === GameType.NetworkGame) {
       const versionRecord = {
         version: manifest.version,
         path: targetPath,

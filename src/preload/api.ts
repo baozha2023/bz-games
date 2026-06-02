@@ -9,6 +9,7 @@ import type {
   MarketIndex,
   MarketTaskEvent,
   MarketTaskState,
+  GameType,
   RoomEvent,
   UpdateState,
 } from "../shared/types";
@@ -31,11 +32,7 @@ export const electronAPI = {
         platformVersion?: string;
         icon?: string;
         cover?: string;
-        type:
-          | "singleplayer"
-          | "multiplayer"
-          | "singlemultiple"
-          | "networkgame";
+        type: GameType;
         minPlayers?: number;
         maxPlayers?: number;
       },
@@ -181,6 +178,20 @@ export const electronAPI = {
       ipcRenderer.invoke(IPC.SYSTEM_GET_AVATAR_FRAME_IMAGE, fileName),
     selectGameStoragePath: () =>
       ipcRenderer.invoke(IPC.SYSTEM_SELECT_GAME_STORAGE_PATH),
+    selectGameStoragePathRelaxed: () =>
+      ipcRenderer.invoke(IPC.SYSTEM_SELECT_GAME_STORAGE_PATH_RELAXED),
+    getDefaultGamesMigrationStatus: () =>
+      ipcRenderer.invoke(IPC.SYSTEM_GET_DEFAULT_GAMES_MIGRATION_STATUS),
+    getGameStoragePaths: () =>
+      ipcRenderer.invoke(IPC.SYSTEM_GET_GAME_STORAGE_PATHS),
+    addGameStoragePath: (targetPath: string) =>
+      ipcRenderer.invoke(IPC.SYSTEM_ADD_GAME_STORAGE_PATH, targetPath),
+    setDefaultGameStoragePath: (targetPath: string) =>
+      ipcRenderer.invoke(IPC.SYSTEM_SET_DEFAULT_GAME_STORAGE_PATH, targetPath),
+    migrateDefaultGamesLibrary: (payload: { targetPath?: string; ignore?: boolean }) =>
+      ipcRenderer.invoke(IPC.SYSTEM_MIGRATE_DEFAULT_GAMES_LIBRARY, payload),
+    migrateGameStorageLibrary: (payload: { sourcePath: string; targetPath: string }) =>
+      ipcRenderer.invoke(IPC.SYSTEM_MIGRATE_GAME_STORAGE_LIBRARY, payload),
     openPath: (targetPath: string) =>
       ipcRenderer.invoke(IPC.SYSTEM_OPEN_PATH, targetPath),
     openUrl: (url: string) =>
