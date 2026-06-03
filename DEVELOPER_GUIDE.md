@@ -182,7 +182,7 @@ Web 游戏通常使用 `localStorage` 或 `IndexedDB` 存储本地数据（如�
 游戏与平台通过 WebSocket 进行通信。
 
 * **地址**: `ws://127.0.0.1:{apiPort}`
-* **格式**: JSON
+* **格式**: JSON 控制帧；v2 实时通信额外支持二进制帧
 * **超时**: 连接建立后，必须在 **60秒** 内发送 `auth` 请求，否则会被断开。
 
 ### 4.1 消息结构
@@ -233,6 +233,36 @@ Web 游戏通常使用 `localStorage` 或 `IndexedDB` 存储本地数据（如�
 }
 ```
 
+**v2 二进制帧 (Binary Frame) - 高频实时数据:**
+
+v2 支持直接通过 WebSocket binary frame 发送原始二进制数据，避免将 `ArrayBuffer` 转为 Base64 字符串造成体积膨胀和额外编解码成本。二进制帧仅用于 `message.send`、`message.broadcast`、`message.publish`，认证、订阅、成就、统计等控制接口仍使用 JSON。
+
+二进制帧结构如下：
+
+```text
+4 bytes big-endian headerLength
+headerLength bytes UTF-8 JSON header
+remaining bytes binary body
+```
+
+其中 `header` 是普通 Game API request，但 `payload.data` 不需要携带二进制主体：
+
+```json
+{
+  "id": "uuid-req-1",
+  "type": "request",
+  "action": "message.publish",
+  "payload": {
+    "channel": "state",
+    "seq": 1024,
+    "delivery": "latest",
+    "contentType": "binary"
+  }
+}
+```
+
+平台向目标游戏推送二进制消息时，也使用同样的二进制帧结构，`header` 是 `event.message`，`payload` 会包含 `contentType: "binary"`、`binary: true`、`byteLength` 等元数据，原始字节位于 binary body。
+
 ---
 
 ## 五、 API 接口详解
@@ -258,6 +288,14 @@ Web 游戏通常使用 `localStorage` 或 `IndexedDB` 存储本地数据（如�
     }
   }
   ```
+
+默认认证为 v1 通信协议。若游戏需要使用 v2 增强通信能力，必须在认证时显式声明协议版本：
+
+```json
+{ "token": "从配置或环境变量获取的 Token", "protocolVersion": 2 }
+```
+
+v2 认证成功后，响应中会包含 `protocolVersion: 2` 与 `capabilities`。未声明 `protocolVersion: 2` 的老游戏会进入 v1，不能使用 `message.publish`、`message.batch`、频道订阅或二进制帧。
 
 #### `game.ready` (就绪)
 
@@ -356,7 +394,7 @@ v1 API 是所有联机游戏的最低接入层，适合聊天、回合制、棋�
 
 #### v2 增强通信 API
 
-v2 API 是 v1 的增强层，适合高频同步、频道过滤、可靠确认等场景。游戏可通过 `auth` 响应中的 `capabilities` 判断平台是否支持这些能力。
+v2 API 是独立于 v1 的增强通信协议，适合高频同步、频道过滤、可靠确认等场景。游戏必须在 `auth.payload` 中传入 `protocolVersion: 2` 才会进入 v2；否则默认进入 v1。
 
 ##### `auth.capabilities` (能力声明)
 
@@ -365,18 +403,21 @@ v2 平台会在 `auth` 成功响应中返回能力声明：
 ```json
 {
   "success": true,
+  "protocolVersion": 2,
   "player": { "id": "p-123", "name": "PlayerName", "isHost": true },
   "capabilities": {
     "protocolVersion": 2,
     "protocolName": "bz-game-api-v2",
     "maxMessageBytes": 65536,
+    "maxBinaryBytes": 262144,
     "maxBatchMessages": 32,
     "supportsPublish": true,
     "supportsBatch": true,
     "supportsAck": true,
     "supportsSubscribe": true,
     "supportsDelivery": true,
-    "supportsBinaryContentType": true
+    "supportsBinaryContentType": true,
+    "supportsBinaryFrames": true
   }
 }
 ```
@@ -423,6 +464,68 @@ v2 在 v1 单播基础上增加目标在线校验：目标玩家必须仍在当�
 * **限制**：
     - 单批最多 32 条消息。
     - 单条本地 API 消息最大约 64KB，超过会被平台丢弃或拒绝。
+
+##### 二进制实时消息
+
+当游戏需要发送位置快照、输入帧、压缩状态、音频片段等高频或大体积数据时，推荐使用 v2 二进制帧。平台会在本地 Game API、房主 Room Server、客机 Room Client 之间保持原始二进制 body 中继，不会把 body 转成 Base64。
+
+* **适用接口**: `message.send`、`message.broadcast`、`message.publish`
+* **单帧限制**: `auth.capabilities.maxBinaryBytes`
+* **元数据补齐**: 平台会自动补齐 `senderId`、`messageId`、`sentAt`、`contentType: "binary"`、`binary: true`、`byteLength`
+* **投递语义**: 仍支持 `delivery`、`channel`、`seq`、`reliable`，可与 JSON 消息混用
+
+发送示例：
+
+```javascript
+function encodeBinaryFrame(header, body) {
+  const headerBytes = new TextEncoder().encode(JSON.stringify(header));
+  const buffer = new ArrayBuffer(4 + headerBytes.byteLength + body.byteLength);
+  const view = new DataView(buffer);
+  view.setUint32(0, headerBytes.byteLength, false);
+  new Uint8Array(buffer, 4, headerBytes.byteLength).set(headerBytes);
+  new Uint8Array(buffer, 4 + headerBytes.byteLength).set(new Uint8Array(body));
+  return buffer;
+}
+
+const body = new Float32Array([10, 20, 0.5]).buffer;
+ws.send(encodeBinaryFrame({
+  id: crypto.randomUUID(),
+  type: "request",
+  action: "message.publish",
+  payload: {
+    channel: "state",
+    seq: 1024,
+    delivery: "latest",
+    contentType: "binary"
+  }
+}, body));
+```
+
+接收示例：
+
+```javascript
+function decodeBinaryFrame(buffer) {
+  const view = new DataView(buffer);
+  const headerLength = view.getUint32(0, false);
+  const headerBytes = new Uint8Array(buffer, 4, headerLength);
+  const header = JSON.parse(new TextDecoder().decode(headerBytes));
+  const body = buffer.slice(4 + headerLength);
+  return { header, body };
+}
+
+ws.binaryType = "arraybuffer";
+ws.onmessage = (event) => {
+  if (event.data instanceof ArrayBuffer) {
+    const { header, body } = decodeBinaryFrame(event.data);
+    if (header.action === "event.message" && header.payload.contentType === "binary") {
+      const values = new Float32Array(body);
+      console.log(header.payload.senderId, values);
+    }
+    return;
+  }
+  const msg = JSON.parse(event.data);
+};
+```
 
 ##### `message.subscribe` / `message.unsubscribe` (频道订阅)
 
@@ -554,7 +657,7 @@ v2 通信 API 的失败响应会优先返回结构化错误，旧游戏仍可按
 
 #### v2 事件增强
 
-v2 的 `event.message` 会在 v1 字段基础上额外携带 `channel`、`mode`、`delivery`、`contentType`、`seq` 等字段。高频同步建议使用 `channel` 区分状态流、输入流、聊天流，并使用 `seq` 判断乱序或跳帧。
+v2 的 `event.message` 会在 v1 字段基础上额外携带 `channel`、`mode`、`delivery`、`contentType`、`seq` 等字段。高频同步建议使用 `channel` 区分状态流、输入流、聊天流，并使用 `seq` 判断乱序或跳帧。若 `event.message` 以二进制帧推送，则 JSON header 中的 `payload` 只包含元数据，原始字节位于 binary body。
 
 ##### `event.messageAck` (可靠消息确认)
 

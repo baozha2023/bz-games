@@ -43,16 +43,17 @@ export interface GameApiResponse {
   error?: string | GameApiError;
 }
 
-export type GameApiErrorCode =
-  | "UNKNOWN_ACTION"
-  | "INVALID_PAYLOAD"
-  | "NOT_IN_ROOM"
-  | "MISSING_TARGET"
-  | "TARGET_SELF"
-  | "TARGET_NOT_FOUND"
-  | "MESSAGE_TOO_LARGE"
-  | "BATCH_TOO_LARGE"
-  | "EMPTY_BATCH";
+export enum GameApiErrorCode {
+  UnknownAction = "UNKNOWN_ACTION",
+  InvalidPayload = "INVALID_PAYLOAD",
+  NotInRoom = "NOT_IN_ROOM",
+  MissingTarget = "MISSING_TARGET",
+  TargetSelf = "TARGET_SELF",
+  TargetNotFound = "TARGET_NOT_FOUND",
+  MessageTooLarge = "MESSAGE_TOO_LARGE",
+  BatchTooLarge = "BATCH_TOO_LARGE",
+  EmptyBatch = "EMPTY_BATCH",
+}
 
 export interface GameApiError {
   code: GameApiErrorCode;
@@ -64,6 +65,7 @@ export interface GameApiCapabilities {
   protocolVersion: 2;
   protocolName: "bz-game-api-v2";
   maxMessageBytes: number;
+  maxBinaryBytes: number;
   maxBatchMessages: number;
   supportsPublish: boolean;
   supportsBatch: boolean;
@@ -71,6 +73,7 @@ export interface GameApiCapabilities {
   supportsSubscribe: boolean;
   supportsDelivery: boolean;
   supportsBinaryContentType: boolean;
+  supportsBinaryFrames: boolean;
 }
 
 export interface GameApiEvent {

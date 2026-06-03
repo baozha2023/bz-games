@@ -32,7 +32,7 @@
 - 成就系统（列表、解锁、系统通知、红点提示）
 - 统计系统（支持增量/全量统计模式，游玩时长自动累计）
 - 经济系统（签到、BZ 币、累计游玩时长、头像框解锁与装备）
-- Game API Server（本地 `ws://127.0.0.1`，向游戏进程提供平台能力）
+- Game API Server（本地 `ws://127.0.0.1`，向游戏进程提供平台能力，v2 支持 JSON 控制帧与二进制实时帧）
 - 游戏市场（远程发现、详情展示、下载并安装到默认游戏库，GitHub Release Asset 自动补齐 sha256/size）
 - 个性化系统（头像框解锁、装备、预览，支持多场景展示）
 - 系统设置（玩家信息、主题、端口、语言、更新、游戏库列表、GitHub Token）
@@ -55,7 +55,7 @@
 | 本地数据存储       | electron-store              | v10+ (ESM)，需在构建中配置 include     |
 | SQLite 数据存储      | better-sqlite3              | 游玩会话记录、日历热力图数据查询            |
 | 客户端更新        | electron-updater            | GitHub Releases 作为更新源          |
-| WebSocket 服务 | ws                          | <br />                         |
+| WebSocket 服务 | ws                          | Game API、Room Server、Room Client 均基于 WebSocket，v2 高频通信支持原始二进制帧 |
 | 版本比较         | semver                      | 用于平台版本与游戏版本兼容性检查               |
 | ZIP/7Z 解压     | 7zip-bin (7za)              | 通过 `child_process.spawn` 调用，统一处理 .zip 和 .7z |
 | 目标平台         | Windows 10/11 x64           | <br />                         |
@@ -69,6 +69,8 @@ bz-games/
 ├── CLAUDE.md                             # AI 开发上下文与项目规范文档
 ├── README.md                             # 项目简介与基础使用说明
 ├── DEVELOPER_GUIDE.md                    # 面向游戏接入方的开发接入指南
+├── docs/
+│   └── GAME_API_V1_V2_REFERENCE.md        # Game API v1/v2 接口说明文档
 ├── build/
 │   └── installer.nsh                     # NSIS 自定义安装/卸载钩子（多语言支持）
 ├── package.json                          # 依赖、脚本与打包发布配置
@@ -99,16 +101,19 @@ bz-games/
 │   │   │   └── statistics.ipc.ts          # 统计数据查询 IPC 处理器
 │   │   ├── services/
 │   │   │   ├── DatabaseService.ts         # SQLite 游玩会话记录与日历热力图数据查询
-│   │   │   ├── GameApiServer.ts           # 游戏进程本地 WebSocket API 服务
+│   │   │   ├── GameApiServer.ts           # 游戏进程本地 WebSocket API 服务（连接认证、协议路由、事件分发）
 │   │   │   ├── GameEnvironment.ts         # 游戏启动环境变量、bz-config.js 生成与清理
 │   │   │   ├── GameLoader.ts              # 游戏导入、校验、扫描与记录同步
 │   │   │   ├── GameManager.ts             # 游戏进程启动/停止与生命周期管理
 │   │   │   ├── MarketService.ts           # 游戏市场索引拉取、下载、校验、解压与安装
 │   │   │   ├── NotificationService.ts     # 系统通知窗口服务
-│   │   │   ├── RoomClient.ts              # 客机房间连接与重连管理
-│   │   │   ├── RoomServer.ts              # 房主房间服务与消息中继
+│   │   │   ├── RoomClient.ts              # 客机房间连接与重连管理（支持 v2 二进制帧中继）
+│   │   │   ├── RoomCommunicationConstants.ts # 房间通信常量集中管理（消息大小、心跳间隔、超时等）
+│   │   │   ├── RoomServer.ts              # 房主房间服务与消息中继（支持 v2 二进制帧中继、ordered delivery）
 │   │   │   ├── StoreService.ts            # 本地数据读写与业务数据维护
-│   │   │   └── UpdateService.ts           # 客户端更新检查/下载/安装服务
+│   │   │   ├── UpdateService.ts           # 客户端更新检查/下载/安装服务
+│   │   │   ├── V1GameApiProtocol.ts       # v1 游戏 API 通信协议（send/broadcast）
+│   │   │   └── V2GameApiProtocol.ts       # v2 游戏 API 增强通信协议（send/broadcast/publish/batch/subscribe + 二进制帧）
 │   │   └── utils/
 │   │       ├── appPath.ts                 # 应用根路径工具
 │   │       ├── fileUtils.ts               # 文件复制等通用文件工具
@@ -179,6 +184,7 @@ bz-games/
 │   └── shared/
 │       ├── avatar-frames.ts                # 头像框定义数据（8款头像框的解锁条件与图片文件名）
 │       ├── constants.ts                    # 平台常量（CDN/OSS/GitHub 基础 URL、Referer 值）
+│       ├── binary-protocol.ts              # v2 二进制帧编码/解码工具（4字节头长度 + JSON header + binary body）
 │       ├── game-manifest.ts                # Game Manifest Schema 与类型
 │       ├── ipc-channels.ts                 # IPC 频道常量定义
 │       └── types/
@@ -206,7 +212,8 @@ bz-games/
 | **玩家 (Player)**                     | 加入房间的用户（含房主自身）                                                                 |
 | **Room Server**                     | 房主平台运行的 WebSocket 服务器，经内网穿透工具对外暴露                                              |
 | **Room Client**                     | 非房主玩家的平台连接 Room Server 的 WebSocket 客户端                                         |
-| **Game API Server**                 | 平台在本机运行的本地 WebSocket 服务（`127.0.0.1`），供游戏进程调用平台能力                               |
+| **Game API Server**                 | 平台在本机运行的本地 WebSocket 服务（`127.0.0.1`），供游戏进程调用平台能力；控制面走 JSON，v2 高频实时数据可走二进制帧 |
+| **v2 二进制帧**                       | 高频实时通信帧格式：4字节 big-endian header 长度 + UTF-8 JSON header + 原始 binary body，仅用于 `message.send` / `message.broadcast` / `message.publish` |
 | **游戏市场目录 (Market Directory)**       | 顶层 `market.json` 文件，`sources` 数组列出所有可用市场源，平台一级界面展示                             |
 | **游戏市场索引 (Market Index)**           | 远程 `market.json` 文件（每个市场源仓库中），描述该市场内可展示和可下载的游戏及其版本信息                           |
 | **市场安装包 (Market Package)**          | 市场游戏某个版本对应的下载产物，平台下载后校验并安装到默认游戏库                                              |

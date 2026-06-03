@@ -13,9 +13,15 @@ import type {
 } from "../../shared/types";
 import { storeService } from "./StoreService";
 import { GameLoader } from "./GameLoader";
+import {
+  decodeBinaryEnvelope,
+  encodeBinaryEnvelope,
+} from "../../shared/binary-protocol";
+import { RoomCommunicationConstants } from "./RoomCommunicationConstants";
+
+type BinaryRelayPayload = GameRelayPayload & { binaryData?: Buffer };
 
 export class RoomServer {
-  private static readonly MAX_RECENT_MESSAGE_IDS = 1000;
   private wss: WebSocketServer | null = null;
   public room: RoomInfo | null = null;
   private playerConnections: Map<string, WebSocket> = new Map();
@@ -58,7 +64,7 @@ export class RoomServer {
       if (this.room) {
         this.broadcast({ type: "room:disbanded", payload: {} });
       }
-      await new Promise((resolve) => setTimeout(resolve, 120));
+      await new Promise((resolve) => setTimeout(resolve, RoomCommunicationConstants.ROOM_DISBAND_BROADCAST_DELAY_MS));
 
       await new Promise<void>((resolve) => {
         this.wss?.close(() => {
@@ -77,7 +83,7 @@ export class RoomServer {
 
   broadcast(msg: RoomMessage, exclude?: WebSocket) {
     if (!this.wss) return;
-    const data = JSON.stringify(msg);
+    const data = this.serializeRoomMessage(msg);
     this.wss.clients.forEach((c) => {
       if (c !== exclude && c.readyState === WebSocket.OPEN) {
         c.send(data);
@@ -161,9 +167,10 @@ export class RoomServer {
       (ws as any).isAlive = true;
     });
 
-    ws.on("message", (data: string) => {
+    ws.on("message", (data, isBinary) => {
       try {
-        const msg = JSON.parse(data.toString()) as RoomMessage;
+        const msg = this.deserializeRoomMessage(data, isBinary);
+        if (!msg) return;
         this.handleMessage(ws, msg);
       } catch {}
     });
@@ -184,7 +191,7 @@ export class RoomServer {
         ws.isAlive = false;
         ws.ping();
       });
-    }, 30000);
+    }, RoomCommunicationConstants.ROOM_HEARTBEAT_INTERVAL_MS);
   }
 
   private handleMessage(ws: WebSocket, msg: RoomMessage) {
@@ -417,7 +424,7 @@ export class RoomServer {
 
   private relayMessage(
     senderId: string | undefined,
-    payload: GameRelayPayload,
+    payload: BinaryRelayPayload,
   ) {
     if (!this.room) return;
     if (!senderId) return;
@@ -428,7 +435,6 @@ export class RoomServer {
     if (!shouldRelay) return;
     const targetPlayerId = this.resolveTargetPlayerId(normalizedPayload);
     if (!targetPlayerId) {
-      this.relayBroadcast(senderId, normalizedPayload);
       return;
     }
     if (senderId && targetPlayerId === senderId) return;
@@ -451,7 +457,7 @@ export class RoomServer {
 
   private relayBroadcast(
     senderId: string | undefined,
-    payload: GameRelayPayload,
+    payload: BinaryRelayPayload,
   ) {
     if (!this.room) return;
     if (!senderId) return;
@@ -525,7 +531,7 @@ export class RoomServer {
     if (!messageId || this.recentMessageIdSet.has(messageId)) return;
     this.recentMessageIds.push(messageId);
     this.recentMessageIdSet.add(messageId);
-    while (this.recentMessageIds.length > RoomServer.MAX_RECENT_MESSAGE_IDS) {
+    while (this.recentMessageIds.length > RoomCommunicationConstants.MAX_RECENT_MESSAGE_IDS) {
       const expired = this.recentMessageIds.shift();
       if (expired) this.recentMessageIdSet.delete(expired);
     }
@@ -546,14 +552,14 @@ export class RoomServer {
 
   public relayMessageFromLocal(
     senderId: string,
-    payload: GameRelayPayload,
+    payload: BinaryRelayPayload,
   ) {
     this.relayMessage(senderId, payload);
   }
 
   public relayBroadcastFromLocal(
     senderId: string,
-    payload: GameRelayPayload,
+    payload: BinaryRelayPayload,
   ) {
     this.relayBroadcast(senderId, payload);
   }
@@ -569,8 +575,70 @@ export class RoomServer {
 
   private send(ws: WebSocket, msg: RoomMessage) {
     if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify(msg));
+      ws.send(this.serializeRoomMessage(msg));
     }
+  }
+
+  private serializeRoomMessage(msg: RoomMessage): string | Buffer {
+    const payload = msg.payload as BinaryRelayPayload;
+    if (!payload?.binaryData) return JSON.stringify(msg);
+    return encodeBinaryEnvelope(
+      {
+        ...msg,
+        payload: this.stripBinaryData(payload),
+      },
+      payload.binaryData,
+    );
+  }
+
+  private deserializeRoomMessage(data: WebSocket.RawData, isBinary: boolean): RoomMessage | null {
+    const rawData = this.rawDataToBuffer(data);
+    if (rawData.byteLength > RoomCommunicationConstants.MAX_ROOM_MESSAGE_BYTES) return null;
+    if (!isBinary) {
+      const msg = JSON.parse(rawData.toString()) as RoomMessage;
+      if (this.isGameRelayMessageType(msg.type) && rawData.byteLength > RoomCommunicationConstants.MAX_GAME_RELAY_MESSAGE_BYTES) {
+        return null;
+      }
+      return msg;
+    }
+    const decoded = decodeBinaryEnvelope<RoomMessage>(rawData);
+    if (!decoded) return null;
+    if (
+      this.isGameRelayMessageType(decoded.header.type) &&
+      rawData.byteLength > RoomCommunicationConstants.MAX_GAME_RELAY_MESSAGE_BYTES
+    ) {
+      return null;
+    }
+    const payload = decoded.header.payload as BinaryRelayPayload;
+    return {
+      ...decoded.header,
+      payload: {
+        ...payload,
+        binary: true,
+        byteLength: decoded.body.byteLength,
+        binaryData: decoded.body,
+      },
+    };
+  }
+
+  private rawDataToBuffer(data: WebSocket.RawData): Buffer {
+    if (Buffer.isBuffer(data)) return data;
+    if (data instanceof ArrayBuffer) return Buffer.from(data);
+    return Buffer.concat(data);
+  }
+
+  private isGameRelayMessageType(type: RoomMessage["type"]) {
+    return (
+      type === "game:message:relay" ||
+      type === "game:broadcast:relay" ||
+      type === "game:message:ack"
+    );
+  }
+
+  private stripBinaryData(payload: BinaryRelayPayload): GameRelayPayload {
+    const clone = { ...payload };
+    delete clone.binaryData;
+    return clone;
   }
 }
 

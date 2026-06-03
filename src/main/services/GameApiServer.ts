@@ -12,6 +12,7 @@ import type {
   GameApiCapabilities,
   GameApiError,
 } from "../../shared/types";
+import { GameApiErrorCode } from "../../shared/types";
 import { storeService } from "./StoreService";
 import { roomServer } from "./RoomServer";
 import { roomClient } from "./RoomClient";
@@ -19,11 +20,15 @@ import { mainWindow } from "../window";
 import { IPC } from "../../shared/ipc-channels";
 import { notificationService } from "./NotificationService";
 import { GameLoader } from "./GameLoader";
+import { encodeBinaryEnvelope } from "../../shared/binary-protocol";
+import { V1GameApiProtocol } from "./V1GameApiProtocol";
+import { V2GameApiProtocol } from "./V2GameApiProtocol";
+import { RoomCommunicationConstants } from "./RoomCommunicationConstants";
+
+type BinaryRelayPayload = GameRelayPayload & { binaryData?: Buffer };
+type GameApiProtocolVersion = 1 | 2;
 
 export class GameApiServer {
-  private static readonly MAX_MESSAGE_BYTES = 64 * 1024;
-  private static readonly MAX_BATCH_MESSAGES = 32;
-  private static readonly CHANNEL_ALL = "*";
   private wss: WebSocketServer | null = null;
   private port = 0;
   private token = "";
@@ -34,6 +39,9 @@ export class GameApiServer {
   private shutdownTimer: NodeJS.Timeout | null = null;
   private startupTimer: NodeJS.Timeout | null = null;
   private channelSubscriptions: Map<WebSocket, Set<string>> = new Map();
+  private protocolVersions: Map<WebSocket, GameApiProtocolVersion> = new Map();
+  private readonly v1Protocol = new V1GameApiProtocol(this);
+  private readonly v2Protocol = new V2GameApiProtocol(this);
 
   setOnStop(callback: () => void) {
     this.onStopCallback = callback;
@@ -64,7 +72,7 @@ export class GameApiServer {
       if (this.clients.size === 0) {
         this.triggerStop();
       }
-    }, 60000);
+    }, RoomCommunicationConstants.GAME_API_STARTUP_TIMEOUT_MS);
   }
 
   private handleConnection(ws: WebSocket) {
@@ -77,19 +85,24 @@ export class GameApiServer {
       if (!authenticated) {
         ws.close();
       }
-    }, 60000);
+    }, RoomCommunicationConstants.GAME_API_AUTH_TIMEOUT_MS);
 
     ws.on("ping", () => ws.pong());
 
-    ws.on("message", (data: string) => {
+    ws.on("message", (data, isBinary) => {
       try {
+        if (isBinary) {
+          if (!authenticated) return;
+          this.handleBinaryRequest(ws, Buffer.from(data as Buffer));
+          return;
+        }
         const rawData = data.toString();
-        if (Buffer.byteLength(rawData, "utf8") > GameApiServer.MAX_MESSAGE_BYTES) {
+        if (Buffer.byteLength(rawData, "utf8") > RoomCommunicationConstants.GAME_API_MAX_MESSAGE_BYTES) {
           if (authenticated) {
             this.sendError(ws, "", "message.publish", {
-              code: "MESSAGE_TOO_LARGE",
+              code: GameApiErrorCode.MessageTooLarge,
               message: "Message payload is too large",
-              detail: { maxMessageBytes: GameApiServer.MAX_MESSAGE_BYTES },
+              detail: { maxMessageBytes: RoomCommunicationConstants.GAME_API_MAX_MESSAGE_BYTES },
             });
           }
           return;
@@ -107,7 +120,7 @@ export class GameApiServer {
       } catch {
         if (authenticated) {
           this.sendError(ws, "", "message.publish", {
-            code: "INVALID_PAYLOAD",
+            code: GameApiErrorCode.InvalidPayload,
             message: "Invalid message payload",
           });
         }
@@ -115,8 +128,10 @@ export class GameApiServer {
     });
 
     ws.on("close", () => {
+      clearTimeout(authTimeout);
       this.clients.delete(ws);
       this.channelSubscriptions.delete(ws);
+      this.protocolVersions.delete(ws);
       if (this.clients.size === 0) {
         this.scheduleShutdown();
       }
@@ -126,17 +141,21 @@ export class GameApiServer {
   private handleAuth(ws: WebSocket, msg: GameApiMessage): boolean {
     if (msg.type !== "request" || msg.action !== "auth") return false;
 
-    const payload = msg.payload as { token?: string } | undefined;
+    const payload = msg.payload as { token?: string; protocolVersion?: number } | undefined;
     if (payload?.token === this.token) {
       const settings = storeService.getSettings();
       const isHost = roomServer.room?.hostId === settings.playerId;
+      const protocolVersion: GameApiProtocolVersion =
+        payload.protocolVersion === 2 ? 2 : 1;
 
       this.sendResponse(ws, msg.id, "auth", {
         success: true,
         player: { id: settings.playerId, name: settings.playerName, isHost },
-        capabilities: this.getCapabilities(),
+        protocolVersion,
+        capabilities: protocolVersion === 2 ? this.getCapabilities() : undefined,
       });
-      this.channelSubscriptions.set(ws, new Set([GameApiServer.CHANNEL_ALL]));
+      this.channelSubscriptions.set(ws, new Set([RoomCommunicationConstants.GAME_API_CHANNEL_ALL]));
+      this.protocolVersions.set(ws, protocolVersion);
       return true;
     } else {
       ws.close();
@@ -160,13 +179,9 @@ export class GameApiServer {
         case "message.broadcast":
         case "message.publish":
         case "message.batch":
-          this.handleMessage(ws, req);
-          break;
         case "message.subscribe":
-          this.handleSubscribe(ws, req);
-          break;
         case "message.unsubscribe":
-          this.handleUnsubscribe(ws, req);
+          this.getProtocol(ws).handleRequest(ws, req);
           break;
         case "game.end":
           this.handleGameEnd(ws, req);
@@ -182,14 +197,14 @@ export class GameApiServer {
           break;
         default:
           this.sendError(ws, req.id, req.action, {
-            code: "UNKNOWN_ACTION",
+            code: GameApiErrorCode.UnknownAction,
             message: "Unknown action",
             detail: { action: req.action },
           });
       }
     } catch (error) {
       this.sendError(ws, req.id, req.action, {
-        code: "INVALID_PAYLOAD",
+        code: GameApiErrorCode.InvalidPayload,
         message: (error as Error).message,
       });
     }
@@ -218,253 +233,44 @@ export class GameApiServer {
     return {
       protocolVersion: 2,
       protocolName: "bz-game-api-v2",
-      maxMessageBytes: GameApiServer.MAX_MESSAGE_BYTES,
-      maxBatchMessages: GameApiServer.MAX_BATCH_MESSAGES,
+      maxMessageBytes: RoomCommunicationConstants.GAME_API_MAX_MESSAGE_BYTES,
+      maxBinaryBytes: RoomCommunicationConstants.GAME_API_MAX_BINARY_BYTES,
+      maxBatchMessages: RoomCommunicationConstants.GAME_API_MAX_BATCH_MESSAGES,
       supportsPublish: true,
       supportsBatch: true,
       supportsAck: true,
       supportsSubscribe: true,
       supportsDelivery: true,
       supportsBinaryContentType: true,
+      supportsBinaryFrames: true,
     };
   }
 
-  private handleMessage(ws: WebSocket, req: GameApiRequest) {
-    const settings = storeService.getSettings();
-    const isHost = roomServer.room?.hostId === settings.playerId;
-    const room = isHost ? roomServer.room : roomClient.room;
-    if (!room) {
-      this.sendError(ws, req.id, req.action, {
-        code: "NOT_IN_ROOM",
-        message: "Not in room",
+  private getProtocolVersion(ws: WebSocket): GameApiProtocolVersion {
+    return this.protocolVersions.get(ws) || 1;
+  }
+
+  private getProtocol(ws: WebSocket): V1GameApiProtocol | V2GameApiProtocol {
+    return this.getProtocolVersion(ws) === 2 ? this.v2Protocol : this.v1Protocol;
+  }
+
+  private handleBinaryRequest(ws: WebSocket, data: Buffer) {
+    if (this.getProtocolVersion(ws) !== 2) {
+      this.sendError(ws, "", "message.publish", {
+        code: GameApiErrorCode.InvalidPayload,
+        message: "Binary frames require protocolVersion: 2 in auth payload",
       });
       return;
     }
-    if (req.action === "message.batch") {
-      this.handleMessageBatch(ws, req, settings.playerId, isHost);
-      return;
-    }
-
-    const relayType =
-      req.action === "message.send" ? "game:message:relay" : "game:broadcast:relay";
-    const relayPayload = this.normalizeRelayPayload(
-      req.payload,
-      settings.playerId,
-      req.action === "message.send"
-        ? "direct"
-        : req.action === "message.publish"
-          ? "publish"
-          : "broadcast",
-    );
-    if (req.action === "message.send") {
-      const targetPlayerId = this.resolveTargetPlayerId(relayPayload);
-      if (!targetPlayerId) {
-        this.sendError(
-          ws,
-          req.id,
-          req.action,
-          {
-            code: "MISSING_TARGET",
-            message: "Missing target player id (to/targetPlayerId)",
-          },
-        );
-        return;
-      }
-      if (targetPlayerId === settings.playerId) {
-        this.sendError(ws, req.id, req.action, {
-          code: "TARGET_SELF",
-          message: "Cannot send to self",
-          detail: { targetPlayerId },
-        });
-        return;
-      }
-      if (!this.hasPlayer(room, targetPlayerId)) {
-        this.sendError(ws, req.id, req.action, {
-          code: "TARGET_NOT_FOUND",
-          message: "Target player is not in room",
-          detail: { targetPlayerId },
-        });
-        return;
-      }
-    }
-
-    this.relayMessage(isHost, settings.playerId, relayType, relayPayload);
-    this.sendResponse(ws, req.id, req.action, { success: true });
+    this.v2Protocol.handleBinaryRequest(ws, data);
   }
 
-  private handleMessageBatch(
-    ws: WebSocket,
-    req: GameApiRequest,
-    senderId: string,
-    isHost: boolean,
-  ) {
-    const rawPayload =
-      req.payload && typeof req.payload === "object"
-        ? (req.payload as Record<string, unknown>)
-        : {};
-    const messages = Array.isArray(rawPayload.messages) ? rawPayload.messages : [];
-    if (messages.length === 0) {
-      this.sendError(ws, req.id, req.action, {
-        code: "EMPTY_BATCH",
-        message: "Missing messages",
-      });
-      return;
-    }
-    if (messages.length > GameApiServer.MAX_BATCH_MESSAGES) {
-      this.sendError(ws, req.id, req.action, {
-        code: "BATCH_TOO_LARGE",
-        message: "Too many messages in batch",
-        detail: { maxBatchMessages: GameApiServer.MAX_BATCH_MESSAGES },
-      });
-      return;
-    }
-
-    const relayPayload = this.normalizeRelayPayload(
-      {
-        ...rawPayload,
-        messages: messages.map((message) =>
-          this.normalizeRelayPayload(message, senderId, "batch"),
-        ),
-      },
-      senderId,
-      "batch",
-    );
-    this.relayMessage(isHost, senderId, "game:broadcast:relay", relayPayload);
-    this.sendResponse(ws, req.id, req.action, { success: true });
+  public getClientChannels(ws: WebSocket) {
+    return this.channelSubscriptions.get(ws) || new Set<string>();
   }
 
-  private normalizeRelayPayload(
-    payload: unknown,
-    senderId: string,
-    mode: GameRelayPayload["mode"],
-  ): GameRelayPayload {
-    const rawPayload =
-      payload && typeof payload === "object"
-        ? (payload as Record<string, unknown>)
-        : {};
-    const messageId =
-      typeof rawPayload.messageId === "string"
-        ? rawPayload.messageId
-        : crypto.randomUUID();
-    const sentAt =
-      typeof rawPayload.sentAt === "number" ? rawPayload.sentAt : Date.now();
-    const channel =
-      typeof rawPayload.channel === "string" && rawPayload.channel.length > 0
-        ? rawPayload.channel
-        : "default";
-    const seq = typeof rawPayload.seq === "number" ? rawPayload.seq : undefined;
-    const delivery = this.normalizeDelivery(rawPayload.delivery);
-    const contentType = this.normalizeContentType(rawPayload.contentType, rawPayload.data);
-    const normalized: GameRelayPayload = {
-      ...rawPayload,
-      senderId,
-      messageId,
-      sentAt,
-      channel,
-      seq,
-      mode,
-      delivery,
-      contentType,
-    };
-    if (mode !== "batch") {
-      delete normalized.messages;
-    }
-    return normalized;
-  }
-
-  private normalizeDelivery(delivery: unknown) {
-    if (
-      delivery === "reliable" ||
-      delivery === "ordered" ||
-      delivery === "latest" ||
-      delivery === "unreliable"
-    ) {
-      return delivery;
-    }
-    return "reliable";
-  }
-
-  private normalizeContentType(contentType: unknown, data: unknown) {
-    if (
-      contentType === "text" ||
-      contentType === "audio" ||
-      contentType === "binary" ||
-      contentType === "json"
-    ) {
-      return contentType;
-    }
-    if (typeof data === "string" && this.looksLikeBase64(data)) return "binary";
-    return "json";
-  }
-
-  private looksLikeBase64(value: string) {
-    return value.length > 32 && /^[A-Za-z0-9+/]+={0,2}$/.test(value);
-  }
-
-  private relayMessage(
-    isHost: boolean,
-    senderId: string,
-    relayType: "game:message:relay" | "game:broadcast:relay",
-    relayPayload: GameRelayPayload,
-  ) {
-    if (isHost) {
-      if (relayType === "game:broadcast:relay") {
-        roomServer.relayBroadcastFromLocal(senderId, relayPayload);
-      } else {
-        roomServer.relayMessageFromLocal(senderId, relayPayload);
-      }
-    } else {
-      roomClient.send({ type: relayType, payload: relayPayload });
-    }
-  }
-
-  private hasPlayer(room: { players?: Array<{ id: string }> }, playerId: string) {
-    return Array.isArray(room.players) && room.players.some((player) => player.id === playerId);
-  }
-
-  private handleSubscribe(ws: WebSocket, req: GameApiRequest) {
-    const channels = this.getChannelsFromPayload(req.payload);
-    if (!channels.length) {
-      this.sendError(ws, req.id, req.action, {
-        code: "INVALID_PAYLOAD",
-        message: "Missing channels",
-      });
-      return;
-    }
-    const current = this.channelSubscriptions.get(ws) || new Set<string>();
-    channels.forEach((channel) => current.add(channel));
-    this.channelSubscriptions.set(ws, current);
-    this.sendResponse(ws, req.id, req.action, { success: true, channels: Array.from(current) });
-  }
-
-  private handleUnsubscribe(ws: WebSocket, req: GameApiRequest) {
-    const channels = this.getChannelsFromPayload(req.payload);
-    const current = this.channelSubscriptions.get(ws) || new Set<string>();
-    channels.forEach((channel) => current.delete(channel));
-    if (current.size === 0) current.add(GameApiServer.CHANNEL_ALL);
-    this.channelSubscriptions.set(ws, current);
-    this.sendResponse(ws, req.id, req.action, { success: true, channels: Array.from(current) });
-  }
-
-  private getChannelsFromPayload(payload: unknown) {
-    const rawPayload =
-      payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
-    const channels = Array.isArray(rawPayload.channels)
-      ? rawPayload.channels
-      : [rawPayload.channel];
-    return channels.filter(
-      (channel): channel is string => typeof channel === "string" && channel.length > 0,
-    );
-  }
-
-  private resolveTargetPlayerId(payload: Record<string, unknown>) {
-    const to = payload.to;
-    const targetPlayerId = payload.targetPlayerId;
-    if (typeof to === "string" && to.length > 0) return to;
-    if (typeof targetPlayerId === "string" && targetPlayerId.length > 0) {
-      return targetPlayerId;
-    }
-    return undefined;
+  public setClientChannels(ws: WebSocket, channels: Set<string>) {
+    this.channelSubscriptions.set(ws, channels);
   }
 
   private handleGameEnd(ws: WebSocket, req: GameApiRequest) {
@@ -554,7 +360,7 @@ export class GameApiServer {
       this.sendResponse(ws, req.id, "stats.report", { success: true });
     } else {
       this.sendError(ws, req.id, "stats.report", {
-        code: "INVALID_PAYLOAD",
+        code: GameApiErrorCode.InvalidPayload,
         message: "Invalid payload",
       });
     }
@@ -593,7 +399,7 @@ export class GameApiServer {
     } catch {}
   }
 
-  private sendResponse(
+  public sendResponse(
     ws: WebSocket,
     id: string,
     action: string,
@@ -602,14 +408,14 @@ export class GameApiServer {
     ws.send(JSON.stringify({ id, type: "response", action, payload }));
   }
 
-  private sendError(ws: WebSocket, id: string, action: string, error: string | GameApiError) {
+  public sendError(ws: WebSocket, id: string, action: string, error: string | GameApiError) {
     ws.send(JSON.stringify({ id, type: "response", action, error }));
   }
 
   private scheduleShutdown() {
     this.shutdownTimer = setTimeout(() => {
       this.triggerStop();
-    }, 5000);
+    }, RoomCommunicationConstants.GAME_API_SHUTDOWN_DELAY_MS);
   }
 
   private clearTimers() {
@@ -631,6 +437,8 @@ export class GameApiServer {
     this.clearTimers();
     this.clients.forEach((c) => c.close());
     this.clients.clear();
+    this.channelSubscriptions.clear();
+    this.protocolVersions.clear();
 
     if (this.wss) {
       this.wss.close();
@@ -639,17 +447,22 @@ export class GameApiServer {
   }
 
   sendEvent(action: GameApiEventAction, payload: any) {
-    const msg = JSON.stringify({
+    const binaryBody = (payload as BinaryRelayPayload)?.binaryData;
+    const event = {
       id: crypto.randomUUID(),
       type: "event",
       action,
-      payload,
-    });
+      payload: this.stripBinaryData(payload),
+    };
+    const jsonMsg = JSON.stringify(event);
     this.clients.forEach((c) => {
       if (
         c.readyState === WebSocket.OPEN &&
         (action !== "event.message" || this.shouldDeliverEventToClient(c, payload as GameRelayPayload))
       ) {
+        const msg = binaryBody && this.getProtocolVersion(c) === 2
+          ? encodeBinaryEnvelope(event, binaryBody)
+          : jsonMsg;
         c.send(msg);
       }
     });
@@ -663,6 +476,13 @@ export class GameApiServer {
     if (!payload.channel) return true;
     const channels = this.channelSubscriptions.get(ws);
     if (!channels || channels.size === 0) return true;
-    return channels.has(GameApiServer.CHANNEL_ALL) || channels.has(payload.channel);
+    return channels.has(RoomCommunicationConstants.GAME_API_CHANNEL_ALL) || channels.has(payload.channel);
+  }
+
+  private stripBinaryData<T>(payload: T): T {
+    if (!payload || typeof payload !== "object") return payload;
+    const clone = { ...(payload as Record<string, unknown>) };
+    delete clone.binaryData;
+    return clone as T;
   }
 }

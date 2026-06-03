@@ -44,6 +44,8 @@ export interface GameRelayPayload {
   messageId: string;
   sentAt: number;
   data?: unknown;
+  binary?: boolean;
+  byteLength?: number;
   to?: string;
   targetPlayerId?: string;
   channel?: string;
