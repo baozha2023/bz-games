@@ -1,6 +1,6 @@
 <template>
-  <div style="padding: 24px; display: flex; flex-direction: column; height: calc(100vh - 64px); box-sizing: border-box; overflow: hidden;" v-if="roomStore.room">
-    <n-page-header :title="t('room.titlePrefix') + roomStore.room.gameId" @back="handleBack" style="flex-shrink: 0;">
+  <div class="room-page" v-if="roomStore.room">
+    <n-page-header :title="t('room.titlePrefix') + roomStore.room.gameId" @back="handleBack" class="room-header">
     <template #extra>
       <n-space align="center">
         <n-select
@@ -21,7 +21,7 @@
     <n-alert
       v-if="showConnectionAlert"
       :type="connectionAlertType"
-      style="margin-top: 16px; flex-shrink: 0;"
+      class="room-alert"
     >
       {{ connectionStatusText }}
     </n-alert>
@@ -29,7 +29,7 @@
     <n-alert
       v-if="relayPublicAddress"
       type="success"
-      style="margin-top: 16px; flex-shrink: 0;"
+      class="room-alert"
     >
       <n-space align="center">
         <span>{{ t('room.relayPublicAddress') }}{{ relayPublicAddress }}</span>
@@ -37,18 +37,18 @@
       </n-space>
     </n-alert>
 
-    <n-grid x-gap="24" :cols="1" md="2" style="margin-top: 24px; flex: 1; min-height: 0;">
-      <n-grid-item span="2" style="display: flex; flex-direction: column; min-height: 0;">
+    <n-grid x-gap="24" :cols="1" md="2" class="room-content">
+      <n-grid-item span="2" class="room-main">
         <PlayerList 
           :players="roomStore.room.players" 
           :max-players="roomStore.room.maxPlayers"
           :local-player-id="settingsStore.settings?.playerId || ''"
           :is-host="roomStore.isHost"
           @kick="handleKickPlayer"
-          style="flex-shrink: 0;"
+          class="player-list-section"
         />
         <n-divider />
-        <div style="flex: 1; min-height: 0;">
+        <div class="chat-section">
         <template v-if="isChatPoppedOut">
           <n-alert type="info" style="margin-top: 8px;">
             <template #header>
@@ -64,7 +64,7 @@
       </n-grid-item>
     </n-grid>
 
-    <div style="margin-top: 32px; text-align: center; flex-shrink: 0;">
+    <div class="room-actions">
       <template v-if="roomStore.isHost">
         <n-tooltip trigger="hover" :disabled="canStart">
           <template #trigger>
@@ -384,3 +384,50 @@ const handleKickPlayer = async (playerId: string) => {
   })
 }
 </script>
+
+<style scoped>
+.room-page {
+  min-height: calc(100vh - 64px);
+  max-height: calc(100vh - 64px);
+  padding: 24px;
+  box-sizing: border-box;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.room-header,
+.room-alert,
+.player-list-section,
+.room-actions {
+  flex-shrink: 0;
+}
+
+.room-alert {
+  margin-top: 16px;
+}
+
+.room-content {
+  margin-top: 24px;
+}
+
+.room-main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.chat-section {
+  min-height: 360px;
+}
+
+.room-actions {
+  margin-top: 32px;
+  text-align: center;
+}
+
+@media (max-height: 720px) {
+  .chat-section {
+    min-height: 300px;
+  }
+}
+</style>

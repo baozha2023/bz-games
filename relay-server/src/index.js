@@ -119,25 +119,26 @@ function handleTextMessage(client, message, rawText) {
     touchRoom(client.roomId);
     return;
   }
-  handleRoomControlMessage(client, message);
+  if (handleRoomControlMessage(client, message)) return;
   forwardText(client, message, rawText);
 }
 
 function handleRoomControlMessage(client, message) {
   const room = rooms.get(client.roomId);
-  if (!room) return;
+  if (!room) return false;
   if (client.isHost && message.type === "room:state:sync") {
     updateRoomState(room, message.payload || {});
-    return;
+    return !resolveTargetPlayerId(message);
   }
   if (client.isHost && message.type === "room:disbanded") {
     setTimeout(() => closeRoom(room.id, "relay:closed"), 50);
-    return;
+    return false;
   }
   if (client.isHost && (message.type === "room:kicked" || message.type === "room:join:refused")) {
     const targetPlayerId = resolveTargetPlayerId(message);
     if (targetPlayerId) setTimeout(() => removeClient(clients.get(targetPlayerId), false), 50);
   }
+  return false;
 }
 
 function updateRoomState(room, state) {
@@ -234,6 +235,10 @@ function registerGuest(client, payload) {
   if (!clients.get(room.hostId)) {
     closeRoom(room.id, "relay:closed");
     send(client.ws, { type: "relay:error", payload: { code: "room_not_found" } });
+    return;
+  }
+  if (room.state !== "waiting") {
+    send(client.ws, { type: "relay:error", payload: { code: "game_started" } });
     return;
   }
 
@@ -362,6 +367,7 @@ function canAcceptRoom() {
 
 function canAcceptClient(room) {
   if (clients.size >= MAX_CLIENTS) return { ok: false, reason: "max_clients" };
+  if (room.playerCount >= room.maxPlayers) return { ok: false, reason: "room_full" };
   if (room.clients.size >= Math.min(room.maxPlayers || MAX_CLIENTS_PER_ROOM, MAX_CLIENTS_PER_ROOM)) {
     return { ok: false, reason: "room_full" };
   }

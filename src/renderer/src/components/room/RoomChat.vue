@@ -242,10 +242,11 @@ watch(() => roomStore.chatMessages.length, () => {
 <style scoped>
 .room-chat {
   height: 100%;
+  min-height: 320px;
 }
 .chat-messages {
   flex: 1;
-  min-height: 200px;
+  min-height: 220px;
   overflow-y: auto;
   padding: 8px;
   background: var(--bz-bg-subtle);

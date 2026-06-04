@@ -213,7 +213,11 @@ export class RoomClient {
         if (relayMsg.type === "relay:error" as RoomMessage["type"]) {
           this.shouldReconnect = false;
           this.hasJoinedRoom = false;
-          this.resolveConnection({ success: false, error: String((relayMsg.payload as any)?.code || "relay_error") });
+          const payload = relayMsg.payload as any;
+          const error = payload?.code === "capacity_full" && typeof payload?.reason === "string"
+            ? payload.reason
+            : String(payload?.code || "relay_error");
+          this.resolveConnection({ success: false, error });
           this.cleanup();
           return;
         }

@@ -101,6 +101,7 @@ import { Heart, HeartOutline, OpenOutline } from '@vicons/ionicons5'
 import { useGameStore } from '../stores/useGameStore'
 import { useRoomStore } from '../stores/useRoomStore'
 import { useSettingsStore } from '../stores/useSettingsStore'
+import { useRoomJoin } from '../composables/useRoomJoin'
 import GameCover from '../components/game/GameCover.vue'
 import GameAchievementsModal from '../components/game/GameAchievementsModal.vue'
 import GameDeleteModal from '../components/game/GameDeleteModal.vue'
@@ -114,6 +115,7 @@ const message = useMessage()
 const gameStore = useGameStore()
 const roomStore = useRoomStore()
 const settingsStore = useSettingsStore()
+const { joinRoomByAddress } = useRoomJoin()
 
 const gameId = route.params.id as string
 const game = computed(() => gameStore.games.find(g => g.id === gameId))
@@ -341,49 +343,18 @@ const createRoom = async () => {
 
 const handleJoin = async () => {
   if (!joinAddress.value) { message.error(t('gameDetail.addressEmpty')); return false; }
-
-  let address = joinAddress.value.trim();
-  if (!/^bzgames\.top:\d+$/i.test(address) && !/^(ws|wss):\/\//.test(address)) {
-    address = 'wss://' + address;
-  }
-
-  try {
-    const res = await roomStore.joinRoom(gameId, address, selectedVersion.value)
-    if (res.success) {
-      try {
-        const currentSettings =
-          settingsStore.settings || (await window.electronAPI.settings.get())
-        await settingsStore.saveSettings({
-          ...currentSettings,
-          lastJoinRoomAddress: address
-        })
-      } catch {}
-      joinAddress.value = address
-      showJoinModal.value = false;
-      await router.push(`/room/${gameId}`)
-      return true
-    }
-
-    let errorMsg = res.error;
-    if (res.error === 'version_mismatch') {
-      errorMsg = t('room.joinError.versionMismatch');
-    } else if (res.error === 'room_full') {
-      errorMsg = t('room.joinError.roomFull');
-    } else if (res.error === 'game_started') {
-      errorMsg = t('room.joinError.gameStarted');
-    } else if (res.error === 'game_id_mismatch') {
-      errorMsg = t('room.joinError.gameIdMismatch');
-    } else if (res.error === 'kicked') {
-      errorMsg = t('room.youWereKicked');
-    } else if (res.error === 'own_room') {
-      errorMsg = t('room.joinError.ownRoom');
-    }
-
-    message.error(errorMsg || t('gameDetail.joinFail'));
-    return false;
-  } catch (e: any) {
-    message.error(e?.message || t('gameDetail.joinFail'))
-    return false
-  }
+  const result = await joinRoomByAddress({
+    gameId,
+    address: joinAddress.value,
+    version: selectedVersion.value,
+    router,
+    message,
+    saveLastAddress: true,
+    close: () => {
+      showJoinModal.value = false
+    },
+  })
+  joinAddress.value = result.address
+  return result.success
 }
 </script>

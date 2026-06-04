@@ -37,6 +37,7 @@ export class RoomServer {
   private localRelayHandler:
     | ((gameId: string, msg: RoomMessage) => void)
     | null = null;
+  private stateSyncHandler: (() => void) | null = null;
   private recentMessageIds: string[] = [];
   private recentMessageIdSet: Set<string> = new Set();
   private orderedSeqBySenderChannel: Map<string, number> = new Map();
@@ -66,6 +67,7 @@ export class RoomServer {
       clearInterval(this.heartbeatInterval);
       this.heartbeatInterval = null;
     }
+    this.stateSyncHandler = null;
 
     if (this.wss) {
       if (this.room) {
@@ -87,6 +89,7 @@ export class RoomServer {
     this.room = null;
     this.playerConnections.clear();
     this.relayConnections.clear();
+    this.stateSyncHandler = null;
   }
 
   broadcast(msg: RoomMessage, exclude?: RoomSocket) {
@@ -105,6 +108,10 @@ export class RoomServer {
 
   setLocalRelayHandler(handler: ((gameId: string, msg: RoomMessage) => void) | null) {
     this.localRelayHandler = handler;
+  }
+
+  setStateSyncHandler(handler: (() => void) | null) {
+    this.stateSyncHandler = handler;
   }
 
   private async getMaxPlayers(
@@ -297,7 +304,7 @@ export class RoomServer {
       },
       ws,
     );
-    this.broadcastState();
+    this.broadcastState(ws);
   }
 
   private validateJoin(
@@ -616,12 +623,13 @@ export class RoomServer {
     this.relayBroadcast(senderId, payload);
   }
 
-  public broadcastState() {
+  public broadcastState(exclude?: RoomSocket) {
     if (this.room) {
       this.broadcast({
         type: "room:state:sync",
         payload: this.room,
-      });
+      }, exclude);
+      this.stateSyncHandler?.();
     }
   }
 

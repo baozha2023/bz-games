@@ -60,10 +60,7 @@ export function registerRoomIpc() {
     if (roomServer.room && roomServer.room.state === "waiting") {
       roomServer.room.state = "playing";
       roomServer.broadcast({ type: "room:game:start", payload: {} });
-      roomServer.broadcast({
-        type: "room:state:sync",
-        payload: roomServer.room,
-      });
+      roomServer.broadcastState();
       await gameManager.launch(
         roomServer.room.gameId,
         roomServer.room.gameVersion,

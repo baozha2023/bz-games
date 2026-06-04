@@ -22,7 +22,7 @@
                 </n-space>
               </template>
               <template #header-extra>
-                <n-button size="small" type="primary" :disabled="isJoinButtonDisabled(room)" @click="joinDiscoveredRoom(room)">
+                <n-button size="small" :type="joinButtonType(room)" :loading="isJoiningRoom(room)" :disabled="isJoinButtonDisabled(room)" @click="handleDiscoveredRoomClick(room)">
                   {{ room.canJoin ? t('common.join') : joinBlockText(room) }}
                 </n-button>
               </template>
@@ -54,7 +54,7 @@
                 </n-space>
               </template>
               <template #header-extra>
-                <n-button size="small" type="primary" :disabled="isJoinButtonDisabled(room)" @click="joinDiscoveredRoom(room)">
+                <n-button size="small" :type="joinButtonType(room)" :loading="isJoiningRoom(room)" :disabled="isJoinButtonDisabled(room)" @click="handleDiscoveredRoomClick(room)">
                   {{ room.canJoin ? t('common.join') : joinBlockText(room) }}
                 </n-button>
               </template>
@@ -79,17 +79,18 @@ import { useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import type { DiscoveredRoom } from '../../../shared/types'
-import { useRoomStore } from '../stores/useRoomStore'
 import { useGameStore } from '../stores/useGameStore'
+import { useRoomJoin } from '../composables/useRoomJoin'
 
 const { t } = useI18n()
 const router = useRouter()
 const message = useMessage()
-const roomStore = useRoomStore()
 const gameStore = useGameStore()
+const { joinRoomByAddress } = useRoomJoin()
 
 const activeTab = ref<'lan' | 'relay'>('lan')
 const loading = ref(false)
+const joiningRoomId = ref('')
 const lanRooms = ref<DiscoveredRoom[]>([])
 const relayRooms = ref<DiscoveredRoom[]>([])
 
@@ -128,29 +129,50 @@ const joinBlockText = (room: DiscoveredRoom) => {
   return t('roomDiscovery.unavailable')
 }
 
-const isJoinButtonDisabled = (room: DiscoveredRoom) => !room.canJoin && room.joinBlockReason !== 'own_room'
-
 const roomGameName = (room: DiscoveredRoom) => gameStore.games.find(game => game.id === room.gameId)?.name || room.gameName || room.gameId
 
 const relayRoomAddress = (room: DiscoveredRoom) => room.address || t('roomDiscovery.relayAddressPending')
 
-const joinDiscoveredRoom = async (room: DiscoveredRoom) => {
-  const validation = await window.electronAPI.room.validateDiscovered(room)
-  if (!validation.canJoin) {
-    message.error(joinBlockText({ ...room, joinBlockReason: validation.reason }))
+const roomKey = (room: DiscoveredRoom) => `${room.source}:${room.id}:${room.address}`
+
+const isJoiningRoom = (room: DiscoveredRoom) => joiningRoomId.value === roomKey(room)
+
+const isJoinButtonDisabled = (room: DiscoveredRoom) => {
+  if (isJoiningRoom(room)) return true
+  return !room.canJoin && room.joinBlockReason !== 'own_room'
+}
+
+const joinButtonType = (room: DiscoveredRoom) => room.canJoin || room.joinBlockReason === 'own_room' ? 'primary' : 'default'
+
+const handleDiscoveredRoomClick = (room: DiscoveredRoom) => {
+  if (!room.canJoin && room.joinBlockReason) {
+    message.error(joinBlockText(room))
     return
   }
+  joinDiscoveredRoom(room)
+}
+
+const joinDiscoveredRoom = async (room: DiscoveredRoom) => {
+  if (joiningRoomId.value) return
   const address = room.address
   if (!address) {
     message.error(t('roomDiscovery.relayAddressPending'))
     return
   }
-  const res = await roomStore.joinRoom(room.gameId, address, room.gameVersion)
-  if (!res.success) {
-    message.error(res.error === 'own_room' ? t('room.joinError.ownRoom') : res.error || t('gameDetail.joinFail'))
-    return
+  joiningRoomId.value = roomKey(room)
+  try {
+    await joinRoomByAddress({
+      gameId: room.gameId,
+      address,
+      version: room.gameVersion,
+      router,
+      message,
+    })
+  } catch (error: any) {
+    message.error(error?.message || t('gameDetail.joinFail'))
+  } finally {
+    joiningRoomId.value = ''
   }
-  await router.push(`/room/${room.gameId}`)
 }
 </script>
 

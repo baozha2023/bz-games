@@ -73,6 +73,7 @@ bz-games/
 ├── docs/
 │   └── GAME_API_V1_V2_REFERENCE.md        # Game API v1/v2 接口说明文档
 ├── relay-server/                          # 官方中继服务器（Node.js HTTP + WebSocket，透明转发 Room/Game API 消息）
+│   ├── API.md                             # 中继服务器接口规范
 │   ├── DEPLOY.md                          # 中继服务器部署手册
 │   ├── package.json                       # 中继服务器独立依赖
 │   └── src/index.js                       # 中继服务器入口
@@ -161,6 +162,7 @@ bz-games/
 │   │       │   ├── SettingsView.vue       # 设置页面
 │   │       │   └── StatisticsView.vue     # 统计页面
 │   │       ├── composables/
+│   │       │   ├── useRoomJoin.ts          # 房间地址加入公共逻辑（服务器 Tab 与手动短地址共用）
 │   │       │   └── useImageCache.ts        # 统一图片缓存层（本地+远程）
 │   │       ├── components/
 │   │       │   ├── CachedImg.vue           # 远程图片缓存组件（市场专用）
@@ -742,9 +744,11 @@ interface AppSettings {
     - **公网入口模型**：局域网联机始终可用；房间页的 frp/官方服务器选择只决定公网入口。frp 由用户自备映射到本地 `RoomServer`，官方服务器由房主连接 `RelayRoomService` 注册短地址。
     - **中继服务职责**：`relay-server/src/index.js` 处理 `relay:host`、`relay:join`、`relay:leave`、`relay:heartbeat` 等控制信令；RoomMessage、Game API v1 JSON 和 Game API v2 binary frame 均透明转发。中继服务端使用 `roomId` 管理内部房间，只发送和识别 `roomCode`。
     - **短地址加入**：房主注册成功后服务端返回 `roomCode`；平台按 `DEFAULT_RELAY_PUBLIC_HOST + roomCode` 拼接短地址。平台展示、复制、服务器 Tab 和手动输入统一使用短地址；客机 `RoomClient` 识别短地址后提取 `roomCode`，连接 `DEFAULT_RELAY_SERVER_URL` 并发送 `relay:join`，收到 `relay:join:ack` 后再发送标准 `room:join`。
+    - **加入入口统一**：服务器 Tab 与游戏详情页手动地址加入共用 `useRoomJoin.ts`，地址标准化、短地址识别、加入调用、错误提示保持一致；服务器列表按钮状态用于展示，真实连接结果由 `RoomClient` 与 `RoomServer` 决定。
     - **校验集中化**：客机最终进入房主本地 `RoomServer.handleJoin()`，统一执行 kickedPlayers、人数、房间状态、gameId、gameVersion 校验。
     - **relay bridge**：`RelayRoomService` 将中继收到的原始 text/binary 帧交给 `RoomServer.handleRelayRawMessage()`，房主返回给 relay 客机的消息追加 `__relayTo` 路由字段；binary frame 只重封 header，body 原样保留。
-    - **状态同步与幽灵房间防护**：中继服务端根据房主发送的 `room:state:sync` 更新 `/rooms` 中的状态、人数、游戏名、版本等元信息；房主断开、房主解散、房间 TTL 过期时通过 `closeRoom()` 清理房间和连接。
+    - **状态同步与幽灵房间防护**：`RoomServer.broadcastState()` 触发 `RelayRoomService.syncRoomState()`；中继服务端根据房主发送的无目标 `room:state:sync` 更新 `/rooms` 中的状态、人数、游戏名、版本等元信息；带 `__relayTo` 的 `room:state:sync` 继续按目标转发给对应玩家。房主断开、房主解散、房间 TTL 过期时通过 `closeRoom()` 清理房间和连接。
+    - **中继加入拦截**：中继服务端在 `relay:join` 阶段拒绝房主离线、已开始、满员和加入自己房间等请求；房主本地 `RoomServer.handleJoin()` 继续执行最终业务校验。
     - **容量保护**：官方中继通过 `MAX_ROOMS`、`MAX_CLIENTS`、`MAX_CLIENTS_PER_ROOM`、`MAX_EVENT_LOOP_DELAY_MS` 控制新房间与新玩家接入。
     - **切换安全**：房主切换 frp/官方服务器公网入口前必须先通知当前其他玩家离开并清理连接；官方服务器注册失败时 UI 回退到 frp 状态。
 

@@ -71,8 +71,9 @@ export class RelayRoomService {
         const publicAddress = typeof roomCode === "string" ? this.toPublicAddress(roomCode) : "";
         if (roomServer.room && publicAddress) {
           roomServer.room.hostPublicAddress = publicAddress;
-          roomServer.broadcastState();
         }
+        roomServer.setStateSyncHandler(() => this.syncRoomState());
+        roomServer.broadcastState();
         this.startHeartbeat();
         ws.off("message", handleHostAck);
         ws.on("message", (relayData, isBinary) => this.handleRelayMessage(relayData, isBinary));
@@ -104,7 +105,13 @@ export class RelayRoomService {
       this.ws.close();
       this.ws = null;
     }
+    roomServer.setStateSyncHandler(null);
     this.relayRoomId = "";
+  }
+
+  syncRoomState() {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN || !roomServer.room) return;
+    this.ws.send(JSON.stringify({ type: "room:state:sync", payload: roomServer.room }));
   }
 
   private startHeartbeat() {
