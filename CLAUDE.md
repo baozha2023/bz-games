@@ -20,7 +20,7 @@
 | **便携式存储**      | 配置默认存储在应用根目录，游戏可存放在默认目录或用户维护的多路径目录中               |
 | **开放式游戏管理**    | 用户可将符合平台规范的游戏载入平台，平台会自动复制并管理游戏文件                  |
 | **统一联机基础设施**   | 平台提供完整的联机房间管理与消息通讯能力，游戏开发者无需自行实现网络层               |
-| **内网穿透工具无关**   | 联机依赖用户自行安装的内网穿透工具（如 SakuraFrp），平台通过标准端口对接，不绑定特定工具 |
+| **公网入口可切换**     | 局域网始终可用，公网入口支持用户自备 frp 或官方中继服务器短地址，不绑定单一联机方式 |
 | **仅限 Windows** | 不考虑 macOS / Linux 兼容性                             |
 
 ### 平台核心功能
@@ -28,6 +28,7 @@
 - 游戏库管理（导入、删除、排序、收藏、封面/图标展示）
 - 游戏启动与进程生命周期管理（主进程统一托管）
 - 联机房间系统（创建、加入、准备、开始、离开、聊天、踢人、解散同步）
+- 房间发现系统（局域网自动发现、官方服务器房间列表、加入前本地游戏与版本校验）
 - 国际化（`zh-CN / en-US / ja-JP`）
 - 成就系统（列表、解锁、系统通知、红点提示）
 - 统计系统（支持增量/全量统计模式，游玩时长自动累计）
@@ -71,6 +72,10 @@ bz-games/
 ├── DEVELOPER_GUIDE.md                    # 面向游戏接入方的开发接入指南
 ├── docs/
 │   └── GAME_API_V1_V2_REFERENCE.md        # Game API v1/v2 接口说明文档
+├── relay-server/                          # 官方中继服务器（Node.js HTTP + WebSocket，透明转发 Room/Game API 消息）
+│   ├── DEPLOY.md                          # 中继服务器部署手册
+│   ├── package.json                       # 中继服务器独立依赖
+│   └── src/index.js                       # 中继服务器入口
 ├── build/
 │   └── installer.nsh                     # NSIS 自定义安装/卸载钩子（多语言支持）
 ├── package.json                          # 依赖、脚本与打包发布配置
@@ -109,6 +114,8 @@ bz-games/
 │   │   │   ├── NotificationService.ts     # 系统通知窗口服务
 │   │   │   ├── RoomClient.ts              # 客机房间连接与重连管理（支持 v2 二进制帧中继）
 │   │   │   ├── RoomCommunicationConstants.ts # 房间通信常量集中管理（消息大小、心跳间隔、超时等）
+│   │   │   ├── RoomDiscoveryService.ts     # 局域网/官方中继房间发现与加入前校验
+│   │   │   ├── RelayRoomService.ts         # 房主侧官方中继接入、短地址注册、relay bridge
 │   │   │   ├── RoomServer.ts              # 房主房间服务与消息中继（支持 v2 二进制帧中继、ordered delivery）
 │   │   │   ├── StoreService.ts            # 本地数据读写与业务数据维护
 │   │   │   ├── UpdateService.ts           # 客户端更新检查/下载/安装服务
@@ -149,6 +156,7 @@ bz-games/
 │   │       │   ├── NotificationView.vue   # 通知窗口页面
 │   │       │   ├── FloatBallView.vue       # 下载悬浮球独立窗口页面
 │   │       │   ├── PersonalizationView.vue # 个性化页面（头像框管理）
+│   │       │   ├── RoomDiscoveryView.vue   # 房间发现页面（局域网/服务器 Tab）
 │   │       │   ├── RoomView.vue           # 房间页面
 │   │       │   ├── SettingsView.vue       # 设置页面
 │   │       │   └── StatisticsView.vue     # 统计页面
@@ -183,7 +191,7 @@ bz-games/
 │   │
 │   └── shared/
 │       ├── avatar-frames.ts                # 头像框定义数据（8款头像框的解锁条件与图片文件名）
-│       ├── constants.ts                    # 平台常量（CDN/OSS/GitHub 基础 URL、Referer 值）
+│       ├── constants.ts                    # 平台常量（CDN/OSS/GitHub/官方中继基础 URL、Referer 值）
 │       ├── binary-protocol.ts              # v2 二进制帧编码/解码工具（4字节头长度 + JSON header + binary body）
 │       ├── game-manifest.ts                # Game Manifest Schema 与类型
 │       ├── ipc-channels.ts                 # IPC 频道常量定义
@@ -214,6 +222,9 @@ bz-games/
 | **Room Client**                     | 非房主玩家的平台连接 Room Server 的 WebSocket 客户端                                         |
 | **Game API Server**                 | 平台在本机运行的本地 WebSocket 服务（`127.0.0.1`），供游戏进程调用平台能力；控制面走 JSON，v2 高频实时数据可走二进制帧 |
 | **v2 二进制帧**                       | 高频实时通信帧格式：4字节 big-endian header 长度 + UTF-8 JSON header + 原始 binary body，仅用于 `message.send` / `message.broadcast` / `message.publish` |
+| **官方中继服务器 (Relay Server)**      | 公网 Node.js HTTP + WebSocket 服务，只负责房间登记、短地址、容量保护和透明转发，不解析游戏业务语义。                            |
+| **官方短地址**                         | 房主开启官方服务器模式后由中继生成的 `bzgames.top:随机数字` 地址，客机输入后由平台识别并连接官方中继。                         |
+| **房间发现 (Room Discovery)**          | 平台房间页面的局域网/服务器 Tab。局域网通过 UDP 发现本地房主，服务器通过官方中继 `/rooms` 获取房间列表。                      |
 | **游戏市场目录 (Market Directory)**       | 顶层 `market.json` 文件，`sources` 数组列出所有可用市场源，平台一级界面展示                             |
 | **游戏市场索引 (Market Index)**           | 远程 `market.json` 文件（每个市场源仓库中），描述该市场内可展示和可下载的游戏及其版本信息                           |
 | **市场安装包 (Market Package)**          | 市场游戏某个版本对应的下载产物，平台下载后校验并安装到默认游戏库                                              |
@@ -496,6 +507,7 @@ interface FloatBallProgress {
 - 拉取远程游戏市场索引、下载市场安装包并执行校验与安装。所有 OSS 请求均携带 `Referer: https://bz-game-client.local` 防盗链
   header（fetch 显式设置 + `session.webRequest.onBeforeSendHeaders` 全量拦截）
 - 运行 Room Server（Host 时）/ Room Client（Client 时）
+- 运行 Room Discovery UDP 服务，提供局域网房间响应；按需连接官方 Relay Server 注册房间短地址
 - 运行 Game API Server（每次有游戏运行时）
 - 注册并处理所有 IPC Handler
 - 广播游戏进程生命周期事件（start/end）
@@ -729,6 +741,16 @@ interface AppSettings {
     - **联机传递**：`RoomJoinPayload` 和 `PlayerInRoom` 新增 `playerAvatarFrame` / `avatarFrame` 字段。房主 `RoomServer` 创建玩家对象时写入，客机 `RoomClient` 加入时携带。`PlayerCard.vue` 使用 `AvatarWithFrame` 渲染。
     - **签到累计天数**：`UserData.checkIn.totalDays` 记录累计签到总天数，在 `performCheckIn` 中自增。签到弹窗新增"累计签到 N 天"展示行。
 
+- **官方中继联机系统（v2.3）**：
+    - **公网入口模型**：局域网联机始终可用；房间页的 frp/官方服务器选择只决定公网入口。frp 由用户自备映射到本地 `RoomServer`，官方服务器由房主连接 `RelayRoomService` 注册短地址。
+    - **中继服务职责**：`relay-server/src/index.js` 只处理 `relay:host`、`relay:join`、`relay:leave`、`relay:heartbeat` 等控制信令；其它 RoomMessage、Game API v1 JSON 和 Game API v2 binary frame 均透明转发。
+    - **短地址加入**：房主注册成功后服务端返回 `publicAddress = bzgames.top:roomCode`；客机 `RoomClient` 识别该格式后连接 `DEFAULT_RELAY_SERVER_URL` 并先发送 `relay:join`，收到 `relay:join:ack` 后再发送标准 `room:join`。
+    - **校验集中化**：官方中继不复制房间业务校验。客机最终仍进入房主本地 `RoomServer.handleJoin()`，统一执行 kickedPlayers、人数、房间状态、gameId、gameVersion 校验。
+    - **relay bridge**：`RelayRoomService` 将中继收到的原始 text/binary 帧交给 `RoomServer.handleRelayRawMessage()`，房主返回给 relay 客机的消息追加 `__relayTo` 路由字段；binary frame 只重封 header，body 原样保留。
+    - **状态同步与幽灵房间防护**：中继服务端根据房主发送的 `room:state:sync` 更新 `/rooms` 中的状态、人数、游戏名、版本等元信息；房主断开、房主解散、房间 TTL 过期时通过 `closeRoom()` 清理房间和连接。
+    - **容量保护**：官方中继通过 `MAX_ROOMS`、`MAX_CLIENTS`、`MAX_CLIENTS_PER_ROOM`、`MAX_EVENT_LOOP_DELAY_MS` 拒绝新房间或新玩家，避免低规格服务器过载影响已在联机的玩家。
+    - **切换安全**：房主切换 frp/官方服务器公网入口前必须先通知当前其他玩家离开并清理连接；官方服务器注册失败时 UI 回退到 frp 状态。
+
 - **下载悬浮球系统（Float Ball — v2.2）**：
     - **独立窗口架构**：悬浮球运行在独立的 `BrowserWindow` 中（透明无边框、置顶、72×72px），通过 `/float-ball` 路由加载 `FloatBallView.vue` 组件。`AppContent` 将其识别为弹窗窗口（`isPopupWindow`），跳过主菜单渲染。
     - **窗口生命周期**：`createFloatBallWindow()` 在用户开启"下载悬浮球"设置时调用（应用启动时检查设置、保存设置时同步开关）。`destroyFloatBallWindow()` 在关闭设置时调用。窗口关闭时自动保存最后位置到 `floatBallPosition`。
@@ -874,6 +896,11 @@ interface AppSettings {
 - `room:sendChat`：发送文本、语音或图片聊天消息（支持文字+图片打包发送）。
 - `room:kickPlayer`：房主踢出指定玩家。
 - `room:reconnect`：客机游戏进程崩溃后重新启动游戏（要求 room.state === "playing"）。
+- `room:discoverLan`：扫描同一局域网内等待中的 BZ-Games 房间，并返回已带加入校验结果的房间列表。
+- `room:discoverRelay`：从官方中继服务器 `/rooms` 拉取服务器房间列表，并返回已带加入校验结果的房间列表。
+- `room:validateDiscovered`：对发现到的房间执行加入前校验，包括是否为自己的房间、房间状态、人数、本地是否安装游戏和版本是否匹配。
+- `room:enableRelayHost`：房主切换到官方服务器公网入口，先断开其他玩家，再向官方中继注册房间并返回短地址。
+- `room:disableRelayHost`：房主关闭官方服务器公网入口，断开中继连接并清空短地址。
 - `room:popOutChat`：将聊天弹出到独立窗口，传递当前聊天历史。
 - `room:popInChat`：关闭独立聊天窗口，聊天回到主窗口。
 - `room:getChatHistory`：获取缓存的聊天历史记录。
@@ -944,6 +971,11 @@ interface AppSettings {
 - **市场版本状态**：对于已安装版本、当前最新版本、预发布版本，需要在版本列表中展示不同状态标记，避免重复安装或误装测试版。
 - **成就展示**：成就列表支持按游戏版本筛选，支持展开/收起，默认收起。若当前版本无成就，显示空列表。
 - **动态元数据**：游戏详情页切换版本时，应优先展示当前选中版本的元数据（如简介、成就），若为空则直接展示为空，不应回退到最新版本数据。
+- **房间入口**：顶部导航的“房间”按钮进入 `/rooms`，包含“局域网”和“服务器”两个 Tab；顶部头像与玩家名点击进入个性化页面。
+- **局域网始终可用**：房间页的 frp/官方服务器选择只表示公网入口，局域网发现和 `房主局域网IP:defaultRoomPort` 直连始终可用。
+- **官方服务器模式**：房主开启官方服务器模式后展示 `bzgames.top:随机数字` 短地址和复制按钮；切换公网入口前必须先通知其他玩家离开，注册失败自动回退到 frp 显示状态。
+- **房间发现校验**：局域网/服务器卡片加入前必须校验本地是否安装对应游戏、版本是否匹配、房间是否等待中、人数是否已满、是否为自己的房间；自己的房间点击加入时必须给出友好提示。
+- **服务器卡片展示**：服务器房间卡片展示官方短地址，不展示 relay 标签；游戏名称显示游戏本身名称，优先本地 Manifest，其次中继返回的 `gameName`，最后兜底 `gameId`。
 - **游戏库展示**：
     - 游戏封面展示区域统一使用 **16:9** 比例，图片模式为 `contain`（完整显示）或 `cover`（填满）。
     - 支持 **长按** 游戏封面进入编辑模式，此时可拖动调整游戏排序。

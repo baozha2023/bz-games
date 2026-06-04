@@ -343,7 +343,7 @@ const handleJoin = async () => {
   if (!joinAddress.value) { message.error(t('gameDetail.addressEmpty')); return false; }
 
   let address = joinAddress.value.trim();
-  if (!/^(ws|wss):\/\//.test(address)) {
+  if (!/^bzgames\.top:\d+$/i.test(address) && !/^(ws|wss):\/\//.test(address)) {
     address = 'wss://' + address;
   }
 
@@ -375,6 +375,8 @@ const handleJoin = async () => {
       errorMsg = t('room.joinError.gameIdMismatch');
     } else if (res.error === 'kicked') {
       errorMsg = t('room.youWereKicked');
+    } else if (res.error === 'own_room') {
+      errorMsg = t('room.joinError.ownRoom');
     }
 
     message.error(errorMsg || t('gameDetail.joinFail'));

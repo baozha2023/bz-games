@@ -7,7 +7,9 @@ import { gameManager } from "../services/GameManager";
 import { mainWindow } from "../window";
 import { createChatWindow, closeChatWindow, sendRoomEventToChat, getCachedChatHistory } from "../chat-window";
 import crypto from "crypto";
-import type { RoomMessage, ChatPayload } from "../../shared/types";
+import type { RoomMessage, ChatPayload, DiscoveredRoom } from "../../shared/types";
+import { roomDiscoveryService } from "../services/RoomDiscoveryService";
+import { relayRoomService } from "../services/RelayRoomService";
 
 export function registerRoomIpc() {
   ipcMain.handle(
@@ -22,11 +24,16 @@ export function registerRoomIpc() {
   ipcMain.handle(
     IPC.ROOM_JOIN,
     async (_, gameId: string, address: string, version?: string) => {
+      const localPlayerId = storeService.getSettings().playerId;
+      if (roomServer.room?.hostId === localPlayerId) {
+        return { success: false, error: "own_room", message: "Cannot join your own room" };
+      }
       return await roomClient.connect(address, gameId, version);
     },
   );
 
   ipcMain.handle(IPC.ROOM_LEAVE, async () => {
+    relayRoomService.disconnect();
     const localPlayerId = storeService.getSettings().playerId;
     if (roomServer.room?.hostId === localPlayerId) {
       await roomServer.stop();
@@ -118,6 +125,31 @@ export function registerRoomIpc() {
         roomClient.room.gameVersion,
       );
     }
+  });
+
+  ipcMain.handle(IPC.ROOM_DISCOVER_LAN, async () => {
+    return await roomDiscoveryService.discoverLanRooms();
+  });
+
+  ipcMain.handle(IPC.ROOM_DISCOVER_RELAY, async () => {
+    return await roomDiscoveryService.discoverRelayRooms();
+  });
+
+  ipcMain.handle(IPC.ROOM_VALIDATE_DISCOVERED, async (_, room: DiscoveredRoom) => {
+    return roomDiscoveryService.validateDiscoveredRoom(room);
+  });
+
+  ipcMain.handle(IPC.ROOM_ENABLE_RELAY_HOST, async () => {
+    roomServer.disconnectRemotePlayersForModeSwitch();
+    return await relayRoomService.enableHostRoom();
+  });
+
+  ipcMain.handle(IPC.ROOM_DISABLE_RELAY_HOST, async () => {
+    relayRoomService.disconnect();
+    if (roomServer.room) {
+      roomServer.room.hostPublicAddress = undefined;
+    }
+    roomServer.disconnectRemotePlayersForModeSwitch();
   });
 
   ipcMain.handle(

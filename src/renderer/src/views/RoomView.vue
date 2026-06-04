@@ -2,9 +2,19 @@
   <div style="padding: 24px; display: flex; flex-direction: column; height: calc(100vh - 64px); box-sizing: border-box; overflow: hidden;" v-if="roomStore.room">
     <n-page-header :title="t('room.titlePrefix') + roomStore.room.gameId" @back="handleBack" style="flex-shrink: 0;">
     <template #extra>
-      <n-button type="error" @click="handleLeaveRoom">
-        {{ roomStore.isHost ? t('room.disbandRoom') : t('room.leaveRoom') }}
-      </n-button>
+      <n-space align="center">
+        <n-select
+          v-if="roomStore.isHost"
+          v-model:value="connectionMode"
+          :options="connectionModeOptions"
+          size="small"
+          style="width: 150px;"
+          @update:value="handleConnectionModeChange"
+        />
+        <n-button type="error" @click="handleLeaveRoom">
+          {{ roomStore.isHost ? t('room.disbandRoom') : t('room.leaveRoom') }}
+        </n-button>
+      </n-space>
     </template>
   </n-page-header>
 
@@ -14,6 +24,17 @@
       style="margin-top: 16px; flex-shrink: 0;"
     >
       {{ connectionStatusText }}
+    </n-alert>
+
+    <n-alert
+      v-if="relayPublicAddress"
+      type="success"
+      style="margin-top: 16px; flex-shrink: 0;"
+    >
+      <n-space align="center">
+        <span>{{ t('room.relayPublicAddress') }}{{ relayPublicAddress }}</span>
+        <n-button size="tiny" @click="copyRelayAddress">{{ t('common.copy') }}</n-button>
+      </n-space>
     </n-alert>
 
     <n-grid x-gap="24" :cols="1" md="2" style="margin-top: 24px; flex: 1; min-height: 0;">
@@ -77,7 +98,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, computed, ref } from 'vue'
+import { onMounted, onUnmounted, computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessage, useDialog } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
@@ -100,6 +121,63 @@ let cleanupRoomEvent: (() => void) | undefined
 let cleanupChatWindowClosed: (() => void) | undefined
 
 const isChatPoppedOut = ref(false)
+const connectionMode = ref<'frp' | 'relay'>('frp')
+const previousConnectionMode = ref<'frp' | 'relay'>('frp')
+const relayPublicAddress = ref('')
+
+const connectionModeOptions = computed(() => [
+  { label: t('room.connectionModeFrp'), value: 'frp' },
+  { label: t('room.connectionModeRelay'), value: 'relay' },
+])
+
+const syncConnectionModeFromRoom = () => {
+  const publicAddress = roomStore.room?.hostPublicAddress || ''
+  relayPublicAddress.value = publicAddress
+  connectionMode.value = publicAddress ? 'relay' : 'frp'
+  previousConnectionMode.value = connectionMode.value
+}
+
+watch(
+  () => roomStore.room?.hostPublicAddress,
+  () => syncConnectionModeFromRoom(),
+)
+
+const handleConnectionModeChange = (value: 'frp' | 'relay') => {
+  if (value === previousConnectionMode.value) return
+  dialog.warning({
+    title: t('room.connectionModeChangeTitle'),
+    content: t('room.connectionModeChangeContent'),
+    positiveText: t('common.confirm'),
+    negativeText: t('common.cancel'),
+    onPositiveClick: async () => {
+      if (value === 'relay') {
+        const result = await window.electronAPI.room.enableRelayHost()
+        if (!result.success || !result.publicAddress) {
+          connectionMode.value = previousConnectionMode.value
+          message.error(t('room.connectionModeRelayFailed', { reason: result.error || t('room.joinError.unknown') }))
+          return
+        }
+        relayPublicAddress.value = result.publicAddress
+        previousConnectionMode.value = value
+        message.success(t('room.connectionModeRelayReady', { address: result.publicAddress }))
+        return
+      }
+      await window.electronAPI.room.disableRelayHost()
+      relayPublicAddress.value = ''
+      previousConnectionMode.value = value
+      message.info(t('room.connectionModeFrpSelected'))
+    },
+    onNegativeClick: () => {
+      connectionMode.value = previousConnectionMode.value
+    }
+  })
+}
+
+const copyRelayAddress = async () => {
+  if (!relayPublicAddress.value) return
+  await navigator.clipboard.writeText(relayPublicAddress.value)
+  message.success(t('common.copied'))
+}
 
 const handlePopOutChat = async () => {
   try {
@@ -188,6 +266,8 @@ onMounted(async () => {
     router.replace('/library');
     return;
   }
+
+  syncConnectionModeFromRoom()
 
   if (window.electronAPI?.game?.onLaunchFailed) {
     cleanupLaunch = window.electronAPI.game.onLaunchFailed((_id, reason) => {

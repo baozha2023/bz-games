@@ -32,6 +32,11 @@ const router = createRouter({
       component: () => import("../views/RoomView.vue"),
     },
     {
+      path: "/rooms",
+      name: "RoomDiscovery",
+      component: () => import("../views/RoomDiscoveryView.vue"),
+    },
+    {
       path: "/settings",
       name: "Settings",
       component: () => import("../views/SettingsView.vue"),

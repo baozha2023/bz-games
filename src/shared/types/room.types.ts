@@ -14,6 +14,10 @@ export type RoomMessageType =
   | "room:kicked" // Server → Target：被踢通知
   | "room:player:kicked" // Server → All：玩家被踢通知
   | "room:connection-status"
+  | "relay:join"
+  | "relay:join:ack"
+  | "relay:closed"
+  | "relay:error"
   | "room:chat" // 双向：房间内聊天消息
   | "room:chat:history:sync" // 主→聊天窗口：聊天历史同步
   | "game:message:relay"
@@ -75,6 +79,35 @@ export interface RoomInfo {
   maxPlayers: number;
   state: "waiting" | "starting" | "playing" | "ended";
   createdAt: number;
+}
+
+export type RoomDiscoverySource = "lan" | "relay";
+
+export interface DiscoveredRoom {
+  id: string;
+  source: RoomDiscoverySource;
+  name: string;
+  gameId: string;
+  gameName?: string;
+  gameVersion: string;
+  hostId: string;
+  hostName: string;
+  address: string;
+  publicAddress?: string;
+  roomCode?: string;
+  playerCount: number;
+  maxPlayers: number;
+  state: RoomInfo["state"];
+  updatedAt: number;
+  relayRoomId?: string;
+  canJoin?: boolean;
+  joinBlockReason?: "game_missing" | "version_mismatch" | "room_full" | "game_started" | "own_room" | "unknown";
+}
+
+export interface RoomJoinValidationResult {
+  canJoin: boolean;
+  reason?: "game_missing" | "version_mismatch" | "room_full" | "game_started" | "own_room" | "unknown";
+  message?: string;
 }
 
 export interface PlayerInRoom {

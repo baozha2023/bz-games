@@ -3,6 +3,8 @@ import type {
   DataHealthReport,
   DownloadTaskSnapshot,
   FloatBallProgress,
+  DiscoveredRoom,
+  RoomJoinValidationResult,
   RoomInfo,
   RoomEvent,
   GameRecord,
@@ -119,6 +121,11 @@ declare global {
         popOutChat: (chatHistory: unknown) => Promise<void>;
         popInChat: () => Promise<void>;
         getChatHistory: () => Promise<unknown[]>;
+        discoverLan: () => Promise<DiscoveredRoom[]>;
+        discoverRelay: () => Promise<DiscoveredRoom[]>;
+        validateDiscovered: (room: DiscoveredRoom) => Promise<RoomJoinValidationResult>;
+        enableRelayHost: () => Promise<{ success: boolean; roomId?: string; roomCode?: string; publicAddress?: string; error?: string }>;
+        disableRelayHost: () => Promise<void>;
         onChatWindowClosed: (callback: () => void) => () => void;
         onEvent: (callback: (event: RoomEvent) => void) => () => void;
       };

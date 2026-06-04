@@ -20,11 +20,18 @@ import {
 import { RoomCommunicationConstants } from "./RoomCommunicationConstants";
 
 type BinaryRelayPayload = GameRelayPayload & { binaryData?: Buffer };
+type RelaySocket = {
+  readyState: number;
+  send: (data: string | Buffer) => void;
+  close: () => void;
+};
+type RoomSocket = WebSocket | RelaySocket;
 
 export class RoomServer {
   private wss: WebSocketServer | null = null;
   public room: RoomInfo | null = null;
-  private playerConnections: Map<string, WebSocket> = new Map();
+  private playerConnections: Map<string, RoomSocket> = new Map();
+  private relayConnections: Set<RelaySocket> = new Set();
   private kickedPlayers: Set<string> = new Set();
   private heartbeatInterval: NodeJS.Timeout | null = null;
   private localRelayHandler:
@@ -72,19 +79,24 @@ export class RoomServer {
           resolve();
         });
 
-        this.playerConnections.forEach((ws) => ws.terminate());
+        this.playerConnections.forEach((ws) => ws.close());
         this.playerConnections.clear();
       });
     }
 
     this.room = null;
     this.playerConnections.clear();
+    this.relayConnections.clear();
   }
 
-  broadcast(msg: RoomMessage, exclude?: WebSocket) {
-    if (!this.wss) return;
+  broadcast(msg: RoomMessage, exclude?: RoomSocket) {
     const data = this.serializeRoomMessage(msg);
-    this.wss.clients.forEach((c) => {
+    this.wss?.clients.forEach((c) => {
+      if (c !== exclude && c.readyState === WebSocket.OPEN) {
+        c.send(data);
+      }
+    });
+    this.relayConnections.forEach((c) => {
       if (c !== exclude && c.readyState === WebSocket.OPEN) {
         c.send(data);
       }
@@ -194,7 +206,22 @@ export class RoomServer {
     }, RoomCommunicationConstants.ROOM_HEARTBEAT_INTERVAL_MS);
   }
 
-  private handleMessage(ws: WebSocket, msg: RoomMessage) {
+  public handleRelayRawMessage(data: WebSocket.RawData, isBinary: boolean, sendToRelay: (data: string | Buffer, targetPlayerId?: string) => void) {
+    const msg = this.deserializeRoomMessage(data, isBinary);
+    if (!msg) return;
+    const playerId = this.resolveRelaySenderId(msg);
+    const relaySocket = this.createRelaySocket(playerId, sendToRelay);
+    if (msg.type !== "room:join") {
+      if (!playerId) return;
+      const existingSocket = this.playerConnections.get(playerId);
+      if (!existingSocket || !this.relayConnections.has(existingSocket as RelaySocket)) return;
+      this.handleMessage(existingSocket, msg);
+      return;
+    }
+    this.handleMessage(relaySocket, msg);
+  }
+
+  private handleMessage(ws: RoomSocket, msg: RoomMessage) {
     if (!this.room) return;
 
     switch (msg.type) {
@@ -225,7 +252,7 @@ export class RoomServer {
     }
   }
 
-  private handleJoin(ws: WebSocket, payload: RoomJoinPayload) {
+  private handleJoin(ws: RoomSocket, payload: RoomJoinPayload) {
     if (!this.room) return;
 
     const rejection = this.validateJoin(payload);
@@ -254,6 +281,9 @@ export class RoomServer {
     );
     this.room.players.push(newPlayer);
     this.playerConnections.set(payload.playerId, ws);
+    if (this.isRelaySocket(ws)) {
+      this.relayConnections.add(ws);
+    }
 
     // Ack to joiner
     this.send(ws, {
@@ -309,7 +339,7 @@ export class RoomServer {
     return null;
   }
 
-  private handlePlayerReady(ws: WebSocket) {
+  private handlePlayerReady(ws: RoomSocket) {
     this.updatePlayerState(ws, { isReady: true });
     const playerId = this.getPlayerIdByWs(ws);
     if (playerId) {
@@ -318,7 +348,7 @@ export class RoomServer {
     }
   }
 
-  private handlePlayerUnready(ws: WebSocket) {
+  private handlePlayerUnready(ws: RoomSocket) {
     this.updatePlayerState(ws, { isReady: false });
     const playerId = this.getPlayerIdByWs(ws);
     if (playerId) {
@@ -327,7 +357,7 @@ export class RoomServer {
     }
   }
 
-  private updatePlayerState(ws: WebSocket, updates: Partial<PlayerInRoom>) {
+  private updatePlayerState(ws: RoomSocket, updates: Partial<PlayerInRoom>) {
     if (!this.room) return;
     const playerId = this.getPlayerIdByWs(ws);
     if (playerId) {
@@ -338,12 +368,15 @@ export class RoomServer {
     }
   }
 
-  private handleDisconnect(ws: WebSocket) {
+  private handleDisconnect(ws: RoomSocket) {
     if (!this.room) return;
     const playerId = this.getPlayerIdByWs(ws);
     if (playerId) {
       const isHost = this.room.hostId === playerId;
       this.playerConnections.delete(playerId);
+      if (this.isRelaySocket(ws)) {
+        this.relayConnections.delete(ws);
+      }
       this.room.players = this.room.players.filter((p) => p.id !== playerId);
       this.broadcast({
         type: "room:player:left",
@@ -387,16 +420,38 @@ export class RoomServer {
     return true;
   }
 
-  private getPlayerIdByWs(ws: WebSocket): string | undefined {
+  private getPlayerIdByWs(ws: RoomSocket): string | undefined {
     for (const [id, socket] of this.playerConnections.entries()) {
       if (socket === ws) return id;
     }
     return undefined;
   }
 
-  public getSocketByPlayerId(playerId?: string): WebSocket | undefined {
+  public getSocketByPlayerId(playerId?: string): RoomSocket | undefined {
     if (!playerId) return undefined;
     return this.playerConnections.get(playerId);
+  }
+
+  public disconnectRemotePlayersForModeSwitch() {
+    if (!this.room) return;
+    const hostId = this.room.hostId;
+    for (const [playerId, socket] of this.playerConnections.entries()) {
+      if (playerId === hostId) continue;
+      this.send(socket, { type: "room:disbanded", payload: {} });
+      socket.close();
+      this.playerConnections.delete(playerId);
+    }
+    this.relayConnections.forEach((socket) => socket.close());
+    this.relayConnections.clear();
+    this.room.players = this.room.players.filter((player) => player.id === hostId);
+    this.broadcastState();
+  }
+
+  public disconnectRelayPlayer(playerId: string) {
+    const socket = this.playerConnections.get(playerId);
+    if (!socket || !this.relayConnections.has(socket as RelaySocket)) return;
+    this.handleDisconnect(socket);
+    socket.close();
   }
 
   private normalizeRelayPayload(
@@ -573,7 +628,7 @@ export class RoomServer {
     }
   }
 
-  private send(ws: WebSocket, msg: RoomMessage) {
+  private send(ws: RoomSocket, msg: RoomMessage) {
     if (ws.readyState === WebSocket.OPEN) {
       ws.send(this.serializeRoomMessage(msg));
     }
@@ -639,6 +694,33 @@ export class RoomServer {
     const clone = { ...payload };
     delete clone.binaryData;
     return clone;
+  }
+
+  private resolveRelaySenderId(msg: RoomMessage): string | undefined {
+    const payload = msg.payload as Record<string, unknown> | undefined;
+    if (msg.type === "room:join" && typeof payload?.playerId === "string") return payload.playerId;
+    if (typeof payload?.senderId === "string") return payload.senderId;
+    if (typeof payload?.playerId === "string") return payload.playerId;
+    return undefined;
+  }
+
+  private createRelaySocket(playerId: string | undefined, sendToRelay: (data: string | Buffer, targetPlayerId?: string) => void): RelaySocket {
+    const existing = playerId ? this.playerConnections.get(playerId) : undefined;
+    if (existing && this.relayConnections.has(existing as RelaySocket)) return existing as RelaySocket;
+    const relaySocket: RelaySocket = {
+      readyState: WebSocket.OPEN,
+      send: (data) => sendToRelay(data, playerId),
+      close: () => {
+        relaySocket.readyState = WebSocket.CLOSED;
+        this.relayConnections.delete(relaySocket);
+        if (playerId) this.playerConnections.delete(playerId);
+      },
+    };
+    return relaySocket;
+  }
+
+  private isRelaySocket(socket: RoomSocket): socket is RelaySocket {
+    return !(socket instanceof WebSocket);
   }
 }
 

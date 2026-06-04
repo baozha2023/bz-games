@@ -41,6 +41,11 @@ export const IPC = {
   ROOM_SEND_CHAT: "room:sendChat",
   ROOM_KICK_PLAYER: "room:kickPlayer",
   ROOM_RECONNECT: "room:reconnect",
+  ROOM_DISCOVER_LAN: "room:discoverLan",
+  ROOM_DISCOVER_RELAY: "room:discoverRelay",
+  ROOM_VALIDATE_DISCOVERED: "room:validateDiscovered",
+  ROOM_ENABLE_RELAY_HOST: "room:enableRelayHost",
+  ROOM_DISABLE_RELAY_HOST: "room:disableRelayHost",
 
   // ── 房间事件推送（主→渲染，使用 ipcRenderer.on）──
   ROOM_EVENT: "room:event",

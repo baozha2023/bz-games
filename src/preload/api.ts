@@ -10,6 +10,7 @@ import type {
   MarketTaskEvent,
   MarketTaskState,
   GameType,
+  DiscoveredRoom,
   RoomEvent,
   UpdateState,
 } from "../shared/types";
@@ -114,6 +115,16 @@ export const electronAPI = {
       ipcRenderer.invoke(IPC.ROOM_POP_IN_CHAT),
     getChatHistory: () =>
       ipcRenderer.invoke(IPC.ROOM_GET_CHAT_HISTORY),
+    discoverLan: (): Promise<DiscoveredRoom[]> =>
+      ipcRenderer.invoke(IPC.ROOM_DISCOVER_LAN),
+    discoverRelay: (): Promise<DiscoveredRoom[]> =>
+      ipcRenderer.invoke(IPC.ROOM_DISCOVER_RELAY),
+    validateDiscovered: (room: DiscoveredRoom) =>
+      ipcRenderer.invoke(IPC.ROOM_VALIDATE_DISCOVERED, room),
+    enableRelayHost: () =>
+      ipcRenderer.invoke(IPC.ROOM_ENABLE_RELAY_HOST),
+    disableRelayHost: () =>
+      ipcRenderer.invoke(IPC.ROOM_DISABLE_RELAY_HOST),
     onChatWindowClosed: (callback: () => void) => {
       const handler = () => callback();
       ipcRenderer.on(IPC.ROOM_CHAT_WINDOW_CLOSED, handler);

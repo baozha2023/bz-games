@@ -17,6 +17,7 @@ import {
   encodeBinaryEnvelope,
 } from "../../shared/binary-protocol";
 import { RoomCommunicationConstants } from "./RoomCommunicationConstants";
+import { DEFAULT_RELAY_SERVER_URL, DEFAULT_RELAY_TOKEN } from "../../shared/constants";
 
 type ConnectResult = { success: boolean; error?: string; message?: string };
 type BinaryRelayPayload = GameRelayPayload & { binaryData?: Buffer };
@@ -32,6 +33,8 @@ export class RoomClient {
   private shouldReconnect = false;
   private manuallyDisconnected = false;
   private hasJoinedRoom = false;
+  private relayMode = false;
+  private relayAddress = "";
   private readonly maxReconnectAttempts = RoomCommunicationConstants.ROOM_MAX_RECONNECT_ATTEMPTS;
 
   private connectionResolver: ((result: ConnectResult) => void) | null = null;
@@ -54,8 +57,15 @@ export class RoomClient {
     this.resetRelayState();
 
     let url = address.trim();
+    this.relayMode = this.isRelayAddress(url);
+    this.relayAddress = this.relayMode ? url : "";
+    if (this.relayMode) {
+      url = DEFAULT_RELAY_SERVER_URL.trim();
+    }
     if (!url.startsWith("ws://") && !url.startsWith("wss://")) {
-      url = `ws://${url}`;
+      if (url.startsWith("https://")) url = `wss://${url.slice("https://".length)}`;
+      else if (url.startsWith("http://")) url = `ws://${url.slice("http://".length)}`;
+      else url = `ws://${url}`;
     }
 
     this.address = url;
@@ -111,6 +121,22 @@ export class RoomClient {
 
   private handleOpen() {
     this.clearReconnectTimer();
+    if (this.relayMode) {
+      const settings = storeService.getSettings();
+      this.sendRaw({
+        type: "relay:join",
+        payload: {
+          token: DEFAULT_RELAY_TOKEN,
+          address: this.relayAddress,
+          playerId: settings.playerId,
+        },
+      });
+      return;
+    }
+    this.sendJoinRequest();
+  }
+
+  private sendJoinRequest() {
     const settings = storeService.getSettings();
     const userData = storeService.getUserData();
     const joinPayload: RoomJoinPayload = {
@@ -175,6 +201,25 @@ export class RoomClient {
 
   private handleIncomingMessage(data: WebSocket.RawData, isBinary: boolean) {
     try {
+      if (this.relayMode && !isBinary) {
+        const relayMsg = JSON.parse(this.rawDataToBuffer(data).toString()) as RoomMessage;
+        if (relayMsg.type === "relay:join:ack" as RoomMessage["type"]) {
+          this.sendJoinRequest();
+          return;
+        }
+        if (relayMsg.type === "relay:error" as RoomMessage["type"]) {
+          this.shouldReconnect = false;
+          this.hasJoinedRoom = false;
+          this.resolveConnection({ success: false, error: String((relayMsg.payload as any)?.code || "relay_error") });
+          this.cleanup();
+          return;
+        }
+        if (relayMsg.type === "relay:closed" as RoomMessage["type"]) {
+          this.processMessage({ type: "room:disbanded", payload: {} });
+          this.cleanup();
+          return;
+        }
+      }
       const msg = this.deserializeRoomMessage(data, isBinary);
       if (!msg) return;
       this.processMessage(msg);
@@ -322,7 +367,13 @@ export class RoomClient {
 
   send(msg: RoomMessage) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(this.serializeRoomMessage(msg));
+      this.ws.send(this.serializeRoomMessage(msg, this.relayMode ? this.room?.hostId : undefined));
+    }
+  }
+
+  private sendRaw(msg: RoomMessage) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(msg));
     }
   }
 
@@ -421,12 +472,13 @@ export class RoomClient {
     });
   }
 
-  private serializeRoomMessage(msg: RoomMessage): string | Buffer {
+  private serializeRoomMessage(msg: RoomMessage, relayTo?: string): string | Buffer {
     const payload = msg.payload as BinaryRelayPayload;
-    if (!payload?.binaryData) return JSON.stringify(msg);
+    const header = relayTo ? { ...msg, __relayTo: relayTo } : msg;
+    if (!payload?.binaryData) return JSON.stringify(header);
     return encodeBinaryEnvelope(
       {
-        ...msg,
+        ...header,
         payload: this.stripBinaryData(payload),
       },
       payload.binaryData,
@@ -473,6 +525,10 @@ export class RoomClient {
     const clone = { ...payload };
     delete clone.binaryData;
     return clone;
+  }
+
+  private isRelayAddress(address: string) {
+    return /^bzgames\.top:\d+$/i.test(address.trim());
   }
 }
 

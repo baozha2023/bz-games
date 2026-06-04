@@ -6,13 +6,15 @@
     <n-layout-header bordered style="height: 64px; padding: 16px;">
       <n-space justify="space-between" align="center">
         <h2 style="margin: 0; display: flex; align-items: center;">
-          <AvatarWithFrame
-            :src="settingsStore.settings?.avatar"
-            :name="settingsStore.settings?.playerName || ''"
-            :size="28"
-            :frame-file-name="topBarFrameFileName"
-          />
-          <span style="margin-left: 8px;">{{ settingsStore.settings?.playerName || 'BZ-Games' }}</span>
+          <button class="profile-entry" @click="router.push('/personalization')">
+            <AvatarWithFrame
+              :src="settingsStore.settings?.avatar"
+              :name="settingsStore.settings?.playerName || ''"
+              :size="28"
+              :frame-file-name="topBarFrameFileName"
+            />
+            <span style="margin-left: 8px;">{{ settingsStore.settings?.playerName || 'BZ-Games' }}</span>
+          </button>
 
           <div 
              style="margin-left: 16px; display: flex; align-items: center; background: var(--bz-bg-panel); padding: 4px 12px; border-radius: 16px; cursor: pointer; transition: all 0.3s;" 
@@ -39,7 +41,7 @@
             <span v-if="gameStore.newAchievements.size > 0" class="red-dot"></span>
             <n-button @click="router.push('/achievements')">{{ t('achievement.title') }}</n-button>
           </div>
-          <n-button @click="router.push('/personalization')">{{ t('nav.personalization') }}</n-button>
+          <n-button @click="router.push('/rooms')">{{ t('nav.rooms') }}</n-button>
           <n-button @click="router.push('/settings')">{{ t('nav.settings') }}</n-button>
         </n-space>
       </n-space>
@@ -331,6 +333,21 @@ onUnmounted(() => {
 .badge-wrapper {
   position: relative;
   display: inline-block;
+}
+
+.profile-entry {
+  display: inline-flex;
+  align-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.profile-entry:hover {
+  opacity: 0.86;
 }
 
 .red-dot {

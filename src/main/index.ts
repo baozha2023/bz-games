@@ -6,6 +6,7 @@ import { storeService } from "./services/StoreService";
 import { marketService } from "./services/MarketService";
 import { databaseService } from "./services/DatabaseService";
 import { requestInterceptor } from "./services/MarketService";
+import { roomDiscoveryService } from "./services/RoomDiscoveryService";
 
 const gotTheLock = app.requestSingleInstanceLock();
 
@@ -37,6 +38,7 @@ if (!gotTheLock) {
     });
 
     registerAllIpc();
+    roomDiscoveryService.start();
     createWindow();
 
     if (settings.downloadFloatBall) {
@@ -53,6 +55,7 @@ if (!gotTheLock) {
 
 app.on("before-quit", () => {
   storeService.recordAppClosed();
+  roomDiscoveryService.stop();
   databaseService.close();
   markAppQuitting();
 });
