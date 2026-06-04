@@ -7,7 +7,6 @@ const HEARTBEAT_INTERVAL_MS = Number(process.env.HEARTBEAT_INTERVAL_MS || 30000)
 const MAX_TEXT_BYTES = Number(process.env.MAX_TEXT_BYTES || 1024 * 1024);
 const MAX_BINARY_BYTES = Number(process.env.MAX_BINARY_BYTES || 12 * 1024 * 1024);
 const RELAY_TOKEN = (process.env.RELAY_TOKEN || "").trim();
-const PUBLIC_ROOM_HOST = (process.env.PUBLIC_ROOM_HOST || "bzgames.top").trim();
 const MAX_ROOMS = Number(process.env.MAX_ROOMS || 80);
 const MAX_CLIENTS = Number(process.env.MAX_CLIENTS || 400);
 const MAX_CLIENTS_PER_ROOM = Number(process.env.MAX_CLIENTS_PER_ROOM || 8);
@@ -162,7 +161,12 @@ function registerHost(client, payload) {
     send(client.ws, { type: "relay:error", payload: { code: "unauthorized" } });
     return;
   }
-  if (!payload.roomId || !payload.playerId || !payload.gameId || !payload.gameVersion) {
+  if (
+    typeof payload.roomId !== "string" ||
+    typeof payload.playerId !== "string" ||
+    typeof payload.gameId !== "string" ||
+    typeof payload.gameVersion !== "string"
+  ) {
     send(client.ws, { type: "relay:error", payload: { code: "invalid_host_payload" } });
     return;
   }
@@ -188,14 +192,12 @@ function registerHost(client, payload) {
     id: payload.roomId,
     source: "relay",
     roomCode,
-    publicAddress: `${PUBLIC_ROOM_HOST}:${roomCode}`,
-    name: payload.name || `${payload.hostName || payload.playerId} 的房间`,
+    name: `${payload.hostName || payload.playerId} 的房间`,
     gameId: payload.gameId,
     gameName: payload.gameName || payload.gameId,
     gameVersion: payload.gameVersion,
     hostId: payload.playerId,
     hostName: payload.hostName || payload.playerId,
-    address: payload.address || "",
     playerCount: Number(payload.playerCount || 1),
     maxPlayers: Number(payload.maxPlayers || 4),
     state: payload.state || "waiting",
@@ -206,9 +208,7 @@ function registerHost(client, payload) {
   send(client.ws, {
     type: "relay:host:ack",
     payload: {
-      roomId: client.roomId,
       roomCode,
-      publicAddress: `${PUBLIC_ROOM_HOST}:${roomCode}`,
     },
   });
 }
@@ -218,8 +218,12 @@ function registerGuest(client, payload) {
     send(client.ws, { type: "relay:error", payload: { code: "unauthorized" } });
     return;
   }
-  const room = resolveRoom(payload.roomId || payload.relayRoomId || payload.roomCode || payload.address);
-  if (!room || !payload.playerId) {
+  if (typeof payload.roomCode !== "string" || typeof payload.playerId !== "string") {
+    send(client.ws, { type: "relay:error", payload: { code: "invalid_join_payload" } });
+    return;
+  }
+  const room = resolveRoom(payload.roomCode);
+  if (!room) {
     send(client.ws, { type: "relay:error", payload: { code: "room_not_found" } });
     return;
   }
@@ -249,7 +253,7 @@ function registerGuest(client, payload) {
   room.playerCount = room.clients.size;
   room.updatedAt = Date.now();
 
-  send(client.ws, { type: "relay:join:ack", payload: { roomId: client.roomId } });
+  send(client.ws, { type: "relay:join:ack", payload: { hostId: room.hostId } });
 }
 
 function forwardText(client, message, rawText) {
@@ -276,7 +280,13 @@ function resolveTargets(client, payload) {
   const room = rooms.get(client.roomId);
   if (!room) return [];
   const targetPlayerId = resolveTargetPlayerId(payload);
+  if (!client.isHost) {
+    if (targetPlayerId !== room.hostId) return [];
+    const host = clients.get(room.hostId);
+    return host ? [host] : [];
+  }
   if (targetPlayerId) {
+    if (!room.clients.has(targetPlayerId)) return [];
     const target = clients.get(targetPlayerId);
     return target ? [target] : [];
   }
@@ -339,12 +349,8 @@ function verifyRelayToken(payload) {
 
 function resolveRoom(value) {
   if (!value) return null;
-  if (rooms.has(value)) return rooms.get(value);
   const normalized = String(value).trim();
-  const code = normalized.startsWith(`${PUBLIC_ROOM_HOST}:`)
-    ? normalized.slice(PUBLIC_ROOM_HOST.length + 1)
-    : normalized;
-  return Array.from(rooms.values()).find((room) => room.roomCode === code || room.publicAddress === normalized) || null;
+  return Array.from(rooms.values()).find((room) => room.roomCode === normalized) || null;
 }
 
 function canAcceptRoom() {
@@ -385,8 +391,21 @@ function touchRoom(roomId) {
 }
 
 function toPublicRoom(room) {
-  const { clients: _clients, ...publicRoom } = room;
-  return { ...publicRoom, address: room.publicAddress || room.address || "", relayRoomId: room.id };
+  return {
+    id: room.roomCode,
+    source: room.source,
+    roomCode: room.roomCode,
+    name: room.name,
+    gameId: room.gameId,
+    gameName: room.gameName,
+    gameVersion: room.gameVersion,
+    hostId: room.hostId,
+    hostName: room.hostName,
+    playerCount: room.playerCount,
+    maxPlayers: room.maxPlayers,
+    state: room.state,
+    updatedAt: room.updatedAt,
+  };
 }
 
 function decodeBinaryEnvelope(buffer) {

@@ -124,7 +124,7 @@ declare global {
         discoverLan: () => Promise<DiscoveredRoom[]>;
         discoverRelay: () => Promise<DiscoveredRoom[]>;
         validateDiscovered: (room: DiscoveredRoom) => Promise<RoomJoinValidationResult>;
-        enableRelayHost: () => Promise<{ success: boolean; roomId?: string; roomCode?: string; publicAddress?: string; error?: string }>;
+        enableRelayHost: () => Promise<{ success: boolean; publicAddress?: string; error?: string }>;
         disableRelayHost: () => Promise<void>;
         onChatWindowClosed: (callback: () => void) => () => void;
         onEvent: (callback: (event: RoomEvent) => void) => () => void;

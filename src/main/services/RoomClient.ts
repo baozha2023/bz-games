@@ -17,7 +17,7 @@ import {
   encodeBinaryEnvelope,
 } from "../../shared/binary-protocol";
 import { RoomCommunicationConstants } from "./RoomCommunicationConstants";
-import { DEFAULT_RELAY_SERVER_URL, DEFAULT_RELAY_TOKEN } from "../../shared/constants";
+import { DEFAULT_RELAY_PUBLIC_HOST, DEFAULT_RELAY_SERVER_URL, DEFAULT_RELAY_TOKEN } from "../../shared/constants";
 
 type ConnectResult = { success: boolean; error?: string; message?: string };
 type BinaryRelayPayload = GameRelayPayload & { binaryData?: Buffer };
@@ -34,7 +34,8 @@ export class RoomClient {
   private manuallyDisconnected = false;
   private hasJoinedRoom = false;
   private relayMode = false;
-  private relayAddress = "";
+  private relayRoomCode = "";
+  private relayHostId = "";
   private readonly maxReconnectAttempts = RoomCommunicationConstants.ROOM_MAX_RECONNECT_ATTEMPTS;
 
   private connectionResolver: ((result: ConnectResult) => void) | null = null;
@@ -58,7 +59,8 @@ export class RoomClient {
 
     let url = address.trim();
     this.relayMode = this.isRelayAddress(url);
-    this.relayAddress = this.relayMode ? url : "";
+    this.relayRoomCode = this.relayMode ? this.resolveRelayRoomCode(url) : "";
+    this.relayHostId = "";
     if (this.relayMode) {
       url = DEFAULT_RELAY_SERVER_URL.trim();
     }
@@ -127,7 +129,7 @@ export class RoomClient {
         type: "relay:join",
         payload: {
           token: DEFAULT_RELAY_TOKEN,
-          address: this.relayAddress,
+          roomCode: this.relayRoomCode,
           playerId: settings.playerId,
         },
       });
@@ -204,6 +206,7 @@ export class RoomClient {
       if (this.relayMode && !isBinary) {
         const relayMsg = JSON.parse(this.rawDataToBuffer(data).toString()) as RoomMessage;
         if (relayMsg.type === "relay:join:ack" as RoomMessage["type"]) {
+          this.relayHostId = String((relayMsg.payload as any)?.hostId || "");
           this.sendJoinRequest();
           return;
         }
@@ -257,6 +260,7 @@ export class RoomClient {
     if (msg.type === "room:join:ack") {
       const ack = msg.payload as RoomJoinAckPayload;
       this.room = ack.room;
+      this.relayHostId = this.relayMode ? ack.room.hostId : "";
       this.hasJoinedRoom = true;
       this.reconnectAttempts = 0;
       this.emitConnectionStatus({
@@ -280,6 +284,7 @@ export class RoomClient {
       const sameGame = state.gameId === this.gameId;
       if (joined && sameGame) {
         this.room = state;
+        this.relayHostId = this.relayMode ? state.hostId : "";
         this.hasJoinedRoom = true;
         this.reconnectAttempts = 0;
         this.emitConnectionStatus({
@@ -367,7 +372,7 @@ export class RoomClient {
 
   send(msg: RoomMessage) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(this.serializeRoomMessage(msg, this.relayMode ? this.room?.hostId : undefined));
+      this.ws.send(this.serializeRoomMessage(msg, this.relayMode ? this.getRelayHostId() : undefined));
     }
   }
 
@@ -407,6 +412,10 @@ export class RoomClient {
       this.ws = null;
     }
     this.connectionResolver = null;
+  }
+
+  private getRelayHostId() {
+    return this.room?.hostId || this.relayHostId || undefined;
   }
 
   private scheduleReconnect() {
@@ -528,7 +537,15 @@ export class RoomClient {
   }
 
   private isRelayAddress(address: string) {
-    return /^bzgames\.top:\d+$/i.test(address.trim());
+    return new RegExp(`^${this.escapeRegExp(DEFAULT_RELAY_PUBLIC_HOST)}:\\d+$`, "i").test(address.trim());
+  }
+
+  private resolveRelayRoomCode(address: string) {
+    return address.trim().split(":").pop() || "";
+  }
+
+  private escapeRegExp(value: string) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   }
 }
 

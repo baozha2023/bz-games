@@ -55,7 +55,6 @@ Environment=RELAY_TOKEN=bzgames
 Environment=ROOM_TTL_MS=60000
 Environment=MAX_TEXT_BYTES=1048576
 Environment=MAX_BINARY_BYTES=12582912
-Environment=PUBLIC_ROOM_HOST=bzgames.top
 Environment=MAX_ROOMS=80
 Environment=MAX_CLIENTS=400
 Environment=MAX_CLIENTS_PER_ROOM=8
@@ -106,6 +105,7 @@ src/shared/constants.ts
 
 ```typescript
 export const DEFAULT_RELAY_SERVER_URL = "http://39.106.221.85:38090";
+export const DEFAULT_RELAY_PUBLIC_HOST = "bzgames.top";
 export const DEFAULT_RELAY_TOKEN = "bzgames";
 ```
 
@@ -113,6 +113,7 @@ export const DEFAULT_RELAY_TOKEN = "bzgames";
 
 ```typescript
 export const DEFAULT_RELAY_SERVER_URL = "https://relay.example.com";
+export const DEFAULT_RELAY_PUBLIC_HOST = "bzgames.top";
 export const DEFAULT_RELAY_TOKEN = "bzgames";
 ```
 
@@ -136,29 +137,27 @@ Environment=MAX_EVENT_LOOP_DELAY_MS=250
 
 后续可根据 `/health` 返回的 `roomCount`、`clientCount`、`eventLoopDelayMs` 和实际带宽占用调整。
 
-## 官方房间短地址
+## 官方房间码与短地址
 
-房主通过 `relay:host` 注册房间成功后，服务端返回：
+房主通过 `relay:host` 注册房间成功后，中继服务器只返回房间码：
 
 ```json
 {
   "type": "relay:host:ack",
   "payload": {
-    "roomId": "uuid",
-    "roomCode": "123456",
-    "publicAddress": "bzgames.top:123456"
+    "roomCode": "123456"
   }
 }
 ```
 
-客机输入 `bzgames.top:123456` 后，客户端应识别 `bzgames.top:` 前缀，并向官方中继服务器发送 `relay:join`，payload 中携带 `address` 或 `roomCode`。
+平台使用 `DEFAULT_RELAY_PUBLIC_HOST` 和 `roomCode` 拼接短地址，例如 `bzgames.top:123456`。客机输入短地址后，平台解析出 `roomCode`，并向官方中继服务器发送 `relay:join`。
 
 ## 中继职责边界
 
-中继服务器不是 RoomServer，也不理解游戏业务逻辑。它只做三件事：
+中继服务器不是 RoomServer，也不理解游戏业务逻辑。它只做以下事情：
 
-- 通过 `relay:host` 登记房间，用于 `/rooms` 展示，并生成 `bzgames.top:随机数字` 短地址。
-- 通过 `relay:join` 将玩家连接登记到某个房间，支持 `roomId` / `relayRoomId` / `roomCode` / `bzgames.top:随机数字`。
+- 通过 `relay:host` 登记房间，用于 `/rooms` 展示，并生成 `roomCode`。
+- 通过 `relay:join` 将玩家连接登记到某个房间，只识别 `roomCode`。
 - 根据 `payload.to` / `payload.targetPlayerId` 或房间广播规则，原样转发 text/binary WebSocket 数据。
 
 若配置了 `RELAY_TOKEN`，客户端注册房间和加入房间时必须在 `relay:host` / `relay:join` 的 payload 中携带相同 `token`。建议公网部署时必须配置。

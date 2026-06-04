@@ -1,6 +1,6 @@
 import { WebSocket } from "ws";
 import crypto from "crypto";
-import { DEFAULT_RELAY_SERVER_URL, DEFAULT_RELAY_TOKEN } from "../../shared/constants";
+import { DEFAULT_RELAY_PUBLIC_HOST, DEFAULT_RELAY_SERVER_URL, DEFAULT_RELAY_TOKEN } from "../../shared/constants";
 import { roomServer } from "./RoomServer";
 import { storeService } from "./StoreService";
 import { GameLoader } from "./GameLoader";
@@ -9,8 +9,6 @@ import type { RoomMessage } from "../../shared/types";
 
 export interface RelayHostResult {
   success: boolean;
-  roomId?: string;
-  roomCode?: string;
   publicAddress?: string;
   error?: string;
 }
@@ -69,7 +67,8 @@ export class RelayRoomService {
           resolve({ success: false, error: message?.payload?.code || "relay_rejected" });
           return;
         }
-        const publicAddress = message.payload?.publicAddress;
+        const roomCode = message.payload?.roomCode;
+        const publicAddress = typeof roomCode === "string" ? this.toPublicAddress(roomCode) : "";
         if (roomServer.room && publicAddress) {
           roomServer.room.hostPublicAddress = publicAddress;
           roomServer.broadcastState();
@@ -79,8 +78,6 @@ export class RelayRoomService {
         ws.on("message", (relayData, isBinary) => this.handleRelayMessage(relayData, isBinary));
         resolve({
           success: true,
-          roomId: message.payload?.roomId,
-          roomCode: message.payload?.roomCode,
           publicAddress,
         });
       };
@@ -162,6 +159,10 @@ export class RelayRoomService {
     if (trimmed.startsWith("https://")) return `wss://${trimmed.slice("https://".length)}`;
     if (trimmed.startsWith("http://")) return `ws://${trimmed.slice("http://".length)}`;
     return `ws://${trimmed}`;
+  }
+
+  private toPublicAddress(roomCode: string) {
+    return `${DEFAULT_RELAY_PUBLIC_HOST}:${roomCode}`;
   }
 
   private parseMessage(data: WebSocket.RawData): any {

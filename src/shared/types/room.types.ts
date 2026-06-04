@@ -93,13 +93,10 @@ export interface DiscoveredRoom {
   hostId: string;
   hostName: string;
   address: string;
-  publicAddress?: string;
-  roomCode?: string;
   playerCount: number;
   maxPlayers: number;
   state: RoomInfo["state"];
   updatedAt: number;
-  relayRoomId?: string;
   canJoin?: boolean;
   joinBlockReason?: "game_missing" | "version_mismatch" | "room_full" | "game_started" | "own_room" | "unknown";
 }

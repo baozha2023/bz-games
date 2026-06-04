@@ -47,11 +47,13 @@ export function registerRoomIpc() {
   });
 
   ipcMain.handle(IPC.ROOM_READY, async () => {
-    roomClient.send({ type: "room:player:ready", payload: {} });
+    const localPlayerId = storeService.getSettings().playerId;
+    roomClient.send({ type: "room:player:ready", payload: { playerId: localPlayerId } });
   });
 
   ipcMain.handle(IPC.ROOM_UNREADY, async () => {
-    roomClient.send({ type: "room:player:unready", payload: {} });
+    const localPlayerId = storeService.getSettings().playerId;
+    roomClient.send({ type: "room:player:unready", payload: { playerId: localPlayerId } });
   });
 
   ipcMain.handle(IPC.ROOM_START, async () => {

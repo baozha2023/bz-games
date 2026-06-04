@@ -10,4 +10,6 @@ export const REFERER = "https://bz-game-client.local";
 
 export const DEFAULT_RELAY_SERVER_URL = "http://39.106.221.85:38090";
 
+export const DEFAULT_RELAY_PUBLIC_HOST = "bzgames.top";
+
 export const DEFAULT_RELAY_TOKEN = "bzgames";

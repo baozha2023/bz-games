@@ -1,6 +1,6 @@
 import dgram from "dgram";
 import os from "os";
-import { DEFAULT_RELAY_SERVER_URL } from "../../shared/constants";
+import { DEFAULT_RELAY_PUBLIC_HOST, DEFAULT_RELAY_SERVER_URL } from "../../shared/constants";
 import type { DiscoveredRoom, RoomInfo, RoomJoinValidationResult } from "../../shared/types";
 import { storeService } from "./StoreService";
 import { roomServer } from "./RoomServer";
@@ -8,6 +8,8 @@ import { roomServer } from "./RoomServer";
 const LAN_DISCOVERY_PORT = 38081;
 const LAN_DISCOVERY_QUERY = "bz-games:room-discovery:query";
 const LAN_DISCOVERY_RESPONSE = "bz-games:room-discovery:response";
+
+type RelayRoomListItem = Omit<DiscoveredRoom, "address"> & { roomCode: string };
 
 export class RoomDiscoveryService {
   private udpServer: dgram.Socket | null = null;
@@ -77,8 +79,8 @@ export class RoomDiscoveryService {
     try {
       const response = await fetch(`${baseUrl.replace(/\/$/, "")}/rooms`);
       if (!response.ok) return [];
-      const rooms = (await response.json()) as DiscoveredRoom[];
-      return rooms.map((room) => this.withJoinValidation(room));
+      const rooms = (await response.json()) as RelayRoomListItem[];
+      return rooms.map((room) => this.withJoinValidation(this.withRelayAddress(room)));
     } catch {
       return [];
     }
@@ -113,6 +115,14 @@ export class RoomDiscoveryService {
       ...room,
       canJoin: validation.canJoin,
       joinBlockReason: validation.reason,
+    };
+  }
+
+  private withRelayAddress(room: RelayRoomListItem): DiscoveredRoom {
+    return {
+      ...room,
+      id: room.roomCode,
+      address: `${DEFAULT_RELAY_PUBLIC_HOST}:${room.roomCode}`,
     };
   }
 

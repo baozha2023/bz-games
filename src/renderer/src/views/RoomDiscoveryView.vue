@@ -140,7 +140,12 @@ const joinDiscoveredRoom = async (room: DiscoveredRoom) => {
     message.error(joinBlockText({ ...room, joinBlockReason: validation.reason }))
     return
   }
-  const res = await roomStore.joinRoom(room.gameId, room.address, room.gameVersion)
+  const address = room.address
+  if (!address) {
+    message.error(t('roomDiscovery.relayAddressPending'))
+    return
+  }
+  const res = await roomStore.joinRoom(room.gameId, address, room.gameVersion)
   if (!res.success) {
     message.error(res.error === 'own_room' ? t('room.joinError.ownRoom') : res.error || t('gameDetail.joinFail'))
     return

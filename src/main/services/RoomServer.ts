@@ -275,7 +275,6 @@ export class RoomServer {
       joinedAt: Date.now(),
     };
 
-    // Remove if exists (rejoin)
     this.room.players = this.room.players.filter(
       (p) => p.id !== payload.playerId,
     );
@@ -284,8 +283,6 @@ export class RoomServer {
     if (this.isRelaySocket(ws)) {
       this.relayConnections.add(ws);
     }
-
-    // Ack to joiner
     this.send(ws, {
       type: "room:join:ack",
       payload: {
@@ -293,8 +290,6 @@ export class RoomServer {
         yourPlayerId: payload.playerId,
       } as RoomJoinAckPayload,
     });
-
-    // Broadcast to others
     this.broadcast(
       {
         type: "room:player:joined",
@@ -340,8 +335,8 @@ export class RoomServer {
   }
 
   private handlePlayerReady(ws: RoomSocket) {
-    this.updatePlayerState(ws, { isReady: true });
     const playerId = this.getPlayerIdByWs(ws);
+    this.updatePlayerState(playerId, { isReady: true });
     if (playerId) {
       this.broadcast({ type: "room:player:ready", payload: { playerId } });
       this.broadcastState();
@@ -349,17 +344,16 @@ export class RoomServer {
   }
 
   private handlePlayerUnready(ws: RoomSocket) {
-    this.updatePlayerState(ws, { isReady: false });
     const playerId = this.getPlayerIdByWs(ws);
+    this.updatePlayerState(playerId, { isReady: false });
     if (playerId) {
       this.broadcast({ type: "room:player:unready", payload: { playerId } });
       this.broadcastState();
     }
   }
 
-  private updatePlayerState(ws: RoomSocket, updates: Partial<PlayerInRoom>) {
+  private updatePlayerState(playerId: string | undefined, updates: Partial<PlayerInRoom>) {
     if (!this.room) return;
-    const playerId = this.getPlayerIdByWs(ws);
     if (playerId) {
       const player = this.room.players.find((p) => p.id === playerId);
       if (player) {
@@ -402,13 +396,16 @@ export class RoomServer {
     this.room.players = this.room.players.filter((p) => p.id !== targetPlayerId);
     const targetSocket = this.playerConnections.get(targetPlayerId);
     this.playerConnections.delete(targetPlayerId);
+    if (targetSocket && this.isRelaySocket(targetSocket)) {
+      this.relayConnections.delete(targetSocket);
+    }
 
     const kickedPayload: RoomKickedPayload = {
       roomId: this.room.id,
       byPlayerId,
     };
     if (targetSocket && targetSocket.readyState === WebSocket.OPEN) {
-      targetSocket.send(JSON.stringify({ type: "room:kicked", payload: kickedPayload }));
+      this.send(targetSocket, { type: "room:kicked", payload: kickedPayload });
       targetSocket.close();
     }
 
