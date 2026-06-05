@@ -8,8 +8,8 @@ import semver from "semver";
 import { path7za } from "7zip-bin";
 import {
   IPC,
-} from "../../shared/ipc-channels";
-import { GameManifestSchema, type GameManifest } from "../../shared/game-manifest";
+} from "../../../shared/ipc-channels";
+import { GameManifestSchema, type GameManifest } from "../../../shared/game-manifest";
 import {
   GameType,
   isGitHubReleaseUrl,
@@ -25,19 +25,19 @@ import {
   type MarketIndex,
   type MarketTaskState,
   type MarketTaskStatus,
-} from "../../shared/types";
+} from "../../../shared/types";
 import { z } from "zod";
-import { GameLoader } from "./GameLoader";
-import { logger } from "../utils/logger";
-import { storeService } from "./StoreService";
-import { mainWindow, floatBallWindow } from "../window";
-import { GITHUB_API_BASE, GITHUB_RAW_BASE, OSS_BASE } from "../../shared/constants";
-import { RequestInterceptor } from "../utils/requestInterceptor";
-
-const PRIMARY_MARKET_INDEX_URL =
-  `${GITHUB_RAW_BASE}baozha2023/bz-games-market/master/market.json`;
-const FALLBACK_MARKET_INDEX_URL =
-  `${OSS_BASE}market.json`;
+import { GameLoader } from "../game/GameLoader";
+import { logger } from "../../utils/logger";
+import { storeService } from "../storage/StoreService";
+import { mainWindow, floatBallWindow } from "../../window";
+import {
+  GITHUB_API_BASE,
+  GITHUB_RAW_BASE,
+  MARKET_FALLBACK_INDEX_URL,
+  MARKET_PRIMARY_INDEX_URL,
+} from "../../../shared/constants";
+import { RequestInterceptor } from "../../utils/requestInterceptor";
 
 function gitToRawUrl(repository: string, branch: string): string {
   const match = repository.match(/github\.com\/(.+?)\/(.+?)(?:\.git)?$/);
@@ -913,12 +913,12 @@ export class MarketService {
 
   private async fetchDirectory(): Promise<MarketDirectory> {
     try {
-      const raw = await this.fetchJson(PRIMARY_MARKET_INDEX_URL);
+      const raw = await this.fetchJson(MARKET_PRIMARY_INDEX_URL);
       return MarketDirectorySchema.parse(raw);
     } catch (primaryError) {
       logger.warn("[MarketService] Failed to load market directory from GitHub, falling back to OSS", primaryError);
       try {
-        const raw = await this.fetchJson(FALLBACK_MARKET_INDEX_URL);
+        const raw = await this.fetchJson(MARKET_FALLBACK_INDEX_URL);
         return MarketDirectorySchema.parse(raw);
       } catch (fallbackError) {
         logger.error("[MarketService] Failed to load market directory from OSS fallback", fallbackError);
@@ -935,11 +935,11 @@ export class MarketService {
 
   private async fetchIndexInternal(): Promise<MarketIndex> {
     try {
-      return await this.fetchIndexFromUrl(PRIMARY_MARKET_INDEX_URL);
+      return await this.fetchIndexFromUrl(MARKET_PRIMARY_INDEX_URL);
     } catch (primaryError) {
       logger.warn("[MarketService] Failed to load market index from GitHub, falling back to OSS", primaryError);
       try {
-        return await this.fetchIndexFromUrl(FALLBACK_MARKET_INDEX_URL);
+        return await this.fetchIndexFromUrl(MARKET_FALLBACK_INDEX_URL);
       } catch (fallbackError) {
         logger.error("[MarketService] Failed to load market index from OSS fallback", fallbackError);
         const primaryMessage =

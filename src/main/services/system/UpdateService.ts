@@ -2,11 +2,11 @@ import { app } from "electron";
 import { autoUpdater } from "electron-updater";
 import fs from "fs/promises";
 import path from "path";
-import { IPC } from "../../shared/ipc-channels";
-import { mainWindow } from "../window";
-import { logger } from "../utils/logger";
-import { getAppRoot } from "../utils/appPath";
-import type { UpdateErrorCode, UpdateState } from "../../shared/types";
+import { IPC } from "../../../shared/ipc-channels";
+import { mainWindow } from "../../window";
+import { logger } from "../../utils/logger";
+import { getAppRoot } from "../../utils/appPath";
+import type { UpdateErrorCode, UpdateState } from "../../../shared/types";
 
 class UpdateService {
   private inited = false;

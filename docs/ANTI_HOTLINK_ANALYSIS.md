@@ -12,7 +12,7 @@
 [MarketService.ts:L40](file:///f:/IDEA/idea-workspace/bz-games/src/main/services/MarketService.ts#L40):
 
 ```typescript
-const REFERER = "https://bz-game-client.local";
+const REFERER = "https://your-client-referer.example";
 ```
 
 这是一个**虚构的本地域名**，不是真实可访问的网站。只要这个字符串在整个代码库中保持一致，它就充当了一个隐式的"密钥"——只有 BZ-Games 客户端才知道这个 Referer，第三方浏览器/下载工具无法伪造。
@@ -31,15 +31,15 @@ const REFERER = "https://bz-game-client.local";
 
 ```typescript
 session.defaultSession.webRequest.onBeforeSendHeaders(
-  { urls: ["http://cdn.bzgames.top/*"] },
+  { urls: ["https://cdn.example.com/*"] },
   (details, callback) => {
-    details.requestHeaders["Referer"] = "https://bz-game-client.local";
+    details.requestHeaders["Referer"] = "https://your-client-referer.example";
     callback({ requestHeaders: details.requestHeaders });
   },
 );
 ```
 
-这个拦截器仅对 `http://cdn.bzgames.top/*` 生效，且只影响 Chromium 渲染进程发出的请求（如 `<img>` 标签、`fetch()` 在渲染进程中的调用）。对于主进程 Node.js 侧的 `fetch()`（MarketService 的核心调用），**此拦截器完全无效**——Node.js 的 fetch 不经过 Chromium 网络栈。
+这个拦截器仅对私有 CDN 域名生效，且只影响 Chromium 渲染进程发出的请求（如 `<img>` 标签、`fetch()` 在渲染进程中的调用）。对于主进程 Node.js 侧的 `fetch()`（MarketService 的核心调用），**此拦截器完全无效**——Node.js 的 fetch 不经过 Chromium 网络栈。
 
 ---
 
@@ -51,8 +51,8 @@ session.defaultSession.webRequest.onBeforeSendHeaders(
 
 | 下载源类型 | 是否兼容 | 原因 |
 |------------|:---:|------|
-| **官方市场（bz-games-market）** | ✅ | 官方服务器（GitHub/OSS）已将 `https://bz-game-client.local` 配置为白名单 Referer |
-| **第三方市场游戏** | ❌ | 第三方服务器不可能将 `https://bz-game-client.local` 加入白名单，因为这是一个私有/虚构域名 |
+| **官方市场（bz-games-market）** | ✅ | 官方服务器（GitHub/OSS）已将私有 Referer 配置为白名单 Referer |
+| **第三方市场游戏** | ❌ | 第三方服务器不可能将平台私有 Referer 加入白名单，因为这是一个私有/虚构域名 |
 | **无防盗链服务器** | ✅ | 不检查 Referer 的服务器（如大多数公共文件托管、未配置热链保护的 CDN）可正常下载 |
 | **有防盗链服务器** | ❌ | 假设某游戏作者将 `.zip` 托管在阿里云 OSS 上并开启"Referer 白名单保护"，该下载将**必然失败** |
 
@@ -72,7 +72,7 @@ BZ-Games 的设计追求          vs        当前防盗链实现
 ```
 场景A：第三方游戏作者将 .7z 托管在阿里云 OSS
   → OSS 开启了"防盗链"，Referer 白名单只包含作者自己的网站域名
-  → BZ-Games 发送 Referer: https://bz-game-client.local
+  → BZ-Games 发送私有 Referer
   → 403 Forbidden → 用户看到"下载失败"
 
 场景B：第三方游戏作者将 .zip 托管在 GitHub Releases
@@ -82,7 +82,7 @@ BZ-Games 的设计追求          vs        当前防盗链实现
 
 ### 2.4 主进程拦截器是否多余？
 
-- `session.defaultSession.webRequest.onBeforeSendHeaders` 只拦截 `cdn.bzgames.top`，这个域名在代码库中除此外没有其他引用
+- `session.defaultSession.webRequest.onBeforeSendHeaders` 只拦截私有 CDN 域名，这个域名在代码库中除此外没有其他引用
 - MarketService 使用 Node.js `fetch()`（主进程），不经过 Chromium 网络栈
 - 该拦截器可能用于早期版本中的渲染进程直接请求，但目前已无实际作用
 

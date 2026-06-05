@@ -60,7 +60,7 @@ relay-server/
 ```bash
 cd relay-server
 npm install --production
-PORT=38090 RELAY_TOKEN=bzgames npm start
+PORT=38090 RELAY_TOKEN=your-relay-token npm start
 ```
 
 验证：
@@ -97,7 +97,7 @@ npm install --production
 启动验证：
 
 ```bash
-PORT=38090 RELAY_TOKEN=bzgames npm start
+PORT=38090 RELAY_TOKEN=your-relay-token npm start
 ```
 
 ## 防火墙
@@ -129,7 +129,7 @@ After=network.target
 WorkingDirectory=/opt/bz-games-relay
 ExecStart=/usr/bin/node src/index.js
 Environment=PORT=38090
-Environment=RELAY_TOKEN=bzgames
+Environment=RELAY_TOKEN=your-relay-token
 Environment=ROOM_TTL_MS=60000
 Environment=HEARTBEAT_INTERVAL_MS=30000
 Environment=MAX_TEXT_BYTES=1048576
@@ -198,37 +198,41 @@ server {
 
 ```typescript
 export const DEFAULT_RELAY_SERVER_URL = "http://relay.example.com";
-export const DEFAULT_RELAY_PUBLIC_HOST = "bzgames.top";
-export const DEFAULT_RELAY_TOKEN = "bzgames";
+export const DEFAULT_RELAY_PUBLIC_HOST = "relay.example.com";
+export const DEFAULT_RELAY_TOKEN = "your-relay-token";
 ```
 
 ## 平台配置
 
-平台常量位置：
+平台侧私有构建配置位置：
 
 ```text
-src/shared/constants.ts
+private-build.config.json
 ```
 
 直连中继服务器：
 
-```typescript
-export const DEFAULT_RELAY_SERVER_URL = "http://39.106.221.85:38090";
-export const DEFAULT_RELAY_PUBLIC_HOST = "bzgames.top";
-export const DEFAULT_RELAY_TOKEN = "bzgames";
+```json
+{
+  "relayServerUrl": "http://relay.example.com:38090",
+  "relayPublicHost": "relay.example.com",
+  "relayToken": "your-relay-token"
+}
 ```
 
 域名反向代理：
 
-```typescript
-export const DEFAULT_RELAY_SERVER_URL = "http://relay.example.com";
-export const DEFAULT_RELAY_PUBLIC_HOST = "bzgames.top";
-export const DEFAULT_RELAY_TOKEN = "bzgames";
+```json
+{
+  "relayServerUrl": "http://relay.example.com",
+  "relayPublicHost": "relay.example.com",
+  "relayToken": "your-relay-token"
+}
 ```
 
 字段规则：
 
-- 用户看到、复制、服务器 Tab 展示、手动输入的地址为平台短地址，例如 `bzgames.top:123456`。
+- 用户看到、复制、服务器 Tab 展示、手动输入的地址为平台短地址，例如 `relay.example.com:123456`。
 - 平台向中继服务器加入房间时只发送 `roomCode`，例如 `123456`。
 - 中继服务器内部使用 `roomId` 管理房间。
 - 中继服务器不拼接、不解析、不识别短地址。
@@ -267,8 +271,8 @@ curl http://127.0.0.1:38090/rooms
 公网检查：
 
 ```bash
-curl http://39.106.221.85:38090/health
-curl http://39.106.221.85:38090/rooms
+curl http://relay.example.com:38090/health
+curl http://relay.example.com:38090/rooms
 ```
 
 返回示例：

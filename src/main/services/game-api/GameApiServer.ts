@@ -3,7 +3,7 @@ import crypto from "crypto";
 import path from "path";
 import fs from "fs";
 import { nativeImage } from "electron";
-import { findAvailablePort } from "../utils/portUtils";
+import { findAvailablePort } from "../../utils/portUtils";
 import type {
   GameApiMessage,
   GameApiRequest,
@@ -11,19 +11,19 @@ import type {
   GameRelayPayload,
   GameApiCapabilities,
   GameApiError,
-} from "../../shared/types";
-import { GameApiErrorCode } from "../../shared/types";
-import { storeService } from "./StoreService";
-import { roomServer } from "./RoomServer";
-import { roomClient } from "./RoomClient";
-import { mainWindow } from "../window";
-import { IPC } from "../../shared/ipc-channels";
-import { notificationService } from "./NotificationService";
-import { GameLoader } from "./GameLoader";
-import { encodeBinaryEnvelope } from "../../shared/binary-protocol";
+} from "../../../shared/types";
+import { GameApiErrorCode } from "../../../shared/types";
+import { storeService } from "../storage/StoreService";
+import { roomServer } from "../room/RoomServer";
+import { roomClient } from "../room/RoomClient";
+import { mainWindow } from "../../window";
+import { IPC } from "../../../shared/ipc-channels";
+import { notificationService } from "../system/NotificationService";
+import { GameLoader } from "../game/GameLoader";
+import { encodeBinaryEnvelope } from "../../../shared/binary-protocol";
 import { V1GameApiProtocol } from "./V1GameApiProtocol";
 import { V2GameApiProtocol } from "./V2GameApiProtocol";
-import { RoomCommunicationConstants } from "./RoomCommunicationConstants";
+import { RoomCommunicationConstants } from "../room/RoomCommunicationConstants";
 
 type BinaryRelayPayload = GameRelayPayload & { binaryData?: Buffer };
 type GameApiProtocolVersion = 1 | 2;

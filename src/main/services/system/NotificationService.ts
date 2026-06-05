@@ -1,8 +1,8 @@
 import { BrowserWindow, nativeTheme, screen } from "electron";
 import path from "path";
 import { is } from "@electron-toolkit/utils";
-import { logger } from "../utils/logger";
-import { storeService } from "./StoreService";
+import { logger } from "../../utils/logger";
+import { storeService } from "../storage/StoreService";
 
 class NotificationService {
   private window: BrowserWindow | null = null;

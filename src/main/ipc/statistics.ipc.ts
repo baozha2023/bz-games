@@ -1,6 +1,6 @@
 import { ipcMain } from "electron";
 import { IPC } from "../../shared/ipc-channels";
-import { databaseService } from "../services/DatabaseService";
+import { databaseService } from "../services/storage/DatabaseService";
 
 export function registerStatisticsIpc() {
   ipcMain.handle(IPC.STATS_GET_DAILY_PLAY_DURATIONS, async (_, days?: number) => {

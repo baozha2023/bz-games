@@ -21,7 +21,14 @@
           </template>
           <template v-else>
             <div class="message-header">
-              <span class="sender" :class="{ 'is-me': msg.senderId === settingsStore.settings?.playerId }">{{ msg.senderName }}</span>
+              <NicknameText
+                class="sender"
+                :class="{ 'is-me': msg.senderId === settingsStore.settings?.playerId }"
+                :name="msg.senderName"
+                :nickname-style="msg.senderStyle"
+                :effective-theme="settingsStore.effectiveTheme"
+                :size="13"
+              />
               <span class="time">{{ formatTime(msg.timestamp) }}</span>
             </div>
             <div class="message-content">
@@ -88,6 +95,7 @@ import { useI18n } from 'vue-i18n'
 import { useRoomStore } from '../../stores/useRoomStore'
 import { useSettingsStore } from '../../stores/useSettingsStore'
 import ImageViewer from './ImageViewer.vue'
+import NicknameText from '../NicknameText.vue'
 import type { ChatPayload } from '../../../../shared/types'
 
 const { t } = useI18n()
@@ -275,11 +283,10 @@ watch(() => roomStore.chatMessages.length, () => {
   margin-bottom: 2px;
 }
 .sender {
-  font-weight: bold;
-  color: var(--bz-info-blue);
+  max-width: 180px;
 }
 .sender.is-me {
-  color: var(--bz-green);
+  filter: brightness(1.08);
 }
 .time {
   color: var(--bz-chat-text-system);

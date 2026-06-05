@@ -13,6 +13,7 @@ import type {
   DiscoveredRoom,
   RoomEvent,
   UpdateState,
+  NicknameStyle,
 } from "../shared/types";
 
 export const electronAPI = {
@@ -182,6 +183,8 @@ export const electronAPI = {
       ipcRenderer.invoke(IPC.SYSTEM_SAVE_SETTINGS, settings),
     savePartialSettings: (partial: Partial<AppSettings>) =>
       ipcRenderer.invoke(IPC.SYSTEM_SAVE_PARTIAL_SETTINGS, partial),
+    saveNicknameStyle: (style: NicknameStyle): Promise<{ success: boolean; code?: string }> =>
+      ipcRenderer.invoke(IPC.SYSTEM_SAVE_NICKNAME_STYLE, style),
     ignoreUpdateVersion: (version: string) =>
       ipcRenderer.invoke(IPC.SYSTEM_SET_IGNORED_UPDATE_VERSION, version),
     uploadAvatar: () => ipcRenderer.invoke(IPC.SYSTEM_UPLOAD_AVATAR),

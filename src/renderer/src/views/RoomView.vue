@@ -149,6 +149,8 @@ const handleConnectionModeChange = (value: 'frp' | 'relay') => {
     content: t('room.connectionModeChangeContent'),
     positiveText: t('common.confirm'),
     negativeText: t('common.cancel'),
+    closable: false,
+    maskClosable: false,
     onPositiveClick: async () => {
       if (value === 'relay') {
         const result = await window.electronAPI.room.enableRelayHost()

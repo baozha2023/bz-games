@@ -3,7 +3,7 @@ import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import { IPC } from "../../shared/ipc-channels";
-import { storeService } from "../services/StoreService";
+import { storeService } from "../services/storage/StoreService";
 
 function getStoragePath(gameId: string, version: string): string {
   return path.join(storeService.getGameVersionStoragePath(gameId, version), "gamedata.json");

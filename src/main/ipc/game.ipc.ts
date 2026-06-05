@@ -5,9 +5,9 @@ import {IPC} from "../../shared/ipc-channels";
 import {
     GameLoader,
     type ManualManifestDraft,
-} from "../services/GameLoader";
-import {gameManager} from "../services/GameManager";
-import {storeService} from "../services/StoreService";
+} from "../services/game/GameLoader";
+import {gameManager} from "../services/game/GameManager";
+import {storeService} from "../services/storage/StoreService";
 import {logger} from "../utils/logger";
 
 const VIDEO_MIME_BY_EXT: Record<string, string> = {

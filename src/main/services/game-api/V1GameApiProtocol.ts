@@ -1,11 +1,11 @@
 import type { WebSocket } from "ws";
 import crypto from "crypto";
-import { GameApiErrorCode, type GameApiRequest, type GameRelayPayload } from "../../shared/types";
+import { GameApiErrorCode, type GameApiRequest, type GameRelayPayload } from "../../../shared/types";
 import type { GameApiServer } from "./GameApiServer";
-import { storeService } from "./StoreService";
-import { roomServer } from "./RoomServer";
-import { roomClient } from "./RoomClient";
-import { RoomCommunicationConstants } from "./RoomCommunicationConstants";
+import { storeService } from "../storage/StoreService";
+import { roomServer } from "../room/RoomServer";
+import { roomClient } from "../room/RoomClient";
+import { RoomCommunicationConstants } from "../room/RoomCommunicationConstants";
 
 type BinaryRelayPayload = GameRelayPayload & { binaryData?: Buffer };
 

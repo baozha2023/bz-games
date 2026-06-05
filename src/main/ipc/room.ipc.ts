@@ -1,15 +1,15 @@
 import { ipcMain } from "electron";
 import { IPC } from "../../shared/ipc-channels";
-import { roomServer } from "../services/RoomServer";
-import { roomClient } from "../services/RoomClient";
-import { storeService } from "../services/StoreService";
-import { gameManager } from "../services/GameManager";
+import { roomServer } from "../services/room/RoomServer";
+import { roomClient } from "../services/room/RoomClient";
+import { storeService } from "../services/storage/StoreService";
+import { gameManager } from "../services/game/GameManager";
 import { mainWindow } from "../window";
 import { createChatWindow, closeChatWindow, sendRoomEventToChat, getCachedChatHistory } from "../chat-window";
 import crypto from "crypto";
 import type { RoomMessage, ChatPayload, DiscoveredRoom } from "../../shared/types";
-import { roomDiscoveryService } from "../services/RoomDiscoveryService";
-import { relayRoomService } from "../services/RelayRoomService";
+import { roomDiscoveryService } from "../services/room/RoomDiscoveryService";
+import { relayRoomService } from "../services/room/RelayRoomService";
 
 export function registerRoomIpc() {
   ipcMain.handle(
@@ -94,6 +94,7 @@ export function registerRoomIpc() {
           id: crypto.randomUUID(),
           senderId: settings.playerId,
           senderName: settings.playerName,
+          senderStyle: settings.nicknameStyle,
           content,
           contentType: type,
           images: images && images.length > 0 ? images : undefined,

@@ -2,11 +2,11 @@ import { app, BrowserWindow, session } from "electron";
 import { createWindow, markAppQuitting, mainWindow, createFloatBallWindow } from "./window";
 import { registerAllIpc } from "./ipc";
 import { electronApp, optimizer } from "@electron-toolkit/utils";
-import { storeService } from "./services/StoreService";
-import { marketService } from "./services/MarketService";
-import { databaseService } from "./services/DatabaseService";
-import { requestInterceptor } from "./services/MarketService";
-import { roomDiscoveryService } from "./services/RoomDiscoveryService";
+import { storeService } from "./services/storage/StoreService";
+import { marketService } from "./services/market/MarketService";
+import { databaseService } from "./services/storage/DatabaseService";
+import { requestInterceptor } from "./services/market/MarketService";
+import { roomDiscoveryService } from "./services/room/RoomDiscoveryService";
 
 const gotTheLock = app.requestSingleInstanceLock();
 

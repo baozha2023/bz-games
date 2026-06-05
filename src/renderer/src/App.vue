@@ -14,7 +14,7 @@
 
 <script setup lang="ts">
 import './assets/theme.css'
-import { computed, ref, onMounted, onUnmounted } from 'vue'
+import { computed, onMounted, onUnmounted } from 'vue'
 import { darkTheme } from 'naive-ui'
 import { useSettingsStore } from './stores/useSettingsStore'
 import AppContent from './AppContent.vue'
@@ -23,16 +23,15 @@ const settingsStore = useSettingsStore()
 settingsStore.loadSettings()
 settingsStore.loadUserData()
 
-const prefersDark = ref(window.matchMedia('(prefers-color-scheme: dark)').matches)
 let mediaQuery: MediaQueryList | null = null
 
 const onSystemThemeChange = (e: MediaQueryListEvent) => {
-  prefersDark.value = e.matches
+  settingsStore.setPrefersDark(e.matches)
 }
 
 onMounted(() => {
   mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-  prefersDark.value = mediaQuery.matches
+  settingsStore.setPrefersDark(mediaQuery.matches)
   mediaQuery.addEventListener('change', onSystemThemeChange)
 })
 
@@ -42,11 +41,7 @@ onUnmounted(() => {
   }
 })
 
-const isDark = computed(() => {
-  const t = settingsStore.settings?.theme
-  if (t === 'auto') return prefersDark.value
-  return t !== 'light'
-})
+const isDark = computed(() => settingsStore.effectiveTheme === 'dark')
 
 const naiveTheme = computed(() => isDark.value ? darkTheme : null)
 const effectiveTheme = computed(() => isDark.value ? 'dark' : 'light')

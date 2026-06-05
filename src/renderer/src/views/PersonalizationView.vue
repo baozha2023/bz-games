@@ -91,27 +91,131 @@
           </n-grid>
         </div>
       </n-tab-pane>
+      <n-tab-pane name="nicknameStyle" :tab="t('personalization.nicknameStyle')">
+        <div class="nickname-style-panel">
+          <n-card class="nickname-preview-card" :bordered="false">
+            <div class="nickname-preview-stage">
+              <NicknameText
+                :name="settingsStore.settings?.playerName || ''"
+                :nickname-style="nicknameStyleForm"
+                :effective-theme="settingsStore.effectiveTheme"
+                size="clamp(1.45rem, 2.6vw, 2rem)"
+              />
+              <div class="nickname-preview-room">
+                <NicknameText
+                  :name="`${settingsStore.settings?.playerName || ''} 的房间`"
+                  :nickname-style="nicknameStyleForm"
+                  :effective-theme="settingsStore.effectiveTheme"
+                  size="clamp(1rem, 1.8vw, 1.25rem)"
+                />
+              </div>
+            </div>
+          </n-card>
+
+          <n-card :title="t('personalization.nicknameStyle')" :bordered="false">
+            <n-alert type="info" class="nickname-style-tip">
+              {{ t('personalization.gradientHelp') }}
+            </n-alert>
+            <n-form label-placement="left" label-width="120">
+              <n-form-item :label="t('personalization.nicknameColor')">
+                <n-color-picker v-model:value="nicknameStyleForm.color" :show-alpha="false" />
+              </n-form-item>
+              <n-alert v-if="!canSaveNicknameStyle" type="warning" class="nickname-style-tip">
+                {{ t('personalization.nicknameColorContrastWarning') }}
+              </n-alert>
+              <n-form-item :label="t('personalization.nicknameFont')">
+                <n-select v-model:value="nicknameStyleForm.font" :options="fontOptions" />
+              </n-form-item>
+              <n-form-item :label="t('personalization.nicknameWeight')">
+                <n-select v-model:value="nicknameStyleForm.weight" :options="weightOptions" />
+              </n-form-item>
+              <n-form-item :label="t('personalization.nicknameEffect')">
+                <n-select v-model:value="nicknameStyleForm.effect" :options="effectOptions" />
+              </n-form-item>
+              <template v-if="supportsGradient">
+                <n-form-item :label="t('personalization.gradientStart')">
+                  <n-color-picker v-model:value="nicknameStyleForm.gradientStart" :show-alpha="false" />
+                </n-form-item>
+                <n-form-item :label="t('personalization.gradientEnd')">
+                  <n-color-picker v-model:value="nicknameStyleForm.gradientEnd" :show-alpha="false" />
+                </n-form-item>
+              </template>
+              <n-space justify="end">
+                <n-button @click="resetNicknameStyle">{{ t('personalization.resetNicknameStyle') }}</n-button>
+                <n-button type="primary" :disabled="!canSaveNicknameStyle" @click="saveNicknameStyle">
+                  {{ t('personalization.saveNicknameStyleCost', { coins: NICKNAME_STYLE_SAVE_COST }) }}
+                </n-button>
+              </n-space>
+            </n-form>
+          </n-card>
+        </div>
+      </n-tab-pane>
     </n-tabs>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useMessage } from 'naive-ui'
 import { useSettingsStore } from '../stores/useSettingsStore'
 import { TimeOutline, CalendarOutline, TodayOutline, WalletOutline } from '@vicons/ionicons5'
 import AvatarWithFrame from '../components/AvatarWithFrame.vue'
-import type { AvatarFrameDef } from '../../../shared/types'
+import NicknameText from '../components/NicknameText.vue'
+import { DEFAULT_NICKNAME_STYLE } from '../../../shared/types'
+import type { AvatarFrameDef, NicknameEffect, NicknameFont, NicknameStyle } from '../../../shared/types'
 import { AVATAR_FRAMES } from '../../../shared/avatar-frames'
+import { adaptNicknameStyleForTheme, isNicknameColorAllowedForTheme } from '../utils/nicknameColor'
 
 const { t } = useI18n()
 const settingsStore = useSettingsStore()
+const message = useMessage()
 
 const activeTab = ref('avatarFrame')
 const frames = ref<AvatarFrameDef[]>(AVATAR_FRAMES)
+const nicknameStyleForm = ref<NicknameStyle>({ ...DEFAULT_NICKNAME_STYLE })
+const NICKNAME_STYLE_SAVE_COST = 30
 
 const userData = computed(() => settingsStore.userData)
 const equippedFrame = computed(() => userData.value?.equippedFrame)
+const gradientEffects: NicknameEffect[] = ['flame', 'neon', 'aurora', 'stardust', 'crystal', 'comet']
+const supportsGradient = computed(() => gradientEffects.includes(nicknameStyleForm.value.effect))
+const canSaveNicknameStyle = computed(() => isNicknameColorAllowedForTheme(nicknameStyleForm.value.color, settingsStore.effectiveTheme))
+
+const fontOptions = computed(() => ([
+  { label: t('personalization.fontSystem'), value: 'system' as NicknameFont },
+  { label: t('personalization.fontRounded'), value: 'rounded' as NicknameFont },
+  { label: t('personalization.fontSerif'), value: 'serif' as NicknameFont },
+  { label: t('personalization.fontMono'), value: 'mono' as NicknameFont },
+  { label: t('personalization.fontFantasy'), value: 'fantasy' as NicknameFont },
+]))
+
+const weightOptions = computed(() => ([
+  { label: t('personalization.weightNormal'), value: 'normal' },
+  { label: t('personalization.weightSemibold'), value: 'semibold' },
+  { label: t('personalization.weightBold'), value: 'bold' },
+]))
+
+const effectOptions = computed(() => ([
+  { label: t('personalization.effectNone'), value: 'none' as NicknameEffect },
+  { label: t('personalization.effectGlow'), value: 'glow' as NicknameEffect },
+  { label: t('personalization.effectSparkle'), value: 'sparkle' as NicknameEffect },
+  { label: t('personalization.effectFlame'), value: 'flame' as NicknameEffect },
+  { label: t('personalization.effectNeon'), value: 'neon' as NicknameEffect },
+  { label: t('personalization.effectRainbow'), value: 'rainbow' as NicknameEffect },
+  { label: t('personalization.effectAurora'), value: 'aurora' as NicknameEffect },
+  { label: t('personalization.effectStardust'), value: 'stardust' as NicknameEffect },
+  { label: t('personalization.effectCrystal'), value: 'crystal' as NicknameEffect },
+  { label: t('personalization.effectComet'), value: 'comet' as NicknameEffect },
+  { label: t('personalization.effectHeartbeat'), value: 'heartbeat' as NicknameEffect },
+]))
+
+function syncNicknameStyleForm() {
+  nicknameStyleForm.value = adaptNicknameStyleForTheme({
+    ...DEFAULT_NICKNAME_STYLE,
+    ...(settingsStore.settings?.nicknameStyle || {}),
+  }, settingsStore.effectiveTheme) || { ...DEFAULT_NICKNAME_STYLE }
+}
 
 function isEquipped(frameId: string): boolean {
   return equippedFrame.value === frameId
@@ -172,8 +276,39 @@ async function handleBuy(frame: AvatarFrameDef) {
   }
 }
 
-onMounted(async () => {
+async function saveNicknameStyle() {
+  if (!canSaveNicknameStyle.value) {
+    message.warning(t('personalization.nicknameColorContrastWarning'))
+    return
+  }
+  const result = await window.electronAPI.settings.saveNicknameStyle({ ...nicknameStyleForm.value })
+  if (!result.success) {
+    if (result.code === 'insufficient_coins') {
+      message.error(t('personalization.nicknameStyleInsufficientCoins', { coins: NICKNAME_STYLE_SAVE_COST }))
+    } else {
+      message.error(t('settings.saveFail'))
+    }
+    return
+  }
+  await settingsStore.loadSettings()
   await settingsStore.loadUserData()
+  syncNicknameStyleForm()
+  message.success(t('personalization.nicknameStyleSaved', { coins: NICKNAME_STYLE_SAVE_COST }))
+}
+
+async function resetNicknameStyle() {
+  nicknameStyleForm.value = { ...DEFAULT_NICKNAME_STYLE }
+  await saveNicknameStyle()
+}
+
+onMounted(async () => {
+  await settingsStore.loadSettings()
+  await settingsStore.loadUserData()
+  syncNicknameStyleForm()
+})
+
+watch(() => settingsStore.effectiveTheme, () => {
+  nicknameStyleForm.value = adaptNicknameStyleForTheme(nicknameStyleForm.value, settingsStore.effectiveTheme) || nicknameStyleForm.value
 })
 </script>
 
@@ -245,5 +380,56 @@ onMounted(async () => {
 .frame-actions {
   display: flex;
   gap: 8px;
+}
+
+.nickname-style-panel {
+  display: grid;
+  grid-template-columns: minmax(min(100%, 18rem), 0.85fr) minmax(min(100%, 24rem), 1.55fr);
+  gap: clamp(12px, 2vw, 20px);
+  padding-top: clamp(12px, 2vw, 18px);
+  align-items: start;
+}
+
+.nickname-preview-card {
+  background: var(--bz-bg-panel);
+}
+
+.nickname-preview-stage {
+  display: flex;
+  min-height: clamp(180px, 32vh, 280px);
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(18px, 4vw, 32px);
+  padding: clamp(18px, 4vw, 32px);
+  text-align: center;
+}
+
+.nickname-preview-room {
+  max-width: 100%;
+  padding: clamp(10px, 2vw, 14px) clamp(14px, 3vw, 22px);
+  border: 1px solid var(--bz-border);
+  border-radius: clamp(12px, 2vw, 16px);
+  background: color-mix(in srgb, var(--bz-bg-panel) 70%, transparent);
+}
+
+.nickname-style-tip {
+  margin-bottom: 16px;
+}
+
+@media (max-width: 900px) {
+  .nickname-style-panel {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .nickname-style-panel :deep(.n-form-item) {
+    grid-template-columns: 1fr;
+  }
+
+  .nickname-style-panel :deep(.n-form-item-label) {
+    padding-bottom: 6px;
+  }
 }
 </style>

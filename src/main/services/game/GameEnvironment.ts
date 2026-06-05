@@ -1,9 +1,9 @@
 import path from "path";
 import fs from "fs";
-import { roomClient } from "./RoomClient";
-import { logger } from "../utils/logger";
-import type { GameManifest } from "../../shared/game-manifest";
-import type { AppSettings } from "../../shared/types";
+import { roomClient } from "../room/RoomClient";
+import { logger } from "../../utils/logger";
+import type { GameManifest } from "../../../shared/game-manifest";
+import type { AppSettings } from "../../../shared/types";
 
 export class GameEnvironment {
   private static readonly STRIP_ENV_PREFIXES = [

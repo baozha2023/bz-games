@@ -1,13 +1,15 @@
 import dgram from "dgram";
 import os from "os";
-import { DEFAULT_RELAY_PUBLIC_HOST, DEFAULT_RELAY_SERVER_URL } from "../../shared/constants";
-import type { DiscoveredRoom, RoomInfo, RoomJoinValidationResult } from "../../shared/types";
-import { storeService } from "./StoreService";
+import {
+  DEFAULT_RELAY_PUBLIC_HOST,
+  DEFAULT_RELAY_SERVER_URL,
+  LAN_DISCOVERY_PORT,
+  LAN_DISCOVERY_QUERY,
+  LAN_DISCOVERY_RESPONSE,
+} from "../../../shared/constants";
+import type { DiscoveredRoom, RoomInfo, RoomJoinValidationResult } from "../../../shared/types";
+import { storeService } from "../storage/StoreService";
 import { roomServer } from "./RoomServer";
-
-const LAN_DISCOVERY_PORT = 38081;
-const LAN_DISCOVERY_QUERY = "bz-games:room-discovery:query";
-const LAN_DISCOVERY_RESPONSE = "bz-games:room-discovery:response";
 
 type RelayRoomListItem = Omit<DiscoveredRoom, "address"> & { roomCode: string };
 
@@ -143,6 +145,7 @@ export class RoomDiscoveryService {
       gameVersion: room.gameVersion,
       hostId: room.hostId,
       hostName: hostPlayer?.name || room.hostId,
+      hostStyle: hostPlayer?.nicknameStyle,
       address: `${host}:${port}`,
       playerCount: room.players.length,
       maxPlayers: room.maxPlayers,

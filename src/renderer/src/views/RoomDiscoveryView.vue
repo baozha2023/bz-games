@@ -17,7 +17,7 @@
             <n-card v-for="room in lanRooms" :key="room.id" class="room-card">
               <template #header>
                 <n-space align="center">
-                  <span>{{ room.name }}</span>
+                  <span class="room-card-title"><NicknameText :name="room.name" :nickname-style="room.hostStyle" :effective-theme="settingsStore.effectiveTheme" :size="16" /></span>
                   <n-tag size="small">{{ room.gameVersion }}</n-tag>
                 </n-space>
               </template>
@@ -49,7 +49,7 @@
             <n-card v-for="room in relayRooms" :key="room.id" class="room-card">
               <template #header>
                 <n-space align="center">
-                  <span>{{ room.name }}</span>
+                  <span class="room-card-title"><NicknameText :name="room.name" :nickname-style="room.hostStyle" :effective-theme="settingsStore.effectiveTheme" :size="16" /></span>
                   <n-tag size="small">{{ room.gameVersion }}</n-tag>
                 </n-space>
               </template>
@@ -81,11 +81,14 @@ import { useI18n } from 'vue-i18n'
 import type { DiscoveredRoom } from '../../../shared/types'
 import { useGameStore } from '../stores/useGameStore'
 import { useRoomJoin } from '../composables/useRoomJoin'
+import NicknameText from '../components/NicknameText.vue'
+import { useSettingsStore } from '../stores/useSettingsStore'
 
 const { t } = useI18n()
 const router = useRouter()
 const message = useMessage()
 const gameStore = useGameStore()
+const settingsStore = useSettingsStore()
 const { joinRoomByAddress } = useRoomJoin()
 
 const activeTab = ref<'lan' | 'relay'>('lan')
@@ -202,5 +205,11 @@ const joinDiscoveredRoom = async (room: DiscoveredRoom) => {
 
 .room-card {
   min-height: 148px;
+}
+
+.room-card-title {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 260px;
 }
 </style>

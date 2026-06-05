@@ -2,10 +2,10 @@ import { app, ipcMain, dialog, nativeImage, shell } from "electron";
 import fs from "fs";
 import path from "path";
 import { IPC } from "../../shared/ipc-channels";
-import { storeService } from "../services/StoreService";
-import { updateService } from "../services/UpdateService";
+import { storeService } from "../services/storage/StoreService";
+import { updateService } from "../services/system/UpdateService";
 import { logger } from "../utils/logger";
-import type { AppSettings } from "../../shared/types";
+import type { AppSettings, NicknameStyle } from "../../shared/types";
 import { createFloatBallWindow, destroyFloatBallWindow } from "../window";
 
 export function registerSystemIpc() {
@@ -54,6 +54,10 @@ export function registerSystemIpc() {
   ipcMain.handle(IPC.SYSTEM_SET_IGNORED_UPDATE_VERSION, async (_, version: string) => {
     storeService.performIgnoreUpdateVersion(version);
     return true;
+  });
+
+  ipcMain.handle(IPC.SYSTEM_SAVE_NICKNAME_STYLE, async (_, style: NicknameStyle) => {
+    return storeService.performSaveNicknameStyle(style, 30);
   });
 
   ipcMain.handle(IPC.SYSTEM_UPLOAD_AVATAR, async () => {

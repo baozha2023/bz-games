@@ -320,7 +320,7 @@ async function authFetch(body: Record<string, unknown>) {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Referer: "https://bz-game-client.local",
+      Referer: "https://your-client-referer.example",
     },
     body: JSON.stringify(body),
   });

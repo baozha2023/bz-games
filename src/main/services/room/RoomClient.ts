@@ -7,17 +7,17 @@ import type {
   RoomInfo,
   RoomConnectionStatusPayload,
   GameRelayPayload,
-} from "../../shared/types";
-import { storeService } from "./StoreService";
-import { mainWindow } from "../window";
-import { sendRoomEventToChat } from "../chat-window";
-import { IPC } from "../../shared/ipc-channels";
+} from "../../../shared/types";
+import { storeService } from "../storage/StoreService";
+import { mainWindow } from "../../window";
+import { sendRoomEventToChat } from "../../chat-window";
+import { IPC } from "../../../shared/ipc-channels";
 import {
   decodeBinaryEnvelope,
   encodeBinaryEnvelope,
-} from "../../shared/binary-protocol";
+} from "../../../shared/binary-protocol";
 import { RoomCommunicationConstants } from "./RoomCommunicationConstants";
-import { DEFAULT_RELAY_PUBLIC_HOST, DEFAULT_RELAY_SERVER_URL, DEFAULT_RELAY_TOKEN } from "../../shared/constants";
+import { DEFAULT_RELAY_PUBLIC_HOST, DEFAULT_RELAY_SERVER_URL, DEFAULT_RELAY_TOKEN } from "../../../shared/constants";
 
 type ConnectResult = { success: boolean; error?: string; message?: string };
 type BinaryRelayPayload = GameRelayPayload & { binaryData?: Buffer };
@@ -146,6 +146,7 @@ export class RoomClient {
       playerName: settings.playerName,
       playerAvatar: settings.avatar,
       playerAvatarFrame: userData.equippedFrame,
+      playerNicknameStyle: settings.nicknameStyle,
       gameId: this.gameId,
       gameVersion: this.gameVersion,
     };

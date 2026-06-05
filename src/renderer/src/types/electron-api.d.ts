@@ -15,6 +15,7 @@ import type {
   MarketTaskState,
   UpdateState,
   UserData,
+  NicknameStyle,
 } from "../../../shared/types";
 import type { GameManifest } from "../../../shared/game-manifest";
 
@@ -154,6 +155,7 @@ declare global {
         getAppVersion: () => Promise<string>;
         save: (settings: AppSettings) => Promise<boolean>;
         savePartialSettings: (partial: Partial<AppSettings>) => Promise<void>;
+        saveNicknameStyle: (style: NicknameStyle) => Promise<{ success: boolean; code?: string }>;
         ignoreUpdateVersion: (version: string) => Promise<boolean>;
         uploadAvatar: () => Promise<string | null>;
         getAvatarFrameImage: (fileName: string) => Promise<string | null>;

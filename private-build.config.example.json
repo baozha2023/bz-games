@@ -1,0 +1,10 @@
+{
+  "cdnBase": "",
+  "ossBase": "",
+  "marketFallbackIndexUrl": "",
+  "referer": "",
+  "relayServerUrl": "",
+  "relayPublicHost": "",
+  "relayToken": "",
+  "configEncryptionSeed": "replace-with-a-private-random-seed"
+}

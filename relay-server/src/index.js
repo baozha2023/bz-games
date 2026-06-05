@@ -151,6 +151,7 @@ function updateRoomState(room, state) {
   if (Array.isArray(state.players)) {
     const hostPlayer = state.players.find((player) => player?.id === room.hostId);
     room.hostName = hostPlayer?.name || room.hostName;
+    room.hostStyle = hostPlayer?.nicknameStyle || room.hostStyle;
     room.name = `${room.hostName} 的房间`;
     room.playerCount = state.players.length;
   }
@@ -199,6 +200,7 @@ function registerHost(client, payload) {
     gameVersion: payload.gameVersion,
     hostId: payload.playerId,
     hostName: payload.hostName || payload.playerId,
+    hostStyle: payload.hostStyle,
     playerCount: Number(payload.playerCount || 1),
     maxPlayers: Number(payload.maxPlayers || 4),
     state: payload.state || "waiting",
@@ -407,6 +409,7 @@ function toPublicRoom(room) {
     gameVersion: room.gameVersion,
     hostId: room.hostId,
     hostName: room.hostName,
+    hostStyle: room.hostStyle,
     playerCount: room.playerCount,
     maxPlayers: room.maxPlayers,
     state: room.state,

@@ -177,7 +177,7 @@ ws://127.0.0.1:38090
 {
   "type": "relay:host",
   "payload": {
-    "token": "bzgames",
+    "token": "your-relay-token",
     "roomId": "relay-8f6a",
     "playerId": "player-host",
     "gameId": "demo-game",
@@ -232,7 +232,7 @@ ws://127.0.0.1:38090
 {
   "type": "relay:join",
   "payload": {
-    "token": "bzgames",
+    "token": "your-relay-token",
     "roomCode": "123456",
     "playerId": "player-guest"
   }

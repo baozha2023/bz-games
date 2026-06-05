@@ -1,6 +1,6 @@
 import { ipcMain } from "electron";
 import { IPC } from "../../shared/ipc-channels";
-import { marketService } from "../services/MarketService";
+import { marketService } from "../services/market/MarketService";
 
 export function registerMarketIpc() {
   ipcMain.handle(IPC.MARKET_GET_SOURCES, async (_, forceRefresh?: boolean) => {

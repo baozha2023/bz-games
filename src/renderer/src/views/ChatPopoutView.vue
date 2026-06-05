@@ -23,7 +23,14 @@
         </template>
         <template v-else>
           <div class="message-header">
-            <span class="sender" :class="{ 'is-me': msg.senderId === playerId }">{{ msg.senderName }}</span>
+            <NicknameText
+              class="sender"
+              :class="{ 'is-me': msg.senderId === playerId }"
+              :name="msg.senderName"
+              :nickname-style="msg.senderStyle"
+              :effective-theme="effectiveTheme"
+              :size="13"
+            />
             <span class="time">{{ formatTime(msg.timestamp) }}</span>
           </div>
           <div class="message-content">
@@ -131,6 +138,8 @@ import { Mic, MusicalNote, Contract, CloseCircle, Image } from '@vicons/ionicons
 import { useI18n } from 'vue-i18n'
 import type { ChatPayload, RoomEvent } from '../../../shared/types'
 import ImageViewer from '../components/room/ImageViewer.vue'
+import NicknameText from '../components/NicknameText.vue'
+import type { EffectiveTheme } from '../utils/nicknameColor'
 
 const { t } = useI18n()
 const message = useMessage()
@@ -142,6 +151,7 @@ const isRecording = ref(false)
 const playingAudioId = ref<string | null>(null)
 const playerId = ref('')
 const roomName = ref('')
+const effectiveTheme = ref<EffectiveTheme>('dark')
 
 let mediaRecorder: MediaRecorder | null = null
 let audioChunks: Blob[] = []
@@ -435,6 +445,11 @@ onMounted(async () => {
     const settings = await window.electronAPI.settings.get()
     if (settings) {
       playerId.value = settings.playerId || ''
+      if (settings.theme === 'light') {
+        effectiveTheme.value = 'light'
+      } else if (settings.theme === 'auto') {
+        effectiveTheme.value = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+      }
       if (settings.chatInputHeight) {
         inputHeight.value = Math.min(MAX_INPUT_HEIGHT, Math.max(MIN_INPUT_HEIGHT, settings.chatInputHeight))
       }
@@ -512,12 +527,11 @@ onUnmounted(() => {
 }
 
 .sender {
-  font-weight: bold;
-  color: var(--bz-info-blue);
+  max-width: 180px;
 }
 
 .sender.is-me {
-  color: var(--bz-green);
+  filter: brightness(1.08);
 }
 
 .time {

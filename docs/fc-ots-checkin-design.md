@@ -246,7 +246,7 @@ ipcMain.handle(IPC.SYSTEM_CHECK_IN, async () => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Referer: 'https://bz-game-client.local',
+        Referer: 'https://your-client-referer.example',
       },
       body: JSON.stringify({
         action: 'checkIn',

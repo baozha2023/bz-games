@@ -5,11 +5,11 @@ import semver from "semver";
 import {
   GameManifestSchema,
   type GameManifest,
-} from "../../shared/game-manifest";
-import { storeService } from "./StoreService";
-import { GameType, type GameRecord } from "../../shared/types";
-import { logger } from "../utils/logger";
-import { copyFolderRecursiveSync } from "../utils/fileUtils";
+} from "../../../shared/game-manifest";
+import { storeService } from "../storage/StoreService";
+import { GameType, type GameRecord } from "../../../shared/types";
+import { logger } from "../../utils/logger";
+import { copyFolderRecursiveSync } from "../../utils/fileUtils";
 
 export interface ImportPreparationResult {
   sourcePath: string;

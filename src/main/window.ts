@@ -1,9 +1,10 @@
 import { BrowserWindow, shell, app, Menu, Tray, screen } from "electron";
 import { join } from "path";
 import { is } from "@electron-toolkit/utils";
-import { storeService } from "./services/StoreService";
-import { databaseService } from "./services/DatabaseService";
+import { storeService } from "./services/storage/StoreService";
+import { databaseService } from "./services/storage/DatabaseService";
 import { IPC } from "../shared/ipc-channels";
+import { FLOAT_BALL_DEFAULT_SIZE } from "../shared/constants";
 
 export let mainWindow: BrowserWindow | null = null;
 export let floatBallWindow: BrowserWindow | null = null;
@@ -37,7 +38,7 @@ function buildTrayMenu(): Menu {
       template.push({
         label: game.game_name,
         click: () => {
-          import("./services/GameManager").then(({ gameManager }) => {
+          import("./services/game/GameManager").then(({ gameManager }) => {
             gameManager.launch(game.game_id);
           });
         },
@@ -124,7 +125,6 @@ export function createWindow(): void {
 }
 
 let floatBallScreenListenerRegistered = false;
-const FLOAT_BALL_DEFAULT_SIZE = 72;
 
 function saveFloatBallPositionThrottled() {
   if (floatBallSaveTimer) return;
@@ -268,7 +268,7 @@ export function createFloatBallWindow(): void {
   }
 
   floatBallWindow.once("ready-to-show", () => {
-    import("./services/MarketService").then(({ marketService }) => {
+    import("./services/market/MarketService").then(({ marketService }) => {
       const progress = marketService.computeTotalProgress();
       if (progress.activeTaskCount > 0) {
         floatBallWindow?.showInactive();

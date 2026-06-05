@@ -1,11 +1,11 @@
 import { WebSocket } from "ws";
 import crypto from "crypto";
-import { DEFAULT_RELAY_PUBLIC_HOST, DEFAULT_RELAY_SERVER_URL, DEFAULT_RELAY_TOKEN } from "../../shared/constants";
+import { DEFAULT_RELAY_PUBLIC_HOST, DEFAULT_RELAY_SERVER_URL, DEFAULT_RELAY_TOKEN } from "../../../shared/constants";
 import { roomServer } from "./RoomServer";
-import { storeService } from "./StoreService";
-import { GameLoader } from "./GameLoader";
-import { decodeBinaryEnvelope, encodeBinaryEnvelope } from "../../shared/binary-protocol";
-import type { RoomMessage } from "../../shared/types";
+import { storeService } from "../storage/StoreService";
+import { GameLoader } from "../game/GameLoader";
+import { decodeBinaryEnvelope, encodeBinaryEnvelope } from "../../../shared/binary-protocol";
+import type { RoomMessage } from "../../../shared/types";
 
 export interface RelayHostResult {
   success: boolean;
@@ -53,6 +53,7 @@ export class RelayRoomService {
             gameName,
             gameVersion: roomServer.room?.gameVersion,
             hostName: hostPlayer?.name || settings.playerName,
+            hostStyle: hostPlayer?.nicknameStyle || settings.nicknameStyle,
             maxPlayers: roomServer.room?.maxPlayers || 4,
             state: roomServer.room?.state || "waiting",
           },

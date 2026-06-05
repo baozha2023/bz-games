@@ -10,13 +10,13 @@ import type {
   RoomKickedPayload,
   GameRelayPayload,
   GameMessageAckPayload,
-} from "../../shared/types";
-import { storeService } from "./StoreService";
-import { GameLoader } from "./GameLoader";
+} from "../../../shared/types";
+import { storeService } from "../storage/StoreService";
+import { GameLoader } from "../game/GameLoader";
 import {
   decodeBinaryEnvelope,
   encodeBinaryEnvelope,
-} from "../../shared/binary-protocol";
+} from "../../../shared/binary-protocol";
 import { RoomCommunicationConstants } from "./RoomCommunicationConstants";
 
 type BinaryRelayPayload = GameRelayPayload & { binaryData?: Buffer };
@@ -277,6 +277,7 @@ export class RoomServer {
       name: payload.playerName,
       avatar: payload.playerAvatar,
       avatarFrame: payload.playerAvatarFrame,
+      nicknameStyle: payload.playerNicknameStyle,
       isHost: isHost,
       isReady: isHost,
       joinedAt: Date.now(),

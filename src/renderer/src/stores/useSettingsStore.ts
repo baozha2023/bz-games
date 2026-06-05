@@ -1,5 +1,5 @@
 import { defineStore } from "pinia";
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import type {
   AppSettings,
   DataHealthReport,
@@ -7,6 +7,7 @@ import type {
   UserData,
 } from "../../../shared/types";
 import { setLocale } from "../i18n";
+import type { EffectiveTheme } from "../utils/nicknameColor";
 
 export const useSettingsStore = defineStore("settings", () => {
   const settings = ref<AppSettings | null>(null);
@@ -18,8 +19,19 @@ export const useSettingsStore = defineStore("settings", () => {
     progress: 0,
   });
   const showUpdateModal = ref(false);
+  const prefersDark = ref(window.matchMedia('(prefers-color-scheme: dark)').matches);
   let cleanupUpdateEvent: (() => void) | undefined;
   let updateInited = false;
+
+  const effectiveTheme = computed<EffectiveTheme>(() => {
+    const theme = settings.value?.theme;
+    if (theme === "auto") return prefersDark.value ? "dark" : "light";
+    return theme === "light" ? "light" : "dark";
+  });
+
+  function setPrefersDark(value: boolean) {
+    prefersDark.value = value;
+  }
 
   async function loadSettings() {
     settings.value = await window.electronAPI.settings.get();
@@ -117,6 +129,9 @@ export const useSettingsStore = defineStore("settings", () => {
     dataHealthReport,
     updateState,
     showUpdateModal,
+    prefersDark,
+    effectiveTheme,
+    setPrefersDark,
     loadSettings,
     saveSettings,
     ignoreUpdateVersion,

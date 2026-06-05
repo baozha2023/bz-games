@@ -12,14 +12,22 @@ import type {
   GameRecord,
   GameVersion,
   UserData,
-} from "../../shared/types";
-import { getAppRoot } from "../utils/appPath";
-import { logger } from "../utils/logger";
-import { AVATAR_FRAMES } from "../../shared/avatar-frames";
+  NicknameStyle,
+} from "../../../shared/types";
+import { DEFAULT_NICKNAME_STYLE } from "../../../shared/types";
+import { getAppRoot } from "../../utils/appPath";
+import { logger } from "../../utils/logger";
+import { AVATAR_FRAMES } from "../../../shared/avatar-frames";
+import {
+  CONFIG_ENCRYPTION_SEED,
+  PLAYTIME_REWARD_AMOUNT,
+  PLAYTIME_REWARD_INTERVAL_MS,
+} from "../../../shared/constants";
 
 const defaultSettings: AppSettings = {
   playerName: "玩家",
   playerId: "",
+  nicknameStyle: DEFAULT_NICKNAME_STYLE,
   lastJoinRoomAddress: "",
   language: "zh-CN",
   theme: "auto",
@@ -53,8 +61,6 @@ const defaultStore: AppStore = {
   userData: defaultUserData,
   recentPlayed: [],
 };
-
-const CONFIG_ENCRYPTION_SEED = "bz-games-config:v1";
 
 function createConfigCipherKey(): Buffer {
   return crypto.createHash("sha256").update(CONFIG_ENCRYPTION_SEED).digest();
@@ -327,6 +333,23 @@ class StoreService {
     return { success: true };
   }
 
+  performSaveNicknameStyle(style: NicknameStyle, coinCost: number): {
+    success: boolean;
+    code?: string;
+  } {
+    const store = this.getStore();
+    const userData = store.get("userData") || defaultUserData;
+
+    if ((userData.bzCoins || 0) < coinCost) {
+      return { success: false, code: "insufficient_coins" };
+    }
+
+    userData.bzCoins -= coinCost;
+    store.set("userData", userData);
+    this.saveSettings({ nicknameStyle: style });
+    return { success: true };
+  }
+
   performEquipFrame(frameId: string): void {
     const store = this.getStore();
     const userData = store.get("userData") || defaultUserData;
@@ -364,16 +387,12 @@ class StoreService {
     const oldTime = userData.cumulativePlayTime || 0;
     const newTime = oldTime + durationMs;
 
-    // 10 minutes = 600,000 ms
-    const REWARD_INTERVAL = 10 * 60 * 1000;
-    const REWARD_AMOUNT = 10;
-
-    const oldIntervals = Math.floor(oldTime / REWARD_INTERVAL);
-    const newIntervals = Math.floor(newTime / REWARD_INTERVAL);
+    const oldIntervals = Math.floor(oldTime / PLAYTIME_REWARD_INTERVAL_MS);
+    const newIntervals = Math.floor(newTime / PLAYTIME_REWARD_INTERVAL_MS);
 
     const rewardCount = newIntervals - oldIntervals;
     if (rewardCount > 0) {
-      const reward = rewardCount * REWARD_AMOUNT;
+      const reward = rewardCount * PLAYTIME_REWARD_AMOUNT;
       userData.bzCoins = (userData.bzCoins || 0) + reward;
       logger.info(`[StoreService] Awarded ${reward} coins for playtime.`);
     }
@@ -383,7 +402,7 @@ class StoreService {
     this.tryUnlockPlaytimeFrames(userData);
 
     store.set("userData", userData);
-    return rewardCount * REWARD_AMOUNT;
+    return rewardCount * PLAYTIME_REWARD_AMOUNT;
   }
 
   private tryUnlockPlaytimeFrames(userData: UserData): void {
@@ -674,7 +693,14 @@ class StoreService {
     const store = this.getStore();
     const settings = store.get("settings", defaultSettings);
 
-    const merged = { ...defaultSettings, ...settings };
+    const merged = {
+      ...defaultSettings,
+      ...settings,
+      nicknameStyle: {
+        ...DEFAULT_NICKNAME_STYLE,
+        ...(settings.nicknameStyle || {}),
+      },
+    };
     const defaultGamesPath = path.join(getAppRoot(), "games");
     let shouldPersist = false;
 

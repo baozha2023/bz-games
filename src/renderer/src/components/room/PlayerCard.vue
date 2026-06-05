@@ -24,7 +24,10 @@
         </n-button>
       </n-space>
     </template>
-    <n-thing :title="player.name">
+    <n-thing>
+      <template #header>
+        <NicknameText :name="player.name" :nickname-style="player.nicknameStyle" :effective-theme="settingsStore.effectiveTheme" :size="15" />
+      </template>
       <template #description>
         {{ isLocalPlayer ? t('room.you') : '' }}
       </template>
@@ -37,10 +40,13 @@ import { computed } from 'vue'
 import { NListItem, NTag, NThing, NSpace, NButton } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import AvatarWithFrame from '../AvatarWithFrame.vue'
+import NicknameText from '../NicknameText.vue'
 import type { PlayerInRoom } from '../../../../shared/types/room.types'
 import { getFrameImageFileName } from '../../../../shared/avatar-frames'
+import { useSettingsStore } from '../../stores/useSettingsStore'
 
 const { t } = useI18n()
+const settingsStore = useSettingsStore()
 
 const props = defineProps<{
   player: PlayerInRoom

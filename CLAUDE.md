@@ -80,11 +80,12 @@ bz-games/
 ├── build/
 │   └── installer.nsh                     # NSIS 自定义安装/卸载钩子（多语言支持）
 ├── package.json                          # 依赖、脚本与打包发布配置
+├── private-build.config.example.json      # 私有构建配置模板（CDN/OSS/中继/加密种子等环境变量）
 ├── pnpm-lock.yaml                        # pnpm 依赖锁定文件
 ├── tsconfig.json                         # TypeScript 根配置
 ├── tsconfig.node.json                    # 主进程/预加载/共享代码 TS 配置
 ├── tsconfig.web.json                     # 渲染进程 TS 配置
-├── electron.vite.config.ts               # Electron-Vite 构建配置
+├── electron.vite.config.ts               # Electron-Vite 构建配置（读取 private-build.config.json 注入构建期常量）
 ├── config.json                           # 本地持久化配置（运行生成）
 ├── db/                                   # SQLite 数据库目录（运行生成）
 │   └── play_sessions.db                  # 游玩会话数据库
@@ -106,22 +107,28 @@ bz-games/
 │   │   │   ├── storage.ipc.ts             # Web 游戏本地存储 IPC 处理器
 │   │   │   └── statistics.ipc.ts          # 统计数据查询 IPC 处理器
 │   │   ├── services/
-│   │   │   ├── DatabaseService.ts         # SQLite 游玩会话记录与日历热力图数据查询
-│   │   │   ├── GameApiServer.ts           # 游戏进程本地 WebSocket API 服务（连接认证、协议路由、事件分发）
-│   │   │   ├── GameEnvironment.ts         # 游戏启动环境变量、bz-config.js 生成与清理
-│   │   │   ├── GameLoader.ts              # 游戏导入、校验、扫描与记录同步
-│   │   │   ├── GameManager.ts             # 游戏进程启动/停止与生命周期管理
-│   │   │   ├── MarketService.ts           # 游戏市场索引拉取、下载、校验、解压与安装
-│   │   │   ├── NotificationService.ts     # 系统通知窗口服务
-│   │   │   ├── RoomClient.ts              # 客机房间连接与重连管理（支持 v2 二进制帧中继）
-│   │   │   ├── RoomCommunicationConstants.ts # 房间通信常量集中管理（消息大小、心跳间隔、超时等）
-│   │   │   ├── RoomDiscoveryService.ts     # 局域网/官方中继房间发现与加入前校验
-│   │   │   ├── RelayRoomService.ts         # 房主侧官方中继接入、短地址注册、relay bridge
-│   │   │   ├── RoomServer.ts              # 房主房间服务与消息中继（支持 v2 二进制帧中继、ordered delivery）
-│   │   │   ├── StoreService.ts            # 本地数据读写与业务数据维护
-│   │   │   ├── UpdateService.ts           # 客户端更新检查/下载/安装服务
-│   │   │   ├── V1GameApiProtocol.ts       # v1 游戏 API 通信协议（send/broadcast）
-│   │   │   └── V2GameApiProtocol.ts       # v2 游戏 API 增强通信协议（send/broadcast/publish/batch/subscribe + 二进制帧）
+│   │   │   ├── storage/
+│   │   │   │   ├── DatabaseService.ts     # SQLite 游玩会话记录与日历热力图数据查询
+│   │   │   │   └── StoreService.ts        # 本地数据读写与业务数据维护
+│   │   │   ├── game/
+│   │   │   │   ├── GameEnvironment.ts     # 游戏启动环境变量、bz-config.js 生成与清理
+│   │   │   │   ├── GameLoader.ts          # 游戏导入、校验、扫描与记录同步
+│   │   │   │   └── GameManager.ts         # 游戏进程启动/停止与生命周期管理
+│   │   │   ├── game-api/
+│   │   │   │   ├── GameApiServer.ts       # 游戏进程本地 WebSocket API 服务（连接认证、协议路由、事件分发）
+│   │   │   │   ├── V1GameApiProtocol.ts   # v1 游戏 API 通信协议（send/broadcast）
+│   │   │   │   └── V2GameApiProtocol.ts   # v2 游戏 API 增强通信协议（send/broadcast/publish/batch/subscribe + 二进制帧）
+│   │   │   ├── room/
+│   │   │   │   ├── RelayRoomService.ts    # 房主侧官方中继接入、短地址注册、relay bridge
+│   │   │   │   ├── RoomClient.ts          # 客机房间连接与重连管理（支持 v2 二进制帧中继）
+│   │   │   │   ├── RoomCommunicationConstants.ts # 房间通信常量集中管理（消息大小、心跳间隔、超时等）
+│   │   │   │   ├── RoomDiscoveryService.ts # 局域网/官方中继房间发现与加入前校验
+│   │   │   │   └── RoomServer.ts          # 房主房间服务与消息中继（支持 v2 二进制帧中继、ordered delivery）
+│   │   │   ├── market/
+│   │   │   │   └── MarketService.ts       # 游戏市场索引拉取、下载、校验、解压与安装
+│   │   │   └── system/
+│   │   │       ├── NotificationService.ts # 系统通知窗口服务
+│   │   │       └── UpdateService.ts       # 客户端更新检查/下载/安装服务
 │   │   └── utils/
 │   │       ├── appPath.ts                 # 应用根路径工具
 │   │       ├── fileUtils.ts               # 文件复制等通用文件工具
@@ -156,7 +163,7 @@ bz-games/
 │   │       │   ├── ChatPopoutView.vue    # 聊天弹窗独立窗口页面
 │   │       │   ├── NotificationView.vue   # 通知窗口页面
 │   │       │   ├── FloatBallView.vue       # 下载悬浮球独立窗口页面
-│   │       │   ├── PersonalizationView.vue # 个性化页面（头像框管理）
+│   │       │   ├── PersonalizationView.vue # 个性化页面（头像框管理 + 昵称样式）
 │   │       │   ├── RoomDiscoveryView.vue   # 房间发现页面（局域网/服务器 Tab）
 │   │       │   ├── RoomView.vue           # 房间页面
 │   │       │   ├── SettingsView.vue       # 设置页面
@@ -169,6 +176,7 @@ bz-games/
 │   │       │   ├── CalendarHeatmap.vue      # GitHub 风格日历热力图组件（统计页）
 │   │       │   ├── CheckInModal.vue        # 签到弹窗组件
 │   │       │   ├── AvatarWithFrame.vue     # 头像+头像框叠加组件（CSS overlay 算法）
+│   │       │   ├── NicknameText.vue        # 昵称样式渲染组件（颜色/渐变/字体/字重/特效动画 + 主题色自适应）
 │   │       │   ├── game/
 │   │       │   │   ├── GameAchievementsModal.vue # 游戏成就弹窗组件
 │   │       │   │   ├── GameCard.vue        # 游戏卡片组件
@@ -189,11 +197,12 @@ bz-games/
 │   │       └── utils/
 │   │           ├── achievementNotifier.ts  # 成就通知辅助逻辑
 │   │           ├── deleteEffect.ts         # 游戏删除碎裂特效工具
+│   │           ├── nicknameColor.ts        # 昵称颜色主题感知适配（WCAG 相对亮度算法）
 │   │           └── sound.ts                # 音效播放工具
 │   │
 │   └── shared/
 │       ├── avatar-frames.ts                # 头像框定义数据（8款头像框的解锁条件与图片文件名）
-│       ├── constants.ts                    # 平台常量（CDN/OSS/GitHub/官方中继基础 URL、Referer 值）
+│       ├── constants.ts                    # 平台常量（CDN/OSS/GitHub/官方中继参数/LAN发现/游玩奖励/悬浮球/DB路径，值由 electron.vite.config.ts 构建期注入 private-build.config.json）
 │       ├── binary-protocol.ts              # v2 二进制帧编码/解码工具（4字节头长度 + JSON header + binary body）
 │       ├── game-manifest.ts                # Game Manifest Schema 与类型
 │       ├── ipc-channels.ts                 # IPC 频道常量定义
@@ -225,7 +234,7 @@ bz-games/
 | **Game API Server**                 | 平台在本机运行的本地 WebSocket 服务（`127.0.0.1`），供游戏进程调用平台能力；控制面走 JSON，v2 高频实时数据可走二进制帧 |
 | **v2 二进制帧**                       | 高频实时通信帧格式：4字节 big-endian header 长度 + UTF-8 JSON header + 原始 binary body，仅用于 `message.send` / `message.broadcast` / `message.publish` |
 | **官方中继服务器 (Relay Server)**      | 公网 Node.js HTTP + WebSocket 服务，负责房间登记、房间码、容量保护和透明转发，不拼接或识别短地址，不解析游戏业务语义。                            |
-| **官方短地址**                         | 平台按 `DEFAULT_RELAY_PUBLIC_HOST + roomCode` 拼接的 `bzgames.top:随机数字` 地址，展示、复制、服务器列表和手动输入统一使用该格式。                         |
+| **官方短地址**                         | 平台按 `DEFAULT_RELAY_PUBLIC_HOST + roomCode` 拼接的 `<relay-public-host>:随机数字` 地址，展示、复制、服务器列表和手动输入统一使用该格式。                         |
 | **官方房间码**                         | 中继服务器生成并识别的数字房间码；平台从短地址中解析后通过 `relay:join.payload.roomCode` 发送给中继服务器。                         |
 | **房间发现 (Room Discovery)**          | 平台房间页面的局域网/服务器 Tab。局域网通过 UDP 发现本地房主，服务器通过官方中继 `/rooms` 获取房间列表。                      |
 | **游戏市场目录 (Market Directory)**       | 顶层 `market.json` 文件，`sources` 数组列出所有可用市场源，平台一级界面展示                             |
@@ -259,7 +268,7 @@ bz-games/
 ### 4.2 游戏市场索引 JSON 规范
 
 - **托管方式**：游戏市场索引文件由独立 GitHub 仓库维护，固定文件名为 `market.json`。平台优先读取 GitHub 原始地址
-  `https://raw.githubusercontent.com/baozha2023/bz-games-market/master/market.json`；若 GitHub 拉取失败，必须自动回退到 OSS 镜像地址 `https://web-bz.oss-cn-beijing.aliyuncs.com/market.json`。
+  `https://raw.githubusercontent.com/baozha2023/bz-games-market/master/market.json`；若 GitHub 拉取失败，必须自动回退到构建期注入的私有镜像地址。
 - **两级市场架构**：顶层 `market.json` 作为**市场目录**，`sources` 数组列出所有可用市场源；每个市场源的仓库中有自己的
   `market.json`。顶层 `market.json` 同时保留 `games` 字段（对应 `sources[0]`）。外部市场源从其仓库 raw 地址直接加载。
 - **拉取时机**：用户首次进入"游戏市场"列表页面时拉取市场目录（`getSources`），进入具体市场时拉取该市场的游戏索引（`getIndex`
@@ -281,7 +290,7 @@ bz-games/
     {
       "marketId": "official",
       "marketName": "BZ Games Market",
-      "coverUrl": "http://cdn.bzgames.top/bz-games-market/cover.png",
+      "coverUrl": "https://cdn.example.com/bz-games-market/cover.png",
       "generatedAt": "2026-05-22T04:21:02.000Z",
       "repository": "https://github.com/baozha2023/bz-games-market.git",
       "branch": "master",
@@ -452,24 +461,46 @@ interface FloatBallProgress {
 ║  │  │  - 设置     │            │  │    (进程管理)        ││   │  ║
 ║  │  └─────────────┘            │  ├─────────────────────┤│   │  ║
 ║  │                             │  │    RoomServer       ││   │  ║
-║  │                             │  │ ws://0.0.0.0:38080  │├───┼──╫──► SakuraFrp
-║  │                             │  ├─────────────────────┤│   │  ║    公网暴露
+║  │                             │  │ ws://0.0.0.0:38080  ││───┼──╫──► frp 公网入口
+║  │                             │  │ 局域网/frp 直连入口  ││   │  ║    用户自备映射
+║  │                             │  ├─────────────────────┤│   │  ║
+║  │                             │  │  RelayRoomService   ││───┼──╫──► 官方 Relay Server
+║  │                             │  │  注册房间/桥接中继    ││   │  ║    HTTP + WebSocket
+║  │                             │  ├─────────────────────┤│   │  ║
 ║  │                             │  │   GameApiServer     ││   │  ║
 ║  │                             │  │ ws://127.0.0.1:*    ││   │  ║
 ║  │                             │  └──────────┬──────────┘│   │  ║
 ║  │                             └─────────────┼───────────┘   │  ║
-║  └─────────────────────────────────────────── ┼ ─────────────┘  ║
-║                                               │ localhost        ║
-║  ┌────────────────────────────────────────────┴──────────────┐   ║
+║  └───────────────────────────────────────────┼──────────────┘  ║
+║                                              │ localhost        ║
+║  ┌───────────────────────────────────────────┴──────────────┐   ║
 ║  │                   游戏进程 (game.exe)                      │  ║
 ║  │   ws://127.0.0.1:{BZ_API_PORT}                            │   ║
 ║  │   通过 Game API Server 进行所有联机通信                     │  ║
 ║  └───────────────────────────────────────────────────────────┘   ║
 ╚══════════════════════════════════════════════════════════════════╝
-                              ▲
-                    SakuraFrp 公网地址
-                    60.26.220.79:39337
-                              ▼
+           ▲                                      ▲
+           │                                      │
+           │ RoomServer WebSocket 直连             │ relay:host / room:state:sync
+           │ RoomMessage / Game API v1/v2          │ RoomMessage / Game API v1/v2 透明转发
+           │                                      │
+           ▼                                      ▼
+╔══════════════════════════════╗      ╔══════════════════════════════════════════════════════════════════╗
+║        frp 公网入口           ║      ║                    官方 Relay Server（公网）                      ║
+║                              ║      ║                                                                  ║
+║  ┌────────────────────────┐  ║      ║  ┌────────────────────────────────────────────────────────────┐  ║
+║  │ 用户自备 frp / SakuraFrp│  ║      ║  │  HTTP：/health、/rooms、/rooms/:roomCode                  │  ║
+║  │ 公网地址 -> RoomServer  │  ║      ║  │  WebSocket：relay:host、relay:join、relay:leave、heartbeat │  ║
+║  │ 平台只负责保存和直连地址 │  ║      ║  │  职责：生成 roomCode、维护房间列表、容量保护、透明转发消息    │  ║
+║  └────────────────────────┘  ║      ║  │  不解析游戏业务语义；短地址由平台按 publicHost + roomCode 拼接 │ ║
+╚══════════════════════════════╝      ║  └────────────────────────────────────────────────────────────┘  ║
+           ▲                         ╚══════════════════════════════════════════════════════════════════╝
+           │                                      ▲
+           │                                      │ relay:join(roomCode)
+           │                                      │ RoomMessage / Game API v1/v2 透明转发
+           │                                      ▼
+           │
+           │
 ╔══════════════════════════════════════════════════════════════════╗
 ║                      CLIENT 客机（可多个）                        ║
 ║                                                                  ║
@@ -479,14 +510,15 @@ interface FloatBallProgress {
 ║  │  ┌─────────────┐    IPC     ┌─────────────────────────┐   │   ║
 ║  │  │  渲染进程    │◄─────────►│       主进程             │   │   ║
 ║  │  │  - 房间页    │            │  ┌─────────────────────┐│   │  ║
-║  │  │  - 设置页    │            │  │    RoomClient       ││   │  ║
-║  │  │  - 游戏详情  │            │  │   连接至房主公网地址 ││   │   ║
+║  │  │  - 设置页    │            │  │    RoomClient       ││───┼──╫──► 官方 Relay Server
+║  │  │  - 游戏详情  │            │  │  短地址/房间码加入   ││   │  ║
+║  │  │             │            │  │  或 frp 地址直连     ││───┼──╫──► frp 公网入口
 ║  │  └─────────────┘            │  ├─────────────────────┤│   │   ║
 ║  │                             │  │   GameApiServer     ││   │   ║
 ║  │                             │  │   (状态同步缓存)     ││   │   ║
 ║  │                             │  └──────────┬──────────┘│   │   ║
 ║  │                             └─────────────┼───────────┘   │   ║
-║  └────────────────────────────────────────── ┼ ─────────────┘   ║
+║  └───────────────────────────────────────────┼──────────────┘   ║
 ║                                              │ localhost        ║
 ║  ┌───────────────────────────────────────────┴──────────────┐   ║
 ║  │                   游戏进程 (game.exe)                      │  ║
@@ -503,7 +535,7 @@ interface FloatBallProgress {
 - 读写本地存储（electron-store），**配置与数据均存储于应用根目录**
 - 调用系统 API（文件对话框、环境变量、子进程）
 - 游戏进程启动 / 管理 / 终止（`child_process.spawn`，支持 Windows 隐藏窗口）
-- 拉取远程游戏市场索引、下载市场安装包并执行校验与安装。所有 OSS 请求均携带 `Referer: https://bz-game-client.local` 防盗链
+- 拉取远程游戏市场索引、下载市场安装包并执行校验与安装。所有私有资源请求均携带构建期注入的 Referer 防盗链
   header（fetch 显式设置 + `session.webRequest.onBeforeSendHeaders` 全量拦截）
 - 运行 Room Server（Host 时）/ Room Client（Client 时）
 - 运行 Room Discovery UDP 服务，提供局域网房间响应；按需连接官方 Relay Server 注册房间短地址
@@ -578,13 +610,29 @@ interface GameRecord {
     isFavorite?: boolean;
 }
 
+type NicknameFont = "system" | "rounded" | "serif" | "mono" | "fantasy";
+
+type NicknameEffect =
+  | "none" | "glow" | "sparkle" | "flame" | "neon"
+  | "rainbow" | "aurora" | "stardust" | "crystal" | "comet" | "heartbeat";
+
+interface NicknameStyle {
+    color: string;
+    gradientStart?: string;
+    gradientEnd?: string;
+    font: NicknameFont;
+    effect: NicknameEffect;
+    weight: "normal" | "semibold" | "bold";
+}
+
 interface AppSettings {
     playerName: string;
     playerId: string;
     avatar?: string;
+    nicknameStyle?: NicknameStyle;
     lastJoinRoomAddress?: string;
     language: "zh-CN" | "en-US" | "ja-JP";
-    theme: "dark" | "light";
+    theme: "dark" | "light" | "auto";
     defaultRoomPort: number;
     closeBehavior: "tray" | "exit";
     autoLaunch: boolean;
@@ -732,6 +780,7 @@ interface AppSettings {
         - `performBuyFrame(frameId, coinCost)`：校验已拥有 / BZ 币余额 → 扣币 → 写入 `ownedFrames[]` → 自动装备 → 返回结果对象。
         - `performEquipFrame(frameId)`：仅校验 `ownedFrames[]` 含此 frame → `equippedFrame = frameId`。
         - `performUnequipFrame(frameId)`：仅当 `equippedFrame === frameId` 时 → `equippedFrame = undefined`。
+        - `performSaveNicknameStyle(style, coinCost)`：校验 BZ 币余额 → 扣币 → `saveSettings({ nicknameStyle: style })`。余额不足返回 `{ success: false, code: "insufficient_coins" }`。
     - **自动解锁**：`tryUnlockPlaytimeFrames()` 和 `tryUnlockCheckInFrames()` 为 `StoreService` 私有方法，分别在 `addPlayTime()` 和 `performCheckIn()` 写盘前调用。扫描 `AVATAR_FRAMES` 数组，满足条件且不在 `ownedFrames[]` 中时自动 push 并记录日志。
     - **单一真相源**：`ownedFrames[]` 是头像框解锁状态的唯一权威数据源。所有解锁逻辑（签到/时长/BZ币购买）均在主进程中写入此数组，前端 `isUnlocked()` **仅检查 `ownedFrames.includes(frameId)`**，不做任何条件比较。
     - **个性化页面**（`PersonalizationView.vue`）：网格布局展示 8 款头像框卡片，每张卡片包含预览（`AvatarWithFrame` 96px）、名称、解锁条件文字+图标、操作按钮（装备/卸下/购买/未解锁）。购买成功后自动装备并刷新用户数据。路由 `/personalization`。
@@ -762,6 +811,16 @@ interface AppSettings {
     - **交互行为**：双击悬浮球打开主窗口（`system:openUrl` 传入空字符串即恢复主窗口）。`-webkit-app-region: drag` 支持拖动。`active`/`dragging` 伪状态应用缩放和阴影效果。
     - **类型定义**：`FloatBallProgress` 接口定义在 `src/shared/types/market.types.ts`，包含 `totalProgress`、`activeTaskCount`、`completedTaskCount`、`totalTaskCount`。
 
+- **昵称样式系统（Nickname Style）**：
+    - **功能范围**：玩家可在个性化页面自定义昵称的显示样式，包括文字颜色、渐变（起点+终点）、字体、字重和特效动画，保存需消耗 30 BZ 币。
+    - **类型定义**：`NicknameStyle` 接口定义在 `src/shared/types/store.types.ts`，包含 `color`、`gradientStart`、`gradientEnd`、`font`（`system`/`rounded`/`serif`/`mono`/`fantasy`）、`effect`（`none`/`glow`/`sparkle`/`flame`/`neon`/`rainbow`/`aurora`/`stardust`/`crystal`/`comet`/`heartbeat`）、`weight`（`normal`/`semibold`/`bold`）。默认样式 `DEFAULT_NICKNAME_STYLE` 的 `color` 为 `"inherit"`。
+    - **渲染组件**：`NicknameText.vue` 使用 CSS 自定义属性（`--nickname-color`/`--nickname-gradient-start`/`--nickname-gradient-end`）驱动样式，通过 `NicknameEffect` 值动态激活对应的 CSS class 和 @keyframes 动画。渐变特效（neon/flame/aurora 等）使用 `background-clip: text` + `color: transparent` 实现渐变文字。粒子特效（sparkle/stardust/comet）通过绝对定位的 `<span>` 粒子元素 + CSS 动画实现。光环特效（aurora/crystal/heartbeat）通过绝对定位的背景层实现。
+    - **主题色自适应**：`nicknameColor.ts` 使用 WCAG 相对亮度公式计算颜色亮度。亮色主题下禁止偏白色（luminance > 0.72），暗色主题下禁止偏黑色（luminance < 0.28），不满足时自动取对称色。`adaptNicknameStyleForTheme()` 接收 `NicknameStyle` 和 `EffectiveTheme`（`useSettingsStore.effectiveTheme`），返回适配后的样式。`NicknameText` 组件接收 `effectiveTheme` prop 后自动调用适配。
+    - **保存与消费**：`performSaveNicknameStyle(style, 30)` 在主进程原子执行：校验 BZ 币余额 → 扣除 30 BZ 币 → 写入 `userData.bzCoins` → 调用 `saveSettings({ nicknameStyle: style })` 持久化到 `settings`。余额不足返回 `{ success: false, code: "insufficient_coins" }`。
+    - **UI 面板**：`PersonalizationView.vue` 新增双栏布局（`.nickname-style-panel`）：左侧预览卡片展示 `NicknameText` 实际效果（含单人/Room 两场景），右侧表单配置颜色/渐变/字体/字重/特效。保存前通过 `isNicknameColorAllowedForTheme` 检验对比度，不通过弹出警告。支持重置为默认样式（`resetNicknameStyle()`）。
+    - **联机传递**：`RoomJoinPayload` 新增 `playerNicknameStyle` 字段，`PlayerInRoom` 新增 `nicknameStyle` 字段，`DiscoveredRoom` 新增 `hostStyle` 字段，`ChatPayload` 新增 `senderStyle` 字段。`RoomServer`/`RoomClient` 创建玩家对象时写入，`PlayerCard.vue` 和 `RoomChat.vue` 使用 `NicknameText` 渲染。房间发现页（`RoomDiscoveryView.vue`）房间名称使用 `NicknameText` 展示房主昵称样式。
+    - **`effectiveTheme` 响应式**：`useSettingsStore` 新增 `effectiveTheme` computed（跟随 `settings.theme` 和 `prefersDark` 系统偏好），新增 `setPrefersDark()` 方法供 `App.vue` 的 `matchMedia` 监听器调用。`PersonalizationView` 中 watch `effectiveTheme` 自动适配预览颜色。
+
 ### 5.6 CSS 变量主题系统
 
 - **语义变量**：`theme.css` 定义全局 `:root` 层基础色板（`--bz-gold`、`--bz-green`、`--bz-red`、`--bz-amber`、`--bz-info-blue`
@@ -790,7 +849,7 @@ interface AppSettings {
   `market.json`。用户可点击"刷新"按钮强制重新拉取。应用重启后缓存自动失效（仅内存缓存，不落盘）。
 - **市场索引更新时间展示**：`MarketView` 从 `index.generatedAt` 读取时间戳，在标题"游戏市场"右侧以小字展示（格式
   `YYYY-MM-DD HH:mm`），使用 `updatedAtLabel` computed 实现，三语 i18n 支持。
-- **OSS 防盗链 Referer**：所有指向 `web-bz.oss-cn-beijing.aliyuncs.com` 的请求均携带 `Referer: https://bz-game-client.local`。实现分两层：`fetch` 请求通过 `RequestInterceptor.buildHeaders()` 统一注入；`<img>` 标签等渲染层请求由 `RequestInterceptor.registerSessionHandler()` 注册的 Electron 全局拦截器注入。
+- **私有资源防盗链 Referer**：所有指向私有 CDN/OSS 的请求均携带构建期注入的 Referer。实现分两层：`fetch` 请求通过 `RequestInterceptor.buildHeaders()` 统一注入；`<img>` 标签等渲染层请求由 `RequestInterceptor.registerSessionHandler()` 注册的 Electron 全局拦截器注入。
 - **市场下载暂存**：市场安装包应先下载到应用可控的临时目录（如 `.market-cache/`）中，校验通过后再解压并导入。
 - **市场安装统一导入**：市场下载成功后，解压目录复用 `GameLoader` 导入链路。
 - **市场安装失败保护**：下载、校验、解压或导入任一步失败时保留已有游戏记录；清理当前失败任务产生的临时文件（`finally`
@@ -833,8 +892,8 @@ interface AppSettings {
 
 ### 6.1.1 NSIS 多语言安装程序
 
-- **语言选择**：`electron-builder` NSIS 配置启用 `multiLanguageInstaller: true`，支持 `zh_CN`、`en_US`、`ja_JP`
-  三种安装语言。用户在安装向导第一步选择语言后，NSIS 继续以该语言完成安装流程。
+- **语言选择**：`electron-builder` NSIS 配置启用 `displayLanguageSelector: true` + `multiLanguageInstaller: true`，支持 `zh_CN`、`en_US`、`ja_JP`
+  三种安装语言。安装向导第一步显示语言选择器，用户选择后 NSIS 继续以该语言完成安装流程。
 - **语言标记文件**：`build/installer.nsh` 在 `customInstall` 钩子中根据 `$LANGUAGE` 常量（1033=en-US, 2052=zh-CN,
   1041=ja-JP）写入 `.initial-language` 标记文件到安装目录。首次启动时 `StoreService.getSettings()`
   读取该文件，覆盖默认语言设置后立即删除文件，确保语言设置只生效一次。
@@ -925,6 +984,7 @@ interface AppSettings {
 - `system:getUserData`：读取用户经济与签到数据。
 - `system:checkIn`：执行每日签到并返回奖励结果。
 - `system:buyFrame`：原子购买头像框（校验余额 + 已拥有，成功自动装备）。
+- `system:saveNicknameStyle`：保存昵称样式（颜色/渐变/字体/字重/特效），扣除 30 BZ 币。
 - `system:equipFrame`：原子装备头像框（仅校验已拥有）。
 - `system:unequipFrame`：原子卸下头像框（仅当前装备时生效）。
 - `system:getAvatarFrameImage`：从 `resources/avatar-frames/` 读取帧图返回 base64 Data URL。
@@ -972,7 +1032,7 @@ interface AppSettings {
 - **动态元数据**：游戏详情页切换版本时，优先展示当前选中版本的元数据（如简介、成就）；为空时展示空状态。
 - **房间入口**：顶部导航的“房间”按钮进入 `/rooms`，包含“局域网”和“服务器”两个 Tab；顶部头像与玩家名点击进入个性化页面。
 - **局域网始终可用**：房间页的 frp/官方服务器选择只表示公网入口，局域网发现和 `房主局域网IP:defaultRoomPort` 直连始终可用。
-- **官方服务器模式**：房主开启官方服务器模式后展示 `bzgames.top:随机数字` 短地址和复制按钮；切换公网入口前必须先通知其他玩家离开，注册失败自动回退到 frp 显示状态。
+- **官方服务器模式**：房主开启官方服务器模式后展示 `<relay-public-host>:随机数字` 短地址和复制按钮；切换公网入口前必须先通知其他玩家离开，注册失败自动回退到 frp 显示状态。
 - **房间发现校验**：局域网/服务器卡片加入前必须校验本地是否安装对应游戏、版本是否匹配、房间是否等待中、人数是否已满、是否为自己的房间；自己的房间点击加入时必须给出友好提示。
 - **服务器卡片展示**：服务器房间卡片展示官方短地址；游戏名称显示游戏本身名称，优先本地 Manifest，其次中继返回的 `gameName`，最后兜底 `gameId`。
 - **游戏库展示**：
@@ -1028,7 +1088,7 @@ interface AppSettings {
   `n-modal preset="card"` 模态框，280×280 圆形大图预览（含头像框）；无头像时显示玩家名首字母大字（使用 `--bz-bg-card-placeholder` 和
   `--bz-text-on-placeholder` CSS 变量适配暗/亮主题）。
 - **设置页主题跟随系统**：主题选择器提供"跟随系统"选项（`themeAuto`）。当选择 `auto` 时，平台自动跟随操作系统亮/暗模式切换。
-- **设置页官网链接**：设置页需展示官方网址 `http://www.bzgames.top/`，使用 NaiveUI `n-a` 组件渲染为可点击链接，`
+- **设置页官网链接**：设置页需展示官方网址，使用 NaiveUI `n-a` 组件渲染为可点击链接，`
   @click.prevent` 拦截默认跳转后通过 `system:openUrl` IPC 调用 `shell.openExternal` 打开系统默认浏览器。
 - **GitHub Token 设置**：设置页提供 `githubToken` 字段（`n-input type="password"`，`@copy.prevent` + `@cut.prevent` 防剪贴板泄漏）。填写有效的 GitHub Personal Access Token 后，平台所有 GitHub API 请求自动携带 `Authorization: Bearer <token>`，将 API 限流从 60 次/小时提升至 5000 次/小时（用于 Release Asset 解析）。
 - **设置页数据自检**：设置页需提供"数据自检"按钮，展示 `config.json`、游戏目录、版本路径、Manifest 完整性等检查结果。

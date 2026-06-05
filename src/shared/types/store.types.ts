@@ -52,10 +52,44 @@ export interface GameRecord {
   isFavorite?: boolean;
 }
 
+export type NicknameFont = "system" | "rounded" | "serif" | "mono" | "fantasy";
+
+export type NicknameEffect =
+  | "none"
+  | "glow"
+  | "sparkle"
+  | "flame"
+  | "neon"
+  | "rainbow"
+  | "aurora"
+  | "stardust"
+  | "crystal"
+  | "comet"
+  | "heartbeat";
+
+export interface NicknameStyle {
+  color: string;
+  gradientStart?: string;
+  gradientEnd?: string;
+  font: NicknameFont;
+  effect: NicknameEffect;
+  weight: "normal" | "semibold" | "bold";
+}
+
+export const DEFAULT_NICKNAME_STYLE: NicknameStyle = {
+  color: "inherit",
+  gradientStart: "#5eead4",
+  gradientEnd: "#a78bfa",
+  font: "system",
+  effect: "none",
+  weight: "normal",
+};
+
 export interface AppSettings {
   playerName: string;
   playerId: string;
   avatar?: string;
+  nicknameStyle?: NicknameStyle;
   lastJoinRoomAddress?: string;
   language: "zh-CN" | "en-US" | "ja-JP";
   theme: "dark" | "light" | "auto";

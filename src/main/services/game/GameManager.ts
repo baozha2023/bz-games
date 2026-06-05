@@ -4,22 +4,22 @@ import path from "path";
 import fs from "fs";
 import { createServer, Server } from "http";
 import handler from "serve-handler";
-import { findAvailablePort } from "../utils/portUtils";
+import { findAvailablePort } from "../../utils/portUtils";
 import { GameLoader } from "./GameLoader";
-import { GameApiServer } from "./GameApiServer";
-import { storeService } from "./StoreService";
+import { GameApiServer } from "../game-api/GameApiServer";
+import { storeService } from "../storage/StoreService";
 import { GameEnvironment } from "./GameEnvironment";
 import type {
   GameMessageAckPayload,
   GameRelayPayload,
   RoomMessage,
-} from "../../shared/types";
-import { roomClient } from "./RoomClient";
-import { roomServer } from "./RoomServer";
-import { mainWindow } from "../window";
-import { IPC } from "../../shared/ipc-channels";
-import type { GameManifest } from "../../shared/game-manifest";
-import { databaseService } from "./DatabaseService";
+} from "../../../shared/types";
+import { roomClient } from "../room/RoomClient";
+import { roomServer } from "../room/RoomServer";
+import { mainWindow } from "../../window";
+import { IPC } from "../../../shared/ipc-channels";
+import type { GameManifest } from "../../../shared/game-manifest";
+import { databaseService } from "../storage/DatabaseService";
 
 class GameManager {
   private activeProcesses: Map<string, ChildProcess> = new Map();
@@ -335,7 +335,7 @@ class GameManager {
     this.notifyRoomGameEnd(id);
     this.stop(id);
     mainWindow?.webContents.send(IPC.GAME_PROCESS_ENDED, id);
-    import("../window").then(({ updateTrayMenu }) => updateTrayMenu());
+    import("../../window").then(({ updateTrayMenu }) => updateTrayMenu());
   }
 
   private recordPlaytime(id: string) {

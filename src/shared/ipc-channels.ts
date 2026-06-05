@@ -87,6 +87,7 @@ export const IPC = {
   SYSTEM_GET_USER_DATA: "system:getUserData",
   SYSTEM_CHECK_IN: "system:checkIn",
   SYSTEM_BUY_FRAME: "system:buyFrame",
+  SYSTEM_SAVE_NICKNAME_STYLE: "system:saveNicknameStyle",
   SYSTEM_EQUIP_FRAME: "system:equipFrame",
   SYSTEM_UNEQUIP_FRAME: "system:unequipFrame",
   SYSTEM_GET_AVATAR_FRAME_IMAGE: "system:getAvatarFrameImage",

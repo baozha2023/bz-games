@@ -167,7 +167,7 @@
             {{ t('settings.migrateStorage') }}
           </n-button>
         </n-space>
-        <n-button type="primary" @click="handleSave">{{ t('settings.save') }}</n-button>
+        <n-button type="primary" :disabled="!canSave" @click="handleSave">{{ t('settings.save') }}</n-button>
       </div>
     </n-form>
 
@@ -311,6 +311,10 @@ const settingsFrameFileName = computed(() => {
   return getFrameImageFileName(frameId)
 })
 
+const canSave = computed(() => {
+  return formValue.value?.playerName?.trim() && formValue.value?.defaultRoomPort
+})
+
 const rules = {
   playerName: { required: true, message: () => t('settings.enterName'), trigger: 'blur' },
   defaultRoomPort: { required: true, type: 'number', message: () => t('settings.enterPort'), trigger: ['blur', 'change'] }
@@ -373,6 +377,11 @@ onMounted(async () => {
 
 const handleSave = async () => {
   if (formValue.value) {
+    try {
+      await (formRef.value as any)?.validate()
+    } catch {
+      return
+    }
     try {
       const plainSettings = JSON.parse(JSON.stringify(formValue.value));
       await settingsStore.saveSettings(plainSettings);

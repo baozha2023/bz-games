@@ -1,8 +1,9 @@
 import path from "path";
 import fs from "fs";
 import Database from "better-sqlite3";
-import { getAppRoot } from "../utils/appPath";
-import { logger } from "../utils/logger";
+import { getAppRoot } from "../../utils/appPath";
+import { logger } from "../../utils/logger";
+import { DB_DIR, DB_FILE_NAME } from "../../../shared/constants";
 
 export interface PlaySession {
   id: string;
@@ -18,9 +19,6 @@ export interface DailyPlayDuration {
   date: string;
   total_duration_ms: number;
 }
-
-const DB_DIR = "db";
-const DB_FILE_NAME = "db/play_sessions.db";
 
 class DatabaseService {
   private db: Database.Database | null = null;

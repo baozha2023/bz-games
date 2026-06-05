@@ -13,7 +13,13 @@
               :size="28"
               :frame-file-name="topBarFrameFileName"
             />
-            <span style="margin-left: 8px;">{{ settingsStore.settings?.playerName || 'BZ-Games' }}</span>
+            <NicknameText
+              :name="settingsStore.settings?.playerName || ''"
+              :nickname-style="settingsStore.settings?.nicknameStyle"
+              :effective-theme="settingsStore.effectiveTheme"
+              :size="20"
+              style="margin-left: 8px;"
+            />
           </button>
 
           <div 
@@ -88,6 +94,7 @@ import { useGameStore } from './stores/useGameStore'
 import { Calendar } from '@vicons/ionicons5'
 import CheckInModal from './components/CheckInModal.vue'
 import AvatarWithFrame from './components/AvatarWithFrame.vue'
+import NicknameText from './components/NicknameText.vue'
 import { ref } from 'vue'
 import { AchievementNotifier } from './utils/achievementNotifier'
 import bzCoinIcon from './assets/images/bz-coin.png'

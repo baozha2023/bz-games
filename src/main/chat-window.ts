@@ -3,7 +3,7 @@ import { join } from "path";
 import { is } from "@electron-toolkit/utils";
 import { IPC } from "../shared/ipc-channels";
 import { mainWindow } from "./window";
-import { storeService } from "./services/StoreService";
+import { storeService } from "./services/storage/StoreService";
 import type { ChatPayload } from "../shared/types";
 
 export let chatWindow: BrowserWindow | null = null;

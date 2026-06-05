@@ -1,3 +1,5 @@
+import type { NicknameStyle } from "./store.types";
+
 export type RoomMessageType =
   | "room:join"
   | "room:join:ack"
@@ -33,6 +35,7 @@ export interface ChatPayload {
   id: string;
   senderId: string;
   senderName: string;
+  senderStyle?: NicknameStyle;
   content: string;
   contentType?: "text" | "audio" | "image";
   images?: string[];
@@ -92,6 +95,7 @@ export interface DiscoveredRoom {
   gameVersion: string;
   hostId: string;
   hostName: string;
+  hostStyle?: NicknameStyle;
   address: string;
   playerCount: number;
   maxPlayers: number;
@@ -112,6 +116,7 @@ export interface PlayerInRoom {
   name: string;
   avatar?: string;
   avatarFrame?: string;
+  nicknameStyle?: NicknameStyle;
   isHost: boolean;
   isReady: boolean;
   joinedAt: number;
@@ -123,6 +128,7 @@ export interface RoomJoinPayload {
   playerName: string;
   playerAvatar?: string;
   playerAvatarFrame?: string;
+  playerNicknameStyle?: NicknameStyle;
   gameId: string;
   gameVersion: string;
 }
