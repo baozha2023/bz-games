@@ -212,6 +212,15 @@ declare global {
           end_time: number | null;
           duration_ms: number | null;
         }[]>;
+        getSessionsByDate: (date: string) => Promise<{
+          id: string;
+          game_id: string;
+          game_name: string;
+          version: string;
+          start_time: number;
+          end_time: number | null;
+          duration_ms: number | null;
+        }[]>;
       };
     };
   }

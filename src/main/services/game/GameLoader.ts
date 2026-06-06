@@ -36,6 +36,14 @@ export interface ManualManifestDraft {
   maxPlayers?: number;
 }
 
+type EntryCandidate = {
+  relativePath: string;
+  name: string;
+  extension: string;
+  depth: number;
+  size: number;
+};
+
 export class GameLoader {
   private static cache: GameManifest[] | null = null;
 
@@ -242,26 +250,159 @@ export class GameLoader {
   }
 
   static detectEntryFile(sourcePath: string): string {
-    const preferred = [
+    const folderName = path.basename(sourcePath).toLowerCase();
+    const preferredNames = [
       "index.html",
       "main.html",
       "game.html",
+      "play.html",
+      "index.htm",
+      "main.htm",
+      "game.htm",
+      `${folderName}.exe`,
       "game.exe",
       "main.exe",
+      "launcher.exe",
+      "launch.exe",
+      "start.exe",
+      "play.exe",
       "start.bat",
+      "launch.bat",
       "start.cmd",
+      "launch.cmd",
     ];
-    for (const candidate of preferred) {
-      if (fs.existsSync(path.join(sourcePath, candidate))) {
-        return candidate;
+    const entries = this.collectEntryCandidates(sourcePath);
+    const preferred = entries.find((entry) =>
+      preferredNames.includes(entry.relativePath.toLowerCase()),
+    );
+    if (preferred) return preferred.relativePath;
+
+    const html = this.pickBestEntryCandidate(
+      entries,
+      [".html", ".htm"],
+      folderName,
+    );
+    if (html) return html.relativePath;
+
+    const executable = this.pickBestEntryCandidate(
+      entries,
+      [".exe", ".bat", ".cmd"],
+      folderName,
+    );
+    if (executable) return executable.relativePath;
+
+    throw {
+      code: "entryNotFound",
+      params: { entry: "index.html | *.exe | start.bat" },
+    };
+  }
+
+  private static collectEntryCandidates(sourcePath: string): EntryCandidate[] {
+    const ignoredDirectories = new Set([
+      "node_modules",
+      ".git",
+      ".svn",
+      ".hg",
+      "__macosx",
+      "cache",
+      "logs",
+      "log",
+      "tmp",
+      "temp",
+      "save",
+      "saves",
+      "screenshots",
+    ]);
+    const allowedExtensions = new Set([".html", ".htm", ".exe", ".bat", ".cmd"]);
+    const candidates: EntryCandidate[] = [];
+    const walk = (directory: string, depth: number) => {
+      if (depth > 3) return;
+      const entries = fs.readdirSync(directory, { withFileTypes: true });
+      for (const entry of entries) {
+        const absolutePath = path.join(directory, entry.name);
+        if (entry.isDirectory()) {
+          if (!ignoredDirectories.has(entry.name.toLowerCase())) {
+            walk(absolutePath, depth + 1);
+          }
+          continue;
+        }
+        if (!entry.isFile()) continue;
+        const extension = path.extname(entry.name).toLowerCase();
+        if (!allowedExtensions.has(extension)) continue;
+        const relativePath = path
+          .relative(sourcePath, absolutePath)
+          .split(path.sep)
+          .join("/");
+        candidates.push({
+          relativePath,
+          name: entry.name,
+          extension,
+          depth,
+          size: fs.statSync(absolutePath).size,
+        });
       }
+    };
+    walk(sourcePath, 0);
+    return candidates;
+  }
+
+  private static pickBestEntryCandidate(
+    candidates: EntryCandidate[],
+    extensions: string[],
+    folderName: string,
+  ): EntryCandidate | undefined {
+    const extensionSet = new Set(extensions);
+    const ignoredExecutableNames = new Set([
+      "unins000.exe",
+      "uninstall.exe",
+      "uninstaller.exe",
+      "setup.exe",
+      "install.exe",
+      "installer.exe",
+      "crashhandler.exe",
+      "crashreporter.exe",
+      "unitycrashhandler32.exe",
+      "unitycrashhandler64.exe",
+      "vcredist_x86.exe",
+      "vcredist_x64.exe",
+    ]);
+    return candidates
+      .filter((candidate) => extensionSet.has(candidate.extension))
+      .filter(
+        (candidate) =>
+          candidate.extension !== ".exe" ||
+          !ignoredExecutableNames.has(candidate.name.toLowerCase()),
+      )
+      .sort(
+        (a, b) =>
+          this.scoreEntryCandidate(b, folderName) -
+          this.scoreEntryCandidate(a, folderName),
+      )[0];
+  }
+
+  private static scoreEntryCandidate(
+    candidate: EntryCandidate,
+    folderName: string,
+  ) {
+    const lowerName = candidate.name.toLowerCase();
+    const baseName = path.basename(candidate.name, candidate.extension).toLowerCase();
+    const lowerPath = candidate.relativePath.toLowerCase();
+    let score = 100 - candidate.depth * 18;
+    if (lowerName === "index.html" || lowerName === "index.htm") score += 80;
+    if (["main", "game", "play", "start", "launch", "launcher"].includes(baseName)) {
+      score += 65;
     }
-    const files = fs.readdirSync(sourcePath);
-    const exe = files.find((f) => f.toLowerCase().endsWith(".exe"));
-    if (exe) return exe;
-    const html = files.find((f) => f.toLowerCase().endsWith(".html"));
-    if (html) return html;
-    throw { code: "entryNotFound", params: { entry: "index.html | *.exe" } };
+    if (baseName === folderName) score += 70;
+    if (
+      lowerPath.includes("/bin/") ||
+      lowerPath.includes("/build/") ||
+      lowerPath.includes("/release/")
+    ) {
+      score += 18;
+    }
+    if (candidate.extension === ".exe") score += Math.min(35, Math.floor(candidate.size / 1024 / 1024));
+    if (lowerName.includes("unins") || lowerName.includes("setup") || lowerName.includes("install")) score -= 120;
+    return score;
   }
 
   private static buildManualManifestDraft(draft: ManualManifestDraft): GameManifest {

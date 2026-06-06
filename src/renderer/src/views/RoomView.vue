@@ -99,7 +99,7 @@
 
 <script setup lang="ts">
 import { onMounted, onUnmounted, computed, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useMessage, useDialog } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { useRoomStore } from '../stores/useRoomStore'
@@ -108,8 +108,11 @@ import { useGameStore } from '../stores/useGameStore'
 import PlayerList from '../components/room/PlayerList.vue'
 import RoomChat from '../components/room/RoomChat.vue'
 
+const STEAM_ROOM_RETURN_KEY = 'bz-games:steam-room-return-game-id'
+
 const { t } = useI18n()
 const router = useRouter()
+const route = useRoute()
 const message = useMessage()
 const dialog = useDialog()
 const roomStore = useRoomStore()
@@ -129,6 +132,34 @@ const connectionModeOptions = computed(() => [
   { label: t('room.connectionModeFrp'), value: 'frp' },
   { label: t('room.connectionModeRelay'), value: 'relay' },
 ])
+
+const roomRouteGameId = computed(() => route.params.id as string | undefined)
+
+const shouldReturnToSteam = computed(() => {
+  return route.query.fromSteam === '1' || sessionStorage.getItem(STEAM_ROOM_RETURN_KEY) === roomRouteGameId.value
+})
+
+const detailRouteForGame = (gameId?: string) => {
+  if (!gameId) {
+    return { name: 'Library' as const }
+  }
+  if (shouldReturnToSteam.value) {
+    return {
+      name: 'Library' as const,
+      query: { steamGameId: gameId }
+    }
+  }
+  return {
+    name: 'GameDetail' as const,
+    params: { id: gameId }
+  }
+}
+
+const clearSteamReturnMarker = () => {
+  if (shouldReturnToSteam.value) {
+    sessionStorage.removeItem(STEAM_ROOM_RETURN_KEY)
+  }
+}
 
 const syncConnectionModeFromRoom = () => {
   const publicAddress = roomStore.room?.hostPublicAddress || ''
@@ -179,6 +210,10 @@ const copyRelayAddress = async () => {
   if (!relayPublicAddress.value) return
   await navigator.clipboard.writeText(relayPublicAddress.value)
   message.success(t('common.copied'))
+}
+
+if (route.query.fromSteam === '1' && roomRouteGameId.value) {
+  sessionStorage.setItem(STEAM_ROOM_RETURN_KEY, roomRouteGameId.value)
 }
 
 const handlePopOutChat = async () => {
@@ -265,7 +300,9 @@ onMounted(async () => {
 
   if (!roomStore.room) {
     message.warning(t('room.notInRoom'));
-    router.replace('/library');
+    const targetRoute = detailRouteForGame(roomRouteGameId.value)
+    clearSteamReturnMarker()
+    router.replace(targetRoute);
     return;
   }
 
@@ -282,15 +319,18 @@ onMounted(async () => {
     cleanupRoomEvent = window.electronAPI.room.onEvent((event) => {
       if (event.type === 'room:disbanded') {
         message.warning(t('room.roomDisbanded'));
-        // Clear room state logic is handled in store, but we need to navigate
-        router.replace('/library');
+        const targetRoute = detailRouteForGame(roomRouteGameId.value);
+        clearSteamReturnMarker()
+        router.replace(targetRoute);
       } else if (event.type === 'room:kicked') {
         dialog.error({
           title: t('common.error'),
           content: t('room.youWereKicked'),
           positiveText: t('common.confirm'),
           onPositiveClick: () => {
-            router.replace('/library')
+            const targetRoute = detailRouteForGame(roomRouteGameId.value)
+            clearSteamReturnMarker()
+            router.replace(targetRoute)
           }
         })
       }
@@ -311,13 +351,10 @@ onUnmounted(() => {
 })
 
 const handleBack = () => {
-  // Just navigate back, do not leave room
   const gameId = roomStore.room?.gameId
-  if (gameId) {
-    router.push(`/library/${gameId}`)
-  } else {
-    router.push('/library')
-  }
+  const targetRoute = detailRouteForGame(gameId)
+  clearSteamReturnMarker()
+  router.push(targetRoute)
 }
 
 const handleLeaveRoom = async () => {
@@ -329,12 +366,10 @@ const handleLeaveRoom = async () => {
     negativeText: t('common.cancel'),
     onPositiveClick: async () => {
       const gameId = roomStore.room?.gameId
+      const targetRoute = detailRouteForGame(gameId)
       await roomStore.leaveRoom()
-      if (gameId) {
-        router.replace(`/library/${gameId}`)
-      } else {
-        router.replace('/library')
-      }
+      clearSteamReturnMarker()
+      router.replace(targetRoute)
     }
   })
 }

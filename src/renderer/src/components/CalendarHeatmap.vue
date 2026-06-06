@@ -77,12 +77,14 @@
             v-for="cell in cells"
             :key="cell.date"
             class="heatmap-cell"
+            :class="{ 'heatmap-cell-active': selectedDate === cell.date }"
             :style="{
               backgroundColor: cell.color,
               width: `${cellSize}px`,
               height: `${cellSize}px`,
               borderRadius: `${Math.max(1, Math.round(cellSize * 0.15))}px`,
             }"
+            @click="handleCellClick(cell.date)"
           >
             <n-tooltip trigger="hover">
               <template #trigger>
@@ -125,6 +127,11 @@ interface MonthLabel {
 
 const props = defineProps<{
   dailyDurations: { date: string; total_duration_ms: number }[]
+  selectedDate?: string
+}>()
+
+const emit = defineEmits<{
+  (e: 'select-date', date: string): void
 }>()
 
 const CONTAINER_PADDING = 32
@@ -231,6 +238,8 @@ const totalDurationMs = computed(() => {
   return props.dailyDurations.reduce((sum, d) => sum + d.total_duration_ms, 0)
 })
 
+const selectedDate = computed(() => props.selectedDate || '')
+
 const cells = computed<CellData[]>(() => {
   const now = new Date()
   const endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate())
@@ -308,6 +317,10 @@ function formatDateStr(date: Date): string {
   const d = String(date.getDate()).padStart(2, '0')
   return `${y}-${m}-${d}`
 }
+
+function handleCellClick(date: string) {
+  emit('select-date', date)
+}
 </script>
 
 <style scoped>
@@ -381,6 +394,11 @@ function formatDateStr(date: Date): string {
 
 .heatmap-cell:hover {
   outline: 2px solid var(--bz-text-title);
+  outline-offset: -1px;
+}
+
+.heatmap-cell-active {
+  outline: 2px solid var(--bz-green);
   outline-offset: -1px;
 }
 

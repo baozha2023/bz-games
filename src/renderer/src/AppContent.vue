@@ -127,7 +127,11 @@ const isPopupWindow = computed(() => {
 
 const handleBackToRoom = () => {
   if (roomStore.room && roomStore.room.gameId) {
-    router.push(`/room/${roomStore.room.gameId}`)
+    router.push({
+      name: 'Room',
+      params: { id: roomStore.room.gameId },
+      query: route.query.steamGameId === roomStore.room.gameId ? { fromSteam: '1' } : undefined
+    })
   }
 }
 

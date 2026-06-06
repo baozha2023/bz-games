@@ -1,6 +1,6 @@
 <template>
-  <div style="padding: 24px;" v-if="game">
-    <n-page-header :title="game.name" @back="$router.back()">
+  <div v-if="game" class="game-detail-page" :class="{ embedded }">
+    <n-page-header :title="game.name" @back="handleBack">
       <template #extra>
         <n-space>
           <n-button @click="handleToggleFavorite">
@@ -108,6 +108,19 @@ import GameDeleteModal from '../components/game/GameDeleteModal.vue'
 import type { GameManifest } from '../../../shared/game-manifest'
 import { GameType } from '../../../shared/types'
 
+const props = withDefaults(defineProps<{
+  gameId?: string
+  embedded?: boolean
+}>(), {
+  gameId: '',
+  embedded: false
+})
+
+const emit = defineEmits<{
+  back: []
+  deleted: [gameId: string]
+}>()
+
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
@@ -117,9 +130,9 @@ const roomStore = useRoomStore()
 const settingsStore = useSettingsStore()
 const { joinRoomByAddress } = useRoomJoin()
 
-const gameId = route.params.id as string
-const game = computed(() => gameStore.games.find(g => g.id === gameId))
-const isRunning = computed(() => gameStore.runningGameIds.has(gameId))
+const effectiveGameId = computed(() => props.gameId || route.params.id as string)
+const game = computed(() => gameStore.games.find(g => g.id === effectiveGameId.value))
+const isRunning = computed(() => gameStore.runningGameIds.has(effectiveGameId.value))
 
 const versions = ref<string[]>([])
 const selectedVersion = ref('')
@@ -164,7 +177,7 @@ const gameAchievements = computed(() => {
     
     if (!achievements || achievements.length === 0) return [];
 
-    const unlocked = gameStore.getUnlockedAchievements(gameId, selectedVersion.value);
+    const unlocked = gameStore.getUnlockedAchievements(effectiveGameId.value, selectedVersion.value);
     return achievements.map(a => {
         const u = unlocked.find(ua => ua.id === a.id);
         return {
@@ -175,7 +188,7 @@ const gameAchievements = computed(() => {
     }).sort((a, b) => (b.unlocked ? 1 : 0) - (a.unlocked ? 1 : 0));
 });
 
-onMounted(async () => {
+const loadGameDetail = async () => {
   if (!settingsStore.settings) {
     await settingsStore.loadSettings()
   }
@@ -185,7 +198,7 @@ onMounted(async () => {
   if (game.value) {
     selectedVersion.value = game.value.version
     try {
-      const v = await window.electronAPI.game.getVersions(gameId);
+      const v = await window.electronAPI.game.getVersions(effectiveGameId.value);
       if (v && v.length > 0) {
         versions.value = v;
         if (!selectedVersion.value || !versions.value.includes(selectedVersion.value)) {
@@ -196,6 +209,19 @@ onMounted(async () => {
       await handleVersionChange(selectedVersion.value);
     } catch {}
   }
+}
+
+onMounted(async () => {
+  await loadGameDetail()
+})
+
+watch(effectiveGameId, async () => {
+  versions.value = []
+  selectedVersion.value = ''
+  currentManifest.value = null
+  showJoinModal.value = false
+  showAchievements.value = false
+  await loadGameDetail()
 })
 
 watch(showJoinModal, (open) => {
@@ -208,7 +234,7 @@ const handleVersionChange = async (version: string) => {
     selectedVersion.value = version;
     currentManifest.value = null;
     try {
-        const manifest = await window.electronAPI.game.getManifest(gameId, version);
+        const manifest = await window.electronAPI.game.getManifest(effectiveGameId.value, version);
         if (manifest) {
             currentManifest.value = manifest;
         }
@@ -218,7 +244,7 @@ const handleVersionChange = async (version: string) => {
 }
 
 const handleLaunch = () => {
-  gameStore.launchGame(gameId, selectedVersion.value)
+  gameStore.launchGame(effectiveGameId.value, selectedVersion.value)
   message.success(t('gameDetail.launchSuccess'))
 }
 
@@ -226,13 +252,13 @@ const showDeleteModal = ref(false)
 const isDeleting = ref(false)
 
 const isFavorite = computed(() => {
-    const record = gameStore.getGameRecord(gameId);
+    const record = gameStore.getGameRecord(effectiveGameId.value);
     return record?.isFavorite || false;
 })
 
 const handleToggleFavorite = async (e: MouseEvent) => {
     try {
-        const newState = await gameStore.toggleFavorite(gameId);
+        const newState = await gameStore.toggleFavorite(effectiveGameId.value);
         if (newState) {
             spawnHeartParticles(e.clientX, e.clientY);
         }
@@ -255,17 +281,23 @@ const confirmDelete = async (versionsToDelete: string[]) => {
     showDeleteModal.value = false
 
     if (isFullDelete) {
-      await router.push({
-        name: 'Library',
-        query: {
-          deletedGameId: gameId,
-          deletedVersions: versionsToDelete.join(','),
-        },
-      })
+      if (props.embedded) {
+        await gameStore.removeGame(effectiveGameId.value, [...versionsToDelete])
+        message.success(t('gameDetail.deleteSuccess'))
+        emit('deleted', effectiveGameId.value)
+      } else {
+        await router.push({
+          name: 'Library',
+          query: {
+            deletedGameId: effectiveGameId.value,
+            deletedVersions: versionsToDelete.join(','),
+          },
+        })
+      }
     } else {
-      await gameStore.removeGame(gameId, [...versionsToDelete])
+      await gameStore.removeGame(effectiveGameId.value, [...versionsToDelete])
       message.success(t('gameDetail.deleteSuccess'))
-      const v = await window.electronAPI.game.getVersions(gameId)
+      const v = await window.electronAPI.game.getVersions(effectiveGameId.value)
       if (v) {
         versions.value = v
         versions.value.sort((a, b) => b.localeCompare(a, undefined, { numeric: true, sensitivity: 'base' }))
@@ -328,10 +360,12 @@ function spawnHeartParticles(x: number, y: number) {
 
 const createRoom = async () => {
   try {
-    // Create room with selected version. 
-    // Host will start the game using this version, and clients must match it.
-    await roomStore.createRoom(gameId, selectedVersion.value)
-    router.push(`/room/${gameId}`)
+    await roomStore.createRoom(effectiveGameId.value, selectedVersion.value)
+    router.push({
+      name: 'Room',
+      params: { id: effectiveGameId.value },
+      query: props.embedded ? { fromSteam: '1' } : undefined
+    })
   } catch (e: any) {
     if (e.message === 'ALREADY_IN_ROOM') {
       message.error(t('room.alreadyInRoom'))
@@ -344,12 +378,13 @@ const createRoom = async () => {
 const handleJoin = async () => {
   if (!joinAddress.value) { message.error(t('gameDetail.addressEmpty')); return false; }
   const result = await joinRoomByAddress({
-    gameId,
+    gameId: effectiveGameId.value,
     address: joinAddress.value,
     version: selectedVersion.value,
     router,
     message,
     saveLastAddress: true,
+    fromSteam: props.embedded,
     close: () => {
       showJoinModal.value = false
     },
@@ -357,4 +392,22 @@ const handleJoin = async () => {
   joinAddress.value = result.address
   return result.success
 }
+
+const handleBack = () => {
+  if (props.embedded) {
+    emit('back')
+    return
+  }
+  router.back()
+}
 </script>
+
+<style scoped>
+.game-detail-page {
+  padding: 24px;
+}
+
+.game-detail-page.embedded {
+  padding: 24px;
+}
+</style>

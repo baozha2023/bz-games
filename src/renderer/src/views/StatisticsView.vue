@@ -30,7 +30,12 @@
         <n-skeleton height="140px" />
         <n-skeleton height="16px" width="40%" style="margin-top: 12px;" />
       </div>
-      <CalendarHeatmap v-else :daily-durations="dailyDurations" />
+      <CalendarHeatmap
+        v-else
+        :daily-durations="dailyDurations"
+        :selected-date="selectedDate"
+        @select-date="handleHeatmapDateSelect"
+      />
     </n-card>
 
     <n-grid x-gap="12" y-gap="12" :cols="1" md="2" lg="3">
@@ -65,11 +70,52 @@
     </n-grid>
     
     <n-empty v-if="filteredGames.length === 0" :description="t('statistics.empty')" style="margin-top: 100px;" />
+
+    <n-modal
+      v-model:show="showSessionModal"
+      preset="card"
+      style="width: min(760px, calc(100vw - 32px));"
+      :title="t('statistics.dayRecordsTitle', { date: selectedDate })"
+      :bordered="false"
+    >
+      <div class="session-modal-content">
+        <div v-if="isLoadingSessions">
+          <n-space vertical :size="12">
+            <n-skeleton height="56px" :repeat="3" />
+          </n-space>
+        </div>
+        <n-empty
+          v-else-if="selectedDateSessions.length === 0"
+          :description="t('statistics.dayRecordsEmpty')"
+        />
+        <n-space v-else vertical :size="12">
+          <n-card
+            v-for="session in selectedDateSessions"
+            :key="session.id"
+            size="small"
+            embedded
+          >
+            <div class="session-row">
+              <div>
+                <div class="session-game">{{ session.game_name }}</div>
+                <div class="session-meta">
+                  {{ t('statistics.version') }}: {{ session.version }}
+                </div>
+              </div>
+              <div class="session-side">
+                <div>{{ formatSessionDuration(session.duration_ms) }}</div>
+                <div class="session-meta">{{ formatSessionRange(session.start_time, session.end_time) }}</div>
+              </div>
+            </div>
+          </n-card>
+        </n-space>
+      </div>
+    </n-modal>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { SearchOutline } from '@vicons/ionicons5'
 import { useGameStore } from '../stores/useGameStore'
@@ -79,12 +125,26 @@ import type { GameManifest } from '../../../shared/game-manifest'
 const { t } = useI18n()
 const gameStore = useGameStore()
 
+interface PlaySession {
+  id: string
+  game_id: string
+  game_name: string
+  version: string
+  start_time: number
+  end_time: number | null
+  duration_ms: number | null
+}
+
 const selectedVersions = ref<Record<string, string>>({})
 const manifestCache = ref<Record<string, GameManifest>>({})
 const searchKeyword = ref('')
 const isSearchExpanded = ref(false)
 const isLoadingHeatmap = ref(true)
 const dailyDurations = ref<{ date: string; total_duration_ms: number }[]>([])
+const selectedDate = ref('')
+const showSessionModal = ref(false)
+const isLoadingSessions = ref(false)
+const selectedDateSessions = ref<PlaySession[]>([])
 
 const games = computed(() => gameStore.games)
 const filteredGames = computed(() => {
@@ -116,16 +176,37 @@ async function loadStatsData() {
   }
 }
 
-onMounted(() => {
-  gameStore.loadGames()
-  loadStatsData()
+async function handleHeatmapDateSelect(date: string) {
+  selectedDate.value = date
+  showSessionModal.value = true
+  isLoadingSessions.value = true
+  try {
+    selectedDateSessions.value = await window.electronAPI.stats.getSessionsByDate(date)
+  } catch (e) {
+    console.error('[StatisticsView] Failed to load sessions by date:', e)
+    selectedDateSessions.value = []
+  } finally {
+    isLoadingSessions.value = false
+  }
+}
 
+const ensureDefaultVersionSelection = () => {
   for (const game of games.value) {
     if (!selectedVersions.value[game.id]) {
-      selectedVersions.value[game.id] = game.version;
-      manifestCache.value[`${game.id}@${game.version}`] = game;
+      selectedVersions.value[game.id] = game.version
+      manifestCache.value[`${game.id}@${game.version}`] = game
     }
   }
+}
+
+onMounted(async () => {
+  await gameStore.loadGames()
+  ensureDefaultVersionSelection()
+  loadStatsData()
+})
+
+watch(games, () => {
+  ensureDefaultVersionSelection()
 })
 
 function getVersionOptions(gameId: string) {
@@ -214,6 +295,25 @@ function formatTime(seconds: number): string {
   return `${hours}h ${remainingMinutes}m`;
 }
 
+function formatSessionDuration(durationMs: number | null): string {
+  if (!durationMs || durationMs <= 0) return t('statistics.noPlay')
+  const minutes = Math.floor(durationMs / 60000)
+  if (minutes < 60) return `${minutes}${t('statistics.minute')}`
+  const hours = Math.floor(minutes / 60)
+  const remainingMinutes = minutes % 60
+  if (remainingMinutes === 0) return `${hours}${t('statistics.hour')}`
+  return `${hours}${t('statistics.hour')}${remainingMinutes}${t('statistics.minute')}`
+}
+
+function formatSessionRange(startTime: number, endTime: number | null): string {
+  const start = new Date(startTime)
+  const end = endTime ? new Date(endTime) : null
+  const startLabel = start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  if (!end) return startLabel
+  const endLabel = end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  return `${startLabel} - ${endLabel}`
+}
+
 function getLabel(gameId: string, key: string): string {
     const manifest = getManifest(gameId);
     if (manifest?.statistics) {
@@ -233,3 +333,33 @@ function getLabel(gameId: string, key: string): string {
     return key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 }
 </script>
+
+<style scoped>
+.session-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+}
+
+.session-modal-content {
+  max-height: 80vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.session-game {
+  font-weight: 600;
+}
+
+.session-side {
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.session-meta {
+  font-size: 12px;
+  color: var(--bz-text-secondary);
+  margin-top: 4px;
+}
+</style>

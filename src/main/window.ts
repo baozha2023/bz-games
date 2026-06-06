@@ -84,8 +84,8 @@ export function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1024,
     height: 768,
-    minWidth: 800,
-    minHeight: 600,
+    minWidth: 1024,
+    minHeight: 768,
     show: false,
     autoHideMenuBar: true,
     icon: join(app.getAppPath(), "resources", "icon.png"),

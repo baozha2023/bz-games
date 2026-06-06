@@ -28,6 +28,7 @@ const defaultSettings: AppSettings = {
   playerName: "玩家",
   playerId: "",
   nicknameStyle: DEFAULT_NICKNAME_STYLE,
+  libraryLayout: "card",
   lastJoinRoomAddress: "",
   language: "zh-CN",
   theme: "auto",
@@ -580,7 +581,7 @@ class StoreService {
   ): Promise<void> {
     for (const v of versions) {
       try {
-        await fs.rm(v.path, { recursive: true, force: true });
+        await this.removePath(v.path, { recursive: true, force: true });
         logger.info(`[StoreService] Removed game version directory: ${v.path}`);
       } catch (e) {
         logger.error(
@@ -613,7 +614,7 @@ class StoreService {
         if (!versionDir.isDirectory()) continue;
         const versionPath = path.join(gameRoot, versionDir.name);
         if (!fsSync.existsSync(path.join(versionPath, "game.json"))) continue;
-        await fs.rm(versionPath, { recursive: true, force: true });
+        await this.removePath(versionPath, { recursive: true, force: true });
         logger.info(`[StoreService] Removed game version directory by manifest: ${versionPath}`);
       }
 
@@ -639,10 +640,30 @@ class StoreService {
     const parentDir = path.dirname(versionPath);
 
     try {
-      await fs.rm(parentDir, { recursive: true, force: true });
+      await this.removePath(parentDir, { recursive: true, force: true });
       logger.info(`[StoreService] Removed game root directory: ${parentDir}`);
     } catch (e) {
       logger.error(`[StoreService] Failed to remove game root directory`, e);
+    }
+  }
+
+  private async removePath(targetPath: string, options: Parameters<typeof fs.rm>[1]): Promise<void> {
+    const prevNoAsar = process.noAsar;
+    process.noAsar = true;
+    try {
+      await fs.rm(targetPath, options);
+    } finally {
+      process.noAsar = prevNoAsar;
+    }
+  }
+
+  private async copyPath(sourcePath: string, targetPath: string, options: Parameters<typeof fs.cp>[2]): Promise<void> {
+    const prevNoAsar = process.noAsar;
+    process.noAsar = true;
+    try {
+      await fs.cp(sourcePath, targetPath, options);
+    } finally {
+      process.noAsar = prevNoAsar;
     }
   }
 
@@ -911,8 +932,8 @@ class StoreService {
     }
 
     try {
-      await fs.cp(sourceRoot, targetRoot, { recursive: true, force: true });
-      await fs.rm(sourceRoot, { recursive: true, force: true });
+      await this.copyPath(sourceRoot, targetRoot, { recursive: true, force: true });
+      await this.removePath(sourceRoot, { recursive: true, force: true });
     } catch (error) {
       try {
         await this.clearDirectoryContents(targetRoot);
@@ -939,7 +960,7 @@ class StoreService {
     }
 
     for (const entry of entries) {
-      await fs.rm(path.join(dirPath, entry.name), {
+      await this.removePath(path.join(dirPath, entry.name), {
         recursive: true,
         force: true,
         maxRetries: 3,

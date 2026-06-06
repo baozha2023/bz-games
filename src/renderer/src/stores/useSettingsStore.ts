@@ -65,6 +65,18 @@ export const useSettingsStore = defineStore("settings", () => {
     }
   }
 
+  async function savePartialSettings(partial: Partial<AppSettings>) {
+    await window.electronAPI.settings.savePartialSettings(partial);
+    const currentSettings = settings.value || (await window.electronAPI.settings.get());
+    settings.value = {
+      ...currentSettings,
+      ...partial,
+    };
+    if (partial.language) {
+      setLocale(partial.language);
+    }
+  }
+
   async function ignoreUpdateVersion(version: string) {
     await window.electronAPI.settings.ignoreUpdateVersion(version);
     if (settings.value) {
@@ -134,6 +146,7 @@ export const useSettingsStore = defineStore("settings", () => {
     setPrefersDark,
     loadSettings,
     saveSettings,
+    savePartialSettings,
     ignoreUpdateVersion,
     loadUserData,
     checkIn,

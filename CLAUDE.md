@@ -630,6 +630,7 @@ interface AppSettings {
     playerId: string;
     avatar?: string;
     nicknameStyle?: NicknameStyle;
+    libraryLayout?: "card" | "icon" | "steam";
     lastJoinRoomAddress?: string;
     language: "zh-CN" | "en-US" | "ja-JP";
     theme: "dark" | "light" | "auto";
@@ -672,6 +673,7 @@ interface AppSettings {
   `removeConfig()` 在游戏退出时自动删除残留的 `bz-config.js` 文件。`activeVersionPaths` Map 追踪版本目录路径，确保所有退出路径（窗口关闭、进程退出、主动停止、启动失败）都能正确清理。
 - **GameManager 生命周期**：`cleanupApiOnly()` 方法仅清理 WebSocket/HTTP 服务器资源，不终止游戏进程也不关闭窗口。当 API
   Server 超时自动停止时调用，避免误杀正在运行的游戏。
+- **游戏库布局状态**：`settings.libraryLayout` 持久化游戏库布局，取值为 `card`、`icon`、`steam`。`LibraryView` 挂载时必须先读取设置再渲染游戏库，避免启动时默认布局闪烁；Steam 布局右侧详情页使用嵌入式 `GameDetailView`，通过 `/library?steamGameId=<id>` 恢复来源游戏详情。
 - **游玩会话记录**：每次游戏启动（`spawnGameProcess` / `createGameWindow`）调用 `databaseService.startSession()` 在
   `play_sessions.db` 创建一条记录（含 `game_id`、`game_name`、`version`、`start_time`）；游戏退出时（
   `handleProcessExit` → `recordPlaytime`）调用 `databaseService.endSession()` 写入 `end_time` 和 `duration_ms`。
@@ -683,6 +685,7 @@ interface AppSettings {
     - `getRecentGames(limit)`：`GROUP BY game_id` 去重，返回最近玩过的游戏列表（供托盘快捷菜单使用）。
     - `getDailyPlayDurations(days)`：按自然日聚合 `SUM(duration_ms)`，返回日历热力图数据源。
     - `getRecentSessions(limit)`：按 `start_time DESC` 返回最近会话。
+    - `getSessionsByDate(date)`：按本地自然日查询已结束会话，用于统计热力图点击日期后的当日记录弹窗。
     - 应用退出 (`before-quit`) 必须调用 `databaseService.close()` 正常关闭 WAL 连接，否则 WAL 文件不会自动合并。
 - **MarketService 设计**：
     - **两级市场架构**：`getSources()` 拉取顶层市场目录（通过 `fetchDirectory()` 获取，主源 GitHub + 备源 OSS），
@@ -886,7 +889,8 @@ interface AppSettings {
     - `platformVersion` 固定为当前平台版本。
     - `type` 使用下拉框；仅当 `type` 为 `multiplayer` 或 `singlemultiple` 时展示 `minPlayers/maxPlayers`。
     - `version` 必须通过语义化版本校验（`x.y.z`）；**网页游戏（`networkgame`）**版本号需填写但不做 semver 校验。
-    - `entry` 会自动探测并允许用户手动修改；`entry=.html` 时校验入口文件存在，`entry=serve` 或 `entry=url` 时跳过入口文件存在性校验。
+    - `entry` 会自动探测并允许用户手动修改；探测支持 `.html`、`.htm`、`.exe`、`.bat`、`.cmd`，优先匹配常见入口名并排除安装器、卸载器、崩溃处理器等误判可执行文件。
+    - `entry=.html/.htm` 时校验入口文件存在，`entry=.exe/.bat/.cmd` 由游戏启动流程执行存在性校验，`entry=serve` 或 `entry=url` 时跳过入口文件存在性校验。
     - `entry=url` 时必须提供 `web_url`（合法 URL）。
     - `icon/cover` 若填写则必须是游戏目录内存在的相对路径。
 
@@ -929,6 +933,7 @@ interface AppSettings {
 - `game:launch`：启动指定游戏版本。
 - `stats:getDailyPlayDurations`：查询最近 N 天的每日游玩时长（日历热力图数据源）。
 - `stats:getRecentSessions`：查询最近 N 条游玩会话记录。
+- `stats:getSessionsByDate`：查询指定本地自然日的已结束游玩会话记录。
 - `market:getSources`：拉取并解析市场目录（含 sources 列表）。
 - `market:getIndex`：拉取并解析指定市场源的远程游戏市场索引。
 - `market:getCachedImage`：按需下载远程图片并返回 base64 Data URL，缓存 1 小时。供 `<CachedImg>` 组件使用。

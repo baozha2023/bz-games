@@ -100,6 +100,18 @@ class DatabaseService {
       .all(limit) as PlaySession[];
   }
 
+  getSessionsByDate(date: string): PlaySession[] {
+    const db = this.getDb();
+    return db
+      .prepare(
+        `SELECT * FROM play_sessions
+         WHERE date(start_time / 1000, 'unixepoch', 'localtime') = ?
+           AND duration_ms IS NOT NULL
+         ORDER BY start_time DESC`,
+      )
+      .all(date) as PlaySession[];
+  }
+
   getRecentGames(limit: number = 5): { game_id: string; game_name: string; version: string; last_played: number }[] {
     const db = this.getDb();
     return db

@@ -76,6 +76,8 @@ export interface NicknameStyle {
   weight: "normal" | "semibold" | "bold";
 }
 
+export type LibraryLayout = "card" | "icon" | "steam";
+
 export const DEFAULT_NICKNAME_STYLE: NicknameStyle = {
   color: "inherit",
   gradientStart: "#5eead4",
@@ -90,6 +92,7 @@ export interface AppSettings {
   playerId: string;
   avatar?: string;
   nicknameStyle?: NicknameStyle;
+  libraryLayout?: LibraryLayout;
   lastJoinRoomAddress?: string;
   language: "zh-CN" | "en-US" | "ja-JP";
   theme: "dark" | "light" | "auto";

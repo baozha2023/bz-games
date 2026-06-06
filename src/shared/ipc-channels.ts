@@ -109,4 +109,5 @@ export const IPC = {
   // ── 统计 ──
   STATS_GET_DAILY_PLAY_DURATIONS: "stats:getDailyPlayDurations",
   STATS_GET_RECENT_SESSIONS: "stats:getRecentSessions",
+  STATS_GET_SESSIONS_BY_DATE: "stats:getSessionsByDate",
 } as const;

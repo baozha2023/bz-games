@@ -245,6 +245,8 @@ export const electronAPI = {
       ipcRenderer.invoke(IPC.STATS_GET_DAILY_PLAY_DURATIONS, days),
     getRecentSessions: (limit?: number) =>
       ipcRenderer.invoke(IPC.STATS_GET_RECENT_SESSIONS, limit),
+    getSessionsByDate: (date: string) =>
+      ipcRenderer.invoke(IPC.STATS_GET_SESSIONS_BY_DATE, date),
   },
 };
 

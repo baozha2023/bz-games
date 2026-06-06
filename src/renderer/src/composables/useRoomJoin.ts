@@ -15,6 +15,7 @@ interface JoinRoomOptions {
   router: Router
   message: MessageApi
   saveLastAddress?: boolean
+  fromSteam?: boolean
   close?: () => void
 }
 
@@ -52,7 +53,11 @@ export const useRoomJoin = () => {
         await saveLastJoinAddress(address)
       }
       options.close?.()
-      await options.router.push(`/room/${options.gameId}`)
+      await options.router.push({
+        name: 'Room',
+        params: { id: options.gameId },
+        query: options.fromSteam ? { fromSteam: '1' } : undefined
+      })
       return { success: true, address }
     } catch (error: any) {
       options.message.error(error?.message || t('gameDetail.joinFail'))

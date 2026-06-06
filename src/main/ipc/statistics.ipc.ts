@@ -10,4 +10,8 @@ export function registerStatisticsIpc() {
   ipcMain.handle(IPC.STATS_GET_RECENT_SESSIONS, async (_, limit?: number) => {
     return databaseService.getRecentSessions(limit ?? 20);
   });
+
+  ipcMain.handle(IPC.STATS_GET_SESSIONS_BY_DATE, async (_, date: string) => {
+    return databaseService.getSessionsByDate(date);
+  });
 }
