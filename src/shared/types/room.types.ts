@@ -13,6 +13,7 @@ export type RoomMessageType =
   | "room:game:end" // Client → Server / Server → All：游戏结束
   | "room:disbanded" // Server → All：房间已解散
   | "room:disconnected"
+  | "room:player:reconnect-needed" // Client → Server：通知服务器某玩家需要重连
   | "room:kicked" // Server → Target：被踢通知
   | "room:player:kicked" // Server → All：玩家被踢通知
   | "room:connection-status"
@@ -37,7 +38,7 @@ export interface ChatPayload {
   senderName: string;
   senderStyle?: NicknameStyle;
   content: string;
-  contentType?: "text" | "audio" | "image";
+  contentType?: "text" | "audio" | "image" | "game_report";
   images?: string[];
   timestamp: number;
   isSystem?: boolean;
@@ -81,6 +82,8 @@ export interface RoomInfo {
   players: PlayerInRoom[];
   maxPlayers: number;
   state: "waiting" | "starting" | "playing" | "ended";
+  /** 需要重新连接游戏进程的玩家 ID 列表，由 RoomServer 管理 */
+  reconnectPlayerIds: string[];
   createdAt: number;
 }
 

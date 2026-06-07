@@ -1,5 +1,5 @@
 import { defineStore } from "pinia";
-import { ref, computed, onScopeDispose } from "vue";
+import { ref, computed } from "vue";
 import { useI18n } from "vue-i18n";
 import type {
   RoomInfo,
@@ -18,7 +18,10 @@ export const useRoomStore = defineStore("room", () => {
   const isConnecting = ref(false);
   const chatMessages = ref<ChatPayload[]>([]);
   const isStartCooldown = ref(false);
-  const isReconnectMode = ref(false);
+  /** 是否需要重连：从 RoomInfo.reconnectPlayerIds 派生，由 RoomServer 管理 */
+  const isReconnectMode = computed(() =>
+    room.value?.reconnectPlayerIds?.includes(settingsStore.settings?.playerId ?? '') ?? false
+  );
   const connectionStatus = ref<RoomConnectionStatus>("idle");
   const connectionReason = ref("");
   const reconnectAttempts = ref(0);
@@ -68,7 +71,6 @@ export const useRoomStore = defineStore("room", () => {
     room.value = null;
     chatMessages.value = [];
     isStartCooldown.value = false;
-    isReconnectMode.value = false;
     resetConnectionStatus();
     if (startCooldownTimer) {
       window.clearTimeout(startCooldownTimer);
@@ -89,7 +91,6 @@ export const useRoomStore = defineStore("room", () => {
   }
 
   async function reconnectGame() {
-    isReconnectMode.value = false;
     await window.electronAPI.room.reconnect();
   }
 
@@ -144,7 +145,6 @@ export const useRoomStore = defineStore("room", () => {
       const prevState = room.value?.state;
       room.value = event.payload as RoomInfo;
       if (prevState === "playing" && room.value?.state === "waiting") {
-        isReconnectMode.value = false;
         chatMessages.value.push({
           id: window.crypto.randomUUID(),
           senderId: "system",
@@ -204,13 +204,11 @@ export const useRoomStore = defineStore("room", () => {
       room.value = null;
       chatMessages.value = [];
       isStartCooldown.value = false;
-      isReconnectMode.value = false;
       resetConnectionStatus();
     } else if (event.type === "room:kicked") {
       room.value = null;
       chatMessages.value = [];
       isStartCooldown.value = false;
-      isReconnectMode.value = false;
       resetConnectionStatus();
     } else if (event.type === "room:player:kicked") {
       const payload = event.payload as { playerId: string; name?: string };
@@ -223,7 +221,6 @@ export const useRoomStore = defineStore("room", () => {
         isSystem: true,
       });
     } else if (event.type === "room:game:start") {
-      isReconnectMode.value = false;
       chatMessages.value.push({
         id: window.crypto.randomUUID(),
         senderId: "system",
@@ -233,19 +230,9 @@ export const useRoomStore = defineStore("room", () => {
         isSystem: true,
       });
     } else if (event.type === "room:game:end") {
-      isReconnectMode.value = false;
+      // reconnectPlayerIds 由 RoomServer 通过 state sync 管理，此处无需手动重置
     }
   }
-
-  const cleanupProcessEvent = window.electronAPI.game.onProcessEvent((type, gameId) => {
-    if (type === "end" && room.value?.state === "playing" && room.value?.gameId === gameId && !isHost.value) {
-      isReconnectMode.value = true;
-    }
-  });
-
-  onScopeDispose(() => {
-    cleanupProcessEvent?.();
-  });
 
   return {
     room,

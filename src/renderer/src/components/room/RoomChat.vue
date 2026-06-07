@@ -17,7 +17,8 @@
         </div>
         <div v-else v-for="msg in roomStore.chatMessages" :key="msg.id" class="message-item" :class="{ 'system': msg.isSystem }">
           <template v-if="msg.isSystem">
-            <span class="system-text">{{ msg.content }}</span>
+            <GameReportCard v-if="msg.contentType === 'game_report'" :msg="msg" />
+            <span v-else class="system-text">{{ msg.content }}</span>
           </template>
           <template v-else>
             <div class="message-header">
@@ -96,6 +97,7 @@ import { useRoomStore } from '../../stores/useRoomStore'
 import { useSettingsStore } from '../../stores/useSettingsStore'
 import ImageViewer from './ImageViewer.vue'
 import NicknameText from '../NicknameText.vue'
+import GameReportCard from './GameReportCard.vue'
 import type { ChatPayload } from '../../../../shared/types'
 
 const { t } = useI18n()

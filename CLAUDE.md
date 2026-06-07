@@ -186,6 +186,7 @@ bz-games/
 │   │       │   └── room/
 │   │       │       ├── PlayerCard.vue      # 房间玩家卡片组件
 │   │       │       ├── PlayerList.vue      # 房间玩家列表组件
+│   │       │       ├── GameReportCard.vue   # 战绩报告卡片组件（纯文本 / 内置布局 / 自定义 HTML 三种模式）
 │   │       │       ├── RoomChat.vue        # 房间聊天组件
 │   │       │       └── ImageViewer.vue      # 图片预览器（全屏蒙层，点击空白退出，自定义光标）
 │   │       ├── locales/
@@ -208,10 +209,11 @@ bz-games/
 │       ├── ipc-channels.ts                 # IPC 频道常量定义
 │       └── types/
 │   │       ├── game.types.ts               # Game API 消息类型
-│   │       ├── index.ts                    # 共享类型聚合导出
-│   │       ├── market.types.ts             # 市场索引、任务状态与错误码类型
-│   │       ├── room.types.ts               # 房间协议与房间模型类型
-│           └── store.types.ts              # 本地存储模型类型
+│       ├── index.ts                    # 共享类型聚合导出
+│       ├── market.types.ts             # 市场索引、任务状态与错误码类型
+│       ├── report.types.ts             # 游戏战绩报告类型（game.report API 的 payload 定义）
+│       ├── room.types.ts               # 房间协议与房间模型类型
+│       └── store.types.ts              # 本地存储模型类型
 │
 ├── resources/
 │   ├── icon.png                            # 应用图标资源
@@ -958,7 +960,7 @@ interface AppSettings {
 - `room:getState`：获取当前房间状态快照。
 - `room:sendChat`：发送文本、语音或图片聊天消息（支持文字+图片打包发送）。
 - `room:kickPlayer`：房主踢出指定玩家。
-- `room:reconnect`：客机游戏进程崩溃后重新启动游戏（要求 room.state === "playing"）。
+- `room:reconnect`：客机游戏进程崩溃后重新启动游戏（要求 `room.reconnectPlayerIds` 包含当前玩家 ID）。
 - `room:discoverLan`：扫描同一局域网内等待中的 BZ-Games 房间，并返回已带加入校验结果的房间列表。
 - `room:discoverRelay`：从官方中继服务器 `/rooms` 拉取服务器房间列表，并返回已带加入校验结果的房间列表。
 - `room:validateDiscovered`：对发现到的房间执行加入前校验，包括是否为自己的房间、房间状态、人数、本地是否安装游戏和版本是否匹配。
@@ -1081,8 +1083,7 @@ interface AppSettings {
 - **房间连接状态可视化**：房间页需展示 `connecting / reconnecting / failed / disconnected` 状态，以及重连倒计时与失败原因。
 - **统计/成就搜索**：右上角默认展示搜索图标，点击后展开输入框并支持按游戏名或游戏 ID 模糊搜索。
 - **房间开始按钮冷却**：房间内收到 `room:game:end` 后，Host 的「开始游戏」按钮需禁用 5 秒。
-- **客机重连按钮**：客机游戏进程意外退出后，当前仍是 `playing` 状态时，Ready/Unready 按钮位替换为"重连"按钮。点击后重新
-  `launch()` 同一游戏版本。`room:game:start` 或 `playing→waiting` 时恢复原状。
+- **客机重连按钮**：客机游戏进程意外退出后，由 `RoomServer` 将 `playerId` 加入 `RoomInfo.reconnectPlayerIds` 并广播状态同步。前端 `isReconnectMode` 从该数组派生，无需手动管理。重连状态下 Ready/Unready 按钮位替换为"重连"按钮。点击后重新 `launch()` 同一游戏版本。`room:game:start` 或 `playing→waiting` 时 `reconnectPlayerIds` 被清空，按钮恢复原状。
 - **统计界面**：卡片右上角需展示该游戏的所有版本号，使用自动换行布局。
 - **设置页更新入口**：设置页需提供「检查更新」按钮，点击后弹出更新状态弹层，显示下载进度与安装按钮。
 - **设置页卸载入口**：设置页底部（与保存按钮同行，`justify-content: space-between`）提供"卸载客户端"按钮（
@@ -1160,9 +1161,8 @@ interface AppSettings {
     - **中继幂等缓存**：`RoomServer` 和 `RoomClient` 使用最近 `messageId` 缓存过滤重复游戏中继消息，默认缓存最近 1000 条。
 5. **游戏结束语义**：
     - `game.end` API：游戏主动调用，平台回复 `{success: true}`；房间状态和进程生命周期由 Host 进程退出事件驱动。
-    - 游戏真正结束仅由 **Host 进程退出** 触发：`handleProcessExit` → `notifyRoomGameEnd` → state 变 `"waiting"` + 广播
-      `room:game:end` + `room:state:sync`。客机 `RoomClient` 收到 `room:game:end` 后调用 `onGameStop` → `stop()`
-      杀死所有客机进程。
+    - `game.report` API：游戏完成一局后提交战绩报告（纯文本 / 结构化 / 自定义 HTML），以系统消息形式展示在房间聊天中，由 `GameReportCard.vue` 渲染。
+    - 游戏真正结束仅由 **Host 进程退出** 触发：`handleProcessExit` → `notifyRoomGameEnd` → state 变 `"waiting"` + 清空 `reconnectPlayerIds` + 广播 `room:game:end` + `room:state:sync`。客机 `RoomClient` 收到 `room:game:end` 后调用 `onGameStop` → `stop()` 杀死所有客机进程。
     - 前端通过 `room:state:sync` 检测 `playing→waiting` 态变化来显示"游戏已结束"聊天消息。
 
 ### 7.2 联机完整流程
@@ -1206,14 +1206,14 @@ interface AppSettings {
 
 当客机游戏进程意外崩溃退出后：
 
-1. **触发条件**：`GameManager.handleProcessExit` → `GAME_PROCESS_ENDED` → `useRoomStore.onProcessEvent` 检测
-   `type==="end" && room.state==="playing" && !isHost` → `isReconnectMode = true`。
-2. **UI 表现**：客机玩家在房间页看到"重连"按钮，位于 Ready/Unready 按钮区域。
-3. **点击重连**：`handleReconnect()` → `reconnectGame()` → `room.reconnect` IPC → `gameManager.launch(gameId, version)`。
-   `launch()` 内部 `isGameRunning()` 守卫（已退出进程为 false）→ 正常启动新进程，注入同一个 `BZ_ROOM_ID`。
-4. **房间状态**：Host 和其他客机维持当前流程，房间 `state` 保持 `"playing"`。客机进程退出不广播 `room:game:end`；Host 进程退出触发 `notifyRoomGameEnd`。
-5. **游戏侧适配**：重连的游戏进程是全新实例（运行时状态丢失），游戏需要调用 `room.getInfo()` 判断 `state`：若 `"playing"`
-   则是重连；若 `"waiting"` 则是正常启动。
+1. **触发条件**：`GameManager.handleProcessExit` → `notifyRoomReconnectNeeded()` → `RoomClient` 发送 `room:player:reconnect-needed` 消息给 `RoomServer`。
+2. **服务端标记**：`RoomServer.handleReconnectNeeded()` 校验 `state === "playing"` 且非 Host → 将 `playerId` 加入 `RoomInfo.reconnectPlayerIds` 数组 → 广播 `room:state:sync` 同步状态。
+3. **客户端响应**：`useRoomStore.isReconnectMode` 为 `computed` 属性，从 `room.reconnectPlayerIds.includes(playerId)` 派生，**无需手动管理**。
+4. **UI 表现**：客机玩家在房间页看到"重连"按钮，位于 Ready/Unready 按钮区域。
+5. **点击重连**：`handleReconnect()` → `reconnectGame()` → `room.reconnect` IPC → 检查 `reconnectPlayerIds.includes(playerId)` → `gameManager.launch(gameId, version)`。
+6. **房间状态**：Host 和其他客机维持当前流程，房间 `state` 保持 `"playing"`。客机进程退出不广播 `room:game:end`；Host 进程退出触发 `notifyRoomGameEnd` → 清空 `reconnectPlayerIds`。
+7. **重新加入**：重连成功的玩家通过 `room:join` 重新加入房间时，`RoomServer.handleJoin()` 将其从 `reconnectPlayerIds` 中移除。
+8. **游戏侧适配**：重连的游戏进程是全新实例（运行时状态丢失），游戏需要调用 `room.getInfo()` 判断 `state`：若 `"playing"` 则是重连；若 `"waiting"` 则是正常启动。
 
 ### 7.3 Room Server / Room Client 消息协议
 
@@ -1234,6 +1234,8 @@ Room Server 与 Room Client 之间使用 **WebSocket + JSON** 通信。
 | `room:game:start`      | Server → All    | 游戏开始信号                                                          |
 | `room:game:end`        | Server → All    | 游戏结束信号（仅 Host 方触发，`notifyRoomGameEnd` / `RoomServer` broadcast） |
 | `room:disbanded`       | Server → All    | 房间已解散                                                           |
+| `room:disconnected`   | Server → Client | 连接断开通知                                                         |
+| `room:player:reconnect-needed` | Client → Server | 客机游戏进程退出后通知服务端标记重连需求                                       |
 | `room:kicked`          | Server → Target | 被踢通知（仅目标玩家）                                                     |
 | `room:player:kicked`   | Server → All    | 广播玩家被踢事件                                                        |
 | `room:chat`            | Bidirectional   | 聊天消息（支持文字、语音、图片，文字和图片可打包为一条消息）                          |
@@ -1314,6 +1316,7 @@ v1 是稳定兼容层，已有游戏应优先按 v1 接入。
 | `room.getInfo`       | -                                               | `{ id, hostId, players, ... }`                       | 获取当前房间信息（若在房间中）。                              |
 | `game.ready`         | -                                               | `{ acknowledged: true }`                             | 告知平台游戏已准备就绪（平台会广播给其他玩家）。                      |
 | `game.end`           | -                                               | `{ success: true }`                                  | 告知平台游戏结束（通常由 Host 调用）。                        |
+| `game.report`        | `GameReportPayload`（联合类型，见 `report.types.ts`） | `{ success: true }`                                  | 提交战绩报告。支持纯文本、结构化（计分板/对决）和自定义 HTML 三种模式，报告以系统消息展示在房间聊天中。 |
 | `message.send`       | `{ to?: string, targetPlayerId?: string, ... }` | `{ success: true }`                                  | 发送单播消息给指定玩家（必须包含 `to` 或 `targetPlayerId` 之一）。 |
 | `message.broadcast`  | `{ ... }`                                       | `{ success: true }`                                  | 广播消息给所有玩家（平台中继）。                              |
 | `achievement.list`   | -                                               | `[{ id, title, description, unlocked, unlockedAt }]` | 获取当前游戏版本的成就列表及解锁状态。                           |

@@ -296,6 +296,7 @@ export default {
     imageTooLarge: "图片不能超过5MB",
     dropHere: "松手添加图片",
     importImage: "发送图片",
+    gameReport: "战绩报告",
   },
   checkIn: {
     title: "每日签到",

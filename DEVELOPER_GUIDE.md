@@ -6,7 +6,7 @@
 
 ## 一、 平台概述
 
-BZ-Games 是一个**无服务器的本地联机游戏平台**。它采用“房主即主机”的架构，平台负责提供统一的房间管理、内网穿透对接（用户自备工具）和消息中继服务。
+BZ-Games 是一个**无服务器的本地联机游戏平台**。它采用"房主即主机"的架构，平台负责提供统一的房间管理、内网穿透对接（用户自备工具）和消息中继服务。
 
 对于游戏开发者而言，**不需要编写任何网络服务端代码**。游戏只需连接本地运行的 **Game API Server** (WebSocket)
 ，即可实现联机通讯、成就解锁等功能。
@@ -127,7 +127,7 @@ my-game/
 
 ```javascript
 window.BZ_CONFIG = {
-    apiPort: 12345,           // 本地 WebSocket 端口
+    apiPort: "12345",         // 本地 WebSocket 端口 (string)
     token: "auth-token-...",  // 认证 Token
     playerId: "uuid-...",     // 当前玩家 ID
     playerName: "PlayerName", // 当前玩家昵称
@@ -154,12 +154,13 @@ window.BZ_CONFIG = {
 
 对于可执行文件，平台通过 **环境变量** 传递配置：
 
-| 环境变量名 |  说明 || :--- | :-     -- |
-| `BZ_API _PORT` | 本地 WebS     ocket 端口 |
-|  `BZ_API_TOKEN` | 认   证 Token |
-|  `BZ_PLAYER_ID` | 当前玩 家 ID |
-| `BZ_PLAYER_N AME` | 当前玩家昵称        |
-| `BZ_PLAYER_AVATAR ` | 当前玩家头像 (Ba       se64) |
+| 环境变量名 | 说明 |
+| :--- | :--- |
+| `BZ_API_PORT` | 本地 WebSocket 端口 |
+| `BZ_API_TOKEN` | 认证 Token |
+| `BZ_PLAYER_ID` | 当前玩家 ID |
+| `BZ_PLAYER_NAME` | 当前玩家昵称 |
+| `BZ_PLAYER_AVATAR` | 当前玩家头像 (Base64) |
 | `BZ_ROOM_ID` | 当前房间 ID (仅联机模式) |
 | `BZ_IS_HOST` | 是否为房主 (`"1"` 或 `"0"`) |
 
@@ -179,73 +180,133 @@ Web 游戏通常使用 `localStorage` 或 `IndexedDB` 存储本地数据（如�
 
 ## 四、 Game API 通信协议
 
-游戏与平台通过 WebSocket 进行通信。
+游戏进程与平台通过 **本地 WebSocket** 通信。平台在启动游戏前启动一个本地 WebSocket 服务器（Game API Server），游戏作为客户端连接后，通过 JSON 消息调用平台能力。
 
-* **地址**: `ws://127.0.0.1:{apiPort}`
-* **格式**: JSON 控制帧；v2 实时通信额外支持二进制帧
-* **超时**: 连接建立后，必须在 **60秒** 内发送 `auth` 请求，否则会被断开。
+### 4.1 连接地址
 
-### 4.1 消息结构
+```
+ws://127.0.0.1:{apiPort}
+```
 
-**请求 (Request) - 游戏发给平台:**
+`apiPort` 通过以下方式获取：
+
+| 平台 | 获取方式 |
+| :--- | :--- |
+| Web 游戏 | `window.BZ_CONFIG.apiPort` |
+| Native 游戏 | 环境变量 `BZ_API_PORT` |
+
+### 4.2 认证超时
+
+连接建立后，必须在 **60 秒** 内发送 `auth` 请求完成认证，否则平台会主动断开连接。
+
+### 4.3 协议版本
+
+| 版本 | 激活方式 | 可用接口 | 帧类型 |
+| :--- | :--- | :--- | :--- |
+| **v1**（默认） | 不传 `protocolVersion` 或传非 `2` 的值 | `message.send`、`message.broadcast` | 仅 JSON text frame |
+| **v2** | `auth` 时传入 `"protocolVersion": 2` | `message.send`、`message.broadcast`、`message.publish`、`message.batch`、`message.subscribe`、`message.unsubscribe` | JSON text frame + WebSocket binary frame |
+
+> 连接认证后协议版本**固定不可切换**。
+
+---
+
+### 4.4 消息格式
+
+所有消息均为 JSON。一条消息包含以下字段：
+
+| 字段 | 类型 | 说明 |
+| :--- | :--- | :--- |
+| `id` | `string` | 消息唯一标识，建议使用 UUID |
+| `type` | `"request"` \| `"response"` \| `"event"` | 消息类型 |
+| `action` | `string` | 接口名称（如 `"auth"`、`"message.send"`） |
+| `payload` | `object` | 消息内容，具体结构由各接口定义 |
+
+#### 请求（Game → Platform）
+
+游戏向平台发出的消息，`type` 固定为 `"request"`。
 
 ```json
 {
-  "id": "uuid-req-1",
-  // 请求唯一ID
+  "id": "550e8400-e29b-41d4-a716-446655440000",
   "type": "request",
-  "action": "action.name",
-  // API 方法名
-  "payload": {
-    ...
-  }
-  // 参数
+  "action": "auth",
+  "payload": { "token": "..." }
 }
 ```
 
-**响应 (Response) - 平台回复游戏:**
+#### 响应（Platform → Game）
+
+平台对请求的回复，`type` 固定为 `"response"`，`id` 与对应请求一致。
+
+**成功时**不含 `error` 字段：
 
 ```json
 {
-  "id": "uuid-req-1",
-  // 对应请求的ID
+  "id": "550e8400-e29b-41d4-a716-446655440000",
   "type": "response",
-  "action": "action.name",
-  "payload": {
-    ...
-  },
-  // 返回数据
-  "error": "Error msg"
-  // 仅失败时存在
+  "action": "auth",
+  "payload": { "success": true, "player": { ... } }
 }
 ```
 
-**事件 (Event) - 平台推送给游戏:**
+**失败时**含 `error` 字段：
 
 ```json
 {
-  "id": "uuid-evt-1",
-  "type": "event",
-  "action": "event.name",
-  "payload": {
-    ...
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "type": "response",
+  "action": "message.send",
+  "error": {
+    "code": "TARGET_NOT_FOUND",
+    "message": "Target player is not in room",
+    "detail": { "targetPlayerId": "p-404" }
   }
 }
 ```
 
-**v2 二进制帧 (Binary Frame) - 高频实时数据:**
+`error` 值可以是字符串（v1）或结构化对象（v2）。v2 的结构化错误见 [5.5.5](#555-结构化错误)。
 
-v2 支持直接通过 WebSocket binary frame 发送原始二进制数据，避免将 `ArrayBuffer` 转为 Base64 字符串造成体积膨胀和额外编解码成本。二进制帧仅用于 `message.send`、`message.broadcast`、`message.publish`，认证、订阅、成就、统计等控制接口仍使用 JSON。
+#### 事件（Platform → Game）
 
-二进制帧结构如下：
+平台主动推送的消息，`type` 固定为 `"event"`，游戏收到后不需要回复。
 
-```text
-4 bytes big-endian headerLength
-headerLength bytes UTF-8 JSON header
-remaining bytes binary body
+```json
+{
+  "id": "660e8400-e29b-41d4-a716-446655440001",
+  "type": "event",
+  "action": "event.message",
+  "payload": {
+    "senderId": "p-456",
+    "messageId": "...",
+    "data": { "type": "move", "x": 10 }
+  }
+}
 ```
 
-其中 `header` 是普通 Game API request，但 `payload.data` 不需要携带二进制主体：
+---
+
+### 4.5 v2 二进制帧
+
+v2 协议支持通过 WebSocket binary frame 发送原始二进制数据，避免 `ArrayBuffer` 转为 Base64 造成 33% 体积膨胀。
+
+> **限制**：二进制帧仅用于 `message.send`、`message.broadcast`、`message.publish`。认证、成就、统计等控制接口仍使用 JSON text frame。
+
+#### 帧结构
+
+```
+┌──────────────────┬──────────────────────┬─────────────────┐
+│  headerLength    │  JSON header         │  binary body    │
+│  (4 bytes BE)    │  (UTF-8)             │  (raw bytes)    │
+└──────────────────┴──────────────────────┴─────────────────┘
+```
+
+| 区段 | 长度 | 编码 | 说明 |
+| :--- | :--- | :--- | :--- |
+| `headerLength` | 4 字节 | `UInt32BE` | JSON header 的字节长度，不含自身 |
+| `header` | 变长 | UTF-8 | 普通 JSON 请求头，`payload.data` 不携带二进制主体 |
+| `body` | 变长 | 原始字节 | 二进制负载 |
+
+**Header 示例**：
 
 ```json
 {
@@ -261,150 +322,103 @@ remaining bytes binary body
 }
 ```
 
-平台向目标游戏推送二进制消息时，也使用同样的二进制帧结构，`header` 是 `event.message`，`payload` 会包含 `contentType: "binary"`、`binary: true`、`byteLength` 等元数据，原始字节位于 binary body。
+#### 发送（游戏 → 平台）
+
+```javascript
+function encodeBinaryFrame(header, body) {
+  const headerBytes = new TextEncoder().encode(JSON.stringify(header));
+  const buf = new ArrayBuffer(4 + headerBytes.byteLength + body.byteLength);
+  const view = new DataView(buf);
+  view.setUint32(0, headerBytes.byteLength, false);          // big-endian
+  new Uint8Array(buf, 4, headerBytes.byteLength).set(headerBytes);
+  new Uint8Array(buf, 4 + headerBytes.byteLength).set(new Uint8Array(body));
+  return buf;
+}
+
+const positionData = new Float32Array([10.0, 20.0, 0.5]).buffer;
+ws.send(encodeBinaryFrame({
+  id: crypto.randomUUID(),
+  type: "request",
+  action: "message.publish",
+  payload: { channel: "state", seq: 1024, delivery: "latest", contentType: "binary" }
+}, positionData));
+```
+
+#### 接收（平台 → 游戏）
+
+```javascript
+ws.binaryType = "arraybuffer";
+ws.onmessage = (event) => {
+  if (event.data instanceof ArrayBuffer) {
+    const view = new DataView(event.data);
+    const headerLength = view.getUint32(0, false);
+    const headerBytes = new Uint8Array(event.data, 4, headerLength);
+    const header = JSON.parse(new TextDecoder().decode(headerBytes));
+    const body = event.data.slice(4 + headerLength);
+    // header.payload 含 contentType: "binary", binary: true, byteLength
+    // body 为原始二进制数据
+    return;
+  }
+  const msg = JSON.parse(event.data);
+  // JSON 消息处理
+};
+```
+
+**单帧上限**：`auth.capabilities.maxBinaryBytes`（256 KB）。超限帧会被拒绝。
 
 ---
 
 ## 五、 API 接口详解
 
-### 5.1 基础流程
+所有接口遵循以下公共规则：
 
-#### `auth` (认证)
+- **请求**：`type = "request"`，`action` 为接口名
+- **响应**：`type = "response"`，`id` 与请求一致，`action` 与请求一致
+- **错误码**：v2 返回结构化错误对象，v1 返回字符串。详见 [5.5.5](#555-结构化错误)
 
-**[必须]** 连接 WebSocket 后必须立即调用的第一个接口。
+---
 
-* **Request Payload**:
-  ```json
-  { "token": "从配置或环境变量获取的 Token" }
-  ```
-* **Response Payload**:
-  ```json
-  {
-    "success": true,
-    "player": {
-      "id": "p-123",
-      "name": "PlayerName",
-      "isHost": true  // 当前玩家是否为房主
-    }
-  }
-  ```
+### 5.1 认证与身份
 
-默认认证为 v1 通信协议。若游戏需要使用 v2 增强通信能力，必须在认证时显式声明协议版本：
+#### `auth` — 认证
+
+> **必须最先调用。** 连接 WebSocket 后第一个接口，不认证无法调用其他任何接口。
+
+**Request**
+
+| 字段 | 类型 | 必填 | 说明 |
+| :--- | :--- | :--- | :--- |
+| `token` | `string` | 是 | 平台生成的认证 Token |
+| `protocolVersion` | `2` | 否 | 显式声明使用 v2 协议。不传或非 `2` 时使用 v1 |
 
 ```json
-{ "token": "从配置或环境变量获取的 Token", "protocolVersion": 2 }
+{ "token": "<BZ_CONFIG.token 或 BZ_API_TOKEN>", "protocolVersion": 2 }
 ```
 
-v2 认证成功后，响应中会包含 `protocolVersion: 2` 与 `capabilities`。未声明 `protocolVersion: 2` 的老游戏会进入 v1，不能使用 `message.publish`、`message.batch`、频道订阅或二进制帧。
+**Response（v1）**
 
-#### `game.ready` (就绪)
-
-通知平台游戏加载完毕，可以接收其他玩家的消息。
-
-* **Request Payload**: `{}`
-* **Response Payload**: `{ "acknowledged": true }`
-
-#### `game.end` (结束)
-
-> ⚠️ **预留接口**：当前版本仅返回 `{ success: true }`，无任何副作用。
-> 未来将用于在聊天框中展示本局游戏战绩（如胜负结果、得分等）。
-
-通知平台本局游戏结束。
-
-* **Request Payload**: `{ "reason": "win" }` (reason 可选，未来用于战绩展示)
-* **Response Payload**: `{ "success": true }`
-* **注意事项**：
-    - 调用此 API **不会**结束游戏进程、不会改变房间状态、不会通知其他玩家。
-    - 游戏进程结束由平台自动检测（进程退出 → 房间状态变为 `waiting` → 通知所有玩家）。
-
-#### 重连机制与游戏状态判断
-
-平台支持客机无条件重连：当客机游戏进程意外崩溃退出后，客机玩家可点击"重连"按钮重新启动游戏进程。重连时平台会以相同的 `BZ_ROOM_ID` 启动游戏。
-
-**游戏需要做的事**：在 `auth` 成功后，立即调用 `room.getInfo()` 获取当前房间状态：
-
-* 若 `state === "waiting"` → 正常启动，进入准备大厅。
-* 若 `state === "playing"` → 这是一次重连，房间正在游戏中。
-
-**重连后的处理策略**（由游戏自行决定）：
-
-| 游戏类型 | 推荐策略 |
-|---------|---------|
-| 消息驱动型（棋牌、回合制） | 重连后可直接加入当前对局，继续收发消息。`message.info` 会自动补齐 `senderId`、`messageId`、`sentAt` |
-| 实时动作型（飞行、射击） | 游戏进程是全新实例，无法恢复运行时状态。建议展示"等待下一局"界面，监听 `room.state` 变化 |
-
-> 注意：平台不要求游戏必须支持重连。如果游戏未做重连处理，最差体验是游戏启动了一个新实例在当前房间里，等同于"游戏重启"。
-
-### 5.2 房间与联机
-
-#### `room.getInfo` (获取房间信息)
-
-获取当前房间状态和玩家列表。`state` 可能的值：`"waiting"`（等待玩家/未开始）、`"playing"`（游戏中）。
-
-* **Request Payload**: `{}`
-* **Response Payload**:
-  ```json
-  {
-    "id": "room-uuid",
-    "hostId": "p-123",
-    "players": [
-      { "id": "p-123", "name": "HostPlayer", "isHost": true },
-      { "id": "p-456", "name": "ClientPlayer", "isHost": false }
-    ],
-    "state": "waiting"
+```json
+{
+  "success": true,
+  "player": {
+    "id": "p-123",
+    "name": "PlayerName",
+    "isHost": true
   }
-  ```
+}
+```
 
-#### v1 基础通信 API
-
-v1 API 是所有联机游戏的最低接入层，适合聊天、回合制、棋牌、轻量对战和低频事件同步。已接入 v1 的游戏不需要理解 v2 字段也可以正常运行。
-
-##### `message.broadcast` (广播消息)
-
-向房间内**除自己以外**的所有玩家发送消息。支持发送文本或语音（音频数据）。
-
-* **Request Payload**:
-  ```json
-  {
-    "data": { "type": "move", "x": 1, "y": 2 }, // 任意 JSON 对象
-    "contentType": "text" // 可选: 'text' | 'audio' (默认 'text')
-  }
-  ```
-* **Response Payload**: `{ "success": true }`
-* **行为说明**：
-    - 平台不会把这条广播回传给发送者自己（避免本地重复处理）。
-    - 平台会自动补齐 `senderId`、`messageId`、`sentAt` 字段到中继消息中。
-
-##### `message.send` (单播消息)
-
-向指定玩家发送消息。支持发送文本或语音。
-
-* **Request Payload**:
-  ```json
-  {
-    "to": "target-player-id",
-    "data": { "content": "Hello secret" },
-    "contentType": "text" // 可选: 'text' | 'audio' (默认 'text')
-  }
-  ```
-* **Response Payload**: `{ "success": true }`
-* **参数要求**：
-    - 必须提供 `to` 或 `targetPlayerId` 其中之一。
-    - 不允许把目标设置为自己。
-
-#### v2 增强通信 API
-
-v2 API 是独立于 v1 的增强通信协议，适合高频同步、频道过滤、可靠确认等场景。游戏必须在 `auth.payload` 中传入 `protocolVersion: 2` 才会进入 v2；否则默认进入 v1。
-
-##### `auth.capabilities` (能力声明)
-
-v2 平台会在 `auth` 成功响应中返回能力声明：
+**Response（v2，含 `capabilities`）**
 
 ```json
 {
   "success": true,
   "protocolVersion": 2,
-  "player": { "id": "p-123", "name": "PlayerName", "isHost": true },
+  "player": {
+    "id": "p-123",
+    "name": "PlayerName",
+    "isHost": true
+  },
   "capabilities": {
     "protocolVersion": 2,
     "protocolName": "bz-game-api-v2",
@@ -422,131 +436,492 @@ v2 平台会在 `auth` 成功响应中返回能力声明：
 }
 ```
 
-##### v2 `message.send` 严格校验
+**`capabilities` 字段**：描述当前连接的能力上限，见 [5.5.1](#551-capabilities-能力声明)。
 
-v2 在 v1 单播基础上增加目标在线校验：目标玩家必须仍在当前房间中，否则返回结构化错误 `TARGET_NOT_FOUND`。这不会改变 v1 的请求格式，只是让错误更明确。
+| 响应字段 | 类型 | 说明 |
+| :--- | :--- | :--- |
+| `success` | `boolean` | 认证是否成功 |
+| `protocolVersion` | `1` \| `2` | 当前连接的协议版本 |
+| `player.id` | `string` | 当前玩家 ID |
+| `player.name` | `string` | 当前玩家昵称 |
+| `player.isHost` | `boolean` | 是否为房主（联机模式有效） |
+| `capabilities` | `object` | v2 能力声明（仅 v2 返回） |
 
-##### `message.publish` (频道广播消息)
+**错误**：Token 不匹配时平台直接关闭连接，不返回错误消息。
 
-面向高频或分频道同步场景的广播接口。它仍会投递为 `event.message`，并保持与 `message.broadcast` 相同的旧协议兼容性；新增的 `channel`、`seq`、`reliable` 字段可用于游戏侧做频道过滤、时序判断和可靠消息确认。
+---
 
-* **Request Payload**:
-  ```json
-  {
-    "channel": "state",
-    "seq": 1024,
-    "delivery": "latest",
-    "data": { "type": "position", "x": 10, "y": 20 },
-    "contentType": "json"
-  }
-  ```
-* **Response Payload**: `{ "success": true }`
-* **行为说明**：
-    - 平台会自动补齐 `senderId`、`messageId`、`sentAt`、`mode: "publish"`。
-    - `delivery` 支持 `reliable`、`ordered`、`latest`、`unreliable`：可靠事件用 `reliable`，输入流用 `ordered`，状态同步用 `latest`。
-    - 适合位置、状态、帧同步等可以按频道处理的消息。
+#### `player.getInfo` — 获取本地玩家信息
 
-##### `message.batch` (批量广播消息)
+在 `auth` 之后即可调用，返回当前玩家的基本信息。
 
-将多条游戏消息打包为一次平台请求，减少高频同步时的 JSON 编解码和 WebSocket 发送次数。平台会在目标游戏侧拆分为多条 `event.message` 投递，因此旧的消息处理器仍可按单条消息处理。
+**Request**
 
-* **Request Payload**:
-  ```json
-  {
-    "channel": "frame",
-    "messages": [
-      { "seq": 1, "data": { "type": "input", "key": "left" } },
-      { "seq": 2, "data": { "type": "input", "key": "jump" } }
-    ]
-  }
-  ```
-* **Response Payload**: `{ "success": true }`
-* **限制**：
-    - 单批最多 32 条消息。
-    - 单条本地 API 消息最大约 64KB，超过会被平台丢弃或拒绝。
-
-##### 二进制实时消息
-
-当游戏需要发送位置快照、输入帧、压缩状态、音频片段等高频或大体积数据时，推荐使用 v2 二进制帧。平台会在本地 Game API、房主 Room Server、客机 Room Client 之间保持原始二进制 body 中继，不会把 body 转成 Base64。
-
-* **适用接口**: `message.send`、`message.broadcast`、`message.publish`
-* **单帧限制**: `auth.capabilities.maxBinaryBytes`
-* **元数据补齐**: 平台会自动补齐 `senderId`、`messageId`、`sentAt`、`contentType: "binary"`、`binary: true`、`byteLength`
-* **投递语义**: 仍支持 `delivery`、`channel`、`seq`、`reliable`，可与 JSON 消息混用
-
-发送示例：
-
-```javascript
-function encodeBinaryFrame(header, body) {
-  const headerBytes = new TextEncoder().encode(JSON.stringify(header));
-  const buffer = new ArrayBuffer(4 + headerBytes.byteLength + body.byteLength);
-  const view = new DataView(buffer);
-  view.setUint32(0, headerBytes.byteLength, false);
-  new Uint8Array(buffer, 4, headerBytes.byteLength).set(headerBytes);
-  new Uint8Array(buffer, 4 + headerBytes.byteLength).set(new Uint8Array(body));
-  return buffer;
-}
-
-const body = new Float32Array([10, 20, 0.5]).buffer;
-ws.send(encodeBinaryFrame({
-  id: crypto.randomUUID(),
-  type: "request",
-  action: "message.publish",
-  payload: {
-    channel: "state",
-    seq: 1024,
-    delivery: "latest",
-    contentType: "binary"
-  }
-}, body));
+```json
+{}
 ```
 
-接收示例：
+**Response**
 
-```javascript
-function decodeBinaryFrame(buffer) {
-  const view = new DataView(buffer);
-  const headerLength = view.getUint32(0, false);
-  const headerBytes = new Uint8Array(buffer, 4, headerLength);
-  const header = JSON.parse(new TextDecoder().decode(headerBytes));
-  const body = buffer.slice(4 + headerLength);
-  return { header, body };
+```json
+{
+  "id": "p-123",
+  "name": "PlayerName"
 }
-
-ws.binaryType = "arraybuffer";
-ws.onmessage = (event) => {
-  if (event.data instanceof ArrayBuffer) {
-    const { header, body } = decodeBinaryFrame(event.data);
-    if (header.action === "event.message" && header.payload.contentType === "binary") {
-      const values = new Float32Array(body);
-      console.log(header.payload.senderId, values);
-    }
-    return;
-  }
-  const msg = JSON.parse(event.data);
-};
 ```
 
-##### `message.subscribe` / `message.unsubscribe` (频道订阅)
+| 字段 | 类型 | 说明 |
+| :--- | :--- | :--- |
+| `id` | `string` | 当前玩家 ID |
+| `name` | `string` | 当前玩家昵称 |
 
-游戏可按频道过滤 `event.message`，减少不关心的实时流进入游戏逻辑。默认订阅 `"*"`，表示接收所有频道。
+---
 
-* **Request Payload**:
-  ```json
-  { "channels": ["state", "input"] }
-  ```
-* **Response Payload**:
-  ```json
-  { "success": true, "channels": ["state", "input"] }
-  ```
+### 5.2 游戏生命周期
 
-##### 状态快照
+#### `game.ready` — 通知就绪
 
-平台暂不提供内置状态快照缓存 API。需要重连恢复或最新状态缓存的游戏，应在游戏自身协议中通过 `message.publish`、`message.batch` 或自定义存档逻辑实现。
+通知平台游戏已加载完毕，可以接收其他玩家的消息。调用后才开始接收 `event.message` 事件。
 
-##### 结构化错误
+**Request**
 
-v2 通信 API 的失败响应会优先返回结构化错误，旧游戏仍可按字符串展示错误。
+```json
+{}
+```
+
+**Response**
+
+```json
+{ "acknowledged": true }
+```
+
+---
+
+#### `game.report` — 提交战绩报告
+
+游戏完成一局后，向平台提交战绩报告。报告以**富媒体卡片**形式显示在房间聊天中，所有房间玩家可见。
+
+支持三种模式，总大小不超过 **64 KB**。
+
+> **注意**：调用此接口不会结束游戏进程、不会改变房间状态。游戏进程结束由平台自动检测。
+
+**模式一：文本**
+
+```json
+{
+  "text": "红队 3:1 蓝队，玩家A 夺得 MVP"
+}
+```
+
+聊天框显示为普通系统消息。
+
+**模式二：结构化 — 计分板**
+
+```json
+{
+  "mode": "structured",
+  "title": "击杀竞赛",
+  "style": "border-color: #4caf50;",
+  "data": {
+    "layout": "scoreboard",
+    "rows": [
+      { "playerId": "p-1", "kills": 12, "deaths": 3, "score": 1500, "won": true },
+      { "playerId": "p-2", "kills":  8, "deaths": 5, "score":  900 },
+      { "playerId": "p-3", "kills":  4, "deaths": 7, "score":  450 }
+    ],
+    "stats": [
+      { "label": "击杀", "values": { "p-1": 12, "p-2": 8, "p-3": 4 } },
+      { "label": "死亡", "values": { "p-1":  3, "p-2": 5, "p-3": 7 } }
+    ],
+    "duration": 1205
+  },
+  "config": {
+    "columns": [
+      { "key": "playerId", "label": "玩家", "render": "playerName", "width": "2fr" },
+      { "key": "kills",    "label": "击杀", "align": "center" },
+      { "key": "score",    "label": "分数", "render": "score", "align": "right" }
+    ],
+    "highlightTop": 3,
+    "compact": false
+  }
+}
+```
+
+**scoreboard 顶层字段**：
+
+| 字段 | 类型 | 必填 | 说明 |
+| :--- | :--- | :--- | :--- |
+| `mode` | `"structured"` | 是 | 结构化模式 |
+| `title` | `string` | 否 | 卡片顶部标题 |
+| `style` | `string` | 否 | 注入到卡片根元素的 CSS（覆盖颜色、边框等） |
+| `data` | `object` | 是 | 战绩数据（见下方） |
+| `config` | `object` | 否 | 布局配置（见下方） |
+
+**`data` 字段**：
+
+| 字段 | 类型 | 必填 | 说明 |
+| :--- | :--- | :--- | :--- |
+| `data.layout` | `"scoreboard"` \| `"versus"` | 是 | 布局类型 |
+| `data.rows` | `object[]` | scoreboard 必填 | 数据行，每行 key 与 `config.columns[].key` 对应 |
+| `data.stats` | `object[]` | 否 | 汇总统计，每项含 `label: string` 和 `values: Record<string, number>` |
+| `data.duration` | `number` | 否 | 游戏时长（秒），显示为 `mm:ss` 格式 |
+| `data.left` | `{ label, avatar?, score, won? }` | versus 必填 | 对决左方 |
+| `data.right` | `{ label, avatar?, score, won? }` | versus 必填 | 对决右方 |
+
+**`config` 字段**：
+
+| 字段 | 类型 | 默认值 | 说明 |
+| :--- | :--- | :--- | :--- |
+| `columns` | `object[]` | — | 列定义，每列含见下表 |
+| `columns[].key` | `string` | — | 对应 `data.rows` 中的字段名 |
+| `columns[].label` | `string` | `key` 值 | 列头显示文字 |
+| `columns[].align` | `"left"` \| `"center"` \| `"right"` | `"left"` | 水平对齐 |
+| `columns[].width` | `string` | `"1fr"` | 列宽（如 `"60px"`、`"2fr"`） |
+| `columns[].render` | `"text"` \| `"badge"` \| `"score"` \| `"avatar"` \| `"playerName"` | `"text"` | 渲染模式 |
+| `columns[].badgeColors` | `Record<number, string>` | — | badge 渲染时数值到颜色的映射 |
+| `highlightTop` | `number` | `3` | 高亮前 N 名（金→银→铜渐变背景） |
+| `compact` | `boolean` | `false` | 紧凑模式，缩小间距和字号 |
+| `showRank` | `boolean` | `true` | 是否显示排名序号列 |
+| `rankLabel` | `string` | — | 排名标签，`{n}` 替换为序号 |
+| `rowStyle` | `string` | — | 注入每行的 CSS，`{rowIndex}` 替换为行号 |
+| `separator` | `string` | `" : "` | versus 比分分隔符 |
+| `scoreFontSize` | `number` | `32` | versus 比分字号（px） |
+| `leftStyle` / `rightStyle` | `string` | — | versus 左右两侧注入的 CSS |
+
+**`render` 模式**：
+
+| 值 | 效果 |
+| :--- | :--- |
+| `"text"` | 纯文本 |
+| `"badge"` | 彩色圆角徽章，颜色由 `badgeColors` 按数值映射 |
+| `"score"` | 大号加粗分数 |
+| `"avatar"` | 玩家头像，平台自动从房间玩家列表反查 |
+| `"playerName"` | 玩家昵称（含昵称样式），平台自动反查 |
+
+**模式三：自定义 HTML/CSS**
+
+```json
+{
+  "mode": "custom",
+  "html": "<div class='my-score'><h2>棋局结束</h2><p>红方用时 8:32 获胜</p></div>",
+  "css": ".my-score { padding: 16px; border-radius: 12px; background: linear-gradient(135deg, #1a1a2e, #16213e); color: #e0e0e0; text-align: center; }",
+  "theme": "dark"
+}
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+| :--- | :--- | :--- | :--- |
+| `mode` | `"custom"` | 是 | 自定义模式 |
+| `html` | `string` | 是 | HTML 片段（不含 `<html>`/`<body>` 标签） |
+| `css` | `string` | 否 | 注入到 `<style>` 块的 CSS |
+| `theme` | `"dark"` \| `"light"` \| `"auto"` | 否 | 主题，平台据此注入 `color-scheme` 和基础背景色 |
+
+**安全说明**：自定义内容在 `sandbox="allow-scripts"` iframe 中渲染，与主页面隔离。可运行 JavaScript（chart.js、canvas 动画等），但 sandbox 限制使其无法访问父页面。`html + css` 总长不超过 64 KB。
+
+**Response**
+
+```json
+{ "success": true }
+```
+
+**行为**：报告以系统聊天消息展示，房间内所有玩家可见。不结束进程、不改变房间状态。一局可多次调用（如回合结算）。
+
+---
+
+#### `game.end` — 结束（预留）
+
+> 预留接口，当前仅返回 `{ success: true }`，无实际效果。
+
+**Request**
+
+```json
+{ "reason": "win" }
+```
+
+**Response**
+
+```json
+{ "success": true }
+```
+
+---
+
+#### 重连机制
+
+客机游戏进程意外崩溃后，玩家可在 UI 点击"重连"重新启动游戏。重连时平台以相同 `BZ_ROOM_ID` 启动游戏。
+
+**游戏判断是否重连**：`auth` 后调用 `room.getInfo()`，检查 `reconnectPlayerIds` 是否包含自己的 `playerId`。
+
+| 游戏类型 | 推荐策略 |
+| :--- | :--- |
+| 消息驱动型（棋牌、回合制） | 直接加入当前对局，继续收发消息 |
+| 实时动作型（飞行、射击） | 新进程无法恢复运行时状态，建议展示"等待下一局"界面 |
+
+> 平台不强制支持重连。未处理时最差体验为"新实例在房间中重启"。
+
+---
+
+### 5.3 房间
+
+#### `room.getInfo` — 获取房间信息
+
+获取当前房间的完整状态。**单机模式时返回 `null`**。
+
+**Request**
+
+```json
+{}
+```
+
+**Response**
+
+```json
+{
+  "id": "room-uuid",
+  "gameId": "com.studio.game",
+  "gameVersion": "1.0.0",
+  "hostId": "p-123",
+  "players": [
+    { "id": "p-123", "name": "HostPlayer",   "isHost": true,  "isReady": true,  "joinedAt": 1713333333000 },
+    { "id": "p-456", "name": "ClientPlayer", "isHost": false, "isReady": false, "joinedAt": 1713333340000 }
+  ],
+  "maxPlayers": 4,
+  "state": "waiting",
+  "reconnectPlayerIds": [],
+  "createdAt": 1713333330000
+}
+```
+
+| 字段 | 类型 | 说明 |
+| :--- | :--- | :--- |
+| `id` | `string` | 房间 ID |
+| `gameId` | `string` | 游戏 ID |
+| `gameVersion` | `string` | 游戏版本号 |
+| `hostId` | `string` | 房主玩家 ID |
+| `hostPublicAddress` | `string?` | 房主公网地址（仅官方服务器模式） |
+| `players` | `PlayerInRoom[]` | 玩家列表（见下表） |
+| `maxPlayers` | `number` | 最大玩家数 |
+| `state` | `"waiting"` \| `"starting"` \| `"playing"` \| `"ended"` | 房间状态 |
+| `reconnectPlayerIds` | `string[]` | 需要重连游戏进程的玩家 ID 列表 |
+| `createdAt` | `number` | 房间创建时间戳（毫秒） |
+
+**`state` 含义**：
+
+| 值 | 含义 |
+| :--- | :--- |
+| `"waiting"` | 等待玩家就绪，尚未开始游戏 |
+| `"starting"` | 正在启动游戏进程（短暂） |
+| `"playing"` | 游戏进行中 |
+| `"ended"` | 游戏已结束 |
+
+**`PlayerInRoom` 字段**：
+
+| 字段 | 类型 | 说明 |
+| :--- | :--- | :--- |
+| `id` | `string` | 玩家 ID |
+| `name` | `string` | 玩家昵称 |
+| `avatar` | `string?` | 玩家头像（Base64 Data URL） |
+| `avatarFrame` | `string?` | 头像框 ID |
+| `nicknameStyle` | `object?` | 昵称样式 |
+| `isHost` | `boolean` | 是否为房主 |
+| `isReady` | `boolean` | 是否已准备（房主默认为 `true`） |
+| `joinedAt` | `number` | 加入时间戳（毫秒） |
+
+**`reconnectPlayerIds`**：当非房主玩家在 `"playing"` 状态下断开连接（进程崩溃或网络断开），其 ID 被加入此列表。重连启动时游戏可通过此字段判断重连场景。
+
+---
+
+### 5.4 v1 通信
+
+v1 提供基础的广播和单播能力。未声明 `protocolVersion: 2` 的游戏使用此层。
+
+#### `message.broadcast` — 广播消息
+
+向房间内**除自己以外**的所有玩家发送消息。平台自动补齐 `senderId`、`messageId`、`sentAt`，不会回传给发送者。
+
+**Request**
+
+| 字段 | 类型 | 必填 | 说明 |
+| :--- | :--- | :--- | :--- |
+| `data` | `any` | 是 | 消息内容，任意 JSON 可序列化的值 |
+| `contentType` | `"text"` \| `"audio"` \| `"json"` \| `"binary"` | 否 | 内容类型，默认 `"json"` |
+
+```json
+{
+  "data": { "type": "move", "x": 1, "y": 2 },
+  "contentType": "text"
+}
+```
+
+**Response**
+
+```json
+{ "success": true }
+```
+
+---
+
+#### `message.send` — 单播消息
+
+向指定玩家发送消息。
+
+**Request**
+
+| 字段 | 类型 | 必填 | 说明 |
+| :--- | :--- | :--- | :--- |
+| `to` | `string` | 条件必填 | 目标玩家 ID（与 `targetPlayerId` 二选一，优先 `to`） |
+| `targetPlayerId` | `string` | 条件必填 | 目标玩家 ID（与 `to` 二选一） |
+| `data` | `any` | 是 | 消息内容 |
+| `contentType` | `"text"` \| `"audio"` \| `"json"` \| `"binary"` | 否 | 内容类型，默认 `"json"` |
+
+```json
+{
+  "to": "p-456",
+  "data": { "content": "Hello" },
+  "contentType": "text"
+}
+```
+
+**校验规则**：
+
+- 必须提供 `to` 或 `targetPlayerId` 之一
+- 不允许发送给自己
+
+**Response**
+
+```json
+{ "success": true }
+```
+
+---
+
+### 5.5 v2 通信
+
+v2 在 v1 基础上增加频道发布、批量消息、频道订阅、二进制帧、可靠确认、结构化错误。适合高频同步和状态广播。
+
+> 必须在 `auth` 时传入 `"protocolVersion": 2` 激活。
+
+#### 5.5.1 Capabilities — 能力声明
+
+v2 认证成功后返回的能力上限：
+
+| 字段 | 值 | 说明 |
+| :--- | :--- | :--- |
+| `protocolVersion` | `2` | 协议版本 |
+| `maxMessageBytes` | `65536` | JSON text frame 最大字节数 |
+| `maxBinaryBytes` | `262144` | Binary frame 最大总字节数（含 header + body） |
+| `maxBatchMessages` | `32` | `message.batch` 单批最大消息数 |
+| `supportsPublish` | `true` | 支持 `message.publish` |
+| `supportsBatch` | `true` | 支持 `message.batch` |
+| `supportsAck` | `true` | 支持 `event.messageAck` |
+| `supportsSubscribe` | `true` | 支持 `message.subscribe` / `message.unsubscribe` |
+| `supportsDelivery` | `true` | 支持 `delivery` 元数据 |
+| `supportsBinaryContentType` | `true` | 支持 `contentType: "binary"` |
+| `supportsBinaryFrames` | `true` | 支持 WebSocket binary frame |
+
+---
+
+#### `message.publish` — 频道广播
+
+在指定频道上发布消息，广播给房间内其他玩家。与 `message.broadcast` 相比多了 `channel`、`seq`、`delivery` 字段。
+
+**Request**
+
+| 字段 | 类型 | 必填 | 说明 |
+| :--- | :--- | :--- | :--- |
+| `channel` | `string` | 否 | 频道名，默认 `"default"` |
+| `seq` | `number` | 否 | 消息序号，用于判断乱序或跳帧 |
+| `delivery` | `"reliable"` \| `"ordered"` \| `"latest"` \| `"unreliable"` | 否 | 投递语义，默认 `"reliable"` |
+| `data` | `any` | 否 | 消息内容（二进制帧时在 body 中，此处不传） |
+| `contentType` | `string` | 否 | 内容类型，默认 `"json"` |
+
+```json
+{
+  "channel": "state",
+  "seq": 1024,
+  "delivery": "latest",
+  "data": { "x": 10, "y": 20 },
+  "contentType": "json"
+}
+```
+
+**`delivery` 说明**：
+
+| 值 | 用途 |
+| :--- | :--- |
+| `"reliable"` | 可靠投递，中继成功后推送 `event.messageAck` |
+| `"ordered"` | 有序投递，平台按 `seq` 去重和排序 |
+| `"latest"` | 仅保留最新消息，旧消息可能被丢弃 |
+| `"unreliable"` | 尽力投递，可能丢失 |
+
+平台自动补齐 `senderId`、`messageId`、`sentAt`、`mode: "publish"`。
+
+**Response**
+
+```json
+{ "success": true }
+```
+
+---
+
+#### `message.batch` — 批量消息
+
+将多条消息打包为一次请求，减少 JSON 编解码开销。平台在目标侧拆分为多条 `event.message`。
+
+**Request**
+
+| 字段 | 类型 | 必填 | 说明 |
+| :--- | :--- | :--- | :--- |
+| `channel` | `string` | 否 | 频道名，子消息继承此频道 |
+| `messages` | `object[]` | 是 | 消息数组，每条格式同 `message.publish` |
+
+```json
+{
+  "channel": "frame",
+  "messages": [
+    { "seq": 1, "data": { "key": "left" } },
+    { "seq": 2, "data": { "key": "jump" } }
+  ]
+}
+```
+
+**限制**：单批最多 32 条，单条 JSON frame 不超过 64 KB。
+
+**Response**
+
+```json
+{ "success": true }
+```
+
+---
+
+#### `message.subscribe` / `message.unsubscribe` — 频道订阅
+
+按频道过滤 `event.message`，只接收已订阅频道的消息。默认订阅 `"*"`（所有频道）。
+
+**Request**
+
+| 字段 | 类型 | 必填 | 说明 |
+| :--- | :--- | :--- | :--- |
+| `channels` | `string[]` | 是 | 要订阅/取消订阅的频道列表 |
+
+```json
+{ "channels": ["state", "input"] }
+```
+
+**Response**
+
+```json
+{ "success": true, "channels": ["state", "input"] }
+```
+
+**行为**：订阅是叠加的；取消订阅后若集合为空，自动恢复 `"*"`。
+
+---
+
+#### 5.5.5 结构化错误
+
+v2 通信接口失败时返回结构化错误对象：
 
 ```json
 {
@@ -561,221 +936,357 @@ v2 通信 API 的失败响应会优先返回结构化错误，旧游戏仍可按
 }
 ```
 
-### 5.3 成就系统
+| `error` 字段 | 类型 | 说明 |
+| :--- | :--- | :--- |
+| `code` | `string` | 错误码 |
+| `message` | `string` | 人类可读的错误描述 |
+| `detail` | `object?` | 附加详情，视错误类型而定 |
 
-#### `achievement.unlock` (解锁成就)
+**错误码列表**：
 
-触发成就解锁。平台会自动处理重复解锁请求（如果已解锁则忽略）。
+| 错误码 | 含义 |
+| :--- | :--- |
+| `UNKNOWN_ACTION` | 未知的 action |
+| `INVALID_PAYLOAD` | payload 格式无效 |
+| `NOT_IN_ROOM` | 当前不在房间中 |
+| `MISSING_TARGET` | 缺少目标玩家 ID |
+| `TARGET_SELF` | 不允许发送给自己 |
+| `TARGET_NOT_FOUND` | 目标玩家不在房间中 |
+| `MESSAGE_TOO_LARGE` | 消息体积超限 |
+| `BATCH_TOO_LARGE` | 批量消息条数超限 |
+| `EMPTY_BATCH` | 批量消息为空 |
 
-* **Request Payload**:
-  ```json
-  {
-    "achievementId": "first_win", // 对应 game.json 中的 id
-    "playerId": "p-123"           // 当前玩家 ID
-  }
-  ```
-* **Response Payload**:
-  ```json
-  {
-    "success": true,
-    "new": true // 如果是首次解锁则为 true
-  }
-  ```
+---
 
-### 5.4 统计系统
+### 5.6 成就系统
 
-#### `stats.report` (上报统计数据)
+#### `achievement.list` — 获取成就列表
 
-上报游戏内的统计数据（如得分、击杀数等）。需在 `game.json` 的 `statistics` 字段中预先定义。
-注意：`time` (游戏时长) 由平台自动统计，无需上报。
+获取当前游戏所有已定义成就及其解锁状态。
 
-`statistics` 字段支持以下写法：
+**Request**
+
+```json
+{}
+```
+
+**Response**
 
 ```json
 [
-  "kills",
   {
-    "score": "得分"
-  },
-  {
-    "endless_high_score": {
-      "label": "无尽最高分",
-      "mode": "full"
-    }
+    "id": "first_win",
+    "title": "初次胜利",
+    "description": "赢得一场比赛",
+    "unlocked": false,
+    "unlockedAt": null
   }
 ]
 ```
 
-`mode` 说明：
-
-- `increment`：增量统计（默认）
-- `full`：全量统计（以传入值覆盖）
-
-* **Request Payload**:
-  ```json
-  {
-    "kills": 5,
-    "score": 100,
-    "endless_high_score": 12000
-  }
-  ```
-* **Response Payload**:
-  ```json
-  {
-    "success": true
-  }
-  ```
+| 字段 | 类型 | 说明 |
+| :--- | :--- | :--- |
+| `id` | `string` | 成就 ID，对应 `game.json` |
+| `title` | `string` | 成就标题 |
+| `description` | `string` | 成就描述 |
+| `unlocked` | `boolean` | 是否已解锁 |
+| `unlockedAt` | `number?` | 首次解锁时间戳（毫秒），未解锁为 `null` |
 
 ---
 
-## 六、 事件通知 (Platform -> Game)
+#### `achievement.unlock` — 解锁成就
 
-游戏需监听 WebSocket 的 `message` 事件来处理以下通知：
+触发成就解锁。重复解锁自动忽略（幂等）。
 
-#### v1 事件
+**Request**
 
-##### `event.message` (收到消息)
+| 字段 | 类型 | 必填 | 说明 |
+| :--- | :--- | :--- | :--- |
+| `achievementId` | `string` | 是 | 成就 ID，对应 `game.json` |
+| `playerId` | `string` | 否 | 玩家 ID。不填则自动使用当前玩家；填写但与当前玩家不匹配则返回失败 |
 
-当其他玩家调用 v1 `message.broadcast` 或 `message.send` 时触发。
+```json
+{
+  "achievementId": "first_win",
+  "playerId": "p-123"
+}
+```
 
-* **Payload**:
-  ```json
-  {
-    "senderId": "sender-player-id",
-    "messageId": "uuid-message-id",
-    "sentAt": 1713333333333,
-    "channel": "default",
-    "mode": "broadcast",
-    "delivery": "reliable",
-    "contentType": "json",
-    "seq": 1,
-    "data": { ... } // 对方发送的数据
-  }
-  ```
-* **幂等建议**：
-    - 建议游戏侧用 `messageId` 做去重，防止网络重试或重连场景下重复处理同一消息。
+**Response（成功）**
 
-#### v2 事件增强
+```json
+{
+  "success": true,
+  "new": true
+}
+```
 
-v2 的 `event.message` 会在 v1 字段基础上额外携带 `channel`、`mode`、`delivery`、`contentType`、`seq` 等字段。高频同步建议使用 `channel` 区分状态流、输入流、聊天流，并使用 `seq` 判断乱序或跳帧。若 `event.message` 以二进制帧推送，则 JSON header 中的 `payload` 只包含元数据，原始字节位于 binary body。
+| 字段 | 类型 | 说明 |
+| :--- | :--- | :--- |
+| `success` | `boolean` | 是否成功 |
+| `new` | `boolean` | 是否首次解锁 |
 
-##### `event.messageAck` (可靠消息确认)
+**Response（失败）**
 
-当游戏发送的消息 payload 中包含 `reliable: true` 时，平台在中继成功后会向发送方游戏推送确认事件。
-
-* **Payload**:
-  ```json
-  {
-    "messageId": "uuid-message-id",
-    "senderId": "sender-player-id",
-    "to": "sender-player-id",
-    "sentAt": 1713333333444
-  }
-  ```
-
-#### 房间生命周期事件
-
-##### `event.playerJoined` (玩家加入)
-
-> ⚠️ **预留接口**：事件类型已定义，当前版本尚未实际推送此事件。
-> 游戏可通过 `room.getInfo` API 获取最新的玩家列表。
-
-有新玩家加入房间时触发。
-
-* **Payload**:
-  ```json
-  {
-    "player": { "id": "...", "name": "..." }
-  }
-  ```
-
-##### `event.playerLeft` (玩家离开)
-
-> ⚠️ **预留接口**：事件类型已定义，当前版本尚未实际推送此事件。
-> 游戏可通过 `room.getInfo` API 获取最新的玩家列表。
-
-有玩家断开连接时触发。
-
-* **Payload**: `{ "playerId": "..." }`
-
-##### `event.gameEnd` (游戏结束通知)
-
-> ⚠️ **预留接口**：事件类型已定义，当前版本尚未实际推送此事件。
-> 未来将在房间游戏结束时（Host 进程退出或房间解散）向游戏进程发送此事件，允许游戏做退出前的清理工作（保存状态、播放结束动画等）。
-
-房间游戏结束时触发。
-
-* **Payload**: `{ "reason": "..." }`
-* **目前行为**：游戏进程会被平台直接终止（`RoomClient` 收到 `room:game:end` 后触发），不会收到此事件。游戏应在自己的退出流程中自行处理清理逻辑。
+```json
+{ "success": false, "reason": "Player mismatch" }
+```
 
 ---
 
-## 七、 开发代码示例 (JavaScript)
+### 5.7 统计系统
 
-以下是一个通用的 Web 游戏接入模板：
+#### `stats.report` — 上报统计数据
+
+上报游戏内统计数据。统计项需在 `game.json` 的 `statistics` 字段中预先定义。
+
+> `time`（游玩时长）由平台自动统计，**无需上报**。
+
+**`game.json` 中 `statistics` 的定义方式**：
+
+```json
+[
+  "kills",
+  { "score": "得分" },
+  { "endless_high_score": { "label": "无尽最高分", "mode": "full" } }
+]
+```
+
+| `mode` 值 | 含义 |
+| :--- | :--- |
+| `"increment"`（默认） | 增量：每次上报值累加到已有值 |
+| `"full"` | 全量：直接用上报值覆盖已有值 |
+
+**Request**
+
+```json
+{
+  "kills": 5,
+  "score": 100,
+  "endless_high_score": 12000
+}
+```
+
+payload 的 key 必须与 `game.json` 中定义的统计项名称一致。
+
+**Response**
+
+```json
+{ "success": true }
+```
+
+---
+
+## 六、 事件通知
+
+平台以 `type = "event"` 的消息向游戏推送通知。游戏在 `onmessage` 中按 `action` 分派处理。
+
+---
+
+### 6.1 `event.message` — 收到消息
+
+其他玩家调用 `message.broadcast`、`message.send` 或 `message.publish` 时触发。
+
+**Payload**
+
+```json
+{
+  "senderId": "p-456",
+  "messageId": "msg-uuid",
+  "sentAt": 1713333333333,
+  "channel": "default",
+  "mode": "broadcast",
+  "delivery": "reliable",
+  "contentType": "json",
+  "seq": 1,
+  "data": { "type": "move", "x": 10 }
+}
+```
+
+| 字段 | 类型 | 说明 |
+| :--- | :--- | :--- |
+| `senderId` | `string` | 发送者玩家 ID（平台补齐） |
+| `messageId` | `string` | 消息唯一 ID（平台补齐，建议用于去重） |
+| `sentAt` | `number` | 发送时间戳毫秒（平台补齐） |
+| `channel` | `string` | 频道名 |
+| `mode` | `"direct"` \| `"broadcast"` \| `"publish"` \| `"batch"` | 发送模式 |
+| `delivery` | `"reliable"` \| `"ordered"` \| `"latest"` \| `"unreliable"` | 投递语义 |
+| `contentType` | `"json"` \| `"text"` \| `"audio"` \| `"binary"` | 内容类型 |
+| `seq` | `number?` | 消息序号 |
+| `data` | `any` | 对方发送的数据 |
+| `binary` | `boolean?` | 二进制帧时为 `true` |
+| `byteLength` | `number?` | 二进制帧时的 body 字节数 |
+
+**去重建议**：使用 `messageId` 做幂等判断。
+
+**二进制接收**：若以 binary frame 推送，JSON header 中 `payload` 仅含元数据，body 为原始字节。处理方式见 [4.5](#45-v2-二进制帧)。
+
+---
+
+### 6.2 `event.messageAck` — 可靠消息确认
+
+当消息 `delivery` 为 `"reliable"` 时，平台中继成功后推送确认。
+
+> 仅 v2 协议支持。
+
+**Payload**
+
+```json
+{
+  "messageId": "msg-uuid",
+  "senderId": "p-123",
+  "to": "p-123",
+  "sentAt": 1713333333444
+}
+```
+
+---
+
+### 6.3 预留事件
+
+以下事件已在类型定义中存在，**当前版本尚未实际推送**。开发者无需编写处理逻辑。
+
+| 事件 | Payload | 说明 |
+| :--- | :--- | :--- |
+| `event.playerJoined` | `{ "player": { "id": "...", "name": "..." } }` | 新玩家加入通知 |
+| `event.playerLeft` | `{ "playerId": "..." }` | 玩家离开通知 |
+| `event.gameEnd` | `{ "reason": "..." }` | 游戏结束通知 |
+
+> **替代方案**：调用 `room.getInfo()` 获取最新玩家列表和房间状态。
+
+---
+
+## 七、 快速集成示例
+
+以下示例涵盖连接、认证、就绪、房间信息、消息收发和战绩上报。
 
 ```javascript
-// 1. 获取配置
+// ── 1. 获取配置 ──
 function getConfig() {
-    if (window.BZ_CONFIG) return window.BZ_CONFIG;
-
-    // URL 参数回退
-    const params = new URLSearchParams(window.location.search);
-    return {
-        apiPort: params.get('apiPort'),
-        token: params.get('token'),
-        playerId: params.get('playerId'),
-        playerName: 'Unknown',
-        isMultiple: params.get('isMultiple') === '1'
-    };
+  if (window.BZ_CONFIG) return window.BZ_CONFIG;
+  const p = new URLSearchParams(location.search);
+  return {
+    apiPort: p.get('apiPort'),
+    token: p.get('token'),
+    playerId: p.get('playerId'),
+    playerName: 'Unknown',
+    isMultiple: p.get('isMultiple') === '1'
+  };
 }
 
 const config = getConfig();
 let ws = null;
+const pending = new Map();  // 请求 ID → { resolve, reject }
 
-// 2. 初始化连接
-function initConnection() {
-    if (!config.apiPort) return console.error("未找到 BZ-Games 配置");
-
-    ws = new WebSocket(`ws://127.0.0.1:${config.apiPort}`);
-
-    ws.onopen = () => {
-        console.log("已连接平台");
-        // 3. 发送认证
-        sendRequest('auth', {token: config.token});
-    };
-
-    ws.onmessage = (event) => {
-        const msg = JSON.parse(event.data);
-        if (msg.type === 'response') handleResponse(msg);
-        if (msg.type === 'event') handleEvent(msg);
-    };
+// ── 2. 连接 ──
+function connect() {
+  if (!config.apiPort) return console.error('未找到 BZ-Games 配置');
+  ws = new WebSocket(`ws://127.0.0.1:${config.apiPort}`);
+  ws.onopen = () => {
+    console.log('已连接');
+    sendRequest('auth', { token: config.token });
+  };
+  ws.onmessage = (event) => {
+    if (event.data instanceof ArrayBuffer) {
+      handleBinary(event.data);
+      return;
+    }
+    const msg = JSON.parse(event.data);
+    if (msg.type === 'response') handleResponse(msg);
+    if (msg.type === 'event')   handleEvent(msg);
+  };
+  ws.onclose = () => console.log('连接断开');
 }
 
-// 4. 发送请求封装
+// ── 3. 请求封装（返回 Promise） ──
 function sendRequest(action, payload) {
-    const id = crypto.randomUUID(); // 或使用简易 UUID 生成器
-    ws.send(JSON.stringify({id, type: 'request', action, payload}));
+  return new Promise((resolve, reject) => {
+    const id = crypto.randomUUID();
+    pending.set(id, { resolve, reject });
+    ws.send(JSON.stringify({ id, type: 'request', action, payload }));
+  });
 }
 
-// 5. 处理响应
-function handleResponse(res) {
-    if (res.action === 'auth' && res.payload.success) {
-        console.log("认证成功！我是:", res.payload.player.name);
-        // 认证成功后，获取房间信息并准备就绪
-        sendRequest('room.getInfo', {});
-        sendRequest('game.ready', {});
+// ── 4. 响应处理 ──
+function handleResponse(msg) {
+  const p = pending.get(msg.id);
+  if (!p) return;
+  pending.delete(msg.id);
+  if (msg.error) {
+    p.reject(new Error(typeof msg.error === 'string' ? msg.error : msg.error.message));
+    return;
+  }
+  p.resolve(msg.payload);
+}
+
+// ── 5. 游戏初始化 ──
+async function initGame() {
+  const auth = await sendRequest('auth', { token: config.token });
+  console.log('我是:', auth.player.name, auth.player.isHost ? '(房主)' : '');
+
+  const room = await sendRequest('room.getInfo', {});
+  if (room) {
+    console.log('联机模式, 状态:', room.state);
+    if (room.reconnectPlayerIds.includes(config.playerId)) {
+      console.log('这是重连启动');
     }
+  }
+
+  await sendRequest('game.ready', {});
+  console.log('就绪');
 }
 
-// 6. 处理事件
+// ── 6. 事件处理 ──
 function handleEvent(evt) {
-    if (evt.action === 'event.message') {
-        console.log(`收到 ${evt.payload.from} 的消息:`, evt.payload.data);
-        // 处理游戏逻辑...
+  switch (evt.action) {
+    case 'event.message': {
+      const { senderId, data } = evt.payload;
+      console.log(`收到 ${senderId}:`, data);
+      break;
     }
+    case 'event.messageAck':
+      console.log('消息已确认:', evt.payload.messageId);
+      break;
+  }
 }
 
-// 启动
-initConnection();
+// ── 7. 发送消息 ──
+function broadcast(data) {
+  sendRequest('message.broadcast', { data });
+}
+
+function sendTo(playerId, data) {
+  sendRequest('message.send', { to: playerId, data });
+}
+
+// ── 8. 上报战绩 ──
+function reportResult(results) {
+  sendRequest('game.report', {
+    mode: 'structured',
+    title: '本局结果',
+    data: { layout: 'scoreboard', rows: results, duration: 1205 },
+    config: {
+      columns: [
+        { key: 'playerId', label: '玩家', render: 'playerName', width: '2fr' },
+        { key: 'score',    label: '分数', render: 'score', align: 'right' }
+      ]
+    }
+  });
+}
+
+// ── 9. 二进制帧处理 ──
+function handleBinary(data) {
+  const view = new DataView(data);
+  const hl = view.getUint32(0, false);
+  const headerBytes = new Uint8Array(data, 4, hl);
+  const header = JSON.parse(new TextDecoder().decode(headerBytes));
+  const body = data.slice(4 + hl);
+  if (header.action === 'event.message' && header.payload.contentType === 'binary') {
+    const values = new Float32Array(body);
+    console.log(`二进制消息:`, header.payload.senderId, values);
+  }
+}
+
+// ── 启动 ──
+connect();
 ```

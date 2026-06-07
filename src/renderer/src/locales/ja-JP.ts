@@ -304,6 +304,7 @@ export default {
     imageTooLarge: "画像は5MB以下にしてください",
     dropHere: "画像をここにドロップ",
     importImage: "画像を送信",
+    gameReport: "戦績レポート",
   },
   checkIn: {
     title: "デイリーサインイン",

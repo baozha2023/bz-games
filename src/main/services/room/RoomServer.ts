@@ -145,6 +145,7 @@ export class RoomServer {
       players: [],
       maxPlayers,
       state: "waiting",
+      reconnectPlayerIds: [],
       createdAt: Date.now(),
     };
   }
@@ -241,6 +242,9 @@ export class RoomServer {
       case "room:player:unready":
         this.handlePlayerUnready(ws);
         break;
+      case "room:player:reconnect-needed":
+        this.handleReconnectNeeded(msg.payload as { playerId: string });
+        break;
       case "room:chat":
         this.broadcast(msg);
         break;
@@ -286,6 +290,8 @@ export class RoomServer {
     this.room.players = this.room.players.filter(
       (p) => p.id !== payload.playerId,
     );
+    // 重连玩家：从重连列表中移除
+    this.room.reconnectPlayerIds = this.room.reconnectPlayerIds.filter(id => id !== payload.playerId);
     this.room.players.push(newPlayer);
     this.playerConnections.set(payload.playerId, ws);
     if (this.isRelaySocket(ws)) {
@@ -342,6 +348,17 @@ export class RoomServer {
     return null;
   }
 
+  private handleReconnectNeeded(payload: { playerId: string }) {
+    if (!this.room) return;
+    // 仅 non-host 玩家在 playing 状态下才记录重连需求
+    if (this.room.state !== "playing" || payload.playerId === this.room.hostId) return;
+    if (!this.room.players.some((p) => p.id === payload.playerId)) return;
+    if (!this.room.reconnectPlayerIds.includes(payload.playerId)) {
+      this.room.reconnectPlayerIds.push(payload.playerId);
+      this.broadcastState();
+    }
+  }
+
   private handlePlayerReady(ws: RoomSocket) {
     const playerId = this.getPlayerIdByWs(ws);
     this.updatePlayerState(playerId, { isReady: true });
@@ -379,16 +396,27 @@ export class RoomServer {
       if (this.isRelaySocket(ws)) {
         this.relayConnections.delete(ws);
       }
-      this.room.players = this.room.players.filter((p) => p.id !== playerId);
-      this.broadcast({
-        type: "room:player:left",
-        payload: { playerId },
-      });
+
       if (isHost) {
         this.broadcast({ type: "room:disbanded", payload: {} });
         this.stop();
         return;
       }
+
+      // 游戏中非房主玩家断线：加入重连列表，保留在玩家列表中
+      if (this.room.state === "playing") {
+        if (!this.room.reconnectPlayerIds.includes(playerId)) {
+          this.room.reconnectPlayerIds.push(playerId);
+          this.broadcast({ type: "room:state:sync", payload: this.room });
+        }
+        return;
+      }
+
+      this.room.players = this.room.players.filter((p) => p.id !== playerId);
+      this.broadcast({
+        type: "room:player:left",
+        payload: { playerId },
+      });
       this.broadcastState();
     }
   }
@@ -402,6 +430,7 @@ export class RoomServer {
 
     this.kickedPlayers.add(targetPlayerId);
     this.room.players = this.room.players.filter((p) => p.id !== targetPlayerId);
+    this.room.reconnectPlayerIds = this.room.reconnectPlayerIds.filter(id => id !== targetPlayerId);
     const targetSocket = this.playerConnections.get(targetPlayerId);
     this.playerConnections.delete(targetPlayerId);
     if (targetSocket && this.isRelaySocket(targetSocket)) {
@@ -449,6 +478,7 @@ export class RoomServer {
     this.relayConnections.forEach((socket) => socket.close());
     this.relayConnections.clear();
     this.room.players = this.room.players.filter((player) => player.id === hostId);
+    this.room.reconnectPlayerIds = [];
     this.broadcastState();
   }
 

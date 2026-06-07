@@ -17,6 +17,7 @@ export type GameApiAction =
   | "message.unsubscribe"
   | "game.ready"
   | "game.end"
+  | "game.report"
   | "achievement.unlock"
   | "achievement.list"
   | "stats.report";

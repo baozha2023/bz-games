@@ -11,6 +11,8 @@ import type {
   GameRelayPayload,
   GameApiCapabilities,
   GameApiError,
+  GameReportPayload,
+  ChatPayload,
 } from "../../../shared/types";
 import { GameApiErrorCode } from "../../../shared/types";
 import { storeService } from "../storage/StoreService";
@@ -186,6 +188,9 @@ export class GameApiServer {
         case "game.end":
           this.handleGameEnd(ws, req);
           break;
+        case "game.report":
+          this.handleGameReport(ws, req);
+          break;
         case "achievement.list":
           await this.handleAchievementList(ws, req);
           break;
@@ -275,6 +280,60 @@ export class GameApiServer {
 
   private handleGameEnd(ws: WebSocket, req: GameApiRequest) {
     this.sendResponse(ws, req.id, "game.end", { success: true });
+  }
+
+  private handleGameReport(ws: WebSocket, req: GameApiRequest) {
+    const payload = req.payload as GameReportPayload | undefined;
+    if (!payload) {
+      this.sendError(ws, req.id, "game.report", {
+        code: GameApiErrorCode.InvalidPayload,
+        message: "Missing payload",
+      });
+      return;
+    }
+
+    // Validate custom mode — prevent oversized HTML/CSS
+    if (payload.mode === "custom") {
+      const htmlLen = payload.html?.length ?? 0;
+      const cssLen = payload.css?.length ?? 0;
+      if (htmlLen + cssLen > 64 * 1024) {
+        this.sendError(ws, req.id, "game.report", {
+          code: GameApiErrorCode.MessageTooLarge,
+          message: "Custom report html+css must be under 64KB",
+        });
+        return;
+      }
+    }
+
+    // Reply to game
+    this.sendResponse(ws, req.id, "game.report", { success: true });
+
+    // Build system chat message
+    const settings = storeService.getSettings();
+    const chatPayload: ChatPayload = {
+      id: crypto.randomUUID(),
+      senderId: "system",
+      senderName: "System",
+      content: JSON.stringify(payload),
+      contentType: "game_report",
+      timestamp: Date.now(),
+      isSystem: true,
+    };
+
+    const roomMsg = { type: "room:chat" as const, payload: chatPayload };
+
+    // Route through room infrastructure
+    const isHost = roomServer.room?.hostId === settings.playerId;
+    if (isHost) {
+      // Host: broadcast to all clients (excluding self), then deliver to own renderer directly
+      const hostSocket = roomServer.getSocketByPlayerId(settings.playerId);
+      roomServer.broadcast(roomMsg, hostSocket);
+      mainWindow?.webContents.send(IPC.ROOM_EVENT, roomMsg);
+    } else if (roomClient.room) {
+      // Client: send via room client — message will be relayed back by server and delivered to renderer
+      // Client: send via room client — message will be relayed back by server and delivered to renderer
+      roomClient.send(roomMsg);
+    }
   }
 
   private async handleAchievementList(ws: WebSocket, req: GameApiRequest) {

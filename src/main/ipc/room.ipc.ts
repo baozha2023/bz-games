@@ -119,7 +119,11 @@ export function registerRoomIpc() {
   });
 
   ipcMain.handle(IPC.ROOM_RECONNECT, async () => {
-    if (roomClient.room && roomClient.room.state === "playing") {
+    const playerId = storeService.getSettings().playerId;
+    if (
+      roomClient.room &&
+      roomClient.room.reconnectPlayerIds.includes(playerId)
+    ) {
       await gameManager.launch(
         roomClient.room.gameId,
         roomClient.room.gameVersion,

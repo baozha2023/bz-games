@@ -332,10 +332,22 @@ class GameManager {
 
   private handleProcessExit(id: string, _code: number | null) {
     this.recordPlaytime(id);
+    // 通知 RoomServer 本局结束（仅 host 端 RoomServer 在线时生效）
     this.notifyRoomGameEnd(id);
+    // 客户端：通知房主需要重连
+    this.notifyRoomReconnectNeeded(id);
     this.stop(id);
     mainWindow?.webContents.send(IPC.GAME_PROCESS_ENDED, id);
     import("../../window").then(({ updateTrayMenu }) => updateTrayMenu());
+  }
+
+  private notifyRoomReconnectNeeded(gameId: string) {
+    // 仅客户端（非房主）在 playing 状态下通知服务器
+    if (roomServer.room) return; // 自己是 Host，不需要通知
+    if (!roomClient.room || roomClient.room.state !== "playing") return;
+    if (roomClient.room.gameId !== gameId) return;
+    const playerId = storeService.getSettings().playerId;
+    roomClient.send({ type: "room:player:reconnect-needed", payload: { playerId } });
   }
 
   private recordPlaytime(id: string) {
@@ -355,6 +367,7 @@ class GameManager {
       roomServer.room.state === "playing"
     ) {
       roomServer.room.state = "waiting";
+      roomServer.room.reconnectPlayerIds = [];
       roomServer.broadcast({ type: "room:game:end", payload: {} });
       roomServer.broadcastState();
     }

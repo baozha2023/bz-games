@@ -9,7 +9,7 @@
       />
     </template>
     <template #suffix>
-      <n-space align="center">
+      <n-space align="center" :wrap="false">
         <n-tag :type="player.isReady ? 'success' : 'warning'">
           {{ player.isHost ? t('room.host') : (player.isReady ? t('room.ready') : t('room.notReady')) }}
         </n-tag>

@@ -303,6 +303,7 @@ export default {
     imageTooLarge: "Image must be under 5MB",
     dropHere: "Drop image here",
     importImage: "Send image",
+    gameReport: "Game Report",
   },
   checkIn: {
     title: "Daily Check-in",
