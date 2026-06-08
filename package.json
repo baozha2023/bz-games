@@ -1,10 +1,10 @@
 {
   "name": "bz-launcher",
-  "version": "2.3.5",
+  "version": "2.3.6",
   "description": "BZ-Games game platform",
   "main": "./out/main/index.js",
   "author": "BZ-Games",
-  "license": "MIT",
+  "license": "GPL-3.0-only",
   "repository": {
     "type": "git",
     "url": "https://github.com/baozha2023/bz-games.git"

@@ -36,7 +36,7 @@ import {
   GITHUB_RAW_BASE,
   MARKET_FALLBACK_INDEX_URL,
   MARKET_PRIMARY_INDEX_URL,
-} from "../../../shared/constants";
+} from "../../../shared/AppConstants";
 import { RequestInterceptor } from "../../utils/requestInterceptor";
 
 function gitToRawUrl(repository: string, branch: string): string {

@@ -273,6 +273,8 @@ export default {
     refreshFailed: "部屋の更新に失敗しました",
     gameId: "ゲームID",
     gameName: "ゲーム名",
+    gameVersion: "バージョン",
+    latency: "遅延",
     host: "ホスト",
     playerName: "ゲームニックネーム",
     players: "人数",

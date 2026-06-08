@@ -124,6 +124,7 @@ declare global {
         getChatHistory: () => Promise<unknown[]>;
         discoverLan: () => Promise<DiscoveredRoom[]>;
         discoverRelay: () => Promise<DiscoveredRoom[]>;
+        measureRelayLatency: () => Promise<number | null>;
         validateDiscovered: (room: DiscoveredRoom) => Promise<RoomJoinValidationResult>;
         enableRelayHost: () => Promise<{ success: boolean; publicAddress?: string; error?: string }>;
         disableRelayHost: () => Promise<void>;

@@ -17,8 +17,12 @@ export type RoomMessageType =
   | "room:kicked" // Server → Target：被踢通知
   | "room:player:kicked" // Server → All：玩家被踢通知
   | "room:connection-status"
+  | "room:relay:latency"
   | "relay:join"
   | "relay:join:ack"
+  | "relay:latency:ping"
+  | "relay:latency:probe"
+  | "relay:latency:pong"
   | "relay:closed"
   | "relay:error"
   | "room:chat" // 双向：房间内聊天消息
@@ -173,6 +177,12 @@ export interface RoomConnectionStatusPayload {
   maxAttempts: number;
   nextRetryMs?: number;
   reason?: string;
+}
+
+export interface RoomRelayLatencyPayload {
+  latencyMs: number | null;
+  mode: "host" | "guest";
+  measuredAt: number;
 }
 
 export interface RoomEvent {

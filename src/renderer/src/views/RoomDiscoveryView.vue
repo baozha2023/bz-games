@@ -12,28 +12,7 @@
             <n-alert type="info" style="margin-bottom: 16px;">
               {{ t('roomDiscovery.lanDesc') }}
             </n-alert>
-            <n-empty v-if="lanRooms.length === 0" :description="t('roomDiscovery.emptyLan')" />
-            <div v-else class="room-list">
-            <n-card v-for="room in lanRooms" :key="room.id" class="room-card">
-              <template #header>
-                <n-space align="center">
-                  <span class="room-card-title"><NicknameText :name="room.name" :nickname-style="room.hostStyle" :effective-theme="settingsStore.effectiveTheme" :size="16" /></span>
-                  <n-tag size="small">{{ room.gameVersion }}</n-tag>
-                </n-space>
-              </template>
-              <template #header-extra>
-                <n-button size="small" :type="joinButtonType(room)" :loading="isJoiningRoom(room)" :disabled="isJoinButtonDisabled(room)" @click="handleDiscoveredRoomClick(room)">
-                  {{ room.canJoin ? t('common.join') : joinBlockText(room) }}
-                </n-button>
-              </template>
-              <n-descriptions :column="2" size="small">
-                <n-descriptions-item :label="t('roomDiscovery.gameId')">{{ room.gameId }}</n-descriptions-item>
-                <n-descriptions-item :label="t('roomDiscovery.gameName')">{{ roomGameName(room) }}</n-descriptions-item>
-                <n-descriptions-item :label="t('roomDiscovery.players')">{{ room.playerCount }}/{{ room.maxPlayers }}</n-descriptions-item>
-                <n-descriptions-item :label="t('roomDiscovery.address')">{{ room.address }}</n-descriptions-item>
-              </n-descriptions>
-            </n-card>
-            </div>
+            <RoomList />
           </div>
         </n-spin>
       </n-tab-pane>
@@ -41,31 +20,13 @@
       <n-tab-pane name="relay" :tab="t('roomDiscovery.relayTab')">
         <n-spin :show="loading && activeTab === 'relay'" content-class="room-spin-content">
           <div class="room-tab-content">
-            <n-alert type="info" style="margin-bottom: 16px;">
-              {{ t('roomDiscovery.relayDesc') }}
+            <n-alert type="info" class="room-discovery-desc">
+              <div class="room-discovery-desc-content">
+                <span>{{ t('roomDiscovery.relayDesc') }}</span>
+                <span class="relay-latency">{{ relayLatencyText }}</span>
+              </div>
             </n-alert>
-            <n-empty v-if="relayRooms.length === 0" :description="t('roomDiscovery.emptyRelay')" />
-            <div v-else class="room-list">
-            <n-card v-for="room in relayRooms" :key="room.id" class="room-card">
-              <template #header>
-                <n-space align="center">
-                  <span class="room-card-title"><NicknameText :name="room.name" :nickname-style="room.hostStyle" :effective-theme="settingsStore.effectiveTheme" :size="16" /></span>
-                  <n-tag size="small">{{ room.gameVersion }}</n-tag>
-                </n-space>
-              </template>
-              <template #header-extra>
-                <n-button size="small" :type="joinButtonType(room)" :loading="isJoiningRoom(room)" :disabled="isJoinButtonDisabled(room)" @click="handleDiscoveredRoomClick(room)">
-                  {{ room.canJoin ? t('common.join') : joinBlockText(room) }}
-                </n-button>
-              </template>
-              <n-descriptions :column="2" size="small">
-                <n-descriptions-item :label="t('roomDiscovery.gameId')">{{ room.gameId }}</n-descriptions-item>
-                <n-descriptions-item :label="t('roomDiscovery.gameName')">{{ roomGameName(room) }}</n-descriptions-item>
-                <n-descriptions-item :label="t('roomDiscovery.players')">{{ room.playerCount }}/{{ room.maxPlayers }}</n-descriptions-item>
-                <n-descriptions-item :label="t('roomDiscovery.address')">{{ relayRoomAddress(room) }}</n-descriptions-item>
-              </n-descriptions>
-            </n-card>
-            </div>
+            <RoomList />
           </div>
         </n-spin>
       </n-tab-pane>
@@ -74,11 +35,12 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, h, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { useMessage } from 'naive-ui'
+import { NButton, NCard, NDescriptions, NDescriptionsItem, NEmpty, NSpace, useMessage } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import type { DiscoveredRoom } from '../../../shared/types'
+import { RoomConstants } from '../../../shared/RoomConstants'
 import { useGameStore } from '../stores/useGameStore'
 import { useRoomJoin } from '../composables/useRoomJoin'
 import NicknameText from '../components/NicknameText.vue'
@@ -96,6 +58,14 @@ const loading = ref(false)
 const joiningRoomId = ref('')
 const lanRooms = ref<DiscoveredRoom[]>([])
 const relayRooms = ref<DiscoveredRoom[]>([])
+const relayLatencyMs = ref<number | null>(null)
+let relayLatencyTimer: number | null = null
+
+const displayedRooms = computed(() => activeTab.value === 'lan' ? lanRooms.value : relayRooms.value)
+
+const currentEmptyText = computed(() => activeTab.value === 'lan' ? t('roomDiscovery.emptyLan') : t('roomDiscovery.emptyRelay'))
+
+const relayLatencyText = computed(() => `${t('roomDiscovery.latency')}: ${relayLatencyMs.value === null ? '-- ms' : `${Math.round(relayLatencyMs.value)} ms`}`)
 
 onMounted(() => {
   if (gameStore.games.length === 0) {
@@ -104,8 +74,17 @@ onMounted(() => {
   refreshCurrentTab()
 })
 
+onUnmounted(() => {
+  stopRelayLatencyRefresh()
+})
+
 const handleTabChange = () => {
   refreshCurrentTab()
+  if (activeTab.value === 'relay') {
+    startRelayLatencyRefresh()
+  } else {
+    stopRelayLatencyRefresh()
+  }
 }
 
 const refreshCurrentTab = async () => {
@@ -115,6 +94,7 @@ const refreshCurrentTab = async () => {
       lanRooms.value = await window.electronAPI.room.discoverLan()
     } else {
       relayRooms.value = await window.electronAPI.room.discoverRelay()
+      await refreshRelayLatency()
     }
   } catch (error: any) {
     message.error(error?.message || t('roomDiscovery.refreshFailed'))
@@ -177,6 +157,57 @@ const joinDiscoveredRoom = async (room: DiscoveredRoom) => {
     joiningRoomId.value = ''
   }
 }
+
+const refreshRelayLatency = async () => {
+  relayLatencyMs.value = await window.electronAPI.room.measureRelayLatency()
+}
+
+const startRelayLatencyRefresh = () => {
+  if (relayLatencyTimer) return
+  refreshRelayLatency()
+  relayLatencyTimer = window.setInterval(refreshRelayLatency, RoomConstants.RELAY_LATENCY_REFRESH_INTERVAL_MS)
+}
+
+const stopRelayLatencyRefresh = () => {
+  if (relayLatencyTimer) {
+    window.clearInterval(relayLatencyTimer)
+    relayLatencyTimer = null
+  }
+}
+
+const RoomList = () => {
+  if (displayedRooms.value.length === 0) {
+    return h(NEmpty, { description: currentEmptyText.value })
+  }
+  return h('div', { class: 'room-list' }, displayedRooms.value.map((room) => h(NCard, { key: roomKey(room), class: 'room-card' }, {
+    header: () => h(NSpace, { align: 'center' }, {
+      default: () => h('span', { class: 'room-card-title' }, [
+        h(NicknameText, {
+          name: room.name,
+          nicknameStyle: room.hostStyle,
+          effectiveTheme: settingsStore.effectiveTheme,
+          size: 16,
+        }),
+      ]),
+    }),
+    'header-extra': () => h(NButton, {
+      size: 'small',
+      type: joinButtonType(room),
+      loading: isJoiningRoom(room),
+      disabled: isJoinButtonDisabled(room),
+      onClick: () => handleDiscoveredRoomClick(room),
+    }, { default: () => room.canJoin ? t('common.join') : joinBlockText(room) }),
+    default: () => h(NDescriptions, { column: 2, size: 'small' }, {
+      default: () => [
+        h(NDescriptionsItem, { label: t('roomDiscovery.gameId') }, { default: () => room.gameId }),
+        h(NDescriptionsItem, { label: t('roomDiscovery.gameName') }, { default: () => roomGameName(room) }),
+        h(NDescriptionsItem, { label: t('roomDiscovery.gameVersion') }, { default: () => room.gameVersion }),
+        h(NDescriptionsItem, { label: t('roomDiscovery.players') }, { default: () => `${room.playerCount}/${room.maxPlayers}` }),
+        h(NDescriptionsItem, { label: t('roomDiscovery.address') }, { default: () => room.source === 'relay' ? relayRoomAddress(room) : room.address }),
+      ],
+    }),
+  })))
+}
 </script>
 
 <style scoped>
@@ -191,6 +222,24 @@ const joinDiscoveredRoom = async (room: DiscoveredRoom) => {
 .room-tab-content {
   min-height: 220px;
   padding-top: 12px;
+}
+
+.room-discovery-desc {
+  margin-bottom: 16px;
+}
+
+.room-discovery-desc-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.relay-latency {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--n-text-color-2);
+  white-space: nowrap;
 }
 
 :deep(.room-spin-content) {

@@ -17,7 +17,7 @@ import {
   decodeBinaryEnvelope,
   encodeBinaryEnvelope,
 } from "../../../shared/binary-protocol";
-import { RoomCommunicationConstants } from "./RoomCommunicationConstants";
+import { RoomConstants } from "../../../shared/RoomConstants";
 
 type BinaryRelayPayload = GameRelayPayload & { binaryData?: Buffer };
 type RelaySocket = {
@@ -73,7 +73,7 @@ export class RoomServer {
       if (this.room) {
         this.broadcast({ type: "room:disbanded", payload: {} });
       }
-      await new Promise((resolve) => setTimeout(resolve, RoomCommunicationConstants.ROOM_DISBAND_BROADCAST_DELAY_MS));
+      await new Promise((resolve) => setTimeout(resolve, RoomConstants.ROOM_DISBAND_BROADCAST_DELAY_MS));
 
       await new Promise<void>((resolve) => {
         this.wss?.close(() => {
@@ -211,7 +211,7 @@ export class RoomServer {
         ws.isAlive = false;
         ws.ping();
       });
-    }, RoomCommunicationConstants.ROOM_HEARTBEAT_INTERVAL_MS);
+    }, RoomConstants.ROOM_HEARTBEAT_INTERVAL_MS);
   }
 
   public handleRelayRawMessage(data: WebSocket.RawData, isBinary: boolean, sendToRelay: (data: string | Buffer, targetPlayerId?: string) => void) {
@@ -621,7 +621,7 @@ export class RoomServer {
     if (!messageId || this.recentMessageIdSet.has(messageId)) return;
     this.recentMessageIds.push(messageId);
     this.recentMessageIdSet.add(messageId);
-    while (this.recentMessageIds.length > RoomCommunicationConstants.MAX_RECENT_MESSAGE_IDS) {
+    while (this.recentMessageIds.length > RoomConstants.MAX_RECENT_MESSAGE_IDS) {
       const expired = this.recentMessageIds.shift();
       if (expired) this.recentMessageIdSet.delete(expired);
     }
@@ -684,10 +684,10 @@ export class RoomServer {
 
   private deserializeRoomMessage(data: WebSocket.RawData, isBinary: boolean): RoomMessage | null {
     const rawData = this.rawDataToBuffer(data);
-    if (rawData.byteLength > RoomCommunicationConstants.MAX_ROOM_MESSAGE_BYTES) return null;
+    if (rawData.byteLength > RoomConstants.MAX_ROOM_MESSAGE_BYTES) return null;
     if (!isBinary) {
       const msg = JSON.parse(rawData.toString()) as RoomMessage;
-      if (this.isGameRelayMessageType(msg.type) && rawData.byteLength > RoomCommunicationConstants.MAX_GAME_RELAY_MESSAGE_BYTES) {
+      if (this.isGameRelayMessageType(msg.type) && rawData.byteLength > RoomConstants.MAX_GAME_RELAY_MESSAGE_BYTES) {
         return null;
       }
       return msg;
@@ -696,7 +696,7 @@ export class RoomServer {
     if (!decoded) return null;
     if (
       this.isGameRelayMessageType(decoded.header.type) &&
-      rawData.byteLength > RoomCommunicationConstants.MAX_GAME_RELAY_MESSAGE_BYTES
+      rawData.byteLength > RoomConstants.MAX_GAME_RELAY_MESSAGE_BYTES
     ) {
       return null;
     }

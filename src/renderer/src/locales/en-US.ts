@@ -272,6 +272,8 @@ export default {
     refreshFailed: "Failed to refresh rooms",
     gameId: "Game ID",
     gameName: "Game Name",
+    gameVersion: "Version",
+    latency: "Latency",
     host: "Host",
     playerName: "Nickname",
     players: "Players",

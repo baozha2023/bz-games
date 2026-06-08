@@ -3,7 +3,7 @@ import fs from "fs";
 import Database from "better-sqlite3";
 import { getAppRoot } from "../../utils/appPath";
 import { logger } from "../../utils/logger";
-import { DB_DIR, DB_FILE_NAME } from "../../../shared/constants";
+import { DB_DIR, DB_FILE_NAME } from "../../../shared/AppConstants";
 
 export interface PlaySession {
   id: string;

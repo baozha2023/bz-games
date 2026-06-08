@@ -1,7 +1,7 @@
 import type { Router } from 'vue-router'
 import type { useMessage } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
-import { DEFAULT_RELAY_PUBLIC_HOST } from '../../../shared/constants'
+import { DEFAULT_RELAY_PUBLIC_HOST } from '../../../shared/AppConstants'
 import type { AppSettings } from '../../../shared/types'
 import { useRoomStore } from '../stores/useRoomStore'
 import { useSettingsStore } from '../stores/useSettingsStore'

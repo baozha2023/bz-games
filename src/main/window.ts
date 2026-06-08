@@ -4,7 +4,7 @@ import { is } from "@electron-toolkit/utils";
 import { storeService } from "./services/storage/StoreService";
 import { databaseService } from "./services/storage/DatabaseService";
 import { IPC } from "../shared/ipc-channels";
-import { FLOAT_BALL_DEFAULT_SIZE } from "../shared/constants";
+import { FLOAT_BALL_DEFAULT_SIZE } from "../shared/AppConstants";
 
 export let mainWindow: BrowserWindow | null = null;
 export let floatBallWindow: BrowserWindow | null = null;

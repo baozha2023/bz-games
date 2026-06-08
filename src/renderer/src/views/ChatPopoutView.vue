@@ -23,14 +23,7 @@
         </template>
         <template v-else>
           <div class="message-header">
-            <NicknameText
-              class="sender"
-              :class="{ 'is-me': msg.senderId === playerId }"
-              :name="msg.senderName"
-              :nickname-style="msg.senderStyle"
-              :effective-theme="effectiveTheme"
-              :size="13"
-            />
+            <span class="sender" :class="{ 'is-me': msg.senderId === playerId }">{{ msg.senderName }}</span>
             <span class="time">{{ formatTime(msg.timestamp) }}</span>
           </div>
           <div class="message-content">
@@ -138,8 +131,6 @@ import { Mic, MusicalNote, Contract, CloseCircle, Image } from '@vicons/ionicons
 import { useI18n } from 'vue-i18n'
 import type { ChatPayload, RoomEvent } from '../../../shared/types'
 import ImageViewer from '../components/room/ImageViewer.vue'
-import NicknameText from '../components/NicknameText.vue'
-import type { EffectiveTheme } from '../utils/nicknameColor'
 
 const { t } = useI18n()
 const message = useMessage()
@@ -151,7 +142,6 @@ const isRecording = ref(false)
 const playingAudioId = ref<string | null>(null)
 const playerId = ref('')
 const roomName = ref('')
-const effectiveTheme = ref<EffectiveTheme>('dark')
 
 let mediaRecorder: MediaRecorder | null = null
 let audioChunks: Blob[] = []
@@ -445,11 +435,6 @@ onMounted(async () => {
     const settings = await window.electronAPI.settings.get()
     if (settings) {
       playerId.value = settings.playerId || ''
-      if (settings.theme === 'light') {
-        effectiveTheme.value = 'light'
-      } else if (settings.theme === 'auto') {
-        effectiveTheme.value = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-      }
       if (settings.chatInputHeight) {
         inputHeight.value = Math.min(MAX_INPUT_HEIGHT, Math.max(MIN_INPUT_HEIGHT, settings.chatInputHeight))
       }
@@ -528,10 +513,14 @@ onUnmounted(() => {
 
 .sender {
   max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #333;
 }
 
 .sender.is-me {
-  filter: brightness(1.08);
+  color: #389e0d;
 }
 
 .time {
@@ -542,6 +531,7 @@ onUnmounted(() => {
 .message-content {
   word-break: break-word;
   white-space: pre-wrap;
+  color: var(--bz-text-title);
 }
 
 .message-text {

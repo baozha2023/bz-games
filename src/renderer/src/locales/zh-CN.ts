@@ -265,6 +265,8 @@ export default {
     refreshFailed: "刷新房间失败",
     gameId: "游戏ID",
     gameName: "游戏名称",
+    gameVersion: "游戏版本",
+    latency: "延迟",
     host: "房主",
     playerName: "游戏昵称",
     players: "人数",

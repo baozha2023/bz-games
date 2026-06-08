@@ -3,6 +3,14 @@
     <n-page-header :title="t('room.titlePrefix') + roomStore.room.gameId" @back="handleBack" class="room-header">
     <template #extra>
       <n-space align="center">
+        <div v-if="showRelayLatency" class="relay-latency" :class="relayLatencyClass">
+          <span class="relay-wifi" aria-hidden="true">
+            <span class="relay-wifi-bar relay-wifi-bar-1"></span>
+            <span class="relay-wifi-bar relay-wifi-bar-2"></span>
+            <span class="relay-wifi-bar relay-wifi-bar-3"></span>
+          </span>
+          <span class="relay-latency-text">{{ relayLatencyText }}</span>
+        </div>
         <n-select
           v-if="roomStore.isHost"
           v-model:value="connectionMode"
@@ -247,6 +255,28 @@ const canStart = computed(() => {
   return roomStore.allReady && playerCount >= minPlayers.value && !roomStore.isStartCooldown
 })
 
+const showRelayLatency = computed(() => {
+  if (roomStore.isHost) return Boolean(relayPublicAddress.value)
+  return roomStore.relayLatency?.mode === 'guest'
+})
+
+const relayLatencyValue = computed(() => roomStore.relayLatency?.latencyMs ?? null)
+
+const relayLatencyLevel = computed(() => {
+  const value = relayLatencyValue.value
+  if (value === null) return 0
+  if (value < 100) return 3
+  if (value < 200) return 2
+  return 1
+})
+
+const relayLatencyClass = computed(() => `relay-latency-level-${relayLatencyLevel.value}`)
+
+const relayLatencyText = computed(() => {
+  const value = relayLatencyValue.value
+  return value === null ? '-- ms' : `${Math.round(value)} ms`
+})
+
 const showConnectionAlert = computed(() => {
   return ['connecting', 'reconnecting', 'failed', 'disconnected'].includes(
     roomStore.connectionStatus
@@ -441,6 +471,72 @@ const handleKickPlayer = async (playerId: string) => {
 
 .room-alert {
   margin-top: 16px;
+}
+
+.relay-latency {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--n-border-color);
+  border-radius: 6px;
+  color: var(--n-text-color-2);
+  background: var(--n-color);
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.relay-wifi {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  width: 18px;
+  height: 14px;
+}
+
+.relay-wifi-bar {
+  width: 4px;
+  border-radius: 2px 2px 0 0;
+  background: currentColor;
+  opacity: 0.22;
+}
+
+.relay-wifi-bar-1 {
+  height: 5px;
+}
+
+.relay-wifi-bar-2 {
+  height: 9px;
+}
+
+.relay-wifi-bar-3 {
+  height: 13px;
+}
+
+.relay-latency-level-1 {
+  color: #d03050;
+}
+
+.relay-latency-level-2 {
+  color: #f0a020;
+}
+
+.relay-latency-level-3 {
+  color: #18a058;
+}
+
+.relay-latency-level-1 .relay-wifi-bar-1,
+.relay-latency-level-2 .relay-wifi-bar-1,
+.relay-latency-level-2 .relay-wifi-bar-2,
+.relay-latency-level-3 .relay-wifi-bar {
+  opacity: 1;
+}
+
+.relay-latency-text {
+  min-width: 42px;
+  text-align: right;
 }
 
 .room-content {

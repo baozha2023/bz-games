@@ -1,11 +1,14 @@
 import { WebSocket } from "ws";
 import crypto from "crypto";
-import { DEFAULT_RELAY_PUBLIC_HOST, DEFAULT_RELAY_SERVER_URL, DEFAULT_RELAY_TOKEN } from "../../../shared/constants";
+import { DEFAULT_RELAY_PUBLIC_HOST, DEFAULT_RELAY_SERVER_URL, DEFAULT_RELAY_TOKEN } from "../../../shared/AppConstants";
 import { roomServer } from "./RoomServer";
 import { storeService } from "../storage/StoreService";
 import { GameLoader } from "../game/GameLoader";
 import { decodeBinaryEnvelope, encodeBinaryEnvelope } from "../../../shared/binary-protocol";
-import type { RoomMessage } from "../../../shared/types";
+import type { RoomMessage, RoomRelayLatencyPayload } from "../../../shared/types";
+import { RoomConstants } from "../../../shared/RoomConstants";
+import { mainWindow } from "../../window";
+import { IPC } from "../../../shared/ipc-channels";
 
 export interface RelayHostResult {
   success: boolean;
@@ -15,7 +18,8 @@ export interface RelayHostResult {
 
 export class RelayRoomService {
   private ws: WebSocket | null = null;
-  private heartbeatTimer: NodeJS.Timeout | null = null;
+  private latencyTimer: NodeJS.Timeout | null = null;
+  private pendingLatencyProbes: Map<string, NodeJS.Timeout> = new Map();
   private relayRoomId = "";
 
   async enableHostRoom(): Promise<RelayHostResult> {
@@ -75,7 +79,7 @@ export class RelayRoomService {
         }
         roomServer.setStateSyncHandler(() => this.syncRoomState());
         roomServer.broadcastState();
-        this.startHeartbeat();
+        this.startLatencyProbe();
         ws.off("message", handleHostAck);
         ws.on("message", (relayData, isBinary) => this.handleRelayMessage(relayData, isBinary));
         resolve({
@@ -94,10 +98,7 @@ export class RelayRoomService {
   }
 
   disconnect() {
-    if (this.heartbeatTimer) {
-      clearInterval(this.heartbeatTimer);
-      this.heartbeatTimer = null;
-    }
+    this.stopLatencyProbe();
     if (this.ws) {
       if (this.ws.readyState === WebSocket.OPEN) {
         this.ws.send(JSON.stringify({ type: "relay:leave", payload: {} }));
@@ -115,11 +116,35 @@ export class RelayRoomService {
     this.ws.send(JSON.stringify({ type: "room:state:sync", payload: roomServer.room }));
   }
 
-  private startHeartbeat() {
-    this.heartbeatTimer = setInterval(() => {
-      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
-      this.ws.send(JSON.stringify({ type: "relay:heartbeat", payload: { roomId: this.relayRoomId } }));
-    }, 25000);
+  private startLatencyProbe() {
+    this.stopLatencyProbe(false);
+    this.sendLatencyProbe();
+    this.latencyTimer = setInterval(() => this.sendLatencyProbe(), RoomConstants.RELAY_LATENCY_REFRESH_INTERVAL_MS);
+  }
+
+  private stopLatencyProbe(emitOffline = true) {
+    if (this.latencyTimer) {
+      clearInterval(this.latencyTimer);
+      this.latencyTimer = null;
+    }
+    this.pendingLatencyProbes.forEach((timer) => clearTimeout(timer));
+    this.pendingLatencyProbes.clear();
+    if (emitOffline) this.emitLatency(null);
+  }
+
+  private sendLatencyProbe() {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    const probeId = crypto.randomUUID();
+    const sentAt = Date.now();
+    const timeout = setTimeout(() => {
+      this.pendingLatencyProbes.delete(probeId);
+      this.emitLatency(null);
+    }, RoomConstants.RELAY_LATENCY_TIMEOUT_MS);
+    this.pendingLatencyProbes.set(probeId, timeout);
+    this.ws.send(JSON.stringify({
+      type: "relay:latency:ping",
+      payload: { probeId, sentAt },
+    }));
   }
 
   private handleRelayMessage(data: WebSocket.RawData, isBinary: boolean) {
@@ -132,6 +157,14 @@ export class RelayRoomService {
         if (typeof playerId === "string") roomServer.disconnectRelayPlayer(playerId);
         return;
       }
+      if (message.type === "relay:latency:pong") {
+        this.handleLatencyPong(message.payload);
+        return;
+      }
+      if (message.type === "relay:latency:probe") {
+        this.replyLatencyProbe(message.payload);
+        return;
+      }
       if (message.type.startsWith("relay:")) return;
     }
     roomServer.handleRelayRawMessage(data, isBinary, (outgoing, targetPlayerId) => {
@@ -141,6 +174,43 @@ export class RelayRoomService {
         return;
       }
       this.ws.send(this.addRelayTargetToText(outgoing, targetPlayerId));
+    });
+  }
+
+  private handleLatencyPong(payload: any) {
+    const probeId = typeof payload?.probeId === "string" ? payload.probeId : "";
+    const sentAt = typeof payload?.sentAt === "number" ? payload.sentAt : 0;
+    const timeout = this.pendingLatencyProbes.get(probeId);
+    if (!timeout || !sentAt) return;
+    clearTimeout(timeout);
+    this.pendingLatencyProbes.delete(probeId);
+    this.emitLatency(Math.max(0, Date.now() - sentAt));
+  }
+
+  private replyLatencyProbe(payload: any) {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    const fromPlayerId = typeof payload?.fromPlayerId === "string" ? payload.fromPlayerId : "";
+    if (!fromPlayerId) return;
+    this.ws.send(JSON.stringify({
+      type: "relay:latency:pong",
+      __relayTo: fromPlayerId,
+      payload: {
+        probeId: payload?.probeId,
+        sentAt: payload?.sentAt,
+        fromPlayerId,
+      },
+    }));
+  }
+
+  private emitLatency(latencyMs: number | null) {
+    const payload: RoomRelayLatencyPayload = {
+      latencyMs,
+      mode: "host",
+      measuredAt: Date.now(),
+    };
+    mainWindow?.webContents.send(IPC.ROOM_EVENT, {
+      type: "room:relay:latency",
+      payload,
     });
   }
 

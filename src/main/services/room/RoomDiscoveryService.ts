@@ -6,7 +6,7 @@ import {
   LAN_DISCOVERY_PORT,
   LAN_DISCOVERY_QUERY,
   LAN_DISCOVERY_RESPONSE,
-} from "../../../shared/constants";
+} from "../../../shared/AppConstants";
 import type { DiscoveredRoom, RoomInfo, RoomJoinValidationResult } from "../../../shared/types";
 import { storeService } from "../storage/StoreService";
 import { roomServer } from "./RoomServer";
@@ -85,6 +85,19 @@ export class RoomDiscoveryService {
       return rooms.map((room) => this.withJoinValidation(this.withRelayAddress(room)));
     } catch {
       return [];
+    }
+  }
+
+  async measureRelayLatency(): Promise<number | null> {
+    const baseUrl = DEFAULT_RELAY_SERVER_URL.trim();
+    if (!baseUrl) return null;
+    try {
+      const startedAt = Date.now();
+      const response = await fetch(`${baseUrl.replace(/\/$/, "")}/health`);
+      if (!response.ok) return null;
+      return Math.max(0, Date.now() - startedAt);
+    } catch {
+      return null;
     }
   }
 

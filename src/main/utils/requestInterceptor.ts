@@ -1,5 +1,5 @@
 import type { Session } from "electron";
-import { CDN_BASE, GITHUB_API_BASE, GITHUB_RAW_BASE, OSS_BASE, REFERER } from "../../shared/constants";
+import { CDN_BASE, GITHUB_API_BASE, GITHUB_RAW_BASE, OSS_BASE, REFERER } from "../../shared/AppConstants";
 
 const REFERER_DOMAINS = [CDN_BASE, OSS_BASE] as const;
 

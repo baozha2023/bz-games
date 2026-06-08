@@ -139,6 +139,10 @@ export function registerRoomIpc() {
     return await roomDiscoveryService.discoverRelayRooms();
   });
 
+  ipcMain.handle(IPC.ROOM_MEASURE_RELAY_LATENCY, async () => {
+    return await roomDiscoveryService.measureRelayLatency();
+  });
+
   ipcMain.handle(IPC.ROOM_VALIDATE_DISCOVERED, async (_, room: DiscoveredRoom) => {
     return roomDiscoveryService.validateDiscoveredRoom(room);
   });

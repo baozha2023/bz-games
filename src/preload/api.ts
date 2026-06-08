@@ -120,6 +120,8 @@ export const electronAPI = {
       ipcRenderer.invoke(IPC.ROOM_DISCOVER_LAN),
     discoverRelay: (): Promise<DiscoveredRoom[]> =>
       ipcRenderer.invoke(IPC.ROOM_DISCOVER_RELAY),
+    measureRelayLatency: (): Promise<number | null> =>
+      ipcRenderer.invoke(IPC.ROOM_MEASURE_RELAY_LATENCY),
     validateDiscovered: (room: DiscoveredRoom) =>
       ipcRenderer.invoke(IPC.ROOM_VALIDATE_DISCOVERED, room),
     enableRelayHost: () =>

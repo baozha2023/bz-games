@@ -22,14 +22,7 @@
           </template>
           <template v-else>
             <div class="message-header">
-              <NicknameText
-                class="sender"
-                :class="{ 'is-me': msg.senderId === settingsStore.settings?.playerId }"
-                :name="msg.senderName"
-                :nickname-style="msg.senderStyle"
-                :effective-theme="settingsStore.effectiveTheme"
-                :size="13"
-              />
+              <span class="sender" :class="{ 'is-me': msg.senderId === settingsStore.settings?.playerId }">{{ msg.senderName }}</span>
               <span class="time">{{ formatTime(msg.timestamp) }}</span>
             </div>
             <div class="message-content">
@@ -96,7 +89,6 @@ import { useI18n } from 'vue-i18n'
 import { useRoomStore } from '../../stores/useRoomStore'
 import { useSettingsStore } from '../../stores/useSettingsStore'
 import ImageViewer from './ImageViewer.vue'
-import NicknameText from '../NicknameText.vue'
 import GameReportCard from './GameReportCard.vue'
 import type { ChatPayload } from '../../../../shared/types'
 
@@ -286,9 +278,13 @@ watch(() => roomStore.chatMessages.length, () => {
 }
 .sender {
   max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #333;
 }
 .sender.is-me {
-  filter: brightness(1.08);
+  color: #389e0d;
 }
 .time {
   color: var(--bz-chat-text-system);
@@ -297,6 +293,7 @@ watch(() => roomStore.chatMessages.length, () => {
 .message-content {
   word-break: break-word;
   white-space: pre-wrap;
+  color: var(--bz-text-title);
 }
 
 .message-text {

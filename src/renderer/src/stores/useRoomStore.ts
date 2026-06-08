@@ -8,6 +8,7 @@ import type {
   ChatPayload,
   RoomConnectionStatus,
   RoomConnectionStatusPayload,
+  RoomRelayLatencyPayload,
 } from "../../../shared/types";
 import { useSettingsStore } from "./useSettingsStore";
 
@@ -26,6 +27,7 @@ export const useRoomStore = defineStore("room", () => {
   const connectionReason = ref("");
   const reconnectAttempts = ref(0);
   const reconnectCountdownSec = ref(0);
+  const relayLatency = ref<RoomRelayLatencyPayload | null>(null);
   let startCooldownTimer: number | null = null;
   let reconnectCountdownTimer: number | null = null;
 
@@ -45,6 +47,7 @@ export const useRoomStore = defineStore("room", () => {
     const { port } = await window.electronAPI.room.create(gameId, version);
     room.value = await window.electronAPI.room.getState();
     chatMessages.value = [];
+    relayLatency.value = null;
     return port;
   }
 
@@ -59,6 +62,7 @@ export const useRoomStore = defineStore("room", () => {
           room.value = state;
         }
         chatMessages.value = [];
+        relayLatency.value = null;
       }
       return res;
     } finally {
@@ -71,6 +75,7 @@ export const useRoomStore = defineStore("room", () => {
     room.value = null;
     chatMessages.value = [];
     isStartCooldown.value = false;
+    relayLatency.value = null;
     resetConnectionStatus();
     if (startCooldownTimer) {
       window.clearTimeout(startCooldownTimer);
@@ -137,6 +142,7 @@ export const useRoomStore = defineStore("room", () => {
     connectionReason.value = "";
     reconnectAttempts.value = 0;
     reconnectCountdownSec.value = 0;
+    relayLatency.value = null;
     clearReconnectCountdown();
   }
 
@@ -170,6 +176,8 @@ export const useRoomStore = defineStore("room", () => {
       connectionReason.value = payload.reason || "";
       reconnectAttempts.value = payload.attempts;
       startReconnectCountdown(payload.nextRetryMs);
+    } else if (event.type === "room:relay:latency") {
+      relayLatency.value = event.payload as RoomRelayLatencyPayload;
     } else if (event.type === "room:player:joined") {
       const payload = event.payload as PlayerInRoom;
       chatMessages.value.push({
@@ -204,11 +212,13 @@ export const useRoomStore = defineStore("room", () => {
       room.value = null;
       chatMessages.value = [];
       isStartCooldown.value = false;
+      relayLatency.value = null;
       resetConnectionStatus();
     } else if (event.type === "room:kicked") {
       room.value = null;
       chatMessages.value = [];
       isStartCooldown.value = false;
+      relayLatency.value = null;
       resetConnectionStatus();
     } else if (event.type === "room:player:kicked") {
       const payload = event.payload as { playerId: string; name?: string };
@@ -241,6 +251,7 @@ export const useRoomStore = defineStore("room", () => {
     connectionReason,
     reconnectAttempts,
     reconnectCountdownSec,
+    relayLatency,
     localPlayerId,
     isHost,
     isStartCooldown,

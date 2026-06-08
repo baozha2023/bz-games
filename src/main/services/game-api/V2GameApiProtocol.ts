@@ -6,7 +6,7 @@ import type { GameApiServer } from "./GameApiServer";
 import { storeService } from "../storage/StoreService";
 import { roomServer } from "../room/RoomServer";
 import { roomClient } from "../room/RoomClient";
-import { RoomCommunicationConstants } from "../room/RoomCommunicationConstants";
+import { RoomConstants } from "../../../shared/RoomConstants";
 
 type BinaryRelayPayload = GameRelayPayload & { binaryData?: Buffer };
 
@@ -37,11 +37,11 @@ export class V2GameApiProtocol {
   }
 
   handleBinaryRequest(ws: WebSocket, data: Buffer) {
-    if (data.length > RoomCommunicationConstants.GAME_API_MAX_BINARY_BYTES) {
+    if (data.length > RoomConstants.GAME_API_MAX_BINARY_BYTES) {
       this.server.sendError(ws, "", "message.publish", {
         code: GameApiErrorCode.MessageTooLarge,
         message: "Binary message payload is too large",
-        detail: { maxBinaryBytes: RoomCommunicationConstants.GAME_API_MAX_BINARY_BYTES },
+        detail: { maxBinaryBytes: RoomConstants.GAME_API_MAX_BINARY_BYTES },
       });
       return;
     }
@@ -146,11 +146,11 @@ export class V2GameApiProtocol {
       });
       return;
     }
-    if (messages.length > RoomCommunicationConstants.GAME_API_MAX_BATCH_MESSAGES) {
+    if (messages.length > RoomConstants.GAME_API_MAX_BATCH_MESSAGES) {
       this.server.sendError(ws, req.id, req.action, {
         code: GameApiErrorCode.BatchTooLarge,
         message: "Too many messages in batch",
-        detail: { maxBatchMessages: RoomCommunicationConstants.GAME_API_MAX_BATCH_MESSAGES },
+        detail: { maxBatchMessages: RoomConstants.GAME_API_MAX_BATCH_MESSAGES },
       });
       return;
     }
@@ -267,7 +267,7 @@ export class V2GameApiProtocol {
   }
 
   private looksLikeBase64(value: string) {
-    return value.length > RoomCommunicationConstants.BASE64_DETECTION_MIN_LENGTH && /^[A-Za-z0-9+/]+={0,2}$/.test(value);
+    return value.length > RoomConstants.BASE64_DETECTION_MIN_LENGTH && /^[A-Za-z0-9+/]+={0,2}$/.test(value);
   }
 
   private handleSubscribe(ws: WebSocket, req: GameApiRequest) {

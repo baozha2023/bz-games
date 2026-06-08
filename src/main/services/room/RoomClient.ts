@@ -7,17 +7,19 @@ import type {
   RoomInfo,
   RoomConnectionStatusPayload,
   GameRelayPayload,
+  RoomRelayLatencyPayload,
 } from "../../../shared/types";
 import { storeService } from "../storage/StoreService";
 import { mainWindow } from "../../window";
 import { sendRoomEventToChat } from "../../chat-window";
 import { IPC } from "../../../shared/ipc-channels";
+import crypto from "crypto";
 import {
   decodeBinaryEnvelope,
   encodeBinaryEnvelope,
 } from "../../../shared/binary-protocol";
-import { RoomCommunicationConstants } from "./RoomCommunicationConstants";
-import { DEFAULT_RELAY_PUBLIC_HOST, DEFAULT_RELAY_SERVER_URL, DEFAULT_RELAY_TOKEN } from "../../../shared/constants";
+import { RoomConstants } from "../../../shared/RoomConstants";
+import { DEFAULT_RELAY_PUBLIC_HOST, DEFAULT_RELAY_SERVER_URL, DEFAULT_RELAY_TOKEN } from "../../../shared/AppConstants";
 
 type ConnectResult = { success: boolean; error?: string; message?: string };
 type BinaryRelayPayload = GameRelayPayload & { binaryData?: Buffer };
@@ -36,7 +38,9 @@ export class RoomClient {
   private relayMode = false;
   private relayRoomCode = "";
   private relayHostId = "";
-  private readonly maxReconnectAttempts = RoomCommunicationConstants.ROOM_MAX_RECONNECT_ATTEMPTS;
+  private latencyTimer: NodeJS.Timeout | null = null;
+  private pendingLatencyProbes: Map<string, NodeJS.Timeout> = new Map();
+  private readonly maxReconnectAttempts = RoomConstants.ROOM_MAX_RECONNECT_ATTEMPTS;
 
   private connectionResolver: ((result: ConnectResult) => void) | null = null;
   private msgHandler: ((gameId: string, msg: RoomMessage) => void) | null =
@@ -97,7 +101,7 @@ export class RoomClient {
           this.cleanup();
           this.resolveConnection({ success: false, error: "连接超时 (15s)" });
         }
-      }, RoomCommunicationConstants.ROOM_CONNECT_TIMEOUT_MS);
+      }, RoomConstants.ROOM_CONNECT_TIMEOUT_MS);
     });
   }
 
@@ -181,6 +185,7 @@ export class RoomClient {
       });
       this.resolveConnection({ success: false, error: "Closed before join" });
     }
+    this.stopLatencyProbe();
     if (shouldReconnect) {
       this.scheduleReconnect();
     } else {
@@ -227,6 +232,10 @@ export class RoomClient {
           this.cleanup();
           return;
         }
+        if (relayMsg.type === "relay:latency:pong" as RoomMessage["type"]) {
+          this.handleLatencyPong(relayMsg.payload);
+          return;
+        }
       }
       const msg = this.deserializeRoomMessage(data, isBinary);
       if (!msg) return;
@@ -268,6 +277,7 @@ export class RoomClient {
       this.relayHostId = this.relayMode ? ack.room.hostId : "";
       this.hasJoinedRoom = true;
       this.reconnectAttempts = 0;
+      if (this.relayMode) this.startLatencyProbe();
       this.emitConnectionStatus({
         status: "connected",
         attempts: 0,
@@ -292,6 +302,7 @@ export class RoomClient {
         this.relayHostId = this.relayMode ? state.hostId : "";
         this.hasJoinedRoom = true;
         this.reconnectAttempts = 0;
+        if (this.relayMode) this.startLatencyProbe();
         this.emitConnectionStatus({
           status: "connected",
           attempts: 0,
@@ -357,7 +368,7 @@ export class RoomClient {
     if (!messageId || this.recentMessageIdSet.has(messageId)) return;
     this.recentMessageIds.push(messageId);
     this.recentMessageIdSet.add(messageId);
-    while (this.recentMessageIds.length > RoomCommunicationConstants.MAX_RECENT_MESSAGE_IDS) {
+    while (this.recentMessageIds.length > RoomConstants.MAX_RECENT_MESSAGE_IDS) {
       const expired = this.recentMessageIds.shift();
       if (expired) this.recentMessageIdSet.delete(expired);
     }
@@ -366,6 +377,68 @@ export class RoomClient {
   private resetRelayState() {
     this.recentMessageIds = [];
     this.recentMessageIdSet.clear();
+  }
+
+  private startLatencyProbe() {
+    if (!this.relayMode || this.latencyTimer) return;
+    this.sendLatencyProbe();
+    this.latencyTimer = setInterval(() => this.sendLatencyProbe(), RoomConstants.RELAY_LATENCY_REFRESH_INTERVAL_MS);
+  }
+
+  private stopLatencyProbe(emitOffline = true) {
+    const wasRunning = Boolean(this.latencyTimer || this.pendingLatencyProbes.size > 0);
+    if (this.latencyTimer) {
+      clearInterval(this.latencyTimer);
+      this.latencyTimer = null;
+    }
+    this.pendingLatencyProbes.forEach((timer) => clearTimeout(timer));
+    this.pendingLatencyProbes.clear();
+    if (emitOffline && wasRunning) this.emitLatency(null);
+  }
+
+  private sendLatencyProbe() {
+    if (!this.relayMode || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    const hostId = this.getRelayHostId();
+    if (!hostId) return;
+    const settings = storeService.getSettings();
+    const probeId = crypto.randomUUID();
+    const sentAt = Date.now();
+    const timeout = setTimeout(() => {
+      this.pendingLatencyProbes.delete(probeId);
+      this.emitLatency(null);
+    }, RoomConstants.RELAY_LATENCY_TIMEOUT_MS);
+    this.pendingLatencyProbes.set(probeId, timeout);
+    this.sendRaw({
+      type: "relay:latency:probe",
+      payload: {
+        probeId,
+        sentAt,
+        fromPlayerId: settings.playerId,
+        __relayTo: hostId,
+      },
+    });
+  }
+
+  private handleLatencyPong(payload: any) {
+    const probeId = typeof payload?.probeId === "string" ? payload.probeId : "";
+    const sentAt = typeof payload?.sentAt === "number" ? payload.sentAt : 0;
+    const timeout = this.pendingLatencyProbes.get(probeId);
+    if (!timeout || !sentAt) return;
+    clearTimeout(timeout);
+    this.pendingLatencyProbes.delete(probeId);
+    this.emitLatency(Math.max(0, Date.now() - sentAt));
+  }
+
+  private emitLatency(latencyMs: number | null) {
+    const payload: RoomRelayLatencyPayload = {
+      latencyMs,
+      mode: "guest",
+      measuredAt: Date.now(),
+    };
+    mainWindow?.webContents.send(IPC.ROOM_EVENT, {
+      type: "room:relay:latency",
+      payload,
+    });
   }
 
   private resolveConnection(result: ConnectResult) {
@@ -411,6 +484,7 @@ export class RoomClient {
 
   private cleanup() {
     this.clearReconnectTimer();
+    this.stopLatencyProbe();
     if (this.ws) {
       this.ws.removeAllListeners();
       this.ws.close();
@@ -441,8 +515,8 @@ export class RoomClient {
     this.clearReconnectTimer();
     this.reconnectAttempts += 1;
     const delay = Math.min(
-      this.reconnectAttempts * RoomCommunicationConstants.ROOM_RECONNECT_BASE_DELAY_MS,
-      RoomCommunicationConstants.ROOM_RECONNECT_MAX_DELAY_MS,
+      this.reconnectAttempts * RoomConstants.ROOM_RECONNECT_BASE_DELAY_MS,
+      RoomConstants.ROOM_RECONNECT_MAX_DELAY_MS,
     );
     this.emitConnectionStatus({
       status: "reconnecting",
@@ -501,10 +575,10 @@ export class RoomClient {
 
   private deserializeRoomMessage(data: WebSocket.RawData, isBinary: boolean): RoomMessage | null {
     const rawData = this.rawDataToBuffer(data);
-    if (rawData.byteLength > RoomCommunicationConstants.MAX_ROOM_MESSAGE_BYTES) return null;
+    if (rawData.byteLength > RoomConstants.MAX_ROOM_MESSAGE_BYTES) return null;
     if (!isBinary) {
       const msg = JSON.parse(rawData.toString()) as RoomMessage;
-      if (this.isGameRelayMessage(msg) && rawData.byteLength > RoomCommunicationConstants.MAX_GAME_RELAY_MESSAGE_BYTES) {
+      if (this.isGameRelayMessage(msg) && rawData.byteLength > RoomConstants.MAX_GAME_RELAY_MESSAGE_BYTES) {
         return null;
       }
       return msg;
@@ -513,7 +587,7 @@ export class RoomClient {
     if (!decoded) return null;
     if (
       this.isGameRelayMessage(decoded.header) &&
-      rawData.byteLength > RoomCommunicationConstants.MAX_GAME_RELAY_MESSAGE_BYTES
+      rawData.byteLength > RoomConstants.MAX_GAME_RELAY_MESSAGE_BYTES
     ) {
       return null;
     }

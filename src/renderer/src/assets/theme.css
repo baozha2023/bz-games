@@ -11,6 +11,10 @@
 }
 
 .theme-dark {
+  --bz-bg: #1a1a1a;
+  --bz-border: #333;
+  --bz-bg-hover: rgba(255, 255, 255, 0.08);
+  --bz-border-hover: #555;
   --bz-bg-card-placeholder: #333;
   --bz-bg-placeholder: #555;
   --bz-text-secondary: #666;
@@ -21,14 +25,37 @@
   --bz-bg-panel: rgba(255, 255, 255, 0.1);
   --bz-bg-overlay: rgba(0, 0, 0, 0.1);
   --bz-bg-subtle: rgba(255, 255, 255, 0.05);
-  --bz-bg-chat-bubble: #e0e0e0;
-  --bz-bg-chat-bubble-hover: #d0d0d0;
+  --bz-bg-chat-bubble: #3a3a3a;
+  --bz-bg-chat-bubble-hover: #4a4a4a;
   --bz-icon-locked: #ccc;
   --bz-chat-text-system: #999;
   --bz-delete-warning: #888;
+  scrollbar-color: #555 #2a2a2a;
+}
+
+.theme-dark ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.theme-dark ::-webkit-scrollbar-track {
+  background: #2a2a2a;
+}
+
+.theme-dark ::-webkit-scrollbar-thumb {
+  background: #555;
+  border-radius: 4px;
+}
+
+.theme-dark ::-webkit-scrollbar-thumb:hover {
+  background: #666;
 }
 
 .theme-light {
+  --bz-bg: #fff;
+  --bz-border: #e0e0e0;
+  --bz-bg-hover: rgba(0, 0, 0, 0.04);
+  --bz-border-hover: #bbb;
   --bz-bg-card-placeholder: #f0f0f0;
   --bz-bg-placeholder: #ddd;
   --bz-text-secondary: #666;
@@ -44,4 +71,23 @@
   --bz-icon-locked: #bbb;
   --bz-chat-text-system: #888;
   --bz-delete-warning: #777;
+  scrollbar-color: #c1c1c1 #f0f0f0;
+}
+
+.theme-light ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.theme-light ::-webkit-scrollbar-track {
+  background: #f0f0f0;
+}
+
+.theme-light ::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+.theme-light ::-webkit-scrollbar-thumb:hover {
+  background: #a0a0a0;
 }

@@ -1,4 +1,4 @@
-export class RoomCommunicationConstants {
+export class RoomConstants {
   // 最近已处理游戏中继消息 ID 的保留数量，用于去重并限制内存占用。
   static readonly MAX_RECENT_MESSAGE_IDS = 1000;
 
@@ -19,6 +19,10 @@ export class RoomCommunicationConstants {
 
   // 客户端断线后的最大自动重连次数。
   static readonly ROOM_MAX_RECONNECT_ATTEMPTS = 5;
+
+  static readonly RELAY_LATENCY_REFRESH_INTERVAL_MS = 10_000;
+
+  static readonly RELAY_LATENCY_TIMEOUT_MS = 5_000;
 
   // 客户端自动重连的基础退避时间，每次重连按 attempts * base 计算。
   static readonly ROOM_RECONNECT_BASE_DELAY_MS = 2_000;

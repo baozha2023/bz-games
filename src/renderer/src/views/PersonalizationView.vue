@@ -118,7 +118,7 @@
             </n-alert>
             <n-form label-placement="left" label-width="120">
               <n-form-item :label="t('personalization.nicknameColor')">
-                <n-color-picker v-model:value="nicknameStyleForm.color" :show-alpha="false" />
+                <n-color-picker v-model:value="nicknameStyleForm.color" :show-alpha="false" :modes="['hex']" />
               </n-form-item>
               <n-alert v-if="!canSaveNicknameStyle" type="warning" class="nickname-style-tip">
                 {{ t('personalization.nicknameColorContrastWarning') }}
@@ -134,10 +134,10 @@
               </n-form-item>
               <template v-if="supportsGradient">
                 <n-form-item :label="t('personalization.gradientStart')">
-                  <n-color-picker v-model:value="nicknameStyleForm.gradientStart" :show-alpha="false" />
+                  <n-color-picker v-model:value="nicknameStyleForm.gradientStart" :show-alpha="false" :modes="['hex']" />
                 </n-form-item>
                 <n-form-item :label="t('personalization.gradientEnd')">
-                  <n-color-picker v-model:value="nicknameStyleForm.gradientEnd" :show-alpha="false" />
+                  <n-color-picker v-model:value="nicknameStyleForm.gradientEnd" :show-alpha="false" :modes="['hex']" />
                 </n-form-item>
               </template>
               <n-space justify="end">

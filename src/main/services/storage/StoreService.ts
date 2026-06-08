@@ -22,7 +22,7 @@ import {
   CONFIG_ENCRYPTION_SEED,
   PLAYTIME_REWARD_AMOUNT,
   PLAYTIME_REWARD_INTERVAL_MS,
-} from "../../../shared/constants";
+} from "../../../shared/AppConstants";
 
 const defaultSettings: AppSettings = {
   playerName: "玩家",

@@ -115,8 +115,13 @@ function handleTextMessage(client, message, rawText) {
     removeClient(client);
     return;
   }
-  if (message.type === "relay:heartbeat") {
+  if (message.type === "relay:latency:ping") {
+    send(client.ws, { type: "relay:latency:pong", payload: message.payload || {} });
     touchRoom(client.roomId);
+    return;
+  }
+  if (message.type === "relay:latency:probe" || message.type === "relay:latency:pong") {
+    forwardText(client, message, rawText);
     return;
   }
   if (handleRoomControlMessage(client, message)) return;

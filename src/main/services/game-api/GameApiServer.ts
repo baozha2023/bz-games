@@ -25,7 +25,7 @@ import { GameLoader } from "../game/GameLoader";
 import { encodeBinaryEnvelope } from "../../../shared/binary-protocol";
 import { V1GameApiProtocol } from "./V1GameApiProtocol";
 import { V2GameApiProtocol } from "./V2GameApiProtocol";
-import { RoomCommunicationConstants } from "../room/RoomCommunicationConstants";
+import { RoomConstants } from "../../../shared/RoomConstants";
 
 type BinaryRelayPayload = GameRelayPayload & { binaryData?: Buffer };
 type GameApiProtocolVersion = 1 | 2;
@@ -74,7 +74,7 @@ export class GameApiServer {
       if (this.clients.size === 0) {
         this.triggerStop();
       }
-    }, RoomCommunicationConstants.GAME_API_STARTUP_TIMEOUT_MS);
+    }, RoomConstants.GAME_API_STARTUP_TIMEOUT_MS);
   }
 
   private handleConnection(ws: WebSocket) {
@@ -87,7 +87,7 @@ export class GameApiServer {
       if (!authenticated) {
         ws.close();
       }
-    }, RoomCommunicationConstants.GAME_API_AUTH_TIMEOUT_MS);
+    }, RoomConstants.GAME_API_AUTH_TIMEOUT_MS);
 
     ws.on("ping", () => ws.pong());
 
@@ -99,12 +99,12 @@ export class GameApiServer {
           return;
         }
         const rawData = data.toString();
-        if (Buffer.byteLength(rawData, "utf8") > RoomCommunicationConstants.GAME_API_MAX_MESSAGE_BYTES) {
+        if (Buffer.byteLength(rawData, "utf8") > RoomConstants.GAME_API_MAX_MESSAGE_BYTES) {
           if (authenticated) {
             this.sendError(ws, "", "message.publish", {
               code: GameApiErrorCode.MessageTooLarge,
               message: "Message payload is too large",
-              detail: { maxMessageBytes: RoomCommunicationConstants.GAME_API_MAX_MESSAGE_BYTES },
+              detail: { maxMessageBytes: RoomConstants.GAME_API_MAX_MESSAGE_BYTES },
             });
           }
           return;
@@ -156,7 +156,7 @@ export class GameApiServer {
         protocolVersion,
         capabilities: protocolVersion === 2 ? this.getCapabilities() : undefined,
       });
-      this.channelSubscriptions.set(ws, new Set([RoomCommunicationConstants.GAME_API_CHANNEL_ALL]));
+      this.channelSubscriptions.set(ws, new Set([RoomConstants.GAME_API_CHANNEL_ALL]));
       this.protocolVersions.set(ws, protocolVersion);
       return true;
     } else {
@@ -238,9 +238,9 @@ export class GameApiServer {
     return {
       protocolVersion: 2,
       protocolName: "bz-game-api-v2",
-      maxMessageBytes: RoomCommunicationConstants.GAME_API_MAX_MESSAGE_BYTES,
-      maxBinaryBytes: RoomCommunicationConstants.GAME_API_MAX_BINARY_BYTES,
-      maxBatchMessages: RoomCommunicationConstants.GAME_API_MAX_BATCH_MESSAGES,
+      maxMessageBytes: RoomConstants.GAME_API_MAX_MESSAGE_BYTES,
+      maxBinaryBytes: RoomConstants.GAME_API_MAX_BINARY_BYTES,
+      maxBatchMessages: RoomConstants.GAME_API_MAX_BATCH_MESSAGES,
       supportsPublish: true,
       supportsBatch: true,
       supportsAck: true,
@@ -474,7 +474,7 @@ export class GameApiServer {
   private scheduleShutdown() {
     this.shutdownTimer = setTimeout(() => {
       this.triggerStop();
-    }, RoomCommunicationConstants.GAME_API_SHUTDOWN_DELAY_MS);
+    }, RoomConstants.GAME_API_SHUTDOWN_DELAY_MS);
   }
 
   private clearTimers() {
@@ -535,7 +535,7 @@ export class GameApiServer {
     if (!payload.channel) return true;
     const channels = this.channelSubscriptions.get(ws);
     if (!channels || channels.size === 0) return true;
-    return channels.has(RoomCommunicationConstants.GAME_API_CHANNEL_ALL) || channels.has(payload.channel);
+    return channels.has(RoomConstants.GAME_API_CHANNEL_ALL) || channels.has(payload.channel);
   }
 
   private stripBinaryData<T>(payload: T): T {

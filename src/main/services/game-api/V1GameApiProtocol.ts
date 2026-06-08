@@ -5,7 +5,7 @@ import type { GameApiServer } from "./GameApiServer";
 import { storeService } from "../storage/StoreService";
 import { roomServer } from "../room/RoomServer";
 import { roomClient } from "../room/RoomClient";
-import { RoomCommunicationConstants } from "../room/RoomCommunicationConstants";
+import { RoomConstants } from "../../../shared/RoomConstants";
 
 type BinaryRelayPayload = GameRelayPayload & { binaryData?: Buffer };
 
@@ -139,7 +139,7 @@ export class V1GameApiProtocol {
   }
 
   private looksLikeBase64(value: string) {
-    return value.length > RoomCommunicationConstants.BASE64_DETECTION_MIN_LENGTH && /^[A-Za-z0-9+/]+={0,2}$/.test(value);
+    return value.length > RoomConstants.BASE64_DETECTION_MIN_LENGTH && /^[A-Za-z0-9+/]+={0,2}$/.test(value);
   }
 
   private resolveTargetPlayerId(payload: Record<string, unknown>) {

@@ -121,7 +121,6 @@ bz-games/
 │   │   │   ├── room/
 │   │   │   │   ├── RelayRoomService.ts    # 房主侧官方中继接入、短地址注册、relay bridge
 │   │   │   │   ├── RoomClient.ts          # 客机房间连接与重连管理（支持 v2 二进制帧中继）
-│   │   │   │   ├── RoomCommunicationConstants.ts # 房间通信常量集中管理（消息大小、心跳间隔、超时等）
 │   │   │   │   ├── RoomDiscoveryService.ts # 局域网/官方中继房间发现与加入前校验
 │   │   │   │   └── RoomServer.ts          # 房主房间服务与消息中继（支持 v2 二进制帧中继、ordered delivery）
 │   │   │   ├── market/
@@ -203,7 +202,8 @@ bz-games/
 │   │
 │   └── shared/
 │       ├── avatar-frames.ts                # 头像框定义数据（8款头像框的解锁条件与图片文件名）
-│       ├── constants.ts                    # 平台常量（CDN/OSS/GitHub/官方中继参数/LAN发现/游玩奖励/悬浮球/DB路径，值由 electron.vite.config.ts 构建期注入 private-build.config.json）
+│       ├── AppConstants.ts                 # 平台构建期常量（CDN/OSS/GitHub/官方中继参数/LAN发现/游玩奖励/悬浮球/DB路径，值由 electron.vite.config.ts 构建期注入 private-build.config.json）
+│       ├── RoomConstants.ts                # 房间通信与 Game API 常量（消息大小限制、心跳间隔、重连/延迟探测定时器等）
 │       ├── binary-protocol.ts              # v2 二进制帧编码/解码工具（4字节头长度 + JSON header + binary body）
 │       ├── game-manifest.ts                # Game Manifest Schema 与类型
 │       ├── ipc-channels.ts                 # IPC 频道常量定义
@@ -765,7 +765,7 @@ interface AppSettings {
     - 构造函数注入 `getTokenFn` 回调（惰性读取 `settings.githubToken`），避免静态导入 `StoreService` 造成循环依赖。
     - `buildHeaders(url, extra)` 方法为 fetch 请求构建 headers：CDN/OSS 域名自动加 `Referer`、GitHub API/Raw 域名检测 `githubToken` 并注入 `Authorization: Bearer <token>`。
     - `registerSessionHandler(session)` 方法在 `app.whenReady` 中注册 Electron 全局拦截器，覆盖 `<img>` 标签等非 fetch 请求。
-    - `constants.ts` 集中定义 `CDN_BASE`、`OSS_BASE`、`GITHUB_API_BASE`、`GITHUB_RAW_BASE`、`REFERER` 五个常量，供 `MarketService` 和 `requestInterceptor` 共享。
+    - `AppConstants.ts` 集中定义 `CDN_BASE`、`OSS_BASE`、`GITHUB_API_BASE`、`GITHUB_RAW_BASE`、`REFERER` 五个常量，供 `MarketService` 和 `requestInterceptor` 共享。
 - **CalendarHeatmap 日历热力图组件**：
     - 纯 Vue 3 + CSS Grid 实现，不依赖第三方图表库，渲染 GitHub 贡献墙风格的 7×53+ 格子日历。
     - 颜色渐变 5 档（空 → `#39d353` → `#26a641` → `#006d32` → `#0e4429`），图例标注"少 ↔ 多"。
@@ -796,12 +796,13 @@ interface AppSettings {
 
 - **官方中继联机系统**：
     - **公网入口模型**：局域网联机始终可用；房间页的 frp/官方服务器选择只决定公网入口。frp 由用户自备映射到本地 `RoomServer`，官方服务器由房主连接 `RelayRoomService` 注册短地址。
-    - **中继服务职责**：`relay-server/src/index.js` 处理 `relay:host`、`relay:join`、`relay:leave`、`relay:heartbeat` 等控制信令；RoomMessage、Game API v1 JSON 和 Game API v2 binary frame 均透明转发。中继服务端使用 `roomId` 管理内部房间，只发送和识别 `roomCode`。
+    - **中继服务职责**：`relay-server/src/index.js` 处理 `relay:host`、`relay:join`、`relay:leave`、`relay:latency:ping`、`relay:latency:probe`、`relay:latency:pong` 等控制信令；RoomMessage、Game API v1 JSON 和 Game API v2 binary frame 均透明转发。中继服务端使用 `roomId` 管理内部房间，只发送和识别 `roomCode`。
     - **短地址加入**：房主注册成功后服务端返回 `roomCode`；平台按 `DEFAULT_RELAY_PUBLIC_HOST + roomCode` 拼接短地址。平台展示、复制、服务器 Tab 和手动输入统一使用短地址；客机 `RoomClient` 识别短地址后提取 `roomCode`，连接 `DEFAULT_RELAY_SERVER_URL` 并发送 `relay:join`，收到 `relay:join:ack` 后再发送标准 `room:join`。
     - **加入入口统一**：服务器 Tab 与游戏详情页手动地址加入共用 `useRoomJoin.ts`，地址标准化、短地址识别、加入调用、错误提示保持一致；服务器列表按钮状态用于展示，真实连接结果由 `RoomClient` 与 `RoomServer` 决定。
     - **校验集中化**：客机最终进入房主本地 `RoomServer.handleJoin()`，统一执行 kickedPlayers、人数、房间状态、gameId、gameVersion 校验。
     - **relay bridge**：`RelayRoomService` 将中继收到的原始 text/binary 帧交给 `RoomServer.handleRelayRawMessage()`，房主返回给 relay 客机的消息追加 `__relayTo` 路由字段；binary frame 只重封 header，body 原样保留。
-    - **状态同步与幽灵房间防护**：`RoomServer.broadcastState()` 触发 `RelayRoomService.syncRoomState()`；中继服务端根据房主发送的无目标 `room:state:sync` 更新 `/rooms` 中的状态、人数、游戏名、版本等元信息；带 `__relayTo` 的 `room:state:sync` 继续按目标转发给对应玩家。房主断开、房主解散、房间 TTL 过期时通过 `closeRoom()` 清理房间和连接。
+    - **中继延迟测量**：房主每 10 秒通过 `RelayRoomService` 发送 `relay:latency:ping` 到中继服务器，服务器立即回复 `relay:latency:pong` 计算单向 RTT（`RELAY_LATENCY_REFRESH_INTERVAL_MS` = 10s，`RELAY_LATENCY_TIMEOUT_MS` = 5s 超时）。客机同样每 10 秒发送 `relay:latency:probe` → 中继转发至房主 → 房主回复 `relay:latency:pong` → 中继转发回客机，计算总往返延迟。延迟测量同时承担保活功能（`touchRoom` 刷新 TTL），已移除冗余的 `relay:heartbeat`（25s）定时器。房间内右上角 WiFi 风格 UI 显示延迟：房主显示到中继的延迟，客机显示经中继到房主的总延迟；发现页 Server Tab 描述横幅显示到中继服务器的 HTTP 延迟（通过 `/health` 端点测量）。
+    - **状态同步与幽灵房间防护**：`RoomServer.broadcastState()` 触发 `RelayRoomService.syncRoomState()`；中继服务端根据房主发送的无目标 `room:state:sync` 更新 `/rooms` 中的状态、人数、游戏名、版本等元信息；带 `__relayTo` 的 `room:state:sync` 继续按目标转发给对应玩家。房主断开、房主解散、房间 60s 无活动（`ROOM_TTL_MS`）时通过 `closeRoom()` 清理房间和连接。WebSocket 层 30s ping/pong 检测死连接。
     - **中继加入拦截**：中继服务端在 `relay:join` 阶段拒绝房主离线、已开始、满员和加入自己房间等请求；房主本地 `RoomServer.handleJoin()` 继续执行最终业务校验。
     - **容量保护**：官方中继通过 `MAX_ROOMS`、`MAX_CLIENTS`、`MAX_CLIENTS_PER_ROOM`、`MAX_EVENT_LOOP_DELAY_MS` 控制新房间与新玩家接入。
     - **切换安全**：房主切换 frp/官方服务器公网入口前必须先通知当前其他玩家离开并清理连接；官方服务器注册失败时 UI 回退到 frp 状态。
@@ -829,8 +830,9 @@ interface AppSettings {
 ### 5.6 CSS 变量主题系统
 
 - **语义变量**：`theme.css` 定义全局 `:root` 层基础色板（`--bz-gold`、`--bz-green`、`--bz-red`、`--bz-amber`、`--bz-info-blue`
-  等），`.theme-dark` 与 `.theme-light` 分别定义暗/亮专属变量（`--bz-bg-*`、`--bz-text-*`、`--bz-border-*`、`--bz-chat-*`
-  等），组件层统一使用 `var(--bz-*)` 引用，彻底消除硬编码色值。
+  等），`.theme-dark` 与 `.theme-light` 分别定义暗/亮专属变量（`--bz-bg`、`--bz-bg-*`、`--bz-text-*`、`--bz-border`、`--bz-border-*`、`--bz-chat-*`
+  等），组件层统一使用 `var(--bz-*)` 引用，彻底消除硬编码色值。`.theme-dark` / `.theme-light` 中同时定义 `scrollbar-color`（Firefox）和
+  `::-webkit-scrollbar`（Chrome/Edge）伪元素样式，滚动条跟随主题自动切换。聊天昵称统一采用固定色值（他人 `#333`，自己 `#389e0d` 深绿），不使用样式组件。
 - **`theme: "auto"` 模式**：`AppSettings.theme` 支持 `"auto"` 选项（默认值）。`App.vue` 通过
   `window.matchMedia('(prefers-color-scheme: dark)')` 监听系统主题变化，自动切换 `.theme-dark` / `.theme-light` CSS
   class。`onUnmounted` 时注销 `change` 监听器。NaiveUI 的 `n-config-provider :theme` 同步联动。
