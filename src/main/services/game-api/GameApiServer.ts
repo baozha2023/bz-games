@@ -12,6 +12,9 @@ import type {
   GameApiCapabilities,
   GameApiError,
   GameReportPayload,
+  GameReportScoreboardConfig,
+  GameReportScoreboardData,
+  GameReportStructuredPayload,
   ChatPayload,
 } from "../../../shared/types";
 import { GameApiErrorCode } from "../../../shared/types";
@@ -296,14 +299,16 @@ export class GameApiServer {
     if (payload.mode === "custom") {
       const htmlLen = payload.html?.length ?? 0;
       const cssLen = payload.css?.length ?? 0;
-      if (htmlLen + cssLen > 64 * 1024) {
+      if (htmlLen + cssLen > RoomConstants.GAME_REPORT_HTML_MAX_BYTES) {
         this.sendError(ws, req.id, "game.report", {
           code: GameApiErrorCode.MessageTooLarge,
-          message: "Custom report html+css must be under 64KB",
+          message: `Custom report html+css must be under ${RoomConstants.GAME_REPORT_HTML_MAX_BYTES / 1024}KB`,
         });
         return;
       }
     }
+
+    const messagePayload = this.withReportPlayerSnapshot(payload);
 
     // Reply to game
     this.sendResponse(ws, req.id, "game.report", { success: true });
@@ -314,7 +319,7 @@ export class GameApiServer {
       id: crypto.randomUUID(),
       senderId: "system",
       senderName: "System",
-      content: JSON.stringify(payload),
+      content: JSON.stringify(messagePayload),
       contentType: "game_report",
       timestamp: Date.now(),
       isSystem: true,
@@ -331,9 +336,42 @@ export class GameApiServer {
       mainWindow?.webContents.send(IPC.ROOM_EVENT, roomMsg);
     } else if (roomClient.room) {
       // Client: send via room client — message will be relayed back by server and delivered to renderer
-      // Client: send via room client — message will be relayed back by server and delivered to renderer
       roomClient.send(roomMsg);
     }
+  }
+
+  private withReportPlayerSnapshot(payload: GameReportPayload): GameReportPayload {
+    if (payload.mode !== "structured") return payload;
+    if (payload.data.layout !== "scoreboard") return payload;
+    const room = roomServer.room || roomClient.room;
+    if (!room) return payload;
+    const structuredPayload = payload as GameReportStructuredPayload;
+    const data = structuredPayload.data as GameReportScoreboardData;
+    const config = structuredPayload.config as GameReportScoreboardConfig | undefined;
+    const playerColumns = (config?.columns || []).filter(
+      (column) => column.render === "avatar" || column.render === "playerName",
+    );
+    if (!playerColumns.length) return payload;
+    const referencedPlayerIds = new Set<string>();
+    for (const row of data.rows) {
+      for (const column of playerColumns) {
+        const value = row[column.key];
+        if (typeof value === "string" && value) referencedPlayerIds.add(value);
+      }
+    }
+    if (!referencedPlayerIds.size) return payload;
+    return {
+      ...structuredPayload,
+      playerSnapshot: room.players
+        .filter((player) => referencedPlayerIds.has(player.id))
+        .map((player) => ({
+          id: player.id,
+          name: player.name,
+          avatar: player.avatar,
+          avatarFrame: player.avatarFrame,
+          nicknameStyle: player.nicknameStyle,
+        })),
+    };
   }
 
   private async handleAchievementList(ws: WebSocket, req: GameApiRequest) {

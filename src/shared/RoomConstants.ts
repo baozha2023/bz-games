@@ -3,10 +3,10 @@ export class RoomConstants {
   static readonly MAX_RECENT_MESSAGE_IDS = 1000;
 
   // 单条房间消息最大字节数，覆盖聊天图片、房间状态、系统事件等普通房间消息。
-  static readonly MAX_ROOM_MESSAGE_BYTES = 12 * 1024 * 1024;
+  static readonly MAX_ROOM_MESSAGE_BYTES = 24 * 1024 * 1024;
 
   // 单条游戏实时中继消息最大字节数，用于限制 game:message:relay / game:broadcast:relay 大小。
-  static readonly MAX_GAME_RELAY_MESSAGE_BYTES = 512 * 1024;
+  static readonly MAX_GAME_RELAY_MESSAGE_BYTES = 1024 * 1024;
 
   // 房间 WebSocket 心跳检测间隔，服务端按该间隔 ping 客户端。
   static readonly ROOM_HEARTBEAT_INTERVAL_MS = 30_000;
@@ -31,13 +31,16 @@ export class RoomConstants {
   static readonly ROOM_RECONNECT_MAX_DELAY_MS = 10_000;
 
   // Game API JSON text frame 最大字节数，用于控制面和普通 JSON 通信。
-  static readonly GAME_API_MAX_MESSAGE_BYTES = 64 * 1024;
+  static readonly GAME_API_MAX_MESSAGE_BYTES = 128 * 1024;
 
   // Game API v2 WebSocket binary frame 最大总字节数，包含 headerLength、header 和 body。
-  static readonly GAME_API_MAX_BINARY_BYTES = 256 * 1024;
+  static readonly GAME_API_MAX_BINARY_BYTES = 1024 * 1024;
 
   // Game API v2 message.batch 单批最大子消息数量。
-  static readonly GAME_API_MAX_BATCH_MESSAGES = 32;
+  static readonly GAME_API_MAX_BATCH_MESSAGES = 64;
+
+  // game.report 自定义 HTML + CSS 总长最大字节数。
+  static readonly GAME_REPORT_HTML_MAX_BYTES = 128 * 1024;
 
   // Game API 启动后等待游戏进程连接的最长时间，超时且无客户端连接时自动停止。
   static readonly GAME_API_STARTUP_TIMEOUT_MS = 60_000;

@@ -819,7 +819,7 @@ interface AppSettings {
 
 - **昵称样式系统（Nickname Style）**：
     - **功能范围**：玩家可在个性化页面自定义昵称的显示样式，包括文字颜色、渐变（起点+终点）、字体、字重和特效动画，保存需消耗 30 BZ 币。
-    - **类型定义**：`NicknameStyle` 接口定义在 `src/shared/types/store.types.ts`，包含 `color`、`gradientStart`、`gradientEnd`、`font`（`system`/`rounded`/`serif`/`mono`/`fantasy`）、`effect`（`none`/`glow`/`sparkle`/`flame`/`neon`/`rainbow`/`aurora`/`stardust`/`crystal`/`comet`/`heartbeat`）、`weight`（`normal`/`semibold`/`bold`）。默认样式 `DEFAULT_NICKNAME_STYLE` 的 `color` 为 `"inherit"`。
+    - **类型定义**：`NicknameStyle` 接口定义在 `src/shared/types/store.types.ts`，包含 `color`、`gradientStart`、`gradientEnd`、`font`（`system`/`rounded`/`serif`/`mono`/`fantasy`）、`effect`（`none`/`glow`/`sparkle`/`flame`/`neon`/`rainbow`/`aurora`/`stardust`/`crystal`/`comet`/`heartbeat`）、`weight`（`normal`/`semibold`/`bold`）。默认样式 `DEFAULT_NICKNAME_STYLE` 的 `color` 为 `"#000000"`。
     - **渲染组件**：`NicknameText.vue` 使用 CSS 自定义属性（`--nickname-color`/`--nickname-gradient-start`/`--nickname-gradient-end`）驱动样式，通过 `NicknameEffect` 值动态激活对应的 CSS class 和 @keyframes 动画。渐变特效（neon/flame/aurora 等）使用 `background-clip: text` + `color: transparent` 实现渐变文字。粒子特效（sparkle/stardust/comet）通过绝对定位的 `<span>` 粒子元素 + CSS 动画实现。光环特效（aurora/crystal/heartbeat）通过绝对定位的背景层实现。
     - **主题色自适应**：`nicknameColor.ts` 使用 WCAG 相对亮度公式计算颜色亮度。亮色主题下禁止偏白色（luminance > 0.72），暗色主题下禁止偏黑色（luminance < 0.28），不满足时自动取对称色。`adaptNicknameStyleForTheme()` 接收 `NicknameStyle` 和 `EffectiveTheme`（`useSettingsStore.effectiveTheme`），返回适配后的样式。`NicknameText` 组件接收 `effectiveTheme` prop 后自动调用适配。
     - **保存与消费**：`performSaveNicknameStyle(style, 30)` 在主进程原子执行：校验 BZ 币余额 → 扣除 30 BZ 币 → 写入 `userData.bzCoins` → 调用 `saveSettings({ nicknameStyle: style })` 持久化到 `settings`。余额不足返回 `{ success: false, code: "insufficient_coins" }`。

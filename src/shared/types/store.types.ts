@@ -79,7 +79,7 @@ export interface NicknameStyle {
 export type LibraryLayout = "card" | "icon" | "steam";
 
 export const DEFAULT_NICKNAME_STYLE: NicknameStyle = {
-  color: "inherit",
+  color: "#000000",
   gradientStart: "#5eead4",
   gradientEnd: "#a78bfa",
   font: "system",

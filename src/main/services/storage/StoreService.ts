@@ -41,7 +41,7 @@ const defaultSettings: AppSettings = {
   lastOpenedAt: undefined,
   ignoreDefaultGamesMigrationPrompt: false,
   chatInputHeight: 204,
-  downloadFloatBall: true,
+  downloadFloatBall: false,
 };
 
 const defaultUserData: UserData = {

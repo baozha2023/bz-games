@@ -19,7 +19,7 @@
         <div v-if="scoreboardData.title" class="scoreboard-title">{{ scoreboardData.title }}</div>
 
         <!-- 表头 -->
-        <div class="scoreboard-header" :style="headerGridStyle">
+        <div class="scoreboard-header" :style="scoreboardGridStyle">
           <div v-if="scoreboardConfig.showRank !== false" class="col col-rank">#</div>
           <div
             v-for="col in scoreboardConfig.columns"
@@ -37,7 +37,7 @@
           :key="rowIdx"
           class="scoreboard-row"
           :class="rowClass(rowIdx)"
-          :style="rowStyle(rowIdx)"
+          :style="[scoreboardGridStyle, rowStyle(rowIdx)]"
         >
           <div v-if="scoreboardConfig.showRank !== false" class="col col-rank">
             <span class="rank-badge" :class="'rank-' + (rowIdx + 1)">{{ rankLabel(rowIdx) }}</span>
@@ -75,7 +75,7 @@
             <!-- 分数渲染 -->
             <span v-else-if="col.render === 'score'" class="col-score">{{ row[col.key] }}</span>
             <!-- 默认文本渲染 -->
-            <span v-else>{{ row[col.key] }}</span>
+            <span v-else class="col-text">{{ row[col.key] }}</span>
           </div>
         </div>
 
@@ -83,11 +83,13 @@
         <div v-if="scoreboardData.stats && scoreboardData.stats.length" class="scoreboard-stats">
           <div v-for="stat in scoreboardData.stats" :key="stat.label" class="stat-row">
             <span class="stat-label">{{ stat.label }}</span>
-            <span class="stat-values">
+            <span class="stat-values" :style="scoreboardGridStyle">
+              <span v-if="scoreboardConfig.showRank !== false" class="stat-spacer"></span>
               <template v-for="col in scoreboardConfig.columns" :key="col.key">
                 <span v-if="stat.values[String(col.key)] !== undefined" class="stat-value" :style="colStyle(col)">
                   {{ stat.values[String(col.key)] }}
                 </span>
+                <span v-else class="stat-value"></span>
               </template>
             </span>
           </div>
@@ -136,12 +138,12 @@ import type {
   GameReportCustomPayload,
   GameReportScoreboardData,
   GameReportScoreboardConfig,
+  GameReportPlayerSnapshot,
   GameReportVersusData,
   GameReportVersusConfig,
   GameReportColumnDef,
 } from '../../../../shared/types'
 import { useSettingsStore } from '../../stores/useSettingsStore'
-import { useRoomStore } from '../../stores/useRoomStore'
 import NicknameText from '../NicknameText.vue'
 import AvatarWithFrame from '../AvatarWithFrame.vue'
 import { getFrameImageFileName } from '../../../../shared/avatar-frames'
@@ -149,7 +151,6 @@ import { getFrameImageFileName } from '../../../../shared/avatar-frames'
 const props = defineProps<{ msg: ChatPayload }>()
 
 const settingsStore = useSettingsStore()
-const roomStore = useRoomStore()
 
 // ── 解析 ──
 const report = computed<GameReportPayload | null>(() => {
@@ -184,11 +185,17 @@ const scoreboardConfig = computed<GameReportScoreboardConfig>(() => {
   return { ...defaults, ...cfg }
 })
 
-const headerGridStyle = computed(() => {
+const scoreboardGridStyle = computed(() => {
   const cols = scoreboardConfig.value.columns
   const showRank = scoreboardConfig.value.showRank !== false
-  const template = showRank ? `50px ` : ''
+  const template = showRank ? '52px ' : ''
   return { gridTemplateColumns: template + cols.map(c => c.width || '1fr').join(' ') }
+})
+
+const playerSnapshotMap = computed(() => {
+  const p = report.value as GameReportStructuredPayload | null
+  const players = p?.mode === 'structured' ? p.playerSnapshot || [] : []
+  return new Map(players.map(player => [player.id, player]))
 })
 
 // ── 对决 ──
@@ -233,8 +240,10 @@ const rightSideStyle = computed(() => versusConfig.value.rightStyle || '')
 
 function colStyle(col: GameReportColumnDef) {
   const s: Record<string, string> = {}
-  if (col.align) s.textAlign = col.align
-  if (col.width) s.width = col.width
+  if (col.align) {
+    s.textAlign = col.align
+    s.justifyContent = col.align === 'right' ? 'flex-end' : col.align === 'center' ? 'center' : 'flex-start'
+  }
   return s
 }
 
@@ -274,14 +283,15 @@ function badgeTextColor(col: GameReportColumnDef, value: unknown) {
   return '#fff'
 }
 
-/** 从房间玩家列表反查玩家信息 */
-function playerInfo(row: Record<string, unknown>, key: string) {
+function playerInfo(row: Record<string, unknown>, key: string): GameReportPlayerSnapshot & { avatarFrameFile?: string } | null {
   const id = String(row[key] ?? '')
-  const player = roomStore.room?.players.find(p => p.id === id)
+  const player = playerSnapshotMap.value.get(id)
   if (!player) return null
   return {
+    id: player.id,
     name: player.name,
     avatar: player.avatar,
+    avatarFrame: player.avatarFrame,
     nicknameStyle: player.nicknameStyle,
     avatarFrameFile: player.avatarFrame ? getFrameImageFileName(player.avatarFrame) : undefined,
   }
@@ -342,12 +352,10 @@ function formatDuration(seconds: number) {
 
 .scoreboard-header {
   display: grid;
-  gap: 4px;
+  gap: 8px;
   font-size: 11px;
   font-weight: 600;
   color: var(--bz-chat-text-system);
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
   border-bottom: 1px solid var(--bz-border-subtle);
   padding-bottom: 6px;
   margin-bottom: 6px;
@@ -355,9 +363,10 @@ function formatDuration(seconds: number) {
 
 .scoreboard-row {
   display: grid;
-  gap: 4px;
+  gap: 8px;
   align-items: center;
-  padding: 5px 0;
+  min-height: 42px;
+  padding: 5px 6px;
   border-radius: 6px;
   transition: background 0.15s;
 }
@@ -383,6 +392,16 @@ function formatDuration(seconds: number) {
   align-items: center;
   min-width: 0;
   overflow: hidden;
+}
+
+.col-text,
+.col-score,
+.col-badge {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .col-rank {
@@ -443,13 +462,17 @@ function formatDuration(seconds: number) {
 }
 
 .stat-values {
-  display: flex;
-  gap: 4px;
+  display: grid;
+  gap: 8px;
   flex: 1;
+  min-width: 0;
 }
 
 .stat-value {
-  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .scoreboard-duration {
@@ -476,10 +499,11 @@ function formatDuration(seconds: number) {
 }
 
 .versus-body {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  justify-content: center;
   gap: 12px;
+  width: 100%;
 }
 
 .versus-side {
@@ -487,7 +511,7 @@ function formatDuration(seconds: number) {
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  min-width: 80px;
+  min-width: 0;
 }
 
 .versus-side.winner {
@@ -508,7 +532,7 @@ function formatDuration(seconds: number) {
 
 .versus-label {
   font-size: 13px;
-  max-width: 100px;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

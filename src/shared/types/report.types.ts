@@ -1,3 +1,5 @@
+import type { NicknameStyle } from "./store.types";
+
 // ─── game.report 战绩报告类型 ────────────────────────────────────────────
 // 消费端：GameReportCard.vue / RoomChat.vue / GameApiServer.ts
 
@@ -24,6 +26,15 @@ export interface GameReportStructuredPayload {
   config?: GameReportScoreboardConfig | GameReportVersusConfig;
   /** 注入到卡片根元素的额外内联 CSS，可覆盖内置颜色/间距等 */
   style?: string;
+  playerSnapshot?: GameReportPlayerSnapshot[];
+}
+
+export interface GameReportPlayerSnapshot {
+  id: string;
+  name: string;
+  avatar?: string;
+  avatarFrame?: string;
+  nicknameStyle?: NicknameStyle;
 }
 
 // ── 子类型：计分板 (scoreboard) ──

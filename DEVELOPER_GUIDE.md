@@ -364,7 +364,7 @@ ws.onmessage = (event) => {
 };
 ```
 
-**单帧上限**：`auth.capabilities.maxBinaryBytes`（256 KB）。超限帧会被拒绝。
+**单帧上限**：`auth.capabilities.maxBinaryBytes`（1 MB）。超限帧会被拒绝。
 
 ---
 
@@ -422,9 +422,9 @@ ws.onmessage = (event) => {
   "capabilities": {
     "protocolVersion": 2,
     "protocolName": "bz-game-api-v2",
-    "maxMessageBytes": 65536,
-    "maxBinaryBytes": 262144,
-    "maxBatchMessages": 32,
+    "maxMessageBytes": 131072,
+    "maxBinaryBytes": 1048576,
+    "maxBatchMessages": 64,
     "supportsPublish": true,
     "supportsBatch": true,
     "supportsAck": true,
@@ -501,7 +501,7 @@ ws.onmessage = (event) => {
 
 游戏完成一局后，向平台提交战绩报告。报告以**富媒体卡片**形式显示在房间聊天中，所有房间玩家可见。
 
-支持三种模式，总大小不超过 **64 KB**。
+支持三种模式，总大小不超过 **128 KB**。
 
 > **注意**：调用此接口不会结束游戏进程、不会改变房间状态。游戏进程结束由平台自动检测。
 
@@ -616,7 +616,7 @@ ws.onmessage = (event) => {
 | `css` | `string` | 否 | 注入到 `<style>` 块的 CSS |
 | `theme` | `"dark"` \| `"light"` \| `"auto"` | 否 | 主题，平台据此注入 `color-scheme` 和基础背景色 |
 
-**安全说明**：自定义内容在 `sandbox="allow-scripts"` iframe 中渲染，与主页面隔离。可运行 JavaScript（chart.js、canvas 动画等），但 sandbox 限制使其无法访问父页面。`html + css` 总长不超过 64 KB。
+**安全说明**：自定义内容在 `sandbox="allow-scripts"` iframe 中渲染，与主页面隔离。可运行 JavaScript（chart.js、canvas 动画等），但 sandbox 限制使其无法访问父页面。`html + css` 总长不超过 128 KB。
 
 **Response**
 
@@ -808,9 +808,9 @@ v2 认证成功后返回的能力上限：
 | 字段 | 值 | 说明 |
 | :--- | :--- | :--- |
 | `protocolVersion` | `2` | 协议版本 |
-| `maxMessageBytes` | `65536` | JSON text frame 最大字节数 |
-| `maxBinaryBytes` | `262144` | Binary frame 最大总字节数（含 header + body） |
-| `maxBatchMessages` | `32` | `message.batch` 单批最大消息数 |
+| `maxMessageBytes` | `131072` | JSON text frame 最大字节数 |
+| `maxBinaryBytes` | `1048576` | Binary frame 最大总字节数（含 header + body） |
+| `maxBatchMessages` | `64` | `message.batch` 单批最大消息数 |
 | `supportsPublish` | `true` | 支持 `message.publish` |
 | `supportsBatch` | `true` | 支持 `message.batch` |
 | `supportsAck` | `true` | 支持 `event.messageAck` |
@@ -885,7 +885,7 @@ v2 认证成功后返回的能力上限：
 }
 ```
 
-**限制**：单批最多 32 条，单条 JSON frame 不超过 64 KB。
+**限制**：单批最多 64 条，单条 JSON frame 不超过 128 KB。
 
 **Response**
 
