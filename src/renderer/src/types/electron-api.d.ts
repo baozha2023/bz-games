@@ -110,12 +110,14 @@ declare global {
           gameId: string,
           address: string,
           version?: string,
+          password?: string,
         ) => Promise<{ success: boolean; error?: string }>;
         leave: () => Promise<void>;
         ready: () => Promise<void>;
         unready: () => Promise<void>;
         start: () => Promise<void>;
         setAddress: (address: string) => Promise<void>;
+        setPassword: (password: string) => Promise<boolean>;
         getState: () => Promise<RoomInfo | null>;
         sendChat: (content: string, type?: "text" | "audio" | "image", images?: string[]) => Promise<void>;
         kickPlayer: (playerId: string) => Promise<boolean>;
@@ -124,9 +126,12 @@ declare global {
         popInChat: () => Promise<void>;
         getChatHistory: () => Promise<unknown[]>;
         discoverLan: () => Promise<DiscoveredRoom[]>;
+        discoverVirtualLan: () => Promise<DiscoveredRoom[]>;
         discoverRelay: () => Promise<DiscoveredRoom[]>;
         measureRelayLatency: () => Promise<number | null>;
         validateDiscovered: (room: DiscoveredRoom) => Promise<RoomJoinValidationResult>;
+        probePassword: (address: string) => Promise<{ success: boolean; hasPassword: boolean; error?: string }>;
+        setDirectHostMode: (mode: "lan") => Promise<void>;
         enableRelayHost: () => Promise<{ success: boolean; publicAddress?: string; error?: string }>;
         disableRelayHost: () => Promise<void>;
         onChatWindowClosed: (callback: () => void) => () => void;

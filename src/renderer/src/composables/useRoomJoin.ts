@@ -12,6 +12,7 @@ interface JoinRoomOptions {
   gameId: string
   address: string
   version?: string
+  password?: string
   router: Router
   message: MessageApi
   saveLastAddress?: boolean
@@ -22,8 +23,10 @@ interface JoinRoomOptions {
 export const normalizeRoomJoinAddress = (address: string) => {
   const trimmed = address.trim()
   const relayPattern = new RegExp(`^${escapeRegExp(DEFAULT_RELAY_PUBLIC_HOST)}:\\d+$`, 'i')
-  if (relayPattern.test(trimmed) || /^(ws|wss):\/\//.test(trimmed)) return trimmed
-  return `wss://${trimmed}`
+  if (relayPattern.test(trimmed) || /^(ws|wss):\/\//i.test(trimmed)) return trimmed
+  if (/^https:\/\//i.test(trimmed)) return `wss://${trimmed.slice('https://'.length)}`
+  if (/^http:\/\//i.test(trimmed)) return `ws://${trimmed.slice('http://'.length)}`
+  return `ws://${trimmed}`
 }
 
 export const useRoomJoin = () => {
@@ -38,13 +41,15 @@ export const useRoomJoin = () => {
     if (error === 'game_id_mismatch') return t('room.joinError.gameIdMismatch')
     if (error === 'kicked') return t('room.youWereKicked')
     if (error === 'own_room') return t('room.joinError.ownRoom')
+    if (error === 'password_required') return t('room.joinError.passwordRequired')
+    if (error === 'password_incorrect') return t('room.joinError.passwordIncorrect')
     return error || t('gameDetail.joinFail')
   }
 
   const joinRoomByAddress = async (options: JoinRoomOptions) => {
     const address = normalizeRoomJoinAddress(options.address)
     try {
-      const res = await roomStore.joinRoom(options.gameId, address, options.version)
+      const res = await roomStore.joinRoom(options.gameId, address, options.version, options.password?.trim())
       if (!res.success) {
         options.message.error(joinErrorText(res.error))
         return { success: false, address }

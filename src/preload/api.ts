@@ -97,14 +97,16 @@ export const electronAPI = {
   room: {
     create: (gameId: string, version?: string) =>
       ipcRenderer.invoke(IPC.ROOM_CREATE, gameId, version),
-    join: (gameId: string, address: string, version?: string) =>
-      ipcRenderer.invoke(IPC.ROOM_JOIN, gameId, address, version),
+    join: (gameId: string, address: string, version?: string, password?: string) =>
+      ipcRenderer.invoke(IPC.ROOM_JOIN, gameId, address, version, password),
     leave: () => ipcRenderer.invoke(IPC.ROOM_LEAVE),
     ready: () => ipcRenderer.invoke(IPC.ROOM_READY),
     unready: () => ipcRenderer.invoke(IPC.ROOM_UNREADY),
     start: () => ipcRenderer.invoke(IPC.ROOM_START),
     setAddress: (address: string) =>
       ipcRenderer.invoke(IPC.ROOM_SET_ADDRESS, address),
+    setPassword: (password: string) =>
+      ipcRenderer.invoke(IPC.ROOM_SET_PASSWORD, password),
     getState: () => ipcRenderer.invoke(IPC.ROOM_GET_STATE),
     sendChat: (content: string, type?: "text" | "audio" | "image", images?: string[]) =>
       ipcRenderer.invoke(IPC.ROOM_SEND_CHAT, content, type, images),
@@ -120,12 +122,18 @@ export const electronAPI = {
       ipcRenderer.invoke(IPC.ROOM_GET_CHAT_HISTORY),
     discoverLan: (): Promise<DiscoveredRoom[]> =>
       ipcRenderer.invoke(IPC.ROOM_DISCOVER_LAN),
+    discoverVirtualLan: (): Promise<DiscoveredRoom[]> =>
+      ipcRenderer.invoke(IPC.ROOM_DISCOVER_VIRTUAL_LAN),
     discoverRelay: (): Promise<DiscoveredRoom[]> =>
       ipcRenderer.invoke(IPC.ROOM_DISCOVER_RELAY),
     measureRelayLatency: (): Promise<number | null> =>
       ipcRenderer.invoke(IPC.ROOM_MEASURE_RELAY_LATENCY),
     validateDiscovered: (room: DiscoveredRoom) =>
       ipcRenderer.invoke(IPC.ROOM_VALIDATE_DISCOVERED, room),
+    probePassword: (address: string): Promise<{ success: boolean; hasPassword: boolean; error?: string }> =>
+      ipcRenderer.invoke(IPC.ROOM_PROBE_PASSWORD, address),
+    setDirectHostMode: (mode: "lan") =>
+      ipcRenderer.invoke(IPC.ROOM_SET_DIRECT_HOST_MODE, mode),
     enableRelayHost: () =>
       ipcRenderer.invoke(IPC.ROOM_ENABLE_RELAY_HOST),
     disableRelayHost: () =>

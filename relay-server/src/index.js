@@ -111,6 +111,10 @@ function handleTextMessage(client, message, rawText) {
     registerGuest(client, message.payload || {});
     return;
   }
+  if (message.type === "relay:room:password:probe") {
+    replyRoomPasswordProbe(client.ws, message.payload || {});
+    return;
+  }
   if (message.type === "relay:leave") {
     removeClient(client);
     return;
@@ -135,6 +139,10 @@ function handleRoomControlMessage(client, message) {
     updateRoomState(room, message.payload || {});
     return !resolveTargetPlayerId(message);
   }
+  if (client.isHost && message.type === "relay:room:password:update") {
+    updateRoomPassword(room, message.payload || {});
+    return true;
+  }
   if (client.isHost && message.type === "room:disbanded") {
     setTimeout(() => closeRoom(room.id, "relay:closed"), 50);
     return false;
@@ -153,6 +161,7 @@ function updateRoomState(room, state) {
   if (typeof state.hostId === "string") room.hostId = state.hostId;
   if (typeof state.maxPlayers === "number") room.maxPlayers = state.maxPlayers;
   if (typeof state.state === "string") room.state = state.state;
+  if (typeof state.hasPassword === "boolean") room.hasPassword = state.hasPassword;
   if (Array.isArray(state.players)) {
     const hostPlayer = state.players.find((player) => player?.id === room.hostId);
     room.hostName = hostPlayer?.name || room.hostName;
@@ -160,6 +169,12 @@ function updateRoomState(room, state) {
     room.name = `${room.hostName} 的房间`;
     room.playerCount = state.players.length;
   }
+  room.updatedAt = Date.now();
+}
+
+function updateRoomPassword(room, payload) {
+  room.roomPassword = normalizePassword(payload.roomPassword);
+  room.hasPassword = room.roomPassword.length > 0;
   room.updatedAt = Date.now();
 }
 
@@ -209,6 +224,8 @@ function registerHost(client, payload) {
     playerCount: Number(payload.playerCount || 1),
     maxPlayers: Number(payload.maxPlayers || 4),
     state: payload.state || "waiting",
+    hasPassword: normalizePassword(payload.roomPassword).length > 0,
+    roomPassword: normalizePassword(payload.roomPassword),
     updatedAt: Date.now(),
     clients: new Set([payload.playerId]),
   });
@@ -246,6 +263,15 @@ function registerGuest(client, payload) {
   }
   if (room.state !== "waiting") {
     send(client.ws, { type: "relay:error", payload: { code: "game_started" } });
+    return;
+  }
+  const password = normalizePassword(payload.password);
+  if (room.hasPassword && !password) {
+    send(client.ws, { type: "relay:error", payload: { code: "password_required" } });
+    return;
+  }
+  if (room.hasPassword && password !== room.roomPassword) {
+    send(client.ws, { type: "relay:error", payload: { code: "password_incorrect" } });
     return;
   }
 
@@ -365,6 +391,28 @@ function resolveRoom(value) {
   return Array.from(rooms.values()).find((room) => room.roomCode === normalized) || null;
 }
 
+function replyRoomPasswordProbe(ws, payload) {
+  if (!verifyRelayToken(payload)) {
+    send(ws, { type: "relay:error", payload: { code: "unauthorized" } });
+    return;
+  }
+  if (typeof payload.roomCode !== "string") {
+    send(ws, { type: "relay:error", payload: { code: "invalid_join_payload" } });
+    return;
+  }
+  const room = resolveRoom(payload.roomCode);
+  if (!room) {
+    send(ws, { type: "relay:error", payload: { code: "room_not_found" } });
+    return;
+  }
+  send(ws, {
+    type: "relay:room:password:probe:ack",
+    payload: {
+      hasPassword: Boolean(room.hasPassword),
+    },
+  });
+}
+
 function canAcceptRoom() {
   if (rooms.size >= MAX_ROOMS) return { ok: false, reason: "max_rooms" };
   if (clients.size >= MAX_CLIENTS) return { ok: false, reason: "max_clients" };
@@ -418,8 +466,13 @@ function toPublicRoom(room) {
     playerCount: room.playerCount,
     maxPlayers: room.maxPlayers,
     state: room.state,
+    hasPassword: room.hasPassword,
     updatedAt: room.updatedAt,
   };
+}
+
+function normalizePassword(value) {
+  return typeof value === "string" ? value.trim() : "";
 }
 
 function decodeBinaryEnvelope(buffer) {

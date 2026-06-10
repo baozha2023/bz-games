@@ -4,6 +4,8 @@ export type RoomMessageType =
   | "room:join"
   | "room:join:ack"
   | "room:join:refused"
+  | "room:password:probe"
+  | "room:password:probe:ack"
   | "room:player:joined"
   | "room:player:left"
   | "room:player:ready"
@@ -20,6 +22,8 @@ export type RoomMessageType =
   | "room:relay:latency"
   | "relay:join"
   | "relay:join:ack"
+  | "relay:room:password:probe"
+  | "relay:room:password:probe:ack"
   | "relay:latency:ping"
   | "relay:latency:probe"
   | "relay:latency:pong"
@@ -82,7 +86,9 @@ export interface RoomInfo {
   gameId: string;
   gameVersion: string; // Add game version to RoomInfo
   hostId: string;
+  hostConnectionMode?: "lan" | "relay";
   hostPublicAddress?: string;
+  hasPassword?: boolean;
   players: PlayerInRoom[];
   maxPlayers: number;
   state: "waiting" | "starting" | "playing" | "ended";
@@ -91,7 +97,7 @@ export interface RoomInfo {
   createdAt: number;
 }
 
-export type RoomDiscoverySource = "lan" | "relay";
+export type RoomDiscoverySource = "physical_lan" | "virtual_lan" | "relay";
 
 export interface DiscoveredRoom {
   id: string;
@@ -108,6 +114,7 @@ export interface DiscoveredRoom {
   maxPlayers: number;
   state: RoomInfo["state"];
   updatedAt: number;
+  hasPassword?: boolean;
   canJoin?: boolean;
   joinBlockReason?: "game_missing" | "version_mismatch" | "room_full" | "game_started" | "own_room" | "unknown";
 }
@@ -138,6 +145,7 @@ export interface RoomJoinPayload {
   playerNicknameStyle?: NicknameStyle;
   gameId: string;
   gameVersion: string;
+  password?: string;
 }
 
 export interface RoomJoinAckPayload {
@@ -153,8 +161,14 @@ export interface RoomJoinRefusedPayload {
     | "version_mismatch"
     | "room_closed"
     | "kicked"
+    | "password_required"
+    | "password_incorrect"
     | "unknown";
   message: string;
+}
+
+export interface RoomPasswordProbeAckPayload {
+  hasPassword: boolean;
 }
 
 export interface RoomKickedPayload {

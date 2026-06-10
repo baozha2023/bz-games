@@ -10,6 +10,7 @@ import crypto from "crypto";
 import type { RoomMessage, ChatPayload, DiscoveredRoom } from "../../shared/types";
 import { roomDiscoveryService } from "../services/room/RoomDiscoveryService";
 import { relayRoomService } from "../services/room/RelayRoomService";
+import { roomPasswordProbeService } from "../services/room/RoomPasswordProbeService";
 
 export function registerRoomIpc() {
   ipcMain.handle(
@@ -23,12 +24,12 @@ export function registerRoomIpc() {
 
   ipcMain.handle(
     IPC.ROOM_JOIN,
-    async (_, gameId: string, address: string, version?: string) => {
+    async (_, gameId: string, address: string, version?: string, password?: string) => {
       const localPlayerId = storeService.getSettings().playerId;
       if (roomServer.room?.hostId === localPlayerId) {
         return { success: false, error: "own_room", message: "Cannot join your own room" };
       }
-      return await roomClient.connect(address, gameId, version);
+      return await roomClient.connect(address, gameId, version, password);
     },
   );
 
@@ -76,6 +77,22 @@ export function registerRoomIpc() {
         payload: roomServer.room,
       });
     }
+  });
+
+  ipcMain.handle(IPC.ROOM_SET_PASSWORD, async (_, password: string) => {
+    const localPlayerId = storeService.getSettings().playerId;
+    if (!roomServer.room || roomServer.room.hostId !== localPlayerId) {
+      return false;
+    }
+    const changed = roomServer.setRoomPassword(password);
+    if (changed) {
+      relayRoomService.syncRoomPassword(password);
+    }
+    return changed;
+  });
+
+  ipcMain.handle(IPC.ROOM_PROBE_PASSWORD, async (_, address: string) => {
+    return await roomPasswordProbeService.probe(address);
   });
 
   ipcMain.handle(IPC.ROOM_GET_STATE, async () => {
@@ -135,6 +152,10 @@ export function registerRoomIpc() {
     return await roomDiscoveryService.discoverLanRooms();
   });
 
+  ipcMain.handle(IPC.ROOM_DISCOVER_VIRTUAL_LAN, async () => {
+    return await roomDiscoveryService.discoverVirtualLanRooms();
+  });
+
   ipcMain.handle(IPC.ROOM_DISCOVER_RELAY, async () => {
     return await roomDiscoveryService.discoverRelayRooms();
   });
@@ -147,14 +168,33 @@ export function registerRoomIpc() {
     return roomDiscoveryService.validateDiscoveredRoom(room);
   });
 
-  ipcMain.handle(IPC.ROOM_ENABLE_RELAY_HOST, async () => {
+  ipcMain.handle(IPC.ROOM_SET_DIRECT_HOST_MODE, async (_, mode: "lan") => {
+    relayRoomService.disconnect();
+    if (roomServer.room) {
+      roomServer.room.hostConnectionMode = mode;
+      roomServer.room.hostPublicAddress = undefined;
+    }
     roomServer.disconnectRemotePlayersForModeSwitch();
-    return await relayRoomService.enableHostRoom();
+  });
+
+  ipcMain.handle(IPC.ROOM_ENABLE_RELAY_HOST, async () => {
+    if (roomServer.room) {
+      roomServer.room.hostConnectionMode = "relay";
+    }
+    roomServer.disconnectRemotePlayersForModeSwitch();
+    const result = await relayRoomService.enableHostRoom();
+    if (!result.success && roomServer.room) {
+      roomServer.room.hostConnectionMode = "lan";
+      roomServer.room.hostPublicAddress = undefined;
+      roomServer.broadcastState();
+    }
+    return result;
   });
 
   ipcMain.handle(IPC.ROOM_DISABLE_RELAY_HOST, async () => {
     relayRoomService.disconnect();
     if (roomServer.room) {
+      roomServer.room.hostConnectionMode = "lan";
       roomServer.room.hostPublicAddress = undefined;
     }
     roomServer.disconnectRemotePlayersForModeSwitch();

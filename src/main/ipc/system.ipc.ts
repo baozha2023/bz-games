@@ -329,6 +329,7 @@ export function registerSystemIpc() {
     const targets: string[] = [
       path.join(app.getPath("appData"), "bz-launcher"),
       path.join(app.getPath("home"), "AppData", "Local", "bz-launcher-updater"),
+      path.join(app.getPath("userData"), ".market-cache"),
     ];
 
     let totalSize = 0;

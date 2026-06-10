@@ -6,6 +6,7 @@ import type {
   RoomJoinPayload,
   RoomJoinAckPayload,
   RoomJoinRefusedPayload,
+  RoomPasswordProbeAckPayload,
   PlayerInRoom,
   RoomKickedPayload,
   GameRelayPayload,
@@ -30,6 +31,7 @@ type RoomSocket = WebSocket | RelaySocket;
 export class RoomServer {
   private wss: WebSocketServer | null = null;
   public room: RoomInfo | null = null;
+  private roomPassword = "";
   private playerConnections: Map<string, RoomSocket> = new Map();
   private relayConnections: Set<RelaySocket> = new Set();
   private kickedPlayers: Set<string> = new Set();
@@ -48,6 +50,7 @@ export class RoomServer {
     const gameVersion = await this.getGameVersion(gameId, version);
 
     this.initializeRoom(gameId, gameVersion, maxPlayers);
+    this.roomPassword = "";
     this.kickedPlayers.clear();
     this.resetRelayState();
 
@@ -87,6 +90,7 @@ export class RoomServer {
     }
 
     this.room = null;
+    this.roomPassword = "";
     this.playerConnections.clear();
     this.relayConnections.clear();
     this.stateSyncHandler = null;
@@ -142,6 +146,8 @@ export class RoomServer {
       gameId,
       gameVersion,
       hostId: settings.playerId,
+      hostConnectionMode: "lan",
+      hasPassword: false,
       players: [],
       maxPlayers,
       state: "waiting",
@@ -236,6 +242,12 @@ export class RoomServer {
       case "room:join":
         this.handleJoin(ws, msg.payload as RoomJoinPayload);
         break;
+      case "room:password:probe":
+        this.send(ws, {
+          type: "room:password:probe:ack",
+          payload: { hasPassword: Boolean(this.room?.hasPassword) } as RoomPasswordProbeAckPayload,
+        });
+        break;
       case "room:player:ready":
         this.handlePlayerReady(ws);
         break;
@@ -266,7 +278,7 @@ export class RoomServer {
   private handleJoin(ws: RoomSocket, payload: RoomJoinPayload) {
     if (!this.room) return;
 
-    const rejection = this.validateJoin(payload);
+    const rejection = this.validateJoin(payload, this.isRelaySocket(ws));
     if (rejection) {
       this.send(ws, {
         type: "room:join:refused",
@@ -316,8 +328,23 @@ export class RoomServer {
 
   private validateJoin(
     payload: RoomJoinPayload,
+    skipPasswordCheck = false,
   ): RoomJoinRefusedPayload | null {
     if (!this.room) return { reason: "room_closed", message: "Room closed" };
+    if (!skipPasswordCheck && this.room.hasPassword) {
+      if (!payload.password) {
+        return {
+          reason: "password_required",
+          message: "Room password required",
+        };
+      }
+      if (payload.password !== this.roomPassword) {
+        return {
+          reason: "password_incorrect",
+          message: "Room password incorrect",
+        };
+      }
+    }
     if (this.kickedPlayers.has(payload.playerId)) {
       return {
         reason: "kicked",
@@ -487,6 +514,19 @@ export class RoomServer {
     if (!socket || !this.relayConnections.has(socket as RelaySocket)) return;
     this.handleDisconnect(socket);
     socket.close();
+  }
+
+  public getRoomPassword() {
+    return this.roomPassword;
+  }
+
+  public setRoomPassword(password: string) {
+    if (!this.room) return false;
+    const normalizedPassword = password.trim();
+    this.roomPassword = normalizedPassword;
+    this.room.hasPassword = normalizedPassword.length > 0;
+    this.broadcastState();
+    return true;
   }
 
   private normalizeRelayPayload(

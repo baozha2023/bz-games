@@ -60,6 +60,7 @@ export class RelayRoomService {
             hostStyle: hostPlayer?.nicknameStyle || settings.nicknameStyle,
             maxPlayers: roomServer.room?.maxPlayers || 4,
             state: roomServer.room?.state || "waiting",
+            roomPassword: roomServer.getRoomPassword(),
           },
         }));
       });
@@ -114,6 +115,17 @@ export class RelayRoomService {
   syncRoomState() {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN || !roomServer.room) return;
     this.ws.send(JSON.stringify({ type: "room:state:sync", payload: roomServer.room }));
+  }
+
+  syncRoomPassword(password: string) {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    this.ws.send(JSON.stringify({
+      type: "relay:room:password:update",
+      payload: {
+        roomId: this.relayRoomId,
+        roomPassword: password.trim(),
+      },
+    }));
   }
 
   private startLatencyProbe() {

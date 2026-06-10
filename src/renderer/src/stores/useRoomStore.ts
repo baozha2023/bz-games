@@ -51,10 +51,10 @@ export const useRoomStore = defineStore("room", () => {
     return port;
   }
 
-  async function joinRoom(gameId: string, address: string, version?: string) {
+  async function joinRoom(gameId: string, address: string, version?: string, password?: string) {
     isConnecting.value = true;
     try {
-      const res = await window.electronAPI.room.join(gameId, address, version);
+      const res = await window.electronAPI.room.join(gameId, address, version, password);
       if (res.success) {
         // Wait a bit for sync event or manually get state
         const state = await window.electronAPI.room.getState();
@@ -111,6 +111,10 @@ export const useRoomStore = defineStore("room", () => {
 
   async function kickPlayer(playerId: string) {
     return await window.electronAPI.room.kickPlayer(playerId);
+  }
+
+  async function setRoomPassword(password: string) {
+    return await window.electronAPI.room.setPassword(password);
   }
 
   function clearReconnectCountdown() {
@@ -266,6 +270,7 @@ export const useRoomStore = defineStore("room", () => {
     startGame,
     reconnectGame,
     kickPlayer,
+    setRoomPassword,
     handleRoomEvent,
     sendChatMessage,
     resetConnectionStatus,

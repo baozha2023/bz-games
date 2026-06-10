@@ -38,6 +38,7 @@ export class RoomClient {
   private relayMode = false;
   private relayRoomCode = "";
   private relayHostId = "";
+  private roomPassword = "";
   private latencyTimer: NodeJS.Timeout | null = null;
   private pendingLatencyProbes: Map<string, NodeJS.Timeout> = new Map();
   private readonly maxReconnectAttempts = RoomConstants.ROOM_MAX_RECONNECT_ATTEMPTS;
@@ -55,6 +56,7 @@ export class RoomClient {
     address: string,
     gameId: string,
     gameVersion?: string,
+    password?: string,
   ): Promise<ConnectResult> {
     this.manuallyDisconnected = true;
     this.shouldReconnect = false;
@@ -77,6 +79,7 @@ export class RoomClient {
     this.address = url;
     this.gameId = gameId;
     this.gameVersion = gameVersion || "";
+    this.roomPassword = password?.trim() || "";
     this.reconnectAttempts = 0;
     this.manuallyDisconnected = false;
     this.shouldReconnect = true;
@@ -135,6 +138,7 @@ export class RoomClient {
           token: DEFAULT_RELAY_TOKEN,
           roomCode: this.relayRoomCode,
           playerId: settings.playerId,
+          password: this.roomPassword || undefined,
         },
       });
       return;
@@ -153,6 +157,7 @@ export class RoomClient {
       playerNicknameStyle: settings.nicknameStyle,
       gameId: this.gameId,
       gameVersion: this.gameVersion,
+      password: this.relayMode ? undefined : (this.roomPassword || undefined),
     };
     this.send({ type: "room:join", payload: joinPayload });
   }

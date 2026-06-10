@@ -6,11 +6,22 @@
           {{ t('roomDiscovery.refresh') }}
         </n-button>
       </template>
-      <n-tab-pane name="lan" :tab="t('roomDiscovery.lanTab')">
-        <n-spin :show="loading && activeTab === 'lan'" content-class="room-spin-content">
+      <n-tab-pane name="physical_lan" :tab="t('roomDiscovery.physicalLanTab')">
+        <n-spin :show="loading && activeTab === 'physical_lan'" content-class="room-spin-content">
           <div class="room-tab-content">
             <n-alert type="info" style="margin-bottom: 16px;">
-              {{ t('roomDiscovery.lanDesc') }}
+              {{ t('roomDiscovery.physicalLanDesc') }}
+            </n-alert>
+            <RoomList />
+          </div>
+        </n-spin>
+      </n-tab-pane>
+
+      <n-tab-pane name="virtual_lan" :tab="t('roomDiscovery.virtualLanTab')">
+        <n-spin :show="loading && activeTab === 'virtual_lan'" content-class="room-spin-content">
+          <div class="room-tab-content">
+            <n-alert type="info" style="margin-bottom: 16px;">
+              {{ t('roomDiscovery.virtualLanDesc') }}
             </n-alert>
             <RoomList />
           </div>
@@ -31,11 +42,28 @@
         </n-spin>
       </n-tab-pane>
     </n-tabs>
+
+    <n-modal
+      v-model:show="showJoinPasswordModal"
+      preset="dialog"
+      :title="t('room.joinPasswordModalTitle')"
+      :positive-text="t('common.join')"
+      :negative-text="t('common.cancel')"
+      @positive-click="handleJoinPasswordConfirm"
+    >
+      <n-input
+        v-model:value="joinPassword"
+        type="password"
+        show-password-on="click"
+        :maxlength="64"
+        :placeholder="t('room.joinPasswordInputPlaceholder')"
+      />
+    </n-modal>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, h, onMounted, onUnmounted, ref } from 'vue'
+import { computed, h, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { NButton, NCard, NDescriptions, NDescriptionsItem, NEmpty, NSpace, useMessage } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
@@ -53,17 +81,29 @@ const gameStore = useGameStore()
 const settingsStore = useSettingsStore()
 const { joinRoomByAddress } = useRoomJoin()
 
-const activeTab = ref<'lan' | 'relay'>('lan')
+const activeTab = ref<'physical_lan' | 'virtual_lan' | 'relay'>('physical_lan')
 const loading = ref(false)
 const joiningRoomId = ref('')
-const lanRooms = ref<DiscoveredRoom[]>([])
+const physicalLanRooms = ref<DiscoveredRoom[]>([])
+const virtualLanRooms = ref<DiscoveredRoom[]>([])
 const relayRooms = ref<DiscoveredRoom[]>([])
 const relayLatencyMs = ref<number | null>(null)
+const showJoinPasswordModal = ref(false)
+const passwordRequiredRoom = ref<DiscoveredRoom | null>(null)
+const joinPassword = ref('')
 let relayLatencyTimer: number | null = null
 
-const displayedRooms = computed(() => activeTab.value === 'lan' ? lanRooms.value : relayRooms.value)
+const displayedRooms = computed(() => {
+  if (activeTab.value === 'physical_lan') return physicalLanRooms.value
+  if (activeTab.value === 'virtual_lan') return virtualLanRooms.value
+  return relayRooms.value
+})
 
-const currentEmptyText = computed(() => activeTab.value === 'lan' ? t('roomDiscovery.emptyLan') : t('roomDiscovery.emptyRelay'))
+const currentEmptyText = computed(() => {
+  if (activeTab.value === 'physical_lan') return t('roomDiscovery.emptyPhysicalLan')
+  if (activeTab.value === 'virtual_lan') return t('roomDiscovery.emptyVirtualLan')
+  return t('roomDiscovery.emptyRelay')
+})
 
 const relayLatencyText = computed(() => `${t('roomDiscovery.latency')}: ${relayLatencyMs.value === null ? '-- ms' : `${Math.round(relayLatencyMs.value)} ms`}`)
 
@@ -90,8 +130,10 @@ const handleTabChange = () => {
 const refreshCurrentTab = async () => {
   loading.value = true
   try {
-    if (activeTab.value === 'lan') {
-      lanRooms.value = await window.electronAPI.room.discoverLan()
+    if (activeTab.value === 'physical_lan') {
+      physicalLanRooms.value = await window.electronAPI.room.discoverLan()
+    } else if (activeTab.value === 'virtual_lan') {
+      virtualLanRooms.value = await window.electronAPI.room.discoverVirtualLan()
     } else {
       relayRooms.value = await window.electronAPI.room.discoverRelay()
       await refreshRelayLatency()
@@ -132,27 +174,65 @@ const handleDiscoveredRoomClick = (room: DiscoveredRoom) => {
     message.error(joinBlockText(room))
     return
   }
-  joinDiscoveredRoom(room)
+  probeAndJoinDiscoveredRoom(room)
 }
 
-const joinDiscoveredRoom = async (room: DiscoveredRoom) => {
-  if (joiningRoomId.value) return
+watch(showJoinPasswordModal, (show) => {
+  if (show) return
+  passwordRequiredRoom.value = null
+  joinPassword.value = ''
+})
+
+const performDiscoveredRoomJoin = async (room: DiscoveredRoom, password?: string) => {
   const address = room.address
   if (!address) {
     message.error(t('roomDiscovery.relayAddressPending'))
-    return
+    return false
   }
+  const result = await joinRoomByAddress({
+    gameId: room.gameId,
+    address,
+    version: room.gameVersion,
+    password,
+    router,
+    message,
+  })
+  return result.success
+}
+
+const probeAndJoinDiscoveredRoom = async (room: DiscoveredRoom) => {
+  if (joiningRoomId.value) return
   joiningRoomId.value = roomKey(room)
   try {
-    await joinRoomByAddress({
-      gameId: room.gameId,
-      address,
-      version: room.gameVersion,
-      router,
-      message,
-    })
+    const probe = await window.electronAPI.room.probePassword(room.address)
+    if (!probe.success) {
+      message.error(t('room.joinError.probeFailed'))
+      return
+    }
+    if (!probe.hasPassword) {
+      await performDiscoveredRoomJoin(room)
+      return
+    }
+    passwordRequiredRoom.value = room
+    joinPassword.value = ''
+    showJoinPasswordModal.value = true
   } catch (error: any) {
-    message.error(error?.message || t('gameDetail.joinFail'))
+    message.error(error?.message || t('room.joinError.probeFailed'))
+  } finally {
+    joiningRoomId.value = ''
+  }
+}
+
+const handleJoinPasswordConfirm = async () => {
+  const room = passwordRequiredRoom.value
+  if (!room) return false
+  joiningRoomId.value = roomKey(room)
+  try {
+    const success = await performDiscoveredRoomJoin(room, joinPassword.value)
+    if (success) {
+      showJoinPasswordModal.value = false
+    }
+    return success
   } finally {
     joiningRoomId.value = ''
   }

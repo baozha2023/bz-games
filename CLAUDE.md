@@ -122,6 +122,7 @@ bz-games/
 │   │   │   │   ├── RelayRoomService.ts    # 房主侧官方中继接入、短地址注册、relay bridge
 │   │   │   │   ├── RoomClient.ts          # 客机房间连接与重连管理（支持 v2 二进制帧中继）
 │   │   │   │   ├── RoomDiscoveryService.ts # 局域网/官方中继房间发现与加入前校验
+│   │   │   │   ├── RoomPasswordProbeService.ts # 加入前密码探测（直连/官方短地址）
 │   │   │   │   └── RoomServer.ts          # 房主房间服务与消息中继（支持 v2 二进制帧中继、ordered delivery）
 │   │   │   ├── market/
 │   │   │   │   └── MarketService.ts       # 游戏市场索引拉取、下载、校验、解压与安装
@@ -163,7 +164,7 @@ bz-games/
 │   │       │   ├── NotificationView.vue   # 通知窗口页面
 │   │       │   ├── FloatBallView.vue       # 下载悬浮球独立窗口页面
 │   │       │   ├── PersonalizationView.vue # 个性化页面（头像框管理 + 昵称样式）
-│   │       │   ├── RoomDiscoveryView.vue   # 房间发现页面（局域网/服务器 Tab）
+│   │       │   ├── RoomDiscoveryView.vue   # 房间发现页面（物理局域网/虚拟局域网/服务器 Tab）
 │   │       │   ├── RoomView.vue           # 房间页面
 │   │       │   ├── SettingsView.vue       # 设置页面
 │   │       │   └── StatisticsView.vue     # 统计页面
@@ -238,7 +239,7 @@ bz-games/
 | **官方中继服务器 (Relay Server)**      | 公网 Node.js HTTP + WebSocket 服务，负责房间登记、房间码、容量保护和透明转发，不拼接或识别短地址，不解析游戏业务语义。                            |
 | **官方短地址**                         | 平台按 `DEFAULT_RELAY_PUBLIC_HOST + roomCode` 拼接的 `<relay-public-host>:随机数字` 地址，展示、复制、服务器列表和手动输入统一使用该格式。                         |
 | **官方房间码**                         | 中继服务器生成并识别的数字房间码；平台从短地址中解析后通过 `relay:join.payload.roomCode` 发送给中继服务器。                         |
-| **房间发现 (Room Discovery)**          | 平台房间页面的局域网/服务器 Tab。局域网通过 UDP 发现本地房主，服务器通过官方中继 `/rooms` 获取房间列表。                      |
+| **房间发现 (Room Discovery)**          | 平台房间页面的物理局域网/虚拟局域网/服务器 Tab。局域网通过 UDP 发现本地房主，按网卡分类过滤；服务器通过官方中继 `/rooms` 获取房间列表。                      |
 | **游戏市场目录 (Market Directory)**       | 顶层 `market.json` 文件，`sources` 数组列出所有可用市场源，平台一级界面展示                             |
 | **游戏市场索引 (Market Index)**           | 远程 `market.json` 文件（每个市场源仓库中），描述该市场内可展示和可下载的游戏及其版本信息                           |
 | **市场安装包 (Market Package)**          | 市场游戏某个版本对应的下载产物，平台下载后校验并安装到默认游戏库                                              |
@@ -796,17 +797,19 @@ interface AppSettings {
     - **签到累计天数**：`UserData.checkIn.totalDays` 记录累计签到总天数，在 `performCheckIn` 中自增。签到弹窗展示"累计签到 N 天"。
 
 - **官方中继联机系统**：
-    - **公网入口模型**：局域网联机始终可用；房间页的 frp/官方服务器选择只决定公网入口。frp 由用户自备映射到本地 `RoomServer`，官方服务器由房主连接 `RelayRoomService` 注册短地址。
+    - **公网入口模型**：房间模式仅允许 `lan` 与 `relay` 两种。`RoomServer` 始终监听 `settings.defaultRoomPort`（默认 38080），无论房主当前选择局域网还是官方服务器模式，本地物理局域网 IP、虚拟局域网 IP 和用户自备 frp 地址都仍然可以直连；官方服务器模式只是在此基础上额外注册一个短地址入口。
     - **中继服务职责**：`relay-server/src/index.js` 处理 `relay:host`、`relay:join`、`relay:leave`、`relay:latency:ping`、`relay:latency:probe`、`relay:latency:pong` 等控制信令；RoomMessage、Game API v1 JSON 和 Game API v2 binary frame 均透明转发。中继服务端使用 `roomId` 管理内部房间，只发送和识别 `roomCode`。
     - **短地址加入**：房主注册成功后服务端返回 `roomCode`；平台按 `DEFAULT_RELAY_PUBLIC_HOST + roomCode` 拼接短地址。平台展示、复制、服务器 Tab 和手动输入统一使用短地址；客机 `RoomClient` 识别短地址后提取 `roomCode`，连接 `DEFAULT_RELAY_SERVER_URL` 并发送 `relay:join`，收到 `relay:join:ack` 后再发送标准 `room:join`。
-    - **加入入口统一**：服务器 Tab 与游戏详情页手动地址加入共用 `useRoomJoin.ts`，地址标准化、短地址识别、加入调用、错误提示保持一致；服务器列表按钮状态用于展示，真实连接结果由 `RoomClient` 与 `RoomServer` 决定。
-    - **校验集中化**：客机最终进入房主本地 `RoomServer.handleJoin()`，统一执行 kickedPlayers、人数、房间状态、gameId、gameVersion 校验。
+    - **加入入口统一**：服务器 Tab、局域网卡片加入和游戏详情页手动地址加入共用 `useRoomJoin.ts`，地址标准化、短地址识别、加入调用、错误提示保持一致；列表按钮状态仅用于展示，真实连接结果由 `RoomClient` / `RoomServer` / relay-server 联合决定。
+    - **密码模型**：房间密码只保存在房主本地 `RoomServer.roomPassword` 与 relay-server 内存中，房间状态与发现结果只暴露 `hasPassword`，绝不广播真实密码。
+    - **密码探测与前置拦截**：`RoomPasswordProbeService` 负责加入前探测目标房间是否设置密码。物理局域网/虚拟局域网直连先向房主发送 `room:password:probe`；官方短地址先向中继发送 `relay:room:password:probe`。仅在 `hasPassword=true` 时才弹出密码输入框。
+    - **校验集中化**：官方短地址加入先由 relay-server 在 `relay:join` 阶段执行房间存在、房主在线、已开始、满员、密码必填/错误等准入校验，再转发到房主；物理局域网/虚拟局域网直连由 `RoomServer.handleJoin()` 统一执行密码、kickedPlayers、人数、房间状态、gameId、gameVersion 校验。
     - **relay bridge**：`RelayRoomService` 将中继收到的原始 text/binary 帧交给 `RoomServer.handleRelayRawMessage()`，房主返回给 relay 客机的消息追加 `__relayTo` 路由字段；binary frame 只重封 header，body 原样保留。
     - **中继延迟测量**：房主每 10 秒通过 `RelayRoomService` 发送 `relay:latency:ping` 到中继服务器，服务器立即回复 `relay:latency:pong` 计算单向 RTT（`RELAY_LATENCY_REFRESH_INTERVAL_MS` = 10s，`RELAY_LATENCY_TIMEOUT_MS` = 5s 超时）。客机同样每 10 秒发送 `relay:latency:probe` → 中继转发至房主 → 房主回复 `relay:latency:pong` → 中继转发回客机，计算总往返延迟。延迟测量同时承担保活功能（`touchRoom` 刷新 TTL），已移除冗余的 `relay:heartbeat`（25s）定时器。房间内右上角 WiFi 风格 UI 显示延迟：房主显示到中继的延迟，客机显示经中继到房主的总延迟；发现页 Server Tab 描述横幅显示到中继服务器的 HTTP 延迟（通过 `/health` 端点测量）。
-    - **状态同步与幽灵房间防护**：`RoomServer.broadcastState()` 触发 `RelayRoomService.syncRoomState()`；中继服务端根据房主发送的无目标 `room:state:sync` 更新 `/rooms` 中的状态、人数、游戏名、版本等元信息；带 `__relayTo` 的 `room:state:sync` 继续按目标转发给对应玩家。房主断开、房主解散、房间 60s 无活动（`ROOM_TTL_MS`）时通过 `closeRoom()` 清理房间和连接。WebSocket 层 30s ping/pong 检测死连接。
-    - **中继加入拦截**：中继服务端在 `relay:join` 阶段拒绝房主离线、已开始、满员和加入自己房间等请求；房主本地 `RoomServer.handleJoin()` 继续执行最终业务校验。
+    - **状态同步与幽灵房间防护**：`RoomServer.broadcastState()` 触发 `RelayRoomService.syncRoomState()`；中继服务端根据房主发送的无目标 `room:state:sync` 更新 `/rooms` 中的状态、人数、游戏名、版本、`hasPassword` 等元信息；带 `__relayTo` 的 `room:state:sync` 继续按目标转发给对应玩家。房主断开、房主解散、房间 60s 无活动（`ROOM_TTL_MS`）时通过 `closeRoom()` 清理房间和连接。WebSocket 层 30s ping/pong 检测死连接。
+    - **密码同步**：房主更新密码时，`room.ipc.ts` 先更新本地 `RoomServer`，再调用 `RelayRoomService.syncRoomPassword()` 将密码同步给 relay-server，保证短地址准入规则与房主本地保持一致。
     - **容量保护**：官方中继通过 `MAX_ROOMS`、`MAX_CLIENTS`、`MAX_CLIENTS_PER_ROOM`、`MAX_EVENT_LOOP_DELAY_MS` 控制新房间与新玩家接入。
-    - **切换安全**：房主切换 frp/官方服务器公网入口前必须先通知当前其他玩家离开并清理连接；官方服务器注册失败时 UI 回退到 frp 状态。
+    - **切换安全**：房主切换 `lan` / `relay` 模式前必须先通知当前其他玩家离开并清理连接；官方服务器注册失败时 UI 回退到 `lan` 状态。
 
 - **下载悬浮球系统（Float Ball）**：
     - **独立窗口架构**：悬浮球运行在独立的 `BrowserWindow` 中（透明无边框、置顶、72×72px），通过 `/float-ball` 路由加载 `FloatBallView.vue` 组件。`AppContent` 将其识别为弹窗窗口（`isPopupWindow`），跳过主菜单渲染。
@@ -955,18 +958,21 @@ interface AppSettings {
 - `market:floatBall:event`：主进程 → 悬浮球渲染进程，推送合并后的下载进度数据（`FloatBallProgress`），节流 1 秒。
 - `floatBall:dragState`：主进程 → 悬浮球渲染进程，通知拖拽状态（拖动中/停止）。
 - `room:create`：创建房间并在本地启动房间服务。
-- `room:join`：加入指定房主地址的房间。
+- `room:join`：加入指定地址的房间（支持官方短地址、物理局域网 IP、虚拟局域网 IP、用户自备 frp 地址），并可附带密码。
 - `room:leave`：离开房间（房主离开会解散房间）。
 - `room:ready`：标记当前玩家为已准备。
 - `room:unready`：取消当前玩家准备状态。
 - `room:start`：由房主触发房间开始游戏。
 - `room:setAddress`：设置并广播房主公网地址。
+- `room:setPassword`：设置或清除房间密码，并同步到官方中继服务器（若当前已开启官方服务器模式）。
 - `room:getState`：获取当前房间状态快照。
 - `room:sendChat`：发送文本、语音或图片聊天消息（支持文字+图片打包发送）。
 - `room:kickPlayer`：房主踢出指定玩家。
 - `room:reconnect`：客机游戏进程崩溃后重新启动游戏（要求 `room.reconnectPlayerIds` 包含当前玩家 ID）。
-- `room:discoverLan`：扫描同一局域网内等待中的 BZ-Games 房间，并返回已带加入校验结果的房间列表。
+- `room:discoverLan`：扫描并返回物理局域网房间列表。
+- `room:discoverVirtualLan`：扫描并返回虚拟局域网房间列表（EasyTier、ZeroTier、Tailscale、WireGuard、Hamachi 等）。
 - `room:discoverRelay`：从官方中继服务器 `/rooms` 拉取服务器房间列表，并返回已带加入校验结果的房间列表。
+- `room:probePassword`：加入前探测目标房间是否设置密码；直连房间走房主本地探测，官方短地址走中继探测。
 - `room:validateDiscovered`：对发现到的房间执行加入前校验，包括是否为自己的房间、房间状态、人数、本地是否安装游戏和版本是否匹配。
 - `room:enableRelayHost`：房主切换到官方服务器公网入口，先断开其他玩家，再向官方中继注册房间并返回短地址。
 - `room:disableRelayHost`：房主关闭官方服务器公网入口，断开中继连接并清空短地址。
@@ -1042,10 +1048,11 @@ interface AppSettings {
 - **市场版本状态**：已安装版本、当前最新版本、预发布版本在版本列表中展示不同状态标记。
 - **成就展示**：成就列表支持按游戏版本筛选，支持展开/收起，默认收起。若当前版本无成就，显示空列表。
 - **动态元数据**：游戏详情页切换版本时，优先展示当前选中版本的元数据（如简介、成就）；为空时展示空状态。
-- **房间入口**：顶部导航的“房间”按钮进入 `/rooms`，包含“局域网”和“服务器”两个 Tab；顶部头像与玩家名点击进入个性化页面。
-- **局域网始终可用**：房间页的 frp/官方服务器选择只表示公网入口，局域网发现和 `房主局域网IP:defaultRoomPort` 直连始终可用。
-- **官方服务器模式**：房主开启官方服务器模式后展示 `<relay-public-host>:随机数字` 短地址和复制按钮；切换公网入口前必须先通知其他玩家离开，注册失败自动回退到 frp 显示状态。
-- **房间发现校验**：局域网/服务器卡片加入前必须校验本地是否安装对应游戏、版本是否匹配、房间是否等待中、人数是否已满、是否为自己的房间；自己的房间点击加入时必须给出友好提示。
+- **房间入口**：顶部导航的“房间”按钮进入 `/rooms`，包含“物理局域网”“虚拟局域网”“服务器”三个 Tab；顶部头像与玩家名点击进入个性化页面。
+- **局域网始终可用**：房主页面的模式切换仅控制是否启用官方短地址；`RoomServer` 的本地监听持续存在，物理局域网、虚拟局域网和用户自备 frp 地址直连始终可用。
+- **官方服务器模式**：房主开启官方服务器模式后展示 `<relay-public-host>:随机数字` 短地址和复制按钮；切换入口前必须先通知其他玩家离开，注册失败自动回退到 `lan` 状态。
+- **房间发现校验**：物理局域网/虚拟局域网/服务器卡片加入前必须校验本地是否安装对应游戏、版本是否匹配、房间是否等待中、人数是否已满、是否为自己的房间；自己的房间点击加入时必须给出友好提示。
+- **房间密码交互**：房间页右上角提供密码按钮；发现页卡片加入前必须先探测 `hasPassword`，仅在目标房间有密码时再弹出密码输入框。
 - **服务器卡片展示**：服务器房间卡片展示官方短地址；游戏名称显示游戏本身名称，优先本地 Manifest，其次中继返回的 `gameName`，最后兜底 `gameId`。
 - **游戏库展示**：
     - 游戏封面展示区域统一使用 **16:9** 比例，图片模式为 `contain`（完整显示）或 `cover`（填满）。
@@ -1185,9 +1192,9 @@ interface AppSettings {
     - 用户在游戏详情页点击「创建房间」。
     - 主进程 `RoomServer` 启动，监听 `settings.defaultRoomPort` (默认 38080)。
     - 房主平台内部 `RoomClient` 连接本地 `RoomServer`。
-2. **内网穿透与地址分享**：
-    - 房主使用内网穿透工具将本地端口映射到公网。
-    - 房主获取公网地址（如 `60.26.220.79:39337`）发送给好友。
+2. **选择对外入口**：
+    - 房主可直接分享物理局域网 IP、虚拟局域网 IP 或用户自备 frp 公网地址。
+    - 若开启官方服务器模式，平台额外向 relay-server 注册一个短地址供好友使用。
 3. **玩家加入**：
     - 房主等待玩家连接。
     - 玩家列表实时更新（通过 `room:player:joined` / `room:state:sync`）。
@@ -1199,13 +1206,15 @@ interface AppSettings {
 #### 玩家（Client）操作流程
 
 1. **加入房间**：
-    - 用户点击「加入房间」，输入房主提供的公网地址。
+    - 用户点击「加入房间」，输入房主提供的短地址、局域网地址、虚拟局域网地址或公网映射地址。
+    - 若从房间发现页点击卡片加入，平台会先探测该房间是否设置密码。
     - 平台 `RoomClient` 尝试建立 WebSocket 连接。
-    - 连接成功后发送 `room:join` 握手消息，携带 `gameId` 和 `gameVersion`。
+    - 官方短地址模式先发送 `relay:join` 做前置准入校验；直连模式连接成功后直接发送 `room:join` 握手消息，携带 `gameId`、`gameVersion` 与可选密码。
 2. **握手与同步**：
-    - `RoomServer` 校验游戏 ID 和版本。
+    - relay-server 会在短地址模式下先校验房间是否存在、房主是否在线、游戏是否已开始、房间是否已满、密码是否缺失或错误。
+    - `RoomServer` 对所有直连/最终加入请求统一校验密码、游戏 ID、版本、黑名单和人数。
     - 收到 `room:join:ack` 表示加入成功，同步房间状态。
-    - 若收到 `room:join:refused` 则提示错误原因（如“房间已满”或“版本不匹配”）。
+    - 若收到 `room:join:refused` 或 relay 错误，则提示对应原因（如“房间已满”“版本不匹配”“密码错误”）。
     - `RoomClient` 在异常断线后会自动重连并重新发送 `room:join`（最多 5 次，递增退避），减少临时网络抖动造成的掉房。
 3. **准备与等待**：
     - 在房间内点击「准备」 (`room:ready`)。
@@ -1238,6 +1247,8 @@ Room Server 与 Room Client 之间使用 **WebSocket + JSON** 通信。
 | `room:join`            | Client → Server | 请求加入房间，携带玩家信息与游戏版本                                              |
 | `room:join:ack`        | Server → Client | 加入成功，返回房间信息                                                     |
 | `room:join:refused`    | Server → Client | 拒绝加入（房间满、版本不匹配等）                                                |
+| `room:password:probe`  | Client → Server | 加入前探测直连房间是否设置密码                                                |
+| `room:password:probe:ack` | Server → Client | 返回直连房间是否设置密码                                                   |
 | `room:player:joined`   | Server → All    | 通知有新玩家加入                                                        |
 | `room:player:left`     | Server → All    | 通知玩家离开                                                          |
 | `room:player:ready`    | Client → Server | 玩家标记为已准备                                                        |

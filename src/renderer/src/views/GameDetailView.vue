@@ -74,7 +74,16 @@
     </n-grid>
 
     <n-modal v-model:show="showJoinModal" preset="dialog" :title="t('gameDetail.joinRoom')" :positive-text="t('common.join')" :negative-text="t('common.cancel')" @positive-click="handleJoin" :loading="roomStore.isConnecting">
-      <n-input v-model:value="joinAddress" :placeholder="t('gameDetail.joinAddressPlaceholder')" />
+      <n-space vertical :size="12">
+        <n-input v-model:value="joinAddress" :placeholder="t('gameDetail.joinAddressPlaceholder')" />
+        <n-input
+          v-model:value="joinPassword"
+          type="password"
+          show-password-on="click"
+          :maxlength="64"
+          :placeholder="t('gameDetail.joinPasswordPlaceholder')"
+        />
+      </n-space>
     </n-modal>
 
     <GameDeleteModal 
@@ -150,6 +159,7 @@ const typeLabel = computed(() => {
 
 const showJoinModal = ref(false)
 const joinAddress = ref('')
+const joinPassword = ref('')
 const showAchievements = ref(false)
 
 const authorUrl = computed(() => {
@@ -227,6 +237,9 @@ watch(effectiveGameId, async () => {
 watch(showJoinModal, (open) => {
   if (open && settingsStore.settings?.lastJoinRoomAddress) {
     joinAddress.value = settingsStore.settings.lastJoinRoomAddress
+  }
+  if (open) {
+    joinPassword.value = ''
   }
 })
 
@@ -381,6 +394,7 @@ const handleJoin = async () => {
     gameId: effectiveGameId.value,
     address: joinAddress.value,
     version: selectedVersion.value,
+    password: joinPassword.value,
     router,
     message,
     saveLastAddress: true,
@@ -390,6 +404,9 @@ const handleJoin = async () => {
     },
   })
   joinAddress.value = result.address
+  if (result.success) {
+    joinPassword.value = ''
+  }
   return result.success
 }
 
