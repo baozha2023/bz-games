@@ -42,6 +42,7 @@ const defaultSettings: AppSettings = {
   ignoreDefaultGamesMigrationPrompt: false,
   chatInputHeight: 204,
   downloadFloatBall: false,
+  sensitiveWordFilter: true,
 };
 
 const defaultUserData: UserData = {

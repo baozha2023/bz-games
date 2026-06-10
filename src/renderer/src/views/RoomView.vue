@@ -550,7 +550,11 @@ const handleKickPlayer = async (playerId: string) => {
 }
 
 .chat-section {
-  min-height: 360px;
+  width: 100%;
+  aspect-ratio: 16 / 5;
+  min-height: 200px;
+  max-height: 800px;
+  overflow: hidden;
 }
 
 .room-actions {
@@ -558,9 +562,4 @@ const handleKickPlayer = async (playerId: string) => {
   text-align: center;
 }
 
-@media (max-height: 720px) {
-  .chat-section {
-    min-height: 300px;
-  }
-}
 </style>

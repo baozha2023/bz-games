@@ -111,6 +111,14 @@ export function registerGameIpc() {
     });
 
     ipcMain.handle(
+        IPC.GAME_GET_INSTALL_PATH,
+        async (_, id: string, version?: string) => {
+            const versionPath = await GameLoader.getVersionPath(id, version);
+            return versionPath ? path.dirname(versionPath) : null;
+        },
+    );
+
+    ipcMain.handle(
         IPC.GAME_GET_COVER,
         async (_, id: string, version?: string) => {
             try {

@@ -107,6 +107,7 @@ export interface AppSettings {
   chatWindowBounds?: { x: number; y: number; width: number; height: number };
   chatInputHeight?: number;
   downloadFloatBall?: boolean;
+  sensitiveWordFilter?: boolean;
   floatBallPosition?: { x: number; y: number };
   ignoreDefaultGamesMigrationPrompt?: boolean;
 }

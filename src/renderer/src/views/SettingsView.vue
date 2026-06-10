@@ -54,6 +54,13 @@
         </n-radio-group>
       </n-form-item>
 
+      <n-form-item :label="t('settings.sensitiveWordFilter')" path="sensitiveWordFilter">
+        <n-radio-group v-model:value="formValue.sensitiveWordFilter">
+          <n-radio :value="true">{{ t('settings.sensitiveWordFilterOn') }}</n-radio>
+          <n-radio :value="false">{{ t('settings.sensitiveWordFilterOff') }}</n-radio>
+        </n-radio-group>
+      </n-form-item>
+
       <n-form-item :label="t('settings.githubToken')" path="githubToken">
         <n-input
           v-model:value="formValue.githubToken"

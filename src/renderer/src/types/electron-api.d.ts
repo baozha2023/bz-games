@@ -80,6 +80,7 @@ declare global {
         getAll: () => Promise<GameManifest[]>;
         getAllRecords: () => Promise<GameRecord[]>;
         getVersions: (id: string) => Promise<string[]>;
+        getInstallPath: (id: string, version?: string) => Promise<string | null>;
         getManifest: (
           id: string,
           version?: string,
@@ -154,6 +155,7 @@ declare global {
       settings: {
         get: () => Promise<AppSettings>;
         getAppVersion: () => Promise<string>;
+        getSensitiveWords: () => Promise<string[]>;
         save: (settings: AppSettings) => Promise<boolean>;
         savePartialSettings: (partial: Partial<AppSettings>) => Promise<void>;
         saveNicknameStyle: (style: NicknameStyle) => Promise<{ success: boolean; code?: string }>;

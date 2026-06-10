@@ -48,6 +48,8 @@ export const electronAPI = {
     getAll: () => ipcRenderer.invoke(IPC.GAME_GET_ALL),
     getAllRecords: () => ipcRenderer.invoke(IPC.GAME_GET_RECORDS),
     getVersions: (id: string) => ipcRenderer.invoke(IPC.GAME_GET_VERSIONS, id),
+    getInstallPath: (id: string, version?: string) =>
+      ipcRenderer.invoke(IPC.GAME_GET_INSTALL_PATH, id, version),
     getManifest: (id: string, version?: string) =>
       ipcRenderer.invoke(IPC.GAME_GET_MANIFEST, id, version),
     getCover: (id: string, version?: string) =>
@@ -181,6 +183,8 @@ export const electronAPI = {
   settings: {
     get: () => ipcRenderer.invoke(IPC.SYSTEM_GET_SETTINGS),
     getAppVersion: () => ipcRenderer.invoke(IPC.SYSTEM_GET_APP_VERSION),
+    getSensitiveWords: (): Promise<string[]> =>
+      ipcRenderer.invoke(IPC.SYSTEM_GET_SENSITIVE_WORDS),
     save: (settings: AppSettings) =>
       ipcRenderer.invoke(IPC.SYSTEM_SAVE_SETTINGS, settings),
     savePartialSettings: (partial: Partial<AppSettings>) =>

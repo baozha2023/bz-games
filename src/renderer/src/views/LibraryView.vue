@@ -67,6 +67,7 @@
                 :class="{ active: selectedSteamGameId === game.id }"
                 @click="handleSteamListClick(game.id)"
                 @dblclick="handleSteamListClick(game.id)"
+                @contextmenu.prevent="handleContextMenu($event, game.id)"
               >
                 <div class="steam-list-thumb">
                   <GameIcon :game-id="game.id" :game-name="game.name" />
@@ -79,7 +80,7 @@
                   </div>
                 </div>
                 <div class="steam-list-flags">
-                  <span v-if="isFavorite(game.id)" class="steam-flag steam-flag-favorite">♥</span>
+                  <n-icon v-if="isFavorite(game.id)" class="steam-flag-heart" :size="16" color="#d03050" :component="Heart" />
                   <span v-if="gameStore.runningGameIds.has(game.id)" class="steam-flag steam-flag-running">RUN</span>
                 </div>
               </button>
@@ -148,6 +149,7 @@
                 @mousedown="handleMouseDown"
                 @mouseup="clearLongPress"
                 @mouseleave="clearLongPress"
+                @contextmenu.prevent="handleContextMenu($event, game.id)"
               >
                 <GameCard :game="game" @click="handleSteamCardClick" />
                 <div v-if="isReorderMode" class="reorder-overlay"></div>
@@ -383,7 +385,7 @@ import { onMounted, ref, computed, watch, h, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useMessage, NIcon, NTooltip, NDropdown } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
-import { GridOutline, AppsOutline, Heart, HeartOutline, ArrowUpOutline, TrashOutline, LibraryOutline, SearchOutline } from '@vicons/ionicons5'
+import { GridOutline, AppsOutline, Heart, HeartOutline, ArrowUpOutline, TrashOutline, LibraryOutline, SearchOutline, FolderOpenOutline } from '@vicons/ionicons5'
 import { useGameStore } from '../stores/useGameStore'
 import { useSettingsStore } from '../stores/useSettingsStore'
 import GameCard from '../components/game/GameCard.vue'
@@ -531,6 +533,11 @@ const contextMenuOptions = computed(() => {
       icon: () => h(NIcon, null, { default: () => h(ArrowUpOutline) }),
     },
     {
+      label: t('library.openGameDirectory'),
+      key: 'openInstallPath',
+      icon: () => h(NIcon, null, { default: () => h(FolderOpenOutline) }),
+    },
+    {
       label: t('library.deleteGameTitle'),
       key: 'delete',
       icon: () => h(NIcon, null, { default: () => h(TrashOutline) }),
@@ -554,6 +561,8 @@ const handleContextMenuSelect = (key: string) => {
     handleToggleFavorite(gameId)
   } else if (key === 'moveToFront') {
     handleMoveToFront(gameId)
+  } else if (key === 'openInstallPath') {
+    handleOpenInstallPath(gameId)
   } else if (key === 'delete') {
     handleDelete(gameId)
   }
@@ -570,6 +579,22 @@ const handleToggleFavorite = async (gameId: string) => {
 const handleMoveToFront = async (gameId: string) => {
   const newOrder = [gameId, ...gameStore.games.filter(g => g.id !== gameId).map(g => g.id)]
   await gameStore.reorderGames(newOrder)
+}
+
+const handleOpenInstallPath = async (gameId: string) => {
+  try {
+    const installPath = await window.electronAPI.game.getInstallPath(gameId)
+    if (!installPath) {
+      message.error(t('library.openGameDirectoryError'))
+      return
+    }
+    const opened = await window.electronAPI.settings.openPath(installPath)
+    if (!opened) {
+      message.error(t('library.openGameDirectoryError'))
+    }
+  } catch {
+    message.error(t('library.openGameDirectoryError'))
+  }
 }
 
 const handleDelete = async (gameId: string) => {
@@ -1066,6 +1091,11 @@ const handleConfirmDraftImport = async () => {
 .steam-flag-favorite {
   color: #fff;
   background: var(--bz-red);
+}
+
+.steam-flag-heart {
+  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.5));
+  flex-shrink: 0;
 }
 
 .steam-flag-running {

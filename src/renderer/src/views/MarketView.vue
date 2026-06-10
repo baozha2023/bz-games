@@ -220,27 +220,32 @@
                     <n-text depth="3">
                       {{ t("market.platformVersion", { version: getSelectedVersionInfo(game)?.platformVersion }) }}
                     </n-text>
-                    <n-text depth="3">
-                      <n-space align="center" :size="4">
-                        <template v-if="getSelectedVersionInfo(game) && isAssetLoading(getSelectedVersionInfo(game)!)">
-                          <n-skeleton text :repeat="1" width="120px" />
-                        </template>
-                        <template v-else>
-                          <span>{{ t("market.packageSize", { size: formatSize(getSelectedVersionInfo(game)) }) }}</span>
-                        </template>
-                        <n-button
-                          v-if="getSelectedVersionInfo(game) && isAssetRefreshable(getSelectedVersionInfo(game)!)"
-                          text
-                          size="tiny"
-                          :disabled="isAssetLoading(getSelectedVersionInfo(game)!)"
-                          @click.stop="handleRefreshAsset(getSelectedVersionInfo(game)!.downloadUrl)"
-                        >
-                          <template #icon>
-                            <n-icon><RefreshOutline /></n-icon>
+                    <div class="market-version-meta-row">
+                      <n-text depth="3">
+                        <n-space align="center" :size="4">
+                          <template v-if="getSelectedVersionInfo(game) && isAssetLoading(getSelectedVersionInfo(game)!)">
+                            <n-skeleton text :repeat="1" width="120px" />
                           </template>
-                        </n-button>
-                      </n-space>
-                    </n-text>
+                          <template v-else>
+                            <span>{{ t("market.packageSize", { size: formatSize(getSelectedVersionInfo(game)) }) }}</span>
+                          </template>
+                          <n-button
+                            v-if="getSelectedVersionInfo(game) && isAssetRefreshable(getSelectedVersionInfo(game)!)"
+                            text
+                            size="tiny"
+                            :disabled="isAssetLoading(getSelectedVersionInfo(game)!)"
+                            @click.stop="handleRefreshAsset(getSelectedVersionInfo(game)!.downloadUrl)"
+                          >
+                            <template #icon>
+                              <n-icon><RefreshOutline /></n-icon>
+                            </template>
+                          </n-button>
+                        </n-space>
+                      </n-text>
+                      <n-text v-if="getSelectedVersionInfo(game)?.publishedAt" depth="3" class="market-version-published-at">
+                        {{ t("market.publishedAt", { time: formatDateTime(getSelectedVersionInfo(game)?.publishedAt) }) }}
+                      </n-text>
+                    </div>
                     <template v-if="getCurrentTask(game)">
                       <n-tag :type="taskTagType(getCurrentTask(game)!.status)" :bordered="false">
                         {{ taskStatusLabel(getCurrentTask(game)!.status) }}
@@ -310,17 +315,17 @@
                   </n-space>
                 </n-card>
 
-                <n-space vertical size="small">
+                <n-space vertical size="small" class="market-version-list">
                   <strong>{{ t("market.versions") }}</strong>
-                  <n-radio-group v-model:value="selectedVersions[game.id]">
-                    <n-space vertical size="small" style="width: 100%;">
+                  <n-radio-group v-model:value="selectedVersions[game.id]" class="market-version-radio-group">
+                    <n-space vertical size="small" class="market-version-stack">
                       <div
                         v-for="version in game.versions"
                         :key="version.version"
                         class="market-version-item"
                       >
-                        <n-space justify="space-between" align="start" style="width: 100%;">
-                          <div style="flex: 1;">
+                        <div class="market-version-content">
+                          <div class="market-version-main">
                             <n-radio :value="version.version">
                               {{ version.version }}
                             </n-radio>
@@ -379,29 +384,34 @@
                               {{ t("market.platformVersion", { version: version.platformVersion }) }}
                             </n-text>
                             <br />
-                            <n-text depth="3">
-                              <n-space align="center" :size="4">
-                                <template v-if="isAssetLoading(version)">
-                                  <n-skeleton text :repeat="1" width="100px" />
-                                </template>
-                                <template v-else>
-                                  <span>{{ t("market.packageSize", { size: formatSize(version) }) }}</span>
-                                </template>
-                                <n-button
-                                  v-if="isAssetRefreshable(version)"
-                                  text
-                                  size="tiny"
-                                  :disabled="isAssetLoading(version)"
-                                  @click.stop="handleRefreshAsset(version.downloadUrl)"
-                                >
-                                  <template #icon>
-                                    <n-icon><RefreshOutline /></n-icon>
+                            <div class="market-version-meta-row">
+                              <n-text depth="3">
+                                <n-space align="center" :size="4">
+                                  <template v-if="isAssetLoading(version)">
+                                    <n-skeleton text :repeat="1" width="100px" />
                                   </template>
-                                </n-button>
-                              </n-space>
-                            </n-text>
+                                  <template v-else>
+                                    <span>{{ t("market.packageSize", { size: formatSize(version) }) }}</span>
+                                  </template>
+                                  <n-button
+                                    v-if="isAssetRefreshable(version)"
+                                    text
+                                    size="tiny"
+                                    :disabled="isAssetLoading(version)"
+                                    @click.stop="handleRefreshAsset(version.downloadUrl)"
+                                  >
+                                    <template #icon>
+                                      <n-icon><RefreshOutline /></n-icon>
+                                    </template>
+                                  </n-button>
+                                </n-space>
+                              </n-text>
+                              <n-text v-if="version.publishedAt" depth="3" class="market-version-published-at">
+                                {{ t("market.publishedAt", { time: formatDateTime(version.publishedAt) }) }}
+                              </n-text>
+                            </div>
                           </div>
-                        </n-space>
+                        </div>
                       </div>
                     </n-space>
                   </n-radio-group>
@@ -507,19 +517,25 @@ const installPathLabel = computed(() => {
 });
 
 const createdAtLabel = computed(() => {
-  if (!generatedAt.value) return "";
+  const time = formatDateTime(generatedAt.value);
+  return time ? t("market.createdAt", { time }) : "";
+});
+
+function formatDateTime(value: string | undefined): string {
+  if (!value) return "";
   try {
-    const date = new Date(generatedAt.value);
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
     const y = date.getFullYear();
     const m = String(date.getMonth() + 1).padStart(2, "0");
     const d = String(date.getDate()).padStart(2, "0");
     const h = String(date.getHours()).padStart(2, "0");
     const min = String(date.getMinutes()).padStart(2, "0");
-    return t("market.createdAt", { time: `${y}-${m}-${d} ${h}:${min}` });
+    return `${y}-${m}-${d} ${h}:${min}`;
   } catch {
     return "";
   }
-});
+}
 
 function taskKey(gameId: string, version: string): string {
   return `${gameId}@${version}`;
@@ -1045,7 +1061,41 @@ onUnmounted(() => {
   min-width: 0;
 }
 
+.market-version-list,
+.market-version-radio-group,
+.market-version-stack,
+.market-version-stack :deep(.n-space),
+.market-version-stack :deep(.n-space-item) {
+  width: 100%;
+}
+
+.market-version-content {
+  display: block;
+  width: 100%;
+}
+
+.market-version-main {
+  width: 100%;
+  min-width: 0;
+}
+
+.market-version-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+
+.market-version-published-at {
+  flex-shrink: 0;
+  text-align: right;
+  white-space: nowrap;
+}
+
 .market-version-item {
+  width: 100%;
+  box-sizing: border-box;
   border: 1px solid var(--bz-border-subtle);
   border-radius: 10px;
   padding: 12px;

@@ -648,6 +648,7 @@ interface AppSettings {
     chatWindowBounds?: { x: number; y: number; width: number; height: number };
     chatInputHeight?: number;
     downloadFloatBall?: boolean;
+    sensitiveWordFilter?: boolean;
     floatBallPosition?: { x: number; y: number };
 }
 ```
@@ -931,6 +932,7 @@ interface AppSettings {
 - `game:getCover`：读取指定版本封面并返回 Data URL。
 - `game:getIcon`：读取指定版本图标并返回 Data URL。
 - `game:getVersions`：获取指定游戏的版本列表。
+- `game:getInstallPath`：获取指定游戏的安装根目录（gameId 目录，不含版本子目录），用于在系统文件管理器中打开。
 - `game:reorder`：保存游戏库排序结果。
 - `game:toggleFavorite`：切换游戏收藏状态。
 - `game:remove`：删除指定游戏或指定版本。
@@ -974,6 +976,7 @@ interface AppSettings {
 - `room:chatWindowClosed`：主进程 → 渲染进程事件，通知主窗口聊天弹窗已关闭。
 - `system:getSettings`：读取当前应用设置。
 - `system:getAppVersion`：获取当前平台版本号（供渲染进程进行平台兼容性判断）。
+- `system:getSensitiveWords`：从 `resources/vocabulary/` 加载并返回去重排序后的敏感词列表（按长度降序），结果缓存在主进程模块级变量中。
 - `system:saveSettings`：保存应用设置并应用相关系统行为。
 - `system:savePartialSettings`：保存部分应用设置（合并写入，不会覆盖未传入的字段）。
 - `system:uploadAvatar`：选择并处理玩家头像。
@@ -1078,6 +1081,13 @@ interface AppSettings {
     - 蒙层使用自定义缩小光标（白色 SVG data URI），图片区域 `cursor: default`。
 - **内嵌聊天自适应高度**：
     - RoomChat 使用完整 flex 布局链，`.chat-messages` 为 `flex:1; min-height:200px`，随窗口大小自动调整。
+- **聊天消息统一组件**：
+    - `ChatMessageList.vue` 为 RoomChat 与 ChatPopoutView 提供统一的聊天消息渲染（文本、图片、语音、GameReportCard），消除两处重复代码。
+    - 组件通过 props 接收消息列表、玩家 ID、播放状态、敏感词过滤开关与词库，通过 emits 向外传递图片预览和语音播放事件。
+- **敏感词过滤**：
+    - 客户端侧功能，默认开启；由 `SettingsView` 中的 `sensitiveWordFilter` 开关控制，持久化于 `AppSettings.sensitiveWordFilter`。
+    - 词库存储在 `resources/vocabulary/*.txt`，主进程 `system:getSensitiveWords` 加载并缓存，渲染进程通过 `sensitiveWordFilter.ts` 的 `filterSensitiveText()` 对消息文本进行字符级掩码替换（敏感词替换为 `*`）。
+    - 算法通过 `Array.from()` 正确处理 Unicode 字符，使用 code-unit→char-index 映射表定位，词库按长度降序排序后逐词扫描，被命中的字符位置标记后批量替换。
 - **游戏详情页**：
     - 删除游戏功能使用模态框，支持多选版本进行删除，默认选中当前版本。
     - 若 Manifest 配置了 `video` 字段，详情页进入后自动播放预览视频；视频结束后自动回退显示封面。

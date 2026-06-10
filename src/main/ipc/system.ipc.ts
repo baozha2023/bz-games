@@ -7,6 +7,32 @@ import { updateService } from "../services/system/UpdateService";
 import { logger } from "../utils/logger";
 import type { AppSettings, NicknameStyle } from "../../shared/types";
 import { createFloatBallWindow, destroyFloatBallWindow } from "../window";
+import { getAppRoot } from "../utils/appPath";
+
+let sensitiveWordCache: string[] | null = null;
+
+function loadSensitiveWords(): string[] {
+  if (sensitiveWordCache) return sensitiveWordCache;
+  const vocabularyDir = path.join(getAppRoot(), "resources", "vocabulary");
+  try {
+    const words = fs
+      .readdirSync(vocabularyDir)
+      .filter((fileName) => fileName.endsWith(".txt"))
+      .flatMap((fileName) => {
+        const filePath = path.join(vocabularyDir, fileName);
+        return fs
+          .readFileSync(filePath, "utf8")
+          .split(/\r?\n/)
+          .map((word) => word.trim())
+          .filter(Boolean);
+      });
+    sensitiveWordCache = Array.from(new Set(words)).sort((a, b) => b.length - a.length);
+  } catch (error) {
+    logger.error("[SystemIPC] Failed to load sensitive vocabulary:", error);
+    sensitiveWordCache = [];
+  }
+  return sensitiveWordCache;
+}
 
 export function registerSystemIpc() {
   updateService.init();
@@ -26,6 +52,10 @@ export function registerSystemIpc() {
 
   ipcMain.handle(IPC.SYSTEM_GET_APP_VERSION, async () => {
     return app.getVersion();
+  });
+
+  ipcMain.handle(IPC.SYSTEM_GET_SENSITIVE_WORDS, async () => {
+    return loadSensitiveWords();
   });
 
   ipcMain.handle(IPC.SYSTEM_SAVE_SETTINGS, async (_, settings: AppSettings) => {

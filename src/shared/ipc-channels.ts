@@ -9,6 +9,7 @@ export const IPC = {
   GAME_GET_VIDEO: "game:getVideo",
   GAME_GET_ICON: "game:getIcon",
   GAME_GET_VERSIONS: "game:getVersions",
+  GAME_GET_INSTALL_PATH: "game:getInstallPath",
   GAME_GET_MANIFEST: "game:getManifest",
   GAME_UNLOCK_ACHIEVEMENT: "game:unlockAchievement",
   GAME_TOGGLE_FAVORITE: "game:toggleFavorite",
@@ -69,6 +70,7 @@ export const IPC = {
   // ── 系统 ──
   SYSTEM_GET_SETTINGS: "system:getSettings",
   SYSTEM_GET_APP_VERSION: "system:getAppVersion",
+  SYSTEM_GET_SENSITIVE_WORDS: "system:getSensitiveWords",
   SYSTEM_SAVE_SETTINGS: "system:saveSettings",
   SYSTEM_SAVE_PARTIAL_SETTINGS: "system:savePartialSettings",
   SYSTEM_SET_IGNORED_UPDATE_VERSION: "system:setIgnoredUpdateVersion",
