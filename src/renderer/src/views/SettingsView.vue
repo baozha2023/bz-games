@@ -1,6 +1,6 @@
 <template>
   <div style="padding: 24px; max-width: 600px; margin: 0 auto;">
-    <n-page-header :title="t('settings.title')" @back="$router.push({ name: 'Library' })" />
+    <n-page-header :title="t('settings.title')" @back="handleBack" />
     <n-divider />
     <n-form ref="formRef" :model="formValue" :rules="rules" v-if="formValue" label-placement="left" label-width="120">
       <n-form-item :label="t('settings.playerName')" path="playerName">
@@ -170,7 +170,7 @@
           <n-button secondary @click="handleClearCache">
             {{ t('settings.clearCache') }}
           </n-button>
-          <n-button secondary @click="handleOpenMigrateStorageModal">
+          <n-button type="warning" secondary @click="handleOpenMigrateStorageModal">
             {{ t('settings.migrateStorage') }}
           </n-button>
         </n-space>
@@ -261,11 +261,36 @@
       </div>
     </n-modal>
 
+    <n-modal v-model:show="showCropModal" preset="card" :title="t('settings.cropAvatarTitle')" style="width: 520px;" :closable="false" :mask-closable="false">
+      <div
+        ref="cropContainerRef"
+        class="crop-container"
+        @mousedown="onCropMouseDown"
+        @mousemove="onCropMouseMove"
+        @mouseup="onCropMouseUp"
+        @mouseleave="onCropMouseUp"
+        @wheel.prevent="onCropWheel"
+      >
+        <canvas ref="cropCanvasRef" class="crop-canvas" />
+      </div>
+      <div class="crop-controls">
+        <span class="crop-zoom-label">{{ t('settings.cropZoom') }} {{ cropZoom }}%</span>
+        <n-slider v-model:value="cropZoom" :min="cropMinZoom" :max="300" :step="1" style="flex:1; margin: 0 12px;" />
+      </div>
+      <template #action>
+        <n-space justify="end">
+          <n-button @click="cancelCrop">{{ t('common.cancel') }}</n-button>
+          <n-button type="primary" @click="confirmCrop">{{ t('common.confirm') }}</n-button>
+        </n-space>
+      </template>
+    </n-modal>
+
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, nextTick, watch } from 'vue'
+import { onBeforeRouteLeave, useRouter } from 'vue-router'
 import { useMessage, useDialog } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { useSettingsStore } from '../stores/useSettingsStore'
@@ -276,6 +301,7 @@ import { getFrameImageFileName } from '../../../shared/avatar-frames'
 import { formatBytes } from '../utils/format'
 
 const { t } = useI18n()
+const router = useRouter()
 const settingsStore = useSettingsStore()
 const gameStore = useGameStore()
 const message = useMessage()
@@ -283,8 +309,20 @@ const dialog = useDialog()
 
 const formRef = ref(null)
 const formValue = ref<AppSettings | null>(null)
+const originalSettings = ref<string>('')
 const showUninstallModal = ref(false)
 const showAvatarPreview = ref(false)
+const showCropModal = ref(false)
+const cropImage = ref<HTMLImageElement | null>(null)
+const cropCanvasRef = ref<HTMLCanvasElement | null>(null)
+const cropContainerRef = ref<HTMLDivElement | null>(null)
+const cropZoom = ref(100)
+const cropMinZoom = ref(50)
+const cropPanX = ref(0)
+const cropPanY = ref(0)
+const cropDragging = ref(false)
+const cropDragStart = ref({ x: 0, y: 0 })
+const CROP_BOX_RATIO = 0.7
 const showClearCacheModal = ref(false)
 const showMigrateStorageModal = ref(false)
 const isClearingCache = ref(false)
@@ -320,6 +358,11 @@ const settingsFrameFileName = computed(() => {
 
 const canSave = computed(() => {
   return formValue.value?.playerName?.trim() && formValue.value?.defaultRoomPort
+})
+
+const hasUnsavedChanges = computed(() => {
+  if (!formValue.value) return false
+  return JSON.stringify(formValue.value) !== originalSettings.value
 })
 
 const rules = {
@@ -376,11 +419,50 @@ onMounted(async () => {
   await refreshStoragePaths()
   if (settingsStore.settings) {
     formValue.value = JSON.parse(JSON.stringify(settingsStore.settings))
+    originalSettings.value = JSON.stringify(formValue.value)
   }
   settingsStore.initUpdateEvents()
   await settingsStore.refreshUpdateStatus()
 })
 
+const confirmLeave = () => {
+  return new Promise<boolean>((resolve) => {
+    dialog.warning({
+      title: t('settings.unsavedChangesTitle'),
+      content: t('settings.unsavedChangesContent'),
+      positiveText: t('settings.unsavedChangesSave'),
+      negativeText: t('settings.unsavedChangesDiscard'),
+      closable: false,
+      maskClosable: false,
+      onPositiveClick: async () => {
+        await handleSave()
+        resolve(true)
+      },
+      onNegativeClick: () => resolve(true),
+      onClose: () => resolve(false),
+    })
+  })
+}
+
+onBeforeRouteLeave(async (_to, _from, next) => {
+  if (!hasUnsavedChanges.value) {
+    next()
+    return
+  }
+  const proceed = await confirmLeave()
+  next(proceed)
+})
+
+const handleBack = async () => {
+  if (!hasUnsavedChanges.value) {
+    router.push({ name: 'Library' })
+    return
+  }
+  const proceed = await confirmLeave()
+  if (proceed) {
+    router.push({ name: 'Library' })
+  }
+}
 
 const handleSave = async () => {
   if (formValue.value) {
@@ -392,6 +474,7 @@ const handleSave = async () => {
     try {
       const plainSettings = JSON.parse(JSON.stringify(formValue.value));
       await settingsStore.saveSettings(plainSettings);
+      originalSettings.value = JSON.stringify(formValue.value)
       message.success(t('settings.saveSuccess'));
     } catch (error: any) {
       message.error(`${t('settings.saveFail')}: ${error.message || error}`);
@@ -400,11 +483,145 @@ const handleSave = async () => {
 }
 
 const handleUploadAvatar = async () => {
-  const avatarUrl = await window.electronAPI.settings.uploadAvatar();
-  if (avatarUrl && formValue.value) {
-    formValue.value.avatar = avatarUrl;
-    await handleSave();
+  const dataUrl = await window.electronAPI.settings.uploadAvatar()
+  if (!dataUrl) return
+
+  const img = new Image()
+  img.onload = () => {
+    cropImage.value = img
+    cropPanX.value = 0
+    cropPanY.value = 0
+    showCropModal.value = true
+    nextTick(() => {
+      cropZoom.value = calcFitZoom()
+      cropMinZoom.value = Math.max(30, cropZoom.value)
+      drawCropCanvas()
+    })
   }
+  img.src = dataUrl
+}
+
+const calcFitZoom = () => {
+  if (!cropImage.value || !cropContainerRef.value) return 100
+  const containerSize = cropContainerRef.value.clientWidth
+  const iW = cropImage.value.naturalWidth
+  const iH = cropImage.value.naturalHeight
+  if (!iW || !iH || !containerSize) return 100
+  const cropBoxSize = containerSize * CROP_BOX_RATIO
+  return Math.round(Math.max(cropBoxSize / iW, cropBoxSize / iH) * 100)
+}
+
+const drawCropCanvas = () => {
+  const canvas = cropCanvasRef.value
+  const container = cropContainerRef.value
+  const img = cropImage.value
+  if (!canvas || !container || !img) return
+
+  const S = container.clientWidth
+  canvas.width = S
+  canvas.height = S
+  const ctx = canvas.getContext("2d")!
+  const C = S * CROP_BOX_RATIO
+  const z = cropZoom.value / 100
+
+  const imgW = img.naturalWidth * z
+  const imgH = img.naturalHeight * z
+  const destX = S / 2 + cropPanX.value - imgW / 2
+  const destY = S / 2 + cropPanY.value - imgH / 2
+
+  ctx.fillStyle = "#000"
+  ctx.fillRect(0, 0, S, S)
+  ctx.drawImage(img, destX, destY, imgW, imgH)
+
+  const cx = (S - C) / 2
+  const cy = (S - C) / 2
+
+  ctx.fillStyle = "rgba(0, 0, 0, 0.55)"
+  ctx.fillRect(0, 0, S, cy)
+  ctx.fillRect(0, cy + C, S, S - cy - C)
+  ctx.fillRect(0, cy, cx, C)
+  ctx.fillRect(cx + C, cy, S - cx - C, C)
+
+  ctx.strokeStyle = "#fff"
+  ctx.lineWidth = 2
+  ctx.strokeRect(cx, cy, C, C)
+
+  ctx.strokeStyle = "rgba(255,255,255,0.25)"
+  ctx.lineWidth = 1
+  for (let i = 1; i < 3; i++) {
+    const y = cy + (C / 3) * i
+    ctx.beginPath(); ctx.moveTo(cx, y); ctx.lineTo(cx + C, y); ctx.stroke()
+    const x = cx + (C / 3) * i
+    ctx.beginPath(); ctx.moveTo(x, cy); ctx.lineTo(x, cy + C); ctx.stroke()
+  }
+}
+
+const clampPan = () => {
+  if (!cropImage.value || !cropContainerRef.value) return
+  const S = cropContainerRef.value.clientWidth
+  const C = S * CROP_BOX_RATIO
+  const z = cropZoom.value / 100
+  const maxPanX = Math.max(0, (cropImage.value.naturalWidth * z) / 2 - C / 2)
+  const maxPanY = Math.max(0, (cropImage.value.naturalHeight * z) / 2 - C / 2)
+  cropPanX.value = Math.max(-maxPanX, Math.min(maxPanX, cropPanX.value))
+  cropPanY.value = Math.max(-maxPanY, Math.min(maxPanY, cropPanY.value))
+}
+
+watch(cropZoom, () => {
+  clampPan()
+  drawCropCanvas()
+})
+
+const onCropMouseDown = (e: MouseEvent) => {
+  cropDragging.value = true
+  cropDragStart.value = { x: e.clientX - cropPanX.value, y: e.clientY - cropPanY.value }
+}
+
+const onCropMouseMove = (e: MouseEvent) => {
+  if (!cropDragging.value) return
+  cropPanX.value = e.clientX - cropDragStart.value.x
+  cropPanY.value = e.clientY - cropDragStart.value.y
+  clampPan()
+  drawCropCanvas()
+}
+
+const onCropMouseUp = () => {
+  cropDragging.value = false
+}
+
+const onCropWheel = (e: WheelEvent) => {
+  const delta = e.deltaY > 0 ? -5 : 5
+  const newZoom = Math.max(cropMinZoom.value, Math.min(300, cropZoom.value + delta))
+  if (newZoom === cropZoom.value) return
+  cropZoom.value = newZoom
+}
+
+const confirmCrop = () => {
+  const canvas = cropCanvasRef.value
+  const img = cropImage.value
+  const container = cropContainerRef.value
+  if (!canvas || !img || !container) return
+
+  const S = container.clientWidth
+  const C = Math.round(S * CROP_BOX_RATIO)
+  const cropX = (S - C) / 2
+  const cropY = (S - C) / 2
+
+  const result = document.createElement("canvas")
+  result.width = 256
+  result.height = 256
+  result.getContext("2d")!.drawImage(canvas, cropX, cropY, C, C, 0, 0, 256, 256)
+
+  if (formValue.value) {
+    formValue.value.avatar = result.toDataURL("image/jpeg", 0.8)
+  }
+  showCropModal.value = false
+  nextTick(() => handleSave())
+}
+
+const cancelCrop = () => {
+  showCropModal.value = false
+  cropImage.value = null
 }
 
 const handleAvatarClick = () => {
@@ -626,7 +843,7 @@ const confirmClearCache = async () => {
 
   const progressInterval = setInterval(() => {
     if (clearCacheProgress.value < 90) {
-      clearCacheProgress.value += Math.random() * 15 + 5
+      clearCacheProgress.value += Math.round(Math.random() * 15 + 5)
       if (clearCacheProgress.value > 90) clearCacheProgress.value = 90
     }
   }, 200)
@@ -664,5 +881,38 @@ const confirmClearCache = async () => {
 .avatar-clickable:hover {
   transform: scale(1.08);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.crop-container {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  overflow: hidden;
+  background: #000;
+  cursor: grab;
+  border-radius: 4px;
+}
+
+.crop-container:active {
+  cursor: grabbing;
+}
+
+.crop-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.crop-controls {
+  display: flex;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.crop-zoom-label {
+  flex-shrink: 0;
+  font-size: 13px;
+  color: var(--n-text-color-3);
+  min-width: 60px;
 }
 </style>

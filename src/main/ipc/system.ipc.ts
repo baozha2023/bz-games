@@ -111,10 +111,11 @@ export function registerSystemIpc() {
         return null;
       }
 
-      const resized = image.resize({ width: 256, height: 256 });
-      const jpegBuffer = resized.toJPEG(80);
-      const dataUrl = `data:image/jpeg;base64,${jpegBuffer.toString("base64")}`;
-      logger.info("[SystemIPC] Avatar processed, length:", dataUrl.length);
+      const ext = path.extname(sourcePath).toLowerCase();
+      const mimeMap: Record<string, string> = { ".png": "image/png", ".webp": "image/webp" };
+      const mimeType = mimeMap[ext] || "image/jpeg";
+      const dataUrl = `data:${mimeType};base64,${buffer.toString("base64")}`;
+      logger.info("[SystemIPC] Avatar raw loaded, length:", dataUrl.length);
       return dataUrl;
     } catch (e) {
       logger.error("[SystemIPC] Failed to process avatar file:", e);

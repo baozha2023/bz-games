@@ -985,7 +985,7 @@ interface AppSettings {
 - `system:getSensitiveWords`：从 `resources/vocabulary/` 加载并返回去重排序后的敏感词列表（按长度降序），结果缓存在主进程模块级变量中。
 - `system:saveSettings`：保存应用设置并应用相关系统行为。
 - `system:savePartialSettings`：保存部分应用设置（合并写入，不会覆盖未传入的字段）。
-- `system:uploadAvatar`：选择并处理玩家头像。
+- `system:uploadAvatar`：选择图片并返回原始 data URL（JPEG/PNG/WebP），不做缩放，裁切由前端 Crop 弹窗完成。
 - `system:selectGameStoragePath`：弹窗选择新的游戏库路径。返回 `{ path: string }` 或
   `{ path: string; error: "directory_not_empty" }`，要求所选目录为空（防止卸载时误删其他文件），若非空则由前端弹出友好提示。
 - `system:selectGameStoragePathRelaxed`：弹窗选择迁移目标路径，路径合法性和空目录约束由主进程迁移逻辑再次校验。
@@ -1108,7 +1108,9 @@ interface AppSettings {
 - **设置页卸载入口**：设置页底部（与保存按钮同行，`justify-content: space-between`）提供"卸载客户端"按钮（
   `type="error" secondary`），右侧提供"清除缓存"按钮。点击卸载弹出 NaiveUI 自定义确认弹窗，包含不可撤销的警告文案、是否同时删除所有游戏库目录的勾选项、以及删除路径列表预览。确认后调用
   `system:uninstall` IPC 执行卸载。若处于开发模式或卸载程序不可用，弹出友好提示。
-- **设置页清除缓存入口**：设置页底部"卸载客户端"按钮右侧提供"清除缓存"按钮（`secondary`），旁边提供"迁移游戏库"按钮。点击"清除缓存"后弹出 `n-modal preset="card"` 弹窗（400px），展示确认文案。点击"清除缓存"后启动模拟进度条（200ms 间隔随机递增 5-20%，最高到 90%），同时通过 `system:clearCache` IPC 调用主进程执行实际清理。主进程清理 `AppData\Roaming\bz-launcher` 和 `AppData\Local\bz-launcher-updater` 两个缓存目录，逐项删除并静默跳过锁定文件（`force: true, maxRetries: 3`），返回已清理的空间大小。IPC 完成后进度条跳至 100%，展示释放空间结果。取消/确认按钮统一在弹窗右下角（`#action` slot + `justify="end"`）。
+- **设置页清除缓存入口**：设置页底部"卸载客户端"按钮右侧提供"清除缓存"按钮（`secondary`），旁边提供"迁移游戏库"按钮（`type="warning" secondary` 黄色样式）。点击"清除缓存"后弹出 `n-modal preset="card"` 弹窗（400px），展示确认文案。点击"清除缓存"后启动模拟进度条（200ms 间隔随机递增 5-20%，最高到 90%），同时通过 `system:clearCache` IPC 调用主进程执行实际清理。主进程清理 `AppData\Roaming\bz-launcher` 和 `AppData\Local\bz-launcher-updater` 两个缓存目录，逐项删除并静默跳过锁定文件（`force: true, maxRetries: 3`），返回已清理的空间大小。IPC 完成后进度条跳至 100%，展示释放空间结果。取消/确认按钮统一在弹窗右下角（`#action` slot + `justify="end"`）。
+- **设置页未保存变更拦截**：进入页面时记录 `originalSettings` JSON 快照，`hasUnsavedChanges` 计算属性实时比对当前表单与快照。`onBeforeRouteLeave` 路由守卫检测到未保存变更时弹出 NaiveUI `dialog.warning`，提供"保存并离开 / 不保存 / 取消"三个选项。页面顶部返回按钮（`n-page-header @back`）同样先检查变更再跳转。保存成功后同步更新快照，不再触发拦截。
+- **设置页头像裁切**：上传头像后弹出裁切弹窗（`n-modal preset="card"` 520px），Canvas 绘制原图 + 正方形裁切框（70% 容器边长，带九宫格参考线）。支持鼠标拖拽平移和滚轮/滑块缩放（自适应最小缩放至覆盖裁切框）。确认后从裁切框区域提取正方形内容，缩放至 256×256 JPEG 并自动保存。存储为正方形，圆形效果由 CSS `border-radius: 50%` 实现。
 - **设置页头像预览**：点击设置页头像缩略图（`AvatarWithFrame` 组件，40px），弹出
   `n-modal preset="card"` 模态框，280×280 圆形大图预览（含头像框）；无头像时显示玩家名首字母大字（使用 `--bz-bg-card-placeholder` 和
   `--bz-text-on-placeholder` CSS 变量适配暗/亮主题）。
