@@ -1,14 +1,17 @@
-# BZ-Games 中继服务器部署手册
+# BZ-Games 中继 / 登录 / 云同步服务部署手册
 
 ## 服务说明
 
-BZ-Games 中继服务器是独立 Node.js 服务，提供 HTTP 房间查询和 WebSocket 透明转发能力。
+BZ-Games 官方服务是独立 Node.js 服务，提供 HTTP 房间查询、GitHub OAuth 登录、用户云数据存储和 WebSocket 透明转发能力。
 
-- HTTP：`/health`、`/rooms`。
+- HTTP：`/health`、`/rooms`、`/auth/github/start`、`/auth/github/callback`、`/api/auth/me`、`/api/auth/logout`、`/api/cloud/files`。
 - WebSocket：`relay:host`、`relay:join`、`relay:leave`、`relay:heartbeat`。
 - 转发内容：RoomMessage、Game API v1 JSON 消息、Game API v2 binary frame。
 - 房间码：中继服务器生成、发送和识别 `roomCode`。
 - 短地址：平台侧使用 `DEFAULT_RELAY_PUBLIC_HOST` 与 `roomCode` 拼接。
+- 云数据：保存 `config.json` 与 `play_sessions.db` 对应的 SQL 逻辑备份，供平台上传、下载、覆盖同步。
+- 用户基础数据：使用 MySQL 保存账号、OAuth state、登录会话、文件元数据。
+- 云端对象内容：使用 MongoDB GridFS 保存，避免配置文件或 SQL dump 增长后触发 16MB BSON 限制。
 
 接口细节见 [API.md](./API.md)。
 
@@ -25,7 +28,7 @@ relay-server/
 
 | 路径 | 说明 |
 | --- | --- |
-| `src/index.js` | HTTP + WebSocket 中继服务入口 |
+| `src/index.js` | HTTP + WebSocket 服务入口 |
 | `package.json` | 服务依赖与启动脚本 |
 | `package-lock.json` | npm 锁定文件 |
 | `DEPLOY.md` | 部署手册 |
@@ -37,6 +40,8 @@ relay-server/
 - Linux 服务器。
 - 公网 TCP 端口，默认 `38090`。
 - npm。
+- MySQL 8+（保存用户基础数据和文件元数据）。
+- MongoDB 6+（保存 `config.json` 文件内容和 `play_sessions.db` 对应 SQL dump）。
 
 ## 环境变量
 
@@ -47,20 +52,49 @@ relay-server/
 | `HEARTBEAT_INTERVAL_MS` | `30000` | WebSocket ping 与清理间隔 |
 | `MAX_TEXT_BYTES` | `1048576` | 单条文本消息最大字节数 |
 | `MAX_BINARY_BYTES` | `12582912` | 单条二进制消息最大字节数 |
+| `MAX_CLOUD_FILE_BYTES` | `67108864` | 单次上传云文件大小上限 |
 | `RELAY_TOKEN` | 空字符串 | 房主注册和客机加入鉴权 token；空字符串表示不校验 |
 | `MAX_ROOMS` | `80` | 最大同时房间数 |
 | `MAX_CLIENTS` | `400` | 最大已登记客户端数 |
 | `MAX_CLIENTS_PER_ROOM` | `8` | 单房间最大中继客户端数上限 |
 | `MAX_EVENT_LOOP_DELAY_MS` | `250` | 事件循环延迟限制 |
+| `MYSQL_HOST` | `127.0.0.1` | MySQL 主机 |
+| `MYSQL_PORT` | `3306` | MySQL 端口 |
+| `MYSQL_USER` | 空字符串 | MySQL 用户名；为空时登录和云同步接口不可用 |
+| `MYSQL_PASSWORD` | 空字符串 | MySQL 密码 |
+| `MYSQL_DATABASE` | `bz_games` | MySQL 数据库名 |
+| `MONGODB_URI` | 空字符串 | MongoDB 连接串；为空时登录和云同步接口不可用 |
+| `MONGODB_DB_NAME` | `bz_games` | MongoDB 数据库名 |
+| `MONGODB_BUCKET_NAME` | `userFiles` | GridFS bucket 名 |
+| `GITHUB_CLIENT_ID` | 空字符串 | GitHub OAuth App Client ID |
+| `GITHUB_CLIENT_SECRET` | 空字符串 | GitHub OAuth App Client Secret |
+| `GITHUB_CALLBACK_URL` | 空字符串 | GitHub OAuth 回调地址，必须与 GitHub OAuth App 配置完全一致 |
+| `GITHUB_OAUTH_SCOPE` | `read:user user:email` | GitHub OAuth scope |
+| `SESSION_COOKIE_NAME` | `bz_games_session` | 登录会话 Cookie 名称 |
+| `OAUTH_SESSION_TTL_MS` | `2592000000` | 登录会话有效期，默认 30 天 |
+| `OAUTH_STATE_TTL_MS` | `600000` | OAuth state 有效期，默认 10 分钟 |
 
 公网部署必须配置 `RELAY_TOKEN`，并与平台侧 `DEFAULT_RELAY_TOKEN` 保持一致。
+如需启用 GitHub 登录，必须额外配置 `MYSQL_USER`、`MYSQL_PASSWORD`、`MYSQL_DATABASE`、`GITHUB_CLIENT_ID`、`GITHUB_CLIENT_SECRET`、`GITHUB_CALLBACK_URL`。
+如需启用云文件同步，还必须额外配置 `MONGODB_URI`。
 
 ## 快速启动
 
 ```bash
 cd relay-server
 npm install --production
-PORT=38090 RELAY_TOKEN=your-relay-token npm start
+PORT=38090 \
+RELAY_TOKEN=your-relay-token \
+MYSQL_HOST=127.0.0.1 \
+MYSQL_PORT=3306 \
+MYSQL_USER=bz_games \
+MYSQL_PASSWORD=your-mysql-password \
+MYSQL_DATABASE=bz_games \
+MONGODB_URI=mongodb://bz_games:your-mongodb-password@127.0.0.1:27017/bz_games \
+GITHUB_CLIENT_ID=your-client-id \
+GITHUB_CLIENT_SECRET=your-client-secret \
+GITHUB_CALLBACK_URL=http://relay.example.com:38090/auth/github/callback \
+npm start
 ```
 
 验证：
@@ -68,6 +102,12 @@ PORT=38090 RELAY_TOKEN=your-relay-token npm start
 ```bash
 curl http://127.0.0.1:38090/health
 curl http://127.0.0.1:38090/rooms
+```
+
+本地测试 GitHub 登录地址：
+
+```text
+http://127.0.0.1:38090/auth/github/start
 ```
 
 ## 服务器部署
@@ -94,10 +134,104 @@ cd /opt/bz-games-relay
 npm install --production
 ```
 
+MySQL 推荐保存账号、会话和元数据；MongoDB 推荐只负责文件内容。
+
+### 安装 MySQL
+
+```bash
+apt update
+apt install -y mysql-server
+systemctl enable mysql
+systemctl start mysql
+systemctl status mysql
+```
+
+创建数据库和账号：
+
+```bash
+mysql -uroot <<'SQL'
+CREATE DATABASE IF NOT EXISTS bz_games
+  CHARACTER SET utf8mb4
+  COLLATE utf8mb4_unicode_ci;
+
+CREATE USER IF NOT EXISTS 'bz_games'@'127.0.0.1' IDENTIFIED BY 'your-mysql-password';
+GRANT ALL PRIVILEGES ON bz_games.* TO 'bz_games'@'127.0.0.1';
+FLUSH PRIVILEGES;
+SQL
+```
+
+验证：
+
+```bash
+mysql -h127.0.0.1 -ubz_games -p bz_games -e "SELECT 1;"
+```
+
+### 安装 MongoDB
+
+导入官方仓库并安装（Ubuntu）：
+
+```bash
+apt update
+apt install -y curl gnupg
+curl -fsSL https://www.mongodb.org/static/pgp/server-8.0.asc \
+  | gpg --dearmor -o /usr/share/keyrings/mongodb-server-8.0.gpg
+echo "deb [ signed-by=/usr/share/keyrings/mongodb-server-8.0.gpg ] https://repo.mongodb.org/apt/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME)/mongodb-org/8.0 multiverse" \
+  | tee /etc/apt/sources.list.d/mongodb-org-8.0.list
+apt update
+apt install -y mongodb-org
+systemctl enable mongod
+systemctl start mongod
+systemctl status mongod
+```
+
+创建数据库账号：
+
+```bash
+mongosh <<'MONGO'
+use bz_games
+db.createUser({
+  user: "bz_games",
+  pwd: "your-mongodb-password",
+  roles: [
+    { role: "readWrite", db: "bz_games" }
+  ]
+})
+MONGO
+```
+
+验证：
+
+```bash
+mongosh "mongodb://bz_games:your-mongodb-password@127.0.0.1:27017/bz_games" --eval "db.runCommand({ ping: 1 })"
+```
+
+### 环境变量配置建议
+
+- `MYSQL_HOST=127.0.0.1`
+- `MYSQL_PORT=3306`
+- `MYSQL_USER=bz_games`
+- `MYSQL_PASSWORD=your-mysql-password`
+- `MYSQL_DATABASE=bz_games`
+- `MONGODB_URI=mongodb://bz_games:your-mongodb-password@127.0.0.1:27017/bz_games`
+- `MONGODB_DB_NAME=bz_games`
+- `MONGODB_BUCKET_NAME=userFiles`
+- `GITHUB_CALLBACK_URL=http://relay.example.com:38090/auth/github/callback`
+
 启动验证：
 
 ```bash
-PORT=38090 RELAY_TOKEN=your-relay-token npm start
+PORT=38090 \
+RELAY_TOKEN=your-relay-token \
+MYSQL_HOST=127.0.0.1 \
+MYSQL_PORT=3306 \
+MYSQL_USER=bz_games \
+MYSQL_PASSWORD=your-mysql-password \
+MYSQL_DATABASE=bz_games \
+MONGODB_URI=mongodb://bz_games:your-mongodb-password@127.0.0.1:27017/bz_games \
+GITHUB_CLIENT_ID=your-client-id \
+GITHUB_CLIENT_SECRET=your-client-secret \
+GITHUB_CALLBACK_URL=http://relay.example.com:38090/auth/github/callback \
+npm start
 ```
 
 ## 防火墙
@@ -134,10 +268,26 @@ Environment=ROOM_TTL_MS=60000
 Environment=HEARTBEAT_INTERVAL_MS=30000
 Environment=MAX_TEXT_BYTES=1048576
 Environment=MAX_BINARY_BYTES=12582912
+Environment=MAX_CLOUD_FILE_BYTES=67108864
 Environment=MAX_ROOMS=80
 Environment=MAX_CLIENTS=400
 Environment=MAX_CLIENTS_PER_ROOM=8
 Environment=MAX_EVENT_LOOP_DELAY_MS=250
+Environment=MYSQL_HOST=127.0.0.1
+Environment=MYSQL_PORT=3306
+Environment=MYSQL_USER=bz_games
+Environment=MYSQL_PASSWORD=your-mysql-password
+Environment=MYSQL_DATABASE=bz_games
+Environment=MONGODB_URI=mongodb://bz_games:your-mongodb-password@127.0.0.1:27017/bz_games
+Environment=MONGODB_DB_NAME=bz_games
+Environment=MONGODB_BUCKET_NAME=userFiles
+Environment=GITHUB_CLIENT_ID=your-client-id
+Environment=GITHUB_CLIENT_SECRET=your-client-secret
+Environment=GITHUB_CALLBACK_URL=http://relay.example.com:38090/auth/github/callback
+Environment="GITHUB_OAUTH_SCOPE=read:user user:email"
+Environment=SESSION_COOKIE_NAME=bz_games_session
+Environment=OAUTH_SESSION_TTL_MS=2592000000
+Environment=OAUTH_STATE_TTL_MS=600000
 Restart=always
 RestartSec=3
 User=root
@@ -173,35 +323,6 @@ systemctl restart bz-games-relay
 systemctl stop bz-games-relay
 ```
 
-## Nginx 反向代理
-
-直接使用 IP + 端口时无需 Nginx。使用域名入口时配置反向代理。
-
-```nginx
-server {
-  listen 80;
-  server_name relay.example.com;
-
-  location / {
-    proxy_pass http://127.0.0.1:38090;
-    proxy_http_version 1.1;
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection "upgrade";
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-  }
-}
-```
-
-平台侧 `DEFAULT_RELAY_SERVER_URL` 使用 Nginx 地址：
-
-```typescript
-export const DEFAULT_RELAY_SERVER_URL = "http://relay.example.com";
-export const DEFAULT_RELAY_PUBLIC_HOST = "relay.example.com";
-export const DEFAULT_RELAY_TOKEN = "your-relay-token";
-```
-
 ## 平台配置
 
 平台侧私有构建配置位置：
@@ -216,19 +337,15 @@ private-build.config.json
 {
   "relayServerUrl": "http://relay.example.com:38090",
   "relayPublicHost": "relay.example.com",
-  "relayToken": "your-relay-token"
+  "relayToken": "your-relay-token",
+  "oauthReturnUrl": "bzgames://oauth-complete"
 }
 ```
 
-域名反向代理：
-
-```json
-{
-  "relayServerUrl": "http://relay.example.com",
-  "relayPublicHost": "relay.example.com",
-  "relayToken": "your-relay-token"
-}
-```
+> `Client ID` 和 `Client Secret` **不要写进** `private-build.config.json`。
+> 这两个值必须只写在服务器环境变量中：`GITHUB_CLIENT_ID`、`GITHUB_CLIENT_SECRET`。
+> `private-build.config.json` 属于客户端构建配置，写入 Secret 会导致泄露风险。
+> `oauthReturnUrl` 是桌面端自定义协议回调地址，不是 GitHub OAuth App 的 `Authorization callback URL`。
 
 字段规则：
 
@@ -236,6 +353,39 @@ private-build.config.json
 - 平台向中继服务器加入房间时只发送 `roomCode`，例如 `123456`。
 - 中继服务器内部使用 `roomId` 管理房间。
 - 中继服务器不拼接、不解析、不识别短地址。
+
+## GitHub OAuth App 注册
+
+在 GitHub OAuth App 页面中，`Authorization callback URL` 填：
+
+`http://relay.example.com:38090/auth/github/callback`
+
+必须与服务端环境变量 `GITHUB_CALLBACK_URL` 完全一致，协议、域名、端口、路径都要一致。
+
+推荐流程：
+
+1. 先确定你的最终公网域名。
+2. 在 GitHub 创建 OAuth App。
+3. 将 callback 填成 `http://你的域名:38090/auth/github/callback`。
+4. 把 GitHub 给你的 `Client ID` 写到服务端 `GITHUB_CLIENT_ID`。
+5. 把 GitHub 给你的 `Client Secret` 写到服务端 `GITHUB_CLIENT_SECRET`。
+6. 重启 `bz-games-relay` 服务。
+
+验证登录入口：
+
+```text
+http://relay.example.com:38090/auth/github/start
+```
+
+未来 Electron 客户端接入时，可通过：
+
+```text
+http://relay.example.com:38090/auth/github/start?returnTo=bzgames://oauth-complete
+```
+
+让服务端在 GitHub 登录成功后跳回桌面端自定义协议。
+
+如果你修改了 `private-build.config.json`，需要重新构建客户端，确保新的 `oauthReturnUrl` 被注入到主进程。
 
 ## 容量配置
 
@@ -326,6 +476,8 @@ journalctl -u bz-games-relay -n 100
 - `ExecStart` 中 node 路径是否正确。
 - `npm install --production` 是否完成。
 - `src/index.js` 是否存在。
+- `MONGODB_URI`、`GITHUB_CLIENT_ID`、`GITHUB_CLIENT_SECRET`、`GITHUB_CALLBACK_URL` 是否已正确配置。
+- `MYSQL_HOST`、`MYSQL_USER`、`MYSQL_PASSWORD`、`MYSQL_DATABASE` 是否已正确配置。
 
 ### 端口无法访问
 
@@ -339,7 +491,7 @@ ufw status
 - 进程是否监听 `38090`。
 - 云服务器安全组是否放行 TCP `38090`。
 - 系统防火墙是否放行 TCP `38090`。
-- Nginx 代理目标是否为 `127.0.0.1:38090`。
+- 公网 IP / 域名是否正确指向当前服务器。
 
 ### 客户端无法注册或加入
 
@@ -359,6 +511,35 @@ ufw status
 - 房主是否发送 `relay:host`。
 - 房间是否超过 `ROOM_TTL_MS` 未更新。
 - 房主是否发送 `room:disbanded` 或断开连接。
+
+### GitHub 登录失败
+
+检查项：
+
+- GitHub OAuth App 的 callback 地址是否与 `GITHUB_CALLBACK_URL` 完全一致。
+- 域名与端口是否能直接访问 `38090`。
+- `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` 是否填错。
+- `MYSQL_HOST` / `MYSQL_USER` / `MYSQL_PASSWORD` / `MYSQL_DATABASE` 是否可连接。
+- 服务器是否能访问 `github.com` 和 `api.github.com`。
+
+### 授权后无法打开平台窗口
+
+检查项：
+
+- 客户端是否把 `oauthReturnUrl` 配成 `bzgames://oauth-complete`。
+- Windows 是否已将 `bzgames://` 重新注册到当前安装的 BZ-Games 程序。
+- 是否需要重启客户端，使 `app.setAsDefaultProtocolClient("bzgames")` 生效。
+- 授权返回地址是否被浏览器当作普通网页链接处理。
+
+### 云数据上传 / 下载失败
+
+检查项：
+
+- `MYSQL_HOST` / `MYSQL_USER` / `MYSQL_PASSWORD` / `MYSQL_DATABASE` 是否可用。
+- `MONGODB_URI` 是否可用。
+- `MAX_CLOUD_FILE_BYTES` 是否过小。
+- 上传时是否携带登录会话 Cookie 或 Bearer Token。
+- 客户端下载 `play_sessions.db` 对应 SQL dump 后是否可以正常清空并重建本地 SQLite 表数据。
 
 ## 上线验证流程
 

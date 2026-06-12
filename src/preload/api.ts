@@ -193,6 +193,10 @@ export const electronAPI = {
     getAppVersion: () => ipcRenderer.invoke(IPC.SYSTEM_GET_APP_VERSION),
     getSensitiveWords: (): Promise<string[]> =>
       ipcRenderer.invoke(IPC.SYSTEM_GET_SENSITIVE_WORDS),
+    getCloudStatus: () => ipcRenderer.invoke(IPC.SYSTEM_CLOUD_GET_STATUS),
+    loginWithGitHub: () => ipcRenderer.invoke(IPC.SYSTEM_CLOUD_LOGIN_GITHUB),
+    uploadCloudData: () => ipcRenderer.invoke(IPC.SYSTEM_CLOUD_UPLOAD),
+    downloadCloudData: () => ipcRenderer.invoke(IPC.SYSTEM_CLOUD_DOWNLOAD),
     save: (settings: AppSettings) =>
       ipcRenderer.invoke(IPC.SYSTEM_SAVE_SETTINGS, settings),
     savePartialSettings: (partial: Partial<AppSettings>) =>
@@ -242,6 +246,13 @@ export const electronAPI = {
       const handler = (_: any, payload: UpdateState) => callback(payload);
       ipcRenderer.on(IPC.SYSTEM_UPDATE_EVENT, handler);
       return () => ipcRenderer.removeListener(IPC.SYSTEM_UPDATE_EVENT, handler);
+    },
+    onCloudSyncEvent: (
+      callback: (payload: { stage: string; percentage: number; fileKey?: string }) => void,
+    ) => {
+      const handler = (_: any, payload: { stage: string; percentage: number; fileKey?: string }) => callback(payload);
+      ipcRenderer.on(IPC.SYSTEM_CLOUD_SYNC_EVENT, handler);
+      return () => ipcRenderer.removeListener(IPC.SYSTEM_CLOUD_SYNC_EVENT, handler);
     },
   },
   user: {

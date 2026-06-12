@@ -27,6 +27,12 @@ import {
 const defaultSettings: AppSettings = {
   playerName: "玩家",
   playerId: "",
+  cloudSessionToken: "",
+  cloudSessionExpiresAt: "",
+  cloudUserLogin: "",
+  cloudUserName: "",
+  cloudUserProfileUrl: "",
+  cloudLastUploadedAt: "",
   nicknameStyle: DEFAULT_NICKNAME_STYLE,
   libraryLayout: "card",
   lastJoinRoomAddress: "",
@@ -236,7 +242,11 @@ class StoreService {
    * Initialize the store.
    * This must be called after app.whenReady().
    */
-  async init(): Promise<void> {
+  async init(forceReload = false): Promise<void> {
+    if (forceReload) {
+      this.store = null;
+      this._initPromise = null;
+    }
     if (this.store) return;
     if (this._initPromise) return this._initPromise;
 
@@ -280,6 +290,16 @@ class StoreService {
     })();
 
     return this._initPromise;
+  }
+
+  getConfigPath(): string {
+    return this.getStore().path;
+  }
+
+  replaceConfigFile(sourcePath: string): void {
+    const configPath = this.getConfigPath();
+    fsSync.copyFileSync(sourcePath, configPath);
+    this._initPromise = null;
   }
 
   private getStore(): ElectronStore<AppStore> {

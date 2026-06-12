@@ -20,6 +20,9 @@ export interface DailyPlayDuration {
   total_duration_ms: number;
 }
 
+const CLOUD_SQL_DUMP_HEADER = "-- BZ-Games cloud SQL dump v1";
+const CLOUD_SYNC_TABLES = ["play_sessions"];
+
 class DatabaseService {
   private db: Database.Database | null = null;
 
@@ -53,11 +56,105 @@ class DatabaseService {
     logger.info(`[DatabaseService] Initialized at: ${dbPath}`);
   }
 
+  getDatabasePath(): string {
+    return path.join(getAppRoot(), DB_FILE_NAME);
+  }
+
+  exportCloudSqlDump(): string {
+    const db = this.getDb();
+    const tableNames = this.getCloudSyncTableNames();
+    const lines = [
+      CLOUD_SQL_DUMP_HEADER,
+      `-- generated_at: ${new Date().toISOString()}`,
+      `-- tables: ${tableNames.join(",")}`,
+      "BEGIN TRANSACTION;",
+    ];
+    for (const tableName of tableNames) {
+      const columns = this.getTableColumns(tableName);
+      lines.push(`DELETE FROM ${this.quoteIdentifier(tableName)};`);
+      const rows = db.prepare(`SELECT ${columns.map((column) => this.quoteIdentifier(column)).join(", ")} FROM ${this.quoteIdentifier(tableName)}`).all() as Record<string, unknown>[];
+      for (const row of rows) {
+        lines.push(`INSERT INTO ${this.quoteIdentifier(tableName)} (${columns.map((column) => this.quoteIdentifier(column)).join(", ")}) VALUES (${columns.map((column) => this.toSqlLiteral(row[column])).join(", ")});`);
+      }
+    }
+    lines.push("COMMIT;");
+    lines.push("");
+    return lines.join("\n");
+  }
+
+  importCloudSqlDump(sql: string): void {
+    const db = this.getDb();
+    const normalizedSql = String(sql || "").trim();
+    if (!normalizedSql.startsWith(CLOUD_SQL_DUMP_HEADER)) {
+      throw new Error("invalid_cloud_sql_dump");
+    }
+    this.validateCloudSqlDump(normalizedSql);
+    db.exec(normalizedSql);
+  }
+
   private getDb(): Database.Database {
     if (!this.db) {
       throw new Error("DatabaseService not initialized! Call init() first.");
     }
     return this.db;
+  }
+
+  private getCloudSyncTableNames(): string[] {
+    const db = this.getDb();
+    const existingTables = new Set((db.prepare(
+      `SELECT name FROM sqlite_master
+       WHERE type = 'table'
+         AND name NOT LIKE 'sqlite_%'`,
+    ).all() as Array<{ name: string }>).map((row) => row.name));
+    return CLOUD_SYNC_TABLES.filter((tableName) => existingTables.has(tableName));
+  }
+
+  private getTableColumns(tableName: string): string[] {
+    const db = this.getDb();
+    const rows = db.prepare(`PRAGMA table_info(${this.quoteIdentifier(tableName)})`).all() as Array<{ name: string }>;
+    return rows.map((row) => row.name);
+  }
+
+  private quoteIdentifier(value: string): string {
+    return `"${String(value).replace(/"/g, '""')}"`;
+  }
+
+  private toSqlLiteral(value: unknown): string {
+    if (value === null || value === undefined) return "NULL";
+    if (Buffer.isBuffer(value)) return `X'${value.toString("hex")}'`;
+    if (typeof value === "number") return Number.isFinite(value) ? String(value) : "NULL";
+    if (typeof value === "bigint") return String(value);
+    return `'${String(value).replace(/'/g, "''")}'`;
+  }
+
+  private validateCloudSqlDump(sql: string): void {
+    const stripped = sql
+      .replace(/'(?:''|[^'])*'/g, "''")
+      .replace(/X'(?:[0-9a-fA-F]{2})*'/g, "X''")
+      .split("\n")
+      .filter((line) => !line.trim().startsWith("--"))
+      .join("\n");
+    const currentTables = new Set(this.getCloudSyncTableNames());
+    const deletedTables = new Set<string>();
+    const statements = stripped.split(";").map((statement) => statement.trim()).filter(Boolean);
+    for (const statement of statements) {
+      if (/^BEGIN\s+TRANSACTION$/i.test(statement) || /^COMMIT$/i.test(statement)) continue;
+      const deleteMatch = statement.match(/^DELETE\s+FROM\s+"((?:""|[^"])*)"$/i);
+      if (deleteMatch) {
+        const tableName = deleteMatch[1].replace(/""/g, '"');
+        if (!currentTables.has(tableName)) throw new Error("invalid_cloud_sql_table");
+        deletedTables.add(tableName);
+        continue;
+      }
+      const insertMatch = statement.match(/^INSERT\s+INTO\s+"((?:""|[^"])*)"\s*\(/i);
+      if (insertMatch) {
+        const tableName = insertMatch[1].replace(/""/g, '"');
+        if (!currentTables.has(tableName)) throw new Error("invalid_cloud_sql_table");
+        if (!deletedTables.has(tableName)) throw new Error("invalid_cloud_sql_order");
+        continue;
+      }
+      throw new Error("invalid_cloud_sql_statement");
+    }
   }
 
   startSession(gameId: string, gameName: string, version: string): string {

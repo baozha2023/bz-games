@@ -41,8 +41,9 @@
 - **Core**: Electron, TypeScript
 - **Frontend**: Vue 3, Naive UI, Pinia, Vue Router
 - **Build**: Electron-Vite, Electron-Builder
-- **Storage**: electron-store (Local JSON)
-- **Communication**: WebSocket (Room Server/Client), Electron IPC
+- **Storage**: electron-store (Local JSON), better-sqlite3 (Play session database)
+- **Communication**: WebSocket (Room Server/Client, Game API v1/v2), Electron IPC
+- **Relay Server**: Node.js + MySQL + MongoDB GridFS (Room relay / GitHub OAuth / Cloud file sync)
 - **Archive**: extract-zip (ZIP), 7zip-bin / 7za (7Z)
 - **Update**: electron-updater (GitHub Releases)
 

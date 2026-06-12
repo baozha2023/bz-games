@@ -6,5 +6,6 @@
   "relayServerUrl": "",
   "relayPublicHost": "",
   "relayToken": "",
-  "configEncryptionSeed": "replace-with-a-private-random-seed"
+  "configEncryptionSeed": "replace-with-a-private-random-seed",
+  "oauthReturnUrl": ""
 }

@@ -91,6 +91,12 @@ export interface AppSettings {
   playerName: string;
   playerId: string;
   avatar?: string;
+  cloudSessionToken?: string;
+  cloudSessionExpiresAt?: string;
+  cloudUserLogin?: string;
+  cloudUserName?: string;
+  cloudUserProfileUrl?: string;
+  cloudLastUploadedAt?: string;
   nicknameStyle?: NicknameStyle;
   libraryLayout?: LibraryLayout;
   lastJoinRoomAddress?: string;

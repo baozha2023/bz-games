@@ -6,6 +6,7 @@ declare const __BZ_RELAY_SERVER_URL__: string;
 declare const __BZ_RELAY_PUBLIC_HOST__: string;
 declare const __BZ_RELAY_TOKEN__: string;
 declare const __BZ_CONFIG_ENCRYPTION_SEED__: string;
+declare const __BZ_OAUTH_RETURN_URL__: string;
 
 export const CDN_BASE = __BZ_CDN_BASE__;
 
@@ -28,6 +29,8 @@ export const DEFAULT_RELAY_PUBLIC_HOST = __BZ_RELAY_PUBLIC_HOST__;
 export const DEFAULT_RELAY_TOKEN = __BZ_RELAY_TOKEN__;
 
 export const CONFIG_ENCRYPTION_SEED = __BZ_CONFIG_ENCRYPTION_SEED__;
+
+export const OAUTH_RETURN_URL = __BZ_OAUTH_RETURN_URL__;
 
 export const LAN_DISCOVERY_PORT = 38081;
 

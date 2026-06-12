@@ -6,8 +6,9 @@ import { storeService } from "../services/storage/StoreService";
 import { updateService } from "../services/system/UpdateService";
 import { logger } from "../utils/logger";
 import type { AppSettings, NicknameStyle } from "../../shared/types";
-import { createFloatBallWindow, destroyFloatBallWindow } from "../window";
+import { createFloatBallWindow, destroyFloatBallWindow, mainWindow } from "../window";
 import { getAppRoot } from "../utils/appPath";
+import { cloudSyncService } from "../services/system/CloudSyncService";
 
 let sensitiveWordCache: string[] | null = null;
 
@@ -56,6 +57,26 @@ export function registerSystemIpc() {
 
   ipcMain.handle(IPC.SYSTEM_GET_SENSITIVE_WORDS, async () => {
     return loadSensitiveWords();
+  });
+
+  ipcMain.handle(IPC.SYSTEM_CLOUD_GET_STATUS, async () => {
+    return await cloudSyncService.getStatus();
+  });
+
+  ipcMain.handle(IPC.SYSTEM_CLOUD_LOGIN_GITHUB, async () => {
+    return await cloudSyncService.loginWithGitHub();
+  });
+
+  ipcMain.handle(IPC.SYSTEM_CLOUD_UPLOAD, async () => {
+    return await cloudSyncService.upload((progress) => {
+      mainWindow?.webContents.send(IPC.SYSTEM_CLOUD_SYNC_EVENT, progress);
+    });
+  });
+
+  ipcMain.handle(IPC.SYSTEM_CLOUD_DOWNLOAD, async () => {
+    return await cloudSyncService.download((progress) => {
+      mainWindow?.webContents.send(IPC.SYSTEM_CLOUD_SYNC_EVENT, progress);
+    });
   });
 
   ipcMain.handle(IPC.SYSTEM_SAVE_SETTINGS, async (_, settings: AppSettings) => {

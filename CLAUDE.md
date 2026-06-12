@@ -37,6 +37,7 @@
 - 游戏市场（远程发现、详情展示、下载并安装到默认游戏库，GitHub Release Asset 自动补齐 sha256/size）
 - 个性化系统（头像框解锁、装备、预览，支持多场景展示）
 - 系统设置（玩家信息、主题、端口、语言、更新、游戏库列表、GitHub Token）
+- 官方登录与云同步服务（GitHub OAuth 登录；本地 `config.json` 与 `play_sessions.db` 上传云端 / 下载同步回本地，含进度条与哈希校验）
 
 ***
 
@@ -55,6 +56,8 @@
 | 进程间通信        | Electron IPC（contextBridge） | <br />                         |
 | 本地数据存储       | electron-store              | v10+ (ESM)，需在构建中配置 include     |
 | SQLite 数据存储      | better-sqlite3              | 游玩会话记录、日历热力图数据查询            |
+| 账号与云同步元数据 | MySQL                       | 官方登录服务用户资料、OAuth state、会话、云文件元数据 |
+| 云文件对象存储     | MongoDB GridFS              | 官方云同步服务保存 `config.json` / `play_sessions.db` |
 | 客户端更新        | electron-updater            | GitHub Releases 作为更新源          |
 | WebSocket 服务 | ws                          | Game API、Room Server、Room Client 均基于 WebSocket，v2 高频通信支持原始二进制帧 |
 | 版本比较         | semver                      | 用于平台版本与游戏版本兼容性检查               |
@@ -72,11 +75,28 @@ bz-games/
 ├── DEVELOPER_GUIDE.md                    # 面向游戏接入方的开发接入指南
 ├── docs/
 │   └── GAME_API_V1_V2_REFERENCE.md        # Game API v1/v2 接口说明文档
-├── relay-server/                          # 官方中继服务器（Node.js HTTP + WebSocket，透明转发 Room/Game API 消息）
+├── relay-server/                          # 官方服务端（Node.js HTTP + WebSocket，提供中继 / GitHub 登录 / 云同步能力）
 │   ├── API.md                             # 中继服务器接口规范
+│   ├── DATA_MODEL.md                      # MySQL/MongoDB 数据模型说明
 │   ├── DEPLOY.md                          # 中继服务器部署手册
 │   ├── package.json                       # 中继服务器独立依赖
-│   └── src/index.js                       # 中继服务器入口
+│   └── src/
+│       ├── index.js                       # 中继服务器入口（HTTP + WebSocket 统一启动）
+│       ├── state.js                       # 共享运行时状态（rooms / clients Map）
+│       ├── config.js                      # 环境变量集中配置
+│       ├── http-server.js                 # HTTP 服务创建与路由分发
+│       ├── ws-server.js                   # WebSocket 服务创建与鉴权
+│       ├── services/
+│       │   ├── auth-service.js            # GitHub OAuth 认证与会话管理
+│       │   ├── cloud-data-service.js      # 云端文件同步（config.json / play_sessions.db）
+│       │   ├── message-router.js          # WebSocket 消息路由分发
+│       │   ├── mongo-service.js           # MongoDB GridFS 连接管理
+│       │   ├── mysql-service.js           # MySQL 连接池与建表
+│       │   └── room-service.js            # 房间创建、加入、密码、清理
+│       └── utils/
+│           ├── http.js                    # HTTP 工具（Cookie / Bearer / redirect / JSON 响应）
+│           ├── protocol.js                # 通信协议常量（relay:* 指令集）
+│           └── ws.js                      # WebSocket 消息序列化与广播发送
 ├── build/
 │   └── installer.nsh                     # NSIS 自定义安装/卸载钩子（多语言支持）
 ├── package.json                          # 依赖、脚本与打包发布配置
@@ -127,8 +147,9 @@ bz-games/
 │   │   │   ├── market/
 │   │   │   │   └── MarketService.ts       # 游戏市场索引拉取、下载、校验、解压与安装
 │   │   │   └── system/
-│   │   │       ├── NotificationService.ts # 系统通知窗口服务
-│   │   │       └── UpdateService.ts       # 客户端更新检查/下载/安装服务
+│   │       ├── CloudSyncService.ts    # 云端数据同步（GitHub OAuth 登录 / 配置与数据库上传下载 / 哈希校验 / 进度事件）
+│   │       ├── NotificationService.ts # 系统通知窗口服务
+│   │       └── UpdateService.ts       # 客户端更新检查/下载/安装服务
 │   │   └── utils/
 │   │       ├── appPath.ts                 # 应用根路径工具
 │   │       ├── fileUtils.ts               # 文件复制等通用文件工具
@@ -248,6 +269,67 @@ bz-games/
 | **断点续传 (Resume Download)**          | 利用 HTTP Range 请求头从上次断点继续下载，服务端不支持时自动降级为全量下载                                    |
 | **bz-config.js**                    | 平台在游戏启动前生成的配置文件（包含端口、Token、玩家信息、房间 ID、`isHost` 与 `isMultiple`），游戏退出时自动删除。 |
 | **内网穿透**                            | 由用户自备（如 SakuraFrp），将 Room Server 本地端口映射到公网地址                                   |
+
+### 联机通信架构流程
+
+```
+                          ┌─────────────────────────┐
+                          │   官方 Relay Server      │
+                          │   (relay-server/)        │
+                          │                          │
+                          │  • 房间注册 / 短地址     │
+                          │  • WebSocket 透明转发    │
+                          │  • GitHub OAuth 认证     │
+                          │  • 云端文件同步          │
+                          │  • MySQL + MongoDB       │
+                          └────┬──────────┬─────────┘
+                               │  ws://   │ https://
+                    (中继转发)  │          │ (OAuth / API)
+               ┌───────────────┘          └───────────────┐
+               ▼                                          ▼
+┌──────────────────────────────┐         ┌──────────────────────────────┐
+│        HOST 主机              │         │       CLIENT 客机 (N 台)     │
+│                              │         │                              │
+│  ┌──────────────────────┐    │         │  ┌──────────────────────┐    │
+│  │  Electron Platform   │    │         │  │  Electron Platform   │    │
+│  │                      │    │         │  │                      │    │
+│  │  Renderer (Vue UI)   │    │         │  │  Renderer (Vue UI)   │    │
+│  │       ↕ IPC          │    │         │  │       ↕ IPC          │    │
+│  │  Main Process ───────┼────┼────┐    │  │  Main Process ───────┼────┼──┐
+│  │  • RoomServer        │    │    │    │  │  • RoomClient        │    │  │
+│  │  • RelayRoomService  │    │    │    │  │  • RoomDiscoverySvc  │    │  │
+│  │  • GameApiServer ◄───┼──┐ │    │    │  │  • GameApiServer ◄───┼──┐ │  │
+│  │  • CloudSyncService  │  │ │    │    │  │                      │  │ │  │
+│  └──────────────────────┘  │ │    │    │  └──────────────────────┘  │ │  │
+│                             │ │    │    │                             │ │  │
+│  ┌──────────────────────┐   │ │    │    │  ┌──────────────────────┐   │ │  │
+│  │  Game Process        │   │ │    │    │  │  Game Process        │   │ │  │
+│  │  (game.exe)          │   │ │    │    │  │  (game.exe)          │   │ │  │
+│  │  ws://127.0.0.1:PORT │◄──┘ │    │    │  │  ws://127.0.0.1:PORT │◄──┘ │  │
+│  └──────────────────────┘     │    │    │  └──────────────────────┘     │  │
+│                               │    │    │                               │  │
+│  公网入口 (frp / Relay):       │    │    │  连接入口:                     │  │
+│  局域网 或 wss://relay:PORT    │    │    │  frp地址 或 relay短地址        │  │
+│           ▲                   │    │    │           │                   │  │
+│           └───────────────────┼────┘    │           └───────────────────┼──┘
+│              (ws / wss)       │         │          (ws / wss)          │
+└──────────────────────────────┘         └──────────────────────────────┘
+
+       ◄──── 局域网 UDP 发现 (port 38081) ────►
+
+  联机数据流：Game Process ←ws→ GameApiServer ←IPC→ RoomServer/Client ←ws→ Peer / Relay
+```
+
+**关键设计理念**：
+
+| 理念 | 说明 |
+|-----|------|
+| **本地 Game API** | 游戏进程只与本地 `ws://127.0.0.1` 通信，无需感知网络拓扑；平台透明代理所有联机消息。 |
+| **房主单点** | RoomServer 运行在房主机上，经由 frp 或中继暴露；客机 RoomClient 连接房主地址。 |
+| **中继透明转发** | Relay Server 不解析游戏协议语义，仅按 `relay:*` 指令做房间管理 + 消息转发，保持零耦合。 |
+| **多入口并存** | 同一房间可同时有局域网直连、frp 公网、中继转发的玩家混入，房主本地 RoomServer 统一处理。 |
+| **断线重连** | RoomClient 在 WebSocket 断开后自动重连，房主侧维护 `reconnectPlayerIds` 列表，支持游戏进程无缝恢复。 |
+| **v2 二进制帧** | 高频实时通信走 4B 长度头 + JSON header + binary body，减少序列化开销，仅用于 `send/broadcast/publish`。 |
 
 ### 4.0 游戏库路径体系
 

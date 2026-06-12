@@ -16,6 +16,7 @@ type PrivateBuildConfig = {
     relayPublicHost?: string;
     relayToken?: string;
     configEncryptionSeed?: string;
+    oauthReturnUrl?: string;
 };
 
 const privateConfigPath = resolve("private-build.config.json");
@@ -38,6 +39,7 @@ const injectedPrivateConfig = {
     __BZ_RELAY_PUBLIC_HOST__: JSON.stringify(privateBuildConfig.relayPublicHost || ""),
     __BZ_RELAY_TOKEN__: JSON.stringify(privateBuildConfig.relayToken || ""),
     __BZ_CONFIG_ENCRYPTION_SEED__: JSON.stringify(privateBuildConfig.configEncryptionSeed || ""),
+    __BZ_OAUTH_RETURN_URL__: JSON.stringify(privateBuildConfig.oauthReturnUrl || "bzgames://oauth-complete"),
 };
 
 export default defineConfig({

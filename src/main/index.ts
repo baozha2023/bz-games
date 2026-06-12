@@ -1,4 +1,6 @@
 import { app, BrowserWindow, session } from "electron";
+import { spawnSync } from "child_process";
+import path from "path";
 import { createWindow, markAppQuitting, mainWindow, createFloatBallWindow } from "./window";
 import { registerAllIpc } from "./ipc";
 import { electronApp, optimizer } from "@electron-toolkit/utils";
@@ -7,18 +9,59 @@ import { marketService } from "./services/market/MarketService";
 import { databaseService } from "./services/storage/DatabaseService";
 import { requestInterceptor } from "./services/market/MarketService";
 import { roomDiscoveryService } from "./services/room/RoomDiscoveryService";
+import { cloudSyncService } from "./services/system/CloudSyncService";
 
 const gotTheLock = app.requestSingleInstanceLock();
+const PROTOCOL_SCHEME = "bzgames";
+
+function quoteWindowsArg(value: string): string {
+  return `"${value.replace(/"/g, '\\"')}"`;
+}
+
+function findProtocolUrl(argv: string[]): string {
+  return argv.find((item) => item.startsWith(`${PROTOCOL_SCHEME}://`)) || "";
+}
+
+function registerProtocolClient(): void {
+  if (process.defaultApp) {
+    const mainScriptPath = path.join(__dirname, "index.js");
+    app.setAsDefaultProtocolClient(PROTOCOL_SCHEME, process.execPath, [mainScriptPath]);
+    if (process.platform === "win32") {
+      const command = `${quoteWindowsArg(process.execPath)} ${quoteWindowsArg(mainScriptPath)} "%1"`;
+      spawnSync("reg", ["add", `HKCU\\Software\\Classes\\${PROTOCOL_SCHEME}`, "/ve", "/d", "URL:BZ-Games Protocol", "/f"], { windowsHide: true });
+      spawnSync("reg", ["add", `HKCU\\Software\\Classes\\${PROTOCOL_SCHEME}`, "/v", "URL Protocol", "/t", "REG_SZ", "/d", "", "/f"], { windowsHide: true });
+      spawnSync("reg", ["add", `HKCU\\Software\\Classes\\${PROTOCOL_SCHEME}\\shell\\open\\command`, "/ve", "/d", command, "/f"], { windowsHide: true });
+    }
+    return;
+  }
+  app.setAsDefaultProtocolClient(PROTOCOL_SCHEME);
+}
+
+function showMainWindow(): void {
+  if (!mainWindow) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  if (!mainWindow.isVisible()) mainWindow.show();
+  mainWindow.focus();
+}
+
+registerProtocolClient();
+const launchProtocolUrl = findProtocolUrl(process.argv);
 
 if (!gotTheLock) {
   app.quit();
 } else {
-  app.on("second-instance", () => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      if (!mainWindow.isVisible()) mainWindow.show();
-      mainWindow.focus();
+  app.on("second-instance", (_, argv) => {
+    const protocolUrl = findProtocolUrl(argv);
+    if (protocolUrl) {
+      cloudSyncService.completeOAuth(protocolUrl);
     }
+    showMainWindow();
+  });
+
+  app.on("open-url", (event, url) => {
+    event.preventDefault();
+    cloudSyncService.completeOAuth(url);
+    showMainWindow();
   });
 
   app.whenReady().then(async () => {
@@ -43,6 +86,11 @@ if (!gotTheLock) {
 
     if (settings.downloadFloatBall) {
       createFloatBallWindow();
+    }
+
+    if (launchProtocolUrl) {
+      cloudSyncService.completeOAuth(launchProtocolUrl);
+      showMainWindow();
     }
 
     marketService.restorePendingTasks();

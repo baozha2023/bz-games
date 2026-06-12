@@ -7,6 +7,35 @@
         <n-input v-model:value="formValue.playerName" :placeholder="t('settings.playerNamePlaceholder')" />
       </n-form-item>
 
+      <n-form-item :label="t('settings.cloudSync')">
+        <div class="cloud-sync-row">
+          <div class="cloud-login-line">
+            <n-button class="github-login-button" :disabled="cloudBusy" @click="handleGitHubLogin">
+              <template #icon>
+                <n-icon :size="18">
+                  <LogoGithub />
+                </n-icon>
+              </template>
+              {{ t('settings.githubLogin') }}
+            </n-button>
+            <button
+              v-if="cloudStatus.authenticated && cloudAccountLabel"
+              class="github-account-link"
+              type="button"
+              :disabled="!cloudStatus.userProfileUrl"
+              @click="handleOpenGitHubProfile"
+            >
+              {{ cloudAccountLabel }}
+            </button>
+          </div>
+          <div class="cloud-action-line">
+            <n-button type="primary" secondary :disabled="!cloudStatus.authenticated || cloudBusy" @click="handleCloudUpload">{{ t('settings.cloudUpload') }}</n-button>
+            <n-button type="primary" secondary :disabled="!cloudStatus.authenticated || cloudBusy" @click="handleCloudDownload">{{ t('settings.cloudDownload') }}</n-button>
+            <n-text depth="3" class="cloud-upload-time">{{ cloudTimeText }}</n-text>
+          </div>
+        </div>
+      </n-form-item>
+
       <n-form-item :label="t('settings.avatar')">
         <n-space align="center">
           <div class="avatar-clickable" @click="handleAvatarClick">
@@ -217,6 +246,18 @@
       </template>
     </n-modal>
 
+    <n-modal v-model:show="showCloudProgressModal" preset="card" :title="cloudProgressTitle" style="width: 400px;" :closable="!cloudBusy" :mask-closable="!cloudBusy">
+      <n-space vertical :size="16" style="width: 100%;">
+        <n-progress type="line" :percentage="cloudProgress" :indicator-placement="'inside'" :processing="cloudBusy" />
+        <n-text depth="3">{{ cloudProgressText }}</n-text>
+      </n-space>
+      <template #action>
+        <n-space v-if="!cloudBusy" justify="end">
+          <n-button @click="showCloudProgressModal = false">{{ t('common.confirm') }}</n-button>
+        </n-space>
+      </template>
+    </n-modal>
+
     <n-modal v-model:show="showMigrateStorageModal" preset="card" :title="t('settings.migrateStorage')" style="width: 520px;" :closable="!isMigratingStorage" :mask-closable="!isMigratingStorage">
       <n-space vertical :size="16" style="width: 100%;">
         <n-text>{{ t('settings.migrateStorageDescription') }}</n-text>
@@ -289,7 +330,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, nextTick, watch } from 'vue'
+import { ref, onMounted, computed, nextTick, watch, onUnmounted } from 'vue'
 import { onBeforeRouteLeave, useRouter } from 'vue-router'
 import { useMessage, useDialog } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
@@ -299,6 +340,7 @@ import AvatarWithFrame from '../components/AvatarWithFrame.vue'
 import type { AppSettings } from '../../../shared/types'
 import { getFrameImageFileName } from '../../../shared/avatar-frames'
 import { formatBytes } from '../utils/format'
+import { LogoGithub } from '@vicons/ionicons5'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -338,6 +380,12 @@ const dataHealthReport = computed(() => settingsStore.dataHealthReport)
 const isCheckingUpdate = ref(false)
 const isCheckingHealth = ref(false)
 const removingPath = ref('')
+const cloudBusy = ref(false)
+const showCloudProgressModal = ref(false)
+const cloudProgress = ref(0)
+const cloudProgressStage = ref('checking')
+const cloudProgressMode = ref<'upload' | 'download'>('upload')
+const cloudStatus = ref({ configured: false, authenticated: false, userLogin: '', userName: '', userProfileUrl: '', lastUploadedAt: '', files: [] as Array<any> })
 const allStoragePaths = computed(() => {
   const set = new Set<string>()
   registeredStoragePaths.value.forEach(item => {
@@ -393,6 +441,26 @@ const dataHealthSummaryText = computed(() => {
   }
 })
 
+const cloudTimeText = computed(() => {
+  if (!cloudStatus.value.lastUploadedAt) return t('settings.cloudNeverUploaded')
+  return t('settings.cloudLastUploadedAt', { time: new Date(cloudStatus.value.lastUploadedAt).toLocaleString() })
+})
+
+const cloudAccountLabel = computed(() => {
+  const login = cloudStatus.value.userLogin?.trim() || ''
+  const name = cloudStatus.value.userName?.trim() || ''
+  if (login && name && login !== name) return `${login}（${name}）`
+  return login || name
+})
+
+const cloudProgressTitle = computed(() => cloudProgressMode.value === 'upload' ? t('settings.cloudUpload') : t('settings.cloudDownload'))
+
+const cloudProgressText = computed(() => {
+  const key = `settings.cloudProgress.${cloudProgressStage.value}`
+  const text = t(key)
+  return text === key ? t('settings.cloudProgress.checking') : text
+})
+
 const updateErrorText = (errorCode?: string, rawMessage?: string) => {
   const key = errorCode ? `settings.updateErrors.${errorCode}` : 'settings.updateErrors.unknown'
   const translated = t(key)
@@ -410,6 +478,10 @@ const refreshStoragePaths = async () => {
   registeredStoragePaths.value = await window.electronAPI.settings.getGameStoragePaths()
 }
 
+const refreshCloudStatus = async () => {
+  cloudStatus.value = await window.electronAPI.settings.getCloudStatus()
+}
+
 const isDefaultStoragePath = (targetPath: string) => {
   return registeredStoragePaths.value.some(item => item.path === targetPath && item.isDefault)
 }
@@ -417,12 +489,33 @@ const isDefaultStoragePath = (targetPath: string) => {
 onMounted(async () => {
   await settingsStore.loadSettings()
   await refreshStoragePaths()
+  await refreshCloudStatus()
   if (settingsStore.settings) {
     formValue.value = JSON.parse(JSON.stringify(settingsStore.settings))
     originalSettings.value = JSON.stringify(formValue.value)
   }
   settingsStore.initUpdateEvents()
   await settingsStore.refreshUpdateStatus()
+})
+
+const removeCloudSyncListener = window.electronAPI.settings.onCloudSyncEvent((payload) => {
+  cloudProgress.value = payload.percentage
+  cloudProgressStage.value = payload.stage
+})
+
+let cloudStatusTimer: ReturnType<typeof setInterval> | null = null
+
+if (typeof window !== 'undefined') {
+  cloudStatusTimer = setInterval(() => {
+    if (!cloudBusy.value) {
+      void refreshCloudStatus()
+    }
+  }, 3000)
+}
+
+onUnmounted(() => {
+  removeCloudSyncListener()
+  if (cloudStatusTimer) clearInterval(cloudStatusTimer)
 })
 
 const confirmLeave = () => {
@@ -500,6 +593,62 @@ const handleUploadAvatar = async () => {
   }
   img.src = dataUrl
 }
+
+const cloudErrorText = (error?: string) => {
+  const key = error ? `settings.cloudErrors.${error}` : 'settings.cloudErrors.unknown'
+  const translated = t(key)
+  return translated === key ? error || t('settings.cloudErrors.unknown') : translated
+}
+
+const handleGitHubLogin = async () => {
+  const result = await window.electronAPI.settings.loginWithGitHub()
+  if (!result.success) {
+    message.error(cloudErrorText(result.error))
+    return
+  }
+  message.success(t('settings.githubLoginOpened'))
+}
+
+const handleOpenGitHubProfile = () => {
+  const profileUrl = cloudStatus.value.userProfileUrl?.trim()
+  if (!profileUrl) return
+  window.electronAPI.settings.openUrl(profileUrl)
+}
+
+const runCloudAction = async (mode: 'upload' | 'download') => {
+  if (cloudBusy.value) return
+  cloudBusy.value = true
+  cloudProgressMode.value = mode
+  cloudProgressStage.value = 'checking'
+  cloudProgress.value = 0
+  showCloudProgressModal.value = true
+  try {
+    const result = mode === 'upload'
+      ? await window.electronAPI.settings.uploadCloudData()
+      : await window.electronAPI.settings.downloadCloudData()
+    if (!result.success) {
+      message.error(cloudErrorText(result.error))
+      return
+    }
+    await settingsStore.loadSettings()
+    await refreshCloudStatus()
+    if (settingsStore.settings) {
+      formValue.value = JSON.parse(JSON.stringify(settingsStore.settings))
+      originalSettings.value = JSON.stringify(formValue.value)
+    }
+    message.success(mode === 'upload' ? t('settings.cloudUploadSuccess') : t('settings.cloudDownloadSuccess'))
+  } catch (error: any) {
+    message.error(cloudErrorText(error?.message || String(error || '')))
+  } finally {
+    cloudProgress.value = 100
+    cloudProgressStage.value = 'completed'
+    cloudBusy.value = false
+  }
+}
+
+const handleCloudUpload = () => runCloudAction('upload')
+
+const handleCloudDownload = () => runCloudAction('download')
 
 const calcFitZoom = () => {
   if (!cropImage.value || !cropContainerRef.value) return 100
@@ -873,6 +1022,64 @@ const confirmClearCache = async () => {
 .storage-path-default-tag {
   height: 28px;
   align-items: center;
+}
+.cloud-sync-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+.cloud-login-line,
+.cloud-action-line {
+  width: 100%;
+}
+.cloud-login-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.cloud-action-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cloud-upload-time {
+  flex: 1;
+  text-align: right;
+}
+.github-login-button {
+  --n-color: #24292f !important;
+  --n-color-hover: #32383f !important;
+  --n-color-pressed: #1f2328 !important;
+  --n-color-focus: #24292f !important;
+  --n-text-color: #fff !important;
+  --n-text-color-hover: #fff !important;
+  --n-text-color-pressed: #fff !important;
+  --n-text-color-focus: #fff !important;
+  --n-border: 1px solid #24292f !important;
+  --n-border-hover: 1px solid #32383f !important;
+  --n-border-pressed: 1px solid #1f2328 !important;
+  --n-border-focus: 1px solid #24292f !important;
+}
+.github-account-link {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--n-text-color-2);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1.4;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.github-account-link:hover:not(:disabled) {
+  color: var(--n-primary-color);
+  text-decoration: underline;
+}
+.github-account-link:disabled {
+  cursor: default;
 }
 .avatar-clickable {
   cursor: pointer;

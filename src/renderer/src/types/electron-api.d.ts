@@ -161,6 +161,25 @@ declare global {
         get: () => Promise<AppSettings>;
         getAppVersion: () => Promise<string>;
         getSensitiveWords: () => Promise<string[]>;
+        getCloudStatus: () => Promise<{
+          configured: boolean;
+          authenticated: boolean;
+          userLogin: string;
+          userName: string;
+          userProfileUrl: string;
+          lastUploadedAt: string;
+          files: Array<{
+            fileKey: "config.json" | "play_sessions.db";
+            version: number;
+            size: number;
+            sha256: string;
+            contentType: string;
+            updatedAt: string;
+          } | null>;
+        }>;
+        loginWithGitHub: () => Promise<{ success: boolean; error?: string }>;
+        uploadCloudData: () => Promise<{ success: boolean; lastUploadedAt?: string; error?: string }>;
+        downloadCloudData: () => Promise<{ success: boolean; lastUploadedAt?: string; error?: string }>;
         save: (settings: AppSettings) => Promise<boolean>;
         savePartialSettings: (partial: Partial<AppSettings>) => Promise<void>;
         saveNicknameStyle: (style: NicknameStyle) => Promise<{ success: boolean; code?: string }>;
@@ -208,6 +227,7 @@ declare global {
         uninstall: (payload?: { deleteGames?: boolean }) => Promise<{ success: boolean; error?: string }>;
         clearCache: () => Promise<{ totalSize: number; clearedSize: number }>;
         onUpdateEvent: (callback: (payload: UpdateState) => void) => () => void;
+        onCloudSyncEvent: (callback: (payload: { stage: string; percentage: number; fileKey?: string }) => void) => () => void;
       };
       stats: {
         getDailyPlayDurations: (days?: number) => Promise<{ date: string; total_duration_ms: number }[]>;
