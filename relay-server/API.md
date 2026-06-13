@@ -40,6 +40,8 @@ ws://127.0.0.1:38090
 
 ## HTTP 接口
 
+除 GitHub OAuth 登录入口与回调外，HTTP 接口都必须携带平台构建时注入的 relayToken。推荐使用 `X-Relay-Token: <relayToken>` Header。
+
 ### GET /health
 
 返回服务器健康状态、当前容量和限制配置。
@@ -49,6 +51,7 @@ ws://127.0.0.1:38090
 ```http
 GET /health HTTP/1.1
 Host: 127.0.0.1:38090
+X-Relay-Token: <relayToken>
 ```
 
 响应：
@@ -89,6 +92,7 @@ Host: 127.0.0.1:38090
 ```http
 GET /rooms HTTP/1.1
 Host: 127.0.0.1:38090
+X-Relay-Token: <relayToken>
 ```
 
 响应：
@@ -146,7 +150,7 @@ Host: 127.0.0.1:38090
 - HTTP Header: `Authorization: Bearer <token>`
 - Cookie: `bz_games_session=<token>`
 
-桌面端登录时，平台会打开 `/auth/github/start?returnTo=bzgames://oauth-complete`。服务端完成 GitHub 回调后会跳转到 `bzgames://oauth-complete#session_token=...&expires_at=...&login=...`，Electron 主进程接收自定义协议并保存云同步会话。
+桌面端登录时，平台会打开 `/auth/github/start?returnTo=bzgames://oauth-complete`。GitHub 回调服务端后，服务端再跳转到 `bzgames://oauth-complete#session_token=...&expires_at=...&login=...`，Electron 主进程接收自定义协议并保存云同步会话。
 
 ### GET /auth/github/start
 

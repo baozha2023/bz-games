@@ -4,6 +4,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { DEFAULT_RELAY_SERVER_URL, OAUTH_RETURN_URL } from "../../../shared/AppConstants";
+import { requestInterceptor } from "../../utils/requestInterceptor";
 import { storeService } from "../storage/StoreService";
 import { databaseService } from "../storage/DatabaseService";
 
@@ -53,9 +54,9 @@ function normalizeRelayHttpBase(): string {
   return relayUrl.replace(/\/+$/, "");
 }
 
-function getAuthHeaders(): Record<string, string> {
+function getCloudHeaders(url: string, extra?: Record<string, string>): Record<string, string> {
   const token = storeService.getSettings().cloudSessionToken || "";
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  return requestInterceptor.buildHeaders(url, token ? { ...extra, Authorization: `Bearer ${token}` } : extra);
 }
 
 function contentTypeFor(fileKey: CloudFileMeta["fileKey"]): string {
@@ -76,11 +77,13 @@ class CloudSyncService {
   async loginWithGitHub(): Promise<{ success: boolean; error?: string }> {
     if (!this.baseUrl) return { success: false, error: "cloud_not_configured" };
     const returnTo = OAUTH_RETURN_URL || "bzgames://oauth-complete";
-    await shell.openExternal(`${this.baseUrl}/auth/github/start?returnTo=${encodeURIComponent(returnTo)}`);
+    const url = new URL(`${this.baseUrl}/auth/github/start`);
+    url.searchParams.set("returnTo", returnTo);
+    await shell.openExternal(url.toString());
     return { success: true };
   }
 
-  completeOAuth(urlText: string): boolean {
+  async completeOAuth(urlText: string): Promise<boolean> {
     let url: URL;
     try {
       url = new URL(urlText);
@@ -91,6 +94,7 @@ class CloudSyncService {
     const params = new URLSearchParams(url.hash.startsWith("#") ? url.hash.slice(1) : url.search.slice(1));
     const token = params.get("session_token") || "";
     if (!token) return false;
+    await storeService.init();
     storeService.saveSettings({
       cloudSessionToken: token,
       cloudSessionExpiresAt: params.get("expires_at") || "",
@@ -113,7 +117,8 @@ class CloudSyncService {
       files: [] as Array<CloudFileMeta | null>,
     };
     if (!this.baseUrl || !settings.cloudSessionToken) return status;
-    const authResponse = await fetch(`${this.baseUrl}/api/auth/me`, { headers: getAuthHeaders() });
+    const authUrl = `${this.baseUrl}/api/auth/me`;
+    const authResponse = await fetch(authUrl, { headers: getCloudHeaders(authUrl) });
     if (authResponse.status === 401) {
       storeService.saveSettings({ cloudSessionToken: "", cloudSessionExpiresAt: "", cloudUserLogin: "", cloudUserName: "", cloudUserProfileUrl: "" });
       return { ...status, authenticated: false, userLogin: "", userName: "", userProfileUrl: "" };
@@ -141,7 +146,8 @@ class CloudSyncService {
       status.userName = nextUserName;
       status.userProfileUrl = nextUserProfileUrl;
     }
-    const response = await fetch(`${this.baseUrl}/api/cloud/files`, { headers: getAuthHeaders() });
+    const filesUrl = `${this.baseUrl}/api/cloud/files`;
+    const response = await fetch(filesUrl, { headers: getCloudHeaders(filesUrl) });
     if (response.status === 401) {
       storeService.saveSettings({ cloudSessionToken: "", cloudSessionExpiresAt: "", cloudUserLogin: "", cloudUserName: "", cloudUserProfileUrl: "" });
       return { ...status, authenticated: false, userLogin: "", userName: "", userProfileUrl: "" };
@@ -185,24 +191,24 @@ class CloudSyncService {
     let latestUploadedAt = "";
     let operationId = "";
     for (const source of uploadSources) {
-      const response = await fetch(`${this.baseUrl}/api/cloud/files/${encodeURIComponent(source.fileKey)}`, {
+      const url = `${this.baseUrl}/api/cloud/files/${encodeURIComponent(source.fileKey)}`;
+      const response = await fetch(url, {
         method: "PUT",
-        headers: {
-          ...getAuthHeaders(),
+        headers: getCloudHeaders(url, {
           "Content-Type": source.contentType,
           "Content-Length": String(source.size),
           ...(operationId ? { "X-Cloud-Operation-Id": operationId } : {}),
-        },
+        }),
         body: source.body,
         duplex: "half",
       } as RequestInit);
       operationId = response.headers.get("x-cloud-operation-id") || operationId;
-      uploadedBytes += source.size;
-      progress?.({ stage: "uploading", percentage: Math.min(95, Math.round((uploadedBytes / totalBytes) * 90) + 5), fileKey: source.fileKey });
       if (!response.ok) {
         const body = await response.json().catch(() => ({})) as { error?: string };
         return { success: false, error: body.error || `upload_failed_${response.status}` };
       }
+      uploadedBytes += source.size;
+      progress?.({ stage: "uploading", percentage: Math.min(95, Math.round((uploadedBytes / totalBytes) * 90) + 5), fileKey: source.fileKey });
       const body = await response.json() as { file?: CloudFileMeta };
       if (body.file?.updatedAt) latestUploadedAt = body.file.updatedAt;
     }
@@ -227,11 +233,11 @@ class CloudSyncService {
       for (let index = 0; index < CLOUD_FILES.length; index += 1) {
         const fileKey = CLOUD_FILES[index];
         const meta = metas[index];
-        const response = await fetch(`${this.baseUrl}/api/cloud/files/${encodeURIComponent(fileKey)}`, {
-          headers: {
-            ...getAuthHeaders(),
+        const url = `${this.baseUrl}/api/cloud/files/${encodeURIComponent(fileKey)}`;
+        const response = await fetch(url, {
+          headers: getCloudHeaders(url, {
             ...(operationId ? { "X-Cloud-Operation-Id": operationId } : {}),
-          },
+          }),
         });
         operationId = response.headers.get("x-cloud-operation-id") || operationId;
         if (!response.ok || !response.body) {

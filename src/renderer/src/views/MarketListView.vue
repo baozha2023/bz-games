@@ -29,34 +29,40 @@
       <div
         v-for="(source, index) in displayedSources"
         :key="source.marketId"
-        class="source-card"
+        class="source-card-shell"
         @click="enterMarket(index)"
       >
-        <CachedImg
-          v-if="source.coverUrl"
-          :src="source.coverUrl"
-          class="source-cover"
-        />
-        <div v-else class="source-cover-placeholder">
-          <n-icon size="48" color="var(--bz-text-secondary)">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
-          </n-icon>
-        </div>
-        <div class="source-info">
-          <n-space align="center" :size="8">
-            <strong class="source-name">{{ source.marketName }}</strong>
-            <n-tag v-if="source.marketId === 'official'" size="small" type="info">
-              {{ t('marketList.official') }}
-            </n-tag>
-            <n-tag v-if="source.marketId === 'github-release-market'" size="small" type="success">
-              GitHub
-            </n-tag>
-            <n-tag v-if="source.featured" size="small" type="warning">
-              {{ t('market.featured') }}
-            </n-tag>
-          </n-space>
-          <n-text depth="3" class="source-time">{{ formatTime(source.generatedAt) }}</n-text>
-        </div>
+        <n-card hoverable size="small" embedded content-style="padding: 0;">
+          <template #cover>
+            <div style="aspect-ratio: 16/9; width: 100%; background: var(--bz-bg-card-placeholder); display:flex; align-items:center; justify-content:center; overflow: hidden;">
+              <CachedImg
+                v-if="source.coverUrl"
+                :src="source.coverUrl"
+                style="width:100%; height:100%; object-fit: cover;"
+              />
+              <n-icon v-else size="48" color="var(--bz-text-secondary)">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+              </n-icon>
+            </div>
+          </template>
+          <div style="padding: 12px;">
+            <n-space align="center" :size="4" wrap>
+              <n-ellipsis style="max-width: 100%; font-weight: bold; font-size: 16px;">
+                {{ source.marketName }}
+              </n-ellipsis>
+              <n-tag v-if="source.marketId === 'official'" size="small" type="info">
+                {{ t('marketList.official') }}
+              </n-tag>
+              <n-tag v-if="source.marketId === 'github-release-market'" size="small" type="success">
+                GitHub
+              </n-tag>
+              <n-tag v-if="source.featured" size="small" type="warning">
+                {{ t('market.featured') }}
+              </n-tag>
+            </n-space>
+            <n-text depth="3" style="font-size: 12px;">{{ formatTime(source.generatedAt) }}</n-text>
+          </div>
+        </n-card>
       </div>
     </div>
   </div>
@@ -136,53 +142,24 @@ onMounted(async () => {
 
 .source-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+  gap: 18px;
 }
 
-.source-card {
-  display: flex;
-  flex-direction: column;
+.source-card-shell {
+  position: relative;
+  min-width: 0;
+  border-radius: 12px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.source-card-shell:hover {
+  transform: translateY(-3px);
+}
+
+.source-card-shell :deep(.n-card) {
   border: 1px solid var(--bz-border-subtle);
   border-radius: 12px;
   overflow: hidden;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.source-card:hover {
-  border-color: var(--bz-green);
-  background: var(--bz-green-soft);
-}
-
-.source-cover {
-  width: 100%;
-  height: 160px;
-  object-fit: cover;
-  background: var(--bz-bg-panel);
-}
-
-.source-cover-placeholder {
-  width: 100%;
-  height: 160px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--bz-bg-panel);
-}
-
-.source-info {
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.source-name {
-  font-size: 16px;
-}
-
-.source-time {
-  font-size: 12px;
 }
 </style>

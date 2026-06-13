@@ -29,7 +29,6 @@ import {
 import { z } from "zod";
 import { GameLoader } from "../game/GameLoader";
 import { logger } from "../../utils/logger";
-import { storeService } from "../storage/StoreService";
 import { mainWindow, floatBallWindow } from "../../window";
 import {
   GITHUB_API_BASE,
@@ -37,21 +36,13 @@ import {
   MARKET_FALLBACK_INDEX_URL,
   MARKET_PRIMARY_INDEX_URL,
 } from "../../../shared/AppConstants";
-import { RequestInterceptor } from "../../utils/requestInterceptor";
+import { requestInterceptor } from "../../utils/requestInterceptor";
 
 function gitToRawUrl(repository: string, branch: string): string {
   const match = repository.match(/github\.com\/(.+?)\/(.+?)(?:\.git)?$/);
   if (!match) throw new Error(`market_unsupported_repo:${repository}`);
   return `${GITHUB_RAW_BASE}${match[1]}/${match[2]}/${branch}/market.json`;
 }
-
-export const requestInterceptor = new RequestInterceptor(() => {
-  try {
-    return storeService.getSettings().githubToken?.trim() ?? null;
-  } catch {
-    return null;
-  }
-});
 
 interface TaskMeta {
   gameId: string;

@@ -12,7 +12,11 @@ export function registerMarketIpc() {
   });
 
   ipcMain.handle(IPC.MARKET_GET_CACHED_IMAGE, async (_, url: string) => {
-    return await marketService.getCachedImageDataUrl(url);
+    try {
+      return await marketService.getCachedImageDataUrl(url);
+    } catch {
+      return "";
+    }
   });
 
   ipcMain.handle(

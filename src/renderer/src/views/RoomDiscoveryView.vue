@@ -6,22 +6,11 @@
           {{ t('roomDiscovery.refresh') }}
         </n-button>
       </template>
-      <n-tab-pane name="physical_lan" :tab="t('roomDiscovery.physicalLanTab')">
-        <n-spin :show="loading && activeTab === 'physical_lan'" content-class="room-spin-content">
+      <n-tab-pane name="lan" :tab="t('roomDiscovery.lanTab')">
+        <n-spin :show="loading && activeTab === 'lan'" content-class="room-spin-content">
           <div class="room-tab-content">
             <n-alert type="info" style="margin-bottom: 16px;">
-              {{ t('roomDiscovery.physicalLanDesc') }}
-            </n-alert>
-            <RoomList />
-          </div>
-        </n-spin>
-      </n-tab-pane>
-
-      <n-tab-pane name="virtual_lan" :tab="t('roomDiscovery.virtualLanTab')">
-        <n-spin :show="loading && activeTab === 'virtual_lan'" content-class="room-spin-content">
-          <div class="room-tab-content">
-            <n-alert type="info" style="margin-bottom: 16px;">
-              {{ t('roomDiscovery.virtualLanDesc') }}
+              {{ t('roomDiscovery.lanDesc') }}
             </n-alert>
             <RoomList />
           </div>
@@ -81,11 +70,10 @@ const gameStore = useGameStore()
 const settingsStore = useSettingsStore()
 const { joinRoomByAddress } = useRoomJoin()
 
-const activeTab = ref<'physical_lan' | 'virtual_lan' | 'relay'>('physical_lan')
+const activeTab = ref<'lan' | 'relay'>('lan')
 const loading = ref(false)
 const joiningRoomId = ref('')
-const physicalLanRooms = ref<DiscoveredRoom[]>([])
-const virtualLanRooms = ref<DiscoveredRoom[]>([])
+const lanRooms = ref<DiscoveredRoom[]>([])
 const relayRooms = ref<DiscoveredRoom[]>([])
 const relayLatencyMs = ref<number | null>(null)
 const showJoinPasswordModal = ref(false)
@@ -94,14 +82,12 @@ const joinPassword = ref('')
 let relayLatencyTimer: number | null = null
 
 const displayedRooms = computed(() => {
-  if (activeTab.value === 'physical_lan') return physicalLanRooms.value
-  if (activeTab.value === 'virtual_lan') return virtualLanRooms.value
+  if (activeTab.value === 'lan') return lanRooms.value
   return relayRooms.value
 })
 
 const currentEmptyText = computed(() => {
-  if (activeTab.value === 'physical_lan') return t('roomDiscovery.emptyPhysicalLan')
-  if (activeTab.value === 'virtual_lan') return t('roomDiscovery.emptyVirtualLan')
+  if (activeTab.value === 'lan') return t('roomDiscovery.emptyLan')
   return t('roomDiscovery.emptyRelay')
 })
 
@@ -130,10 +116,12 @@ const handleTabChange = () => {
 const refreshCurrentTab = async () => {
   loading.value = true
   try {
-    if (activeTab.value === 'physical_lan') {
-      physicalLanRooms.value = await window.electronAPI.room.discoverLan()
-    } else if (activeTab.value === 'virtual_lan') {
-      virtualLanRooms.value = await window.electronAPI.room.discoverVirtualLan()
+    if (activeTab.value === 'lan') {
+      const [physicalRooms, virtualRooms] = await Promise.all([
+        window.electronAPI.room.discoverLan(),
+        window.electronAPI.room.discoverVirtualLan(),
+      ])
+      lanRooms.value = [...physicalRooms, ...virtualRooms]
     } else {
       relayRooms.value = await window.electronAPI.room.discoverRelay()
       await refreshRelayLatency()

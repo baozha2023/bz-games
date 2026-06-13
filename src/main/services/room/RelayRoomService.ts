@@ -9,6 +9,7 @@ import type { RoomMessage, RoomRelayLatencyPayload } from "../../../shared/types
 import { RoomConstants } from "../../../shared/RoomConstants";
 import { mainWindow } from "../../window";
 import { IPC } from "../../../shared/ipc-channels";
+import { requestInterceptor } from "../../utils/requestInterceptor";
 
 export interface RelayHostResult {
   success: boolean;
@@ -36,7 +37,7 @@ export class RelayRoomService {
       : undefined;
 
     return new Promise((resolve) => {
-      const ws = new WebSocket(relayUrl, { rejectUnauthorized: false });
+      const ws = new WebSocket(requestInterceptor.buildWebSocketUrl(relayUrl), { rejectUnauthorized: false });
       this.ws = ws;
       const timeout = setTimeout(() => {
         this.disconnect();

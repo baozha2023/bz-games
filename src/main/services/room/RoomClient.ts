@@ -20,6 +20,7 @@ import {
 } from "../../../shared/binary-protocol";
 import { RoomConstants } from "../../../shared/RoomConstants";
 import { DEFAULT_RELAY_PUBLIC_HOST, DEFAULT_RELAY_SERVER_URL, DEFAULT_RELAY_TOKEN } from "../../../shared/AppConstants";
+import { requestInterceptor } from "../../utils/requestInterceptor";
 
 type ConnectResult = { success: boolean; error?: string; message?: string };
 type BinaryRelayPayload = GameRelayPayload & { binaryData?: Buffer };
@@ -111,7 +112,7 @@ export class RoomClient {
   private openSocket() {
     try {
       const options = { rejectUnauthorized: false };
-      this.ws = new WebSocket(this.address, options);
+      this.ws = new WebSocket(requestInterceptor.buildWebSocketUrl(this.address), options);
       this.setupWebSocketListeners();
     } catch {
       this.resolveConnection({ success: false, error: "连接异常" });

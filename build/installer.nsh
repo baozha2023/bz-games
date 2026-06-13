@@ -11,6 +11,14 @@
     FileOpen $0 "$INSTDIR\.initial-language" w
     FileWrite $0 "ja-JP"
     FileClose $0
+  ${ElseIf} $LANGUAGE == 1028
+    FileOpen $0 "$INSTDIR\.initial-language" w
+    FileWrite $0 "zh-TW"
+    FileClose $0
+  ${ElseIf} $LANGUAGE == 1031
+    FileOpen $0 "$INSTDIR\.initial-language" w
+    FileWrite $0 "de-DE"
+    FileClose $0
   ${EndIf}
 !macroend
 

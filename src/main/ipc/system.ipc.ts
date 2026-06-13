@@ -7,14 +7,15 @@ import { updateService } from "../services/system/UpdateService";
 import { logger } from "../utils/logger";
 import type { AppSettings, NicknameStyle } from "../../shared/types";
 import { createFloatBallWindow, destroyFloatBallWindow, mainWindow } from "../window";
-import { getAppRoot } from "../utils/appPath";
 import { cloudSyncService } from "../services/system/CloudSyncService";
 
 let sensitiveWordCache: string[] | null = null;
 
 function loadSensitiveWords(): string[] {
   if (sensitiveWordCache) return sensitiveWordCache;
-  const vocabularyDir = path.join(getAppRoot(), "resources", "vocabulary");
+  const vocabularyDir = app.isPackaged
+    ? path.join(app.getAppPath(), "resources", "vocabulary")
+    : path.join(process.cwd(), "resources", "vocabulary");
   try {
     const words = fs
       .readdirSync(vocabularyDir)

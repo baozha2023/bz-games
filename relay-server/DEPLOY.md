@@ -53,7 +53,7 @@ relay-server/
 | `MAX_TEXT_BYTES` | `1048576` | 单条文本消息最大字节数 |
 | `MAX_BINARY_BYTES` | `12582912` | 单条二进制消息最大字节数 |
 | `MAX_CLOUD_FILE_BYTES` | `67108864` | 单次上传云文件大小上限 |
-| `RELAY_TOKEN` | 空字符串 | 房主注册和客机加入鉴权 token；空字符串表示不校验 |
+| `RELAY_TOKEN` | 空字符串 | 全接口鉴权 token；必须通过 systemd 环境变量配置，平台侧通过构建配置注入同值 |
 | `MAX_ROOMS` | `80` | 最大同时房间数 |
 | `MAX_CLIENTS` | `400` | 最大已登记客户端数 |
 | `MAX_CLIENTS_PER_ROOM` | `8` | 单房间最大中继客户端数上限 |
@@ -74,7 +74,7 @@ relay-server/
 | `OAUTH_SESSION_TTL_MS` | `2592000000` | 登录会话有效期，默认 30 天 |
 | `OAUTH_STATE_TTL_MS` | `600000` | OAuth state 有效期，默认 10 分钟 |
 
-公网部署必须配置 `RELAY_TOKEN`，并与平台侧 `DEFAULT_RELAY_TOKEN` 保持一致。
+公网部署必须配置 `RELAY_TOKEN`，并与平台侧构建注入的 `relayToken` 保持一致。服务端不会兼容未携带 token 的旧版平台。
 如需启用 GitHub 登录，必须额外配置 `MYSQL_USER`、`MYSQL_PASSWORD`、`MYSQL_DATABASE`、`GITHUB_CLIENT_ID`、`GITHUB_CLIENT_SECRET`、`GITHUB_CALLBACK_URL`。
 如需启用云文件同步，还必须额外配置 `MONGODB_URI`。
 
@@ -100,8 +100,8 @@ npm start
 验证：
 
 ```bash
-curl http://127.0.0.1:38090/health
-curl http://127.0.0.1:38090/rooms
+curl -H "X-Relay-Token: your-relay-token" http://127.0.0.1:38090/health
+curl -H "X-Relay-Token: your-relay-token" http://127.0.0.1:38090/rooms
 ```
 
 本地测试 GitHub 登录地址：
@@ -414,15 +414,15 @@ Environment=MAX_EVENT_LOOP_DELAY_MS=250
 本机检查：
 
 ```bash
-curl http://127.0.0.1:38090/health
-curl http://127.0.0.1:38090/rooms
+curl -H "X-Relay-Token: your-relay-token" http://127.0.0.1:38090/health
+curl -H "X-Relay-Token: your-relay-token" http://127.0.0.1:38090/rooms
 ```
 
 公网检查：
 
 ```bash
-curl http://relay.example.com:38090/health
-curl http://relay.example.com:38090/rooms
+curl -H "X-Relay-Token: your-relay-token" http://relay.example.com:38090/health
+curl -H "X-Relay-Token: your-relay-token" http://relay.example.com:38090/rooms
 ```
 
 返回示例：
@@ -458,7 +458,7 @@ systemctl status bz-games-relay
 验证：
 
 ```bash
-curl http://127.0.0.1:38090/health
+curl -H "X-Relay-Token: your-relay-token" http://127.0.0.1:38090/health
 ```
 
 ## 故障排查

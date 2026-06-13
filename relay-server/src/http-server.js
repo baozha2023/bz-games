@@ -1,5 +1,6 @@
 import http from "node:http";
 
+import { requireHttpRelayToken } from "./utils/relay-auth.js";
 import { sendJson } from "./utils/ws.js";
 
 export function createHttpServer({ config, state, roomService, authService, cloudDataService }) {
@@ -11,6 +12,9 @@ export function createHttpServer({ config, state, roomService, authService, clou
         return;
       }
       if (await authService.handleRequest(req, res, url)) {
+        return;
+      }
+      if (!requireHttpRelayToken(config, req, res, url)) {
         return;
       }
       if (await cloudDataService.handleRequest(req, res, url)) {

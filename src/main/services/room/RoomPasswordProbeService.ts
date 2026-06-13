@@ -1,5 +1,6 @@
 import { WebSocket } from "ws";
 import { DEFAULT_RELAY_PUBLIC_HOST, DEFAULT_RELAY_SERVER_URL, DEFAULT_RELAY_TOKEN } from "../../../shared/AppConstants";
+import { requestInterceptor } from "../../utils/requestInterceptor";
 
 export interface RoomPasswordProbeResult {
   success: boolean;
@@ -65,7 +66,7 @@ class RoomPasswordProbeService {
     const relayUrl = this.toWebSocketUrl(DEFAULT_RELAY_SERVER_URL);
     const roomCode = address.trim().split(":").pop() || "";
     return new Promise((resolve) => {
-      const ws = new WebSocket(relayUrl, { rejectUnauthorized: false });
+      const ws = new WebSocket(requestInterceptor.buildWebSocketUrl(relayUrl), { rejectUnauthorized: false });
       const timeout = setTimeout(() => {
         ws.removeAllListeners();
         ws.close();

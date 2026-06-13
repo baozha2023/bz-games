@@ -1,7 +1,12 @@
 import { parseJson } from "./utils/protocol.js";
+import { isValidRelayToken, readRelayTokenFromWs } from "./utils/relay-auth.js";
 
 export function registerWebSocketHandlers({ wss, config, roomService, messageRouter }) {
-  wss.on("connection", (ws) => {
+  wss.on("connection", (ws, req) => {
+    if (!isValidRelayToken(config, readRelayTokenFromWs(req))) {
+      ws.close(1008, "unauthorized");
+      return;
+    }
     const client = {
       ws,
       playerId: "",

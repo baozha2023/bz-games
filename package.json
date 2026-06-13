@@ -1,6 +1,6 @@
 {
   "name": "bz-launcher",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "BZ-Games game platform",
   "main": "./out/main/index.js",
   "author": "BZ-Games",
@@ -85,7 +85,9 @@
       {
         "from": "node_modules/7zip-bin/win/x64",
         "to": "7za",
-        "filter": ["7za.exe"]
+        "filter": [
+          "7za.exe"
+        ]
       }
     ],
     "publish": [
@@ -117,7 +119,9 @@
       "installerLanguages": [
         "zh_CN",
         "en_US",
-        "ja_JP"
+        "ja_JP",
+        "zh_TW",
+        "de_DE"
       ],
       "include": "build/installer.nsh"
     }

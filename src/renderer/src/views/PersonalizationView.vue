@@ -165,7 +165,7 @@ import NicknameText from '../components/NicknameText.vue'
 import { DEFAULT_NICKNAME_STYLE } from '../../../shared/types'
 import type { AvatarFrameDef, NicknameEffect, NicknameFont, NicknameStyle } from '../../../shared/types'
 import { AVATAR_FRAMES } from '../../../shared/avatar-frames'
-import { adaptNicknameStyleForTheme, isNicknameColorAllowedForTheme } from '../utils/nicknameColor'
+import { adaptNicknameStyleForTheme, isNicknameColorAllowedForTheme, normalizeNicknameHexColor } from '../utils/nicknameColor'
 
 const { t } = useI18n()
 const settingsStore = useSettingsStore()
@@ -210,11 +210,21 @@ const effectOptions = computed(() => ([
   { label: t('personalization.effectHeartbeat'), value: 'heartbeat' as NicknameEffect },
 ]))
 
+function normalizeNicknameStyleHexColors(style: NicknameStyle): NicknameStyle {
+  return {
+    ...style,
+    color: normalizeNicknameHexColor(style.color) || style.color,
+    gradientStart: normalizeNicknameHexColor(style.gradientStart) || style.gradientStart,
+    gradientEnd: normalizeNicknameHexColor(style.gradientEnd) || style.gradientEnd,
+  }
+}
+
 function syncNicknameStyleForm() {
-  nicknameStyleForm.value = adaptNicknameStyleForTheme({
+  const style = adaptNicknameStyleForTheme({
     ...DEFAULT_NICKNAME_STYLE,
     ...(settingsStore.settings?.nicknameStyle || {}),
   }, settingsStore.effectiveTheme) || { ...DEFAULT_NICKNAME_STYLE }
+  nicknameStyleForm.value = normalizeNicknameStyleHexColors(style)
 }
 
 function isEquipped(frameId: string): boolean {

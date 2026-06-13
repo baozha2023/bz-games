@@ -29,7 +29,7 @@
 - 游戏启动与进程生命周期管理（主进程统一托管）
 - 联机房间系统（创建、加入、准备、开始、离开、聊天、踢人、解散同步）
 - 房间发现系统（局域网自动发现、官方服务器房间列表、加入前本地游戏与版本校验）
-- 国际化（`zh-CN / en-US / ja-JP`）
+- 国际化（`zh-CN / en-US / ja-JP / zh-TW / lzh / de-DE`）
 - 成就系统（列表、解锁、系统通知、红点提示）
 - 统计系统（支持增量/全量统计模式，游玩时长自动累计）
 - 经济系统（签到、BZ 币、累计游玩时长、头像框解锁与装备）
@@ -139,6 +139,7 @@ bz-games/
 │   │   │   │   ├── V1GameApiProtocol.ts   # v1 游戏 API 通信协议（send/broadcast）
 │   │   │   │   └── V2GameApiProtocol.ts   # v2 游戏 API 增强通信协议（send/broadcast/publish/batch/subscribe + 二进制帧）
 │   │   │   ├── room/
+│   │   │   │   ├── LocalNetworkService.ts      # 局域网发现、网卡扫描、子网匹配（独立服务，解耦自 RoomDiscoveryService）
 │   │   │   │   ├── RelayRoomService.ts    # 房主侧官方中继接入、短地址注册、relay bridge
 │   │   │   │   ├── RoomClient.ts          # 客机房间连接与重连管理（支持 v2 二进制帧中继）
 │   │   │   │   ├── RoomDiscoveryService.ts # 局域网/官方中继房间发现与加入前校验
@@ -185,7 +186,7 @@ bz-games/
 │   │       │   ├── NotificationView.vue   # 通知窗口页面
 │   │       │   ├── FloatBallView.vue       # 下载悬浮球独立窗口页面
 │   │       │   ├── PersonalizationView.vue # 个性化页面（头像框管理 + 昵称样式）
-│   │       │   ├── RoomDiscoveryView.vue   # 房间发现页面（物理局域网/虚拟局域网/服务器 Tab）
+│   │       │   ├── RoomDiscoveryView.vue   # 房间发现页面（局域网/服务器 Tab，物理+虚拟局域网合并）
 │   │       │   ├── RoomView.vue           # 房间页面
 │   │       │   ├── SettingsView.vue       # 设置页面
 │   │       │   └── StatisticsView.vue     # 统计页面
@@ -211,15 +212,18 @@ bz-games/
 │   │       │       ├── RoomChat.vue        # 房间聊天组件
 │   │       │       └── ImageViewer.vue      # 图片预览器（全屏蒙层，点击空白退出，自定义光标）
 │   │       ├── locales/
+│   │       │   ├── de-DE.ts                # 德文文案
 │   │       │   ├── en-US.ts                # 英文文案
 │   │       │   ├── ja-JP.ts                # 日文文案
-│   │       │   └── zh-CN.ts                # 中文文案
+│   │       │   ├── lzh.ts                  # 文言文文案
+│   │       │   ├── zh-CN.ts                # 中文文案
+│   │       │   └── zh-TW.ts                # 繁体中文文案
 │   │       ├── types/
 │   │       │   └── electron-api.d.ts       # window.electronAPI 类型声明
 │   │       └── utils/
 │   │           ├── achievementNotifier.ts  # 成就通知辅助逻辑
 │   │           ├── deleteEffect.ts         # 游戏删除碎裂特效工具
-│   │           ├── nicknameColor.ts        # 昵称颜色主题感知适配（WCAG 相对亮度算法）
+│   │           ├── nicknameColor.ts        # 昵称颜色主题感知适配（WCAG 相对亮度算法，支持 hex/rgb 输入归一化）
 │   │           └── sound.ts                # 音效播放工具
 │   │
 │   └── shared/
@@ -260,7 +264,7 @@ bz-games/
 | **官方中继服务器 (Relay Server)**      | 公网 Node.js HTTP + WebSocket 服务，负责房间登记、房间码、容量保护和透明转发，不拼接或识别短地址，不解析游戏业务语义。                            |
 | **官方短地址**                         | 平台按 `DEFAULT_RELAY_PUBLIC_HOST + roomCode` 拼接的 `<relay-public-host>:随机数字` 地址，展示、复制、服务器列表和手动输入统一使用该格式。                         |
 | **官方房间码**                         | 中继服务器生成并识别的数字房间码；平台从短地址中解析后通过 `relay:join.payload.roomCode` 发送给中继服务器。                         |
-| **房间发现 (Room Discovery)**          | 平台房间页面的物理局域网/虚拟局域网/服务器 Tab。局域网通过 UDP 发现本地房主，按网卡分类过滤；服务器通过官方中继 `/rooms` 获取房间列表。                      |
+| **房间发现 (Room Discovery)**          | 平台房间页面的局域网/服务器 Tab。局域网 Tab 合并了物理局域网和虚拟局域网（通过 `Promise.all` 并发扫描），按网卡分类过滤；服务器通过官方中继 `/rooms` 获取房间列表。                      |
 | **游戏市场目录 (Market Directory)**       | 顶层 `market.json` 文件，`sources` 数组列出所有可用市场源，平台一级界面展示                             |
 | **游戏市场索引 (Market Index)**           | 远程 `market.json` 文件（每个市场源仓库中），描述该市场内可展示和可下载的游戏及其版本信息                           |
 | **市场安装包 (Market Package)**          | 市场游戏某个版本对应的下载产物，平台下载后校验并安装到默认游戏库                                              |
@@ -717,7 +721,7 @@ interface AppSettings {
     nicknameStyle?: NicknameStyle;
     libraryLayout?: "card" | "icon" | "steam";
     lastJoinRoomAddress?: string;
-    language: "zh-CN" | "en-US" | "ja-JP";
+    language: "zh-CN" | "en-US" | "ja-JP" | "zh-TW" | "lzh" | "de-DE";
     theme: "dark" | "light" | "auto";
     defaultRoomPort: number;
     closeBehavior: "tray" | "exit";
@@ -845,10 +849,12 @@ interface AppSettings {
       URL，`ttlMs=60*60*1000` 即 1 小时，由组件内部 `MARKET_IMAGE_TTL_MS` 常量管理）。
 - **应用入口 OSS 拦截**：`index.ts` 在 `app.whenReady` 中调用 `requestInterceptor.registerSessionHandler(session.defaultSession)`，统一注册 Electron 全局请求拦截器（Referer 防盗链）。
 - **RequestInterceptor 统一请求头注入**：
-    - 提取至 `src/main/utils/requestInterceptor.ts`，替代原先散落在 `MarketService.ts` 和 `index.ts` 中的 header 拼接代码。
+    - 提取至 `src/main/utils/requestInterceptor.ts`，作为独立单例导出（`export const requestInterceptor`），替代原先散落在 `MarketService.ts` 和 `index.ts` 中的 header 拼接代码。
     - 构造函数注入 `getTokenFn` 回调（惰性读取 `settings.githubToken`），避免静态导入 `StoreService` 造成循环依赖。
-    - `buildHeaders(url, extra)` 方法为 fetch 请求构建 headers：CDN/OSS 域名自动加 `Referer`、GitHub API/Raw 域名检测 `githubToken` 并注入 `Authorization: Bearer <token>`。
+    - `buildHeaders(url, extra)` 方法为 fetch 请求构建 headers：CDN/OSS 域名自动加 `Referer`、GitHub API/Raw 域名检测 `githubToken` 并注入 `Authorization: Bearer <token>`、中继服务器域名自动注入 `x-relay-token`。
+    - `buildWebSocketUrl(url)` 方法为 WebSocket 连接 URL 自动追加 `relayToken` 查询参数，供 `RoomClient` 连接中继服务器时鉴权。
     - `registerSessionHandler(session)` 方法在 `app.whenReady` 中注册 Electron 全局拦截器，覆盖 `<img>` 标签等非 fetch 请求。
+    - 提供 `normalizeHttpBase()` 和 `normalizeWebSocketBase()` 工具函数，用于 ws/wss/http/https 协议互转。
     - `AppConstants.ts` 集中定义 `CDN_BASE`、`OSS_BASE`、`GITHUB_API_BASE`、`GITHUB_RAW_BASE`、`REFERER` 五个常量，供 `MarketService` 和 `requestInterceptor` 共享。
 - **CalendarHeatmap 日历热力图组件**：
     - 纯 Vue 3 + CSS Grid 实现，不依赖第三方图表库，渲染 GitHub 贡献墙风格的 7×53+ 格子日历。
@@ -1130,10 +1136,10 @@ interface AppSettings {
 - **市场版本状态**：已安装版本、当前最新版本、预发布版本在版本列表中展示不同状态标记。
 - **成就展示**：成就列表支持按游戏版本筛选，支持展开/收起，默认收起。若当前版本无成就，显示空列表。
 - **动态元数据**：游戏详情页切换版本时，优先展示当前选中版本的元数据（如简介、成就）；为空时展示空状态。
-- **房间入口**：顶部导航的“房间”按钮进入 `/rooms`，包含“物理局域网”“虚拟局域网”“服务器”三个 Tab；顶部头像与玩家名点击进入个性化页面。
+- **房间入口**：顶部导航的“房间”按钮进入 `/rooms`，包含“局域网”“服务器”两个 Tab；顶部头像与玩家名点击进入个性化页面。
 - **局域网始终可用**：房主页面的模式切换仅控制是否启用官方短地址；`RoomServer` 的本地监听持续存在，物理局域网、虚拟局域网和用户自备 frp 地址直连始终可用。
 - **官方服务器模式**：房主开启官方服务器模式后展示 `<relay-public-host>:随机数字` 短地址和复制按钮；切换入口前必须先通知其他玩家离开，注册失败自动回退到 `lan` 状态。
-- **房间发现校验**：物理局域网/虚拟局域网/服务器卡片加入前必须校验本地是否安装对应游戏、版本是否匹配、房间是否等待中、人数是否已满、是否为自己的房间；自己的房间点击加入时必须给出友好提示。
+- **房间发现校验**：局域网/服务器卡片加入前必须校验本地是否安装对应游戏、版本是否匹配、房间是否等待中、人数是否已满、是否为自己的房间；自己的房间点击加入时必须给出友好提示。
 - **房间密码交互**：房间页右上角提供密码按钮；发现页卡片加入前必须先探测 `hasPassword`，仅在目标房间有密码时再弹出密码输入框。
 - **服务器卡片展示**：服务器房间卡片展示官方短地址；游戏名称显示游戏本身名称，优先本地 Manifest，其次中继返回的 `gameName`，最后兜底 `gameId`。
 - **游戏库展示**：

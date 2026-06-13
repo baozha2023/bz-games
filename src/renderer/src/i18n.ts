@@ -3,6 +3,9 @@ import type { AppSettings } from "../../shared/types";
 import zhCN from "./locales/zh-CN";
 import enUS from "./locales/en-US";
 import jaJP from "./locales/ja-JP";
+import zhTW from "./locales/zh-TW";
+import lzh from "./locales/lzh";
+import deDE from "./locales/de-DE";
 
 const i18n = createI18n({
   legacy: false,
@@ -12,6 +15,9 @@ const i18n = createI18n({
     "zh-CN": zhCN,
     "en-US": enUS,
     "ja-JP": jaJP,
+    "zh-TW": zhTW,
+    "lzh": lzh,
+    "de-DE": deDE,
   },
 });
 

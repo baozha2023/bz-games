@@ -415,7 +415,10 @@ const hasUnsavedChanges = computed(() => {
 
 const rules = {
   playerName: { required: true, message: () => t('settings.enterName'), trigger: 'blur' },
-  defaultRoomPort: { required: true, type: 'number', message: () => t('settings.enterPort'), trigger: ['blur', 'change'] }
+  defaultRoomPort: [
+    { required: true, type: 'number', message: () => t('settings.enterPort'), trigger: ['blur', 'change'] },
+    { validator: (_rule: unknown, value: number) => value !== 38081, message: () => t('settings.enterPortReserved'), trigger: ['blur', 'change'] },
+  ]
 }
 
 const themeOptions = computed(() => [
@@ -427,7 +430,10 @@ const themeOptions = computed(() => [
 const languageOptions = computed(() => [
   { label: t('settings.langZhCN'), value: 'zh-CN' },
   { label: t('settings.langEnUS'), value: 'en-US' },
-  { label: t('settings.langJaJP'), value: 'ja-JP' }
+  { label: t('settings.langJaJP'), value: 'ja-JP' },
+  { label: t('settings.langZhTW'), value: 'zh-TW' },
+  { label: t('settings.langLzh'), value: 'lzh' },
+  { label: t('settings.langDeDE'), value: 'de-DE' }
 ])
 
 const dataHealthSummaryText = computed(() => {
@@ -501,6 +507,9 @@ onMounted(async () => {
 const removeCloudSyncListener = window.electronAPI.settings.onCloudSyncEvent((payload) => {
   cloudProgress.value = payload.percentage
   cloudProgressStage.value = payload.stage
+  if (cloudBusy.value && payload.stage !== 'checking') {
+    showCloudProgressModal.value = true
+  }
 })
 
 let cloudStatusTimer: ReturnType<typeof setInterval> | null = null
@@ -600,6 +609,8 @@ const cloudErrorText = (error?: string) => {
   return translated === key ? error || t('settings.cloudErrors.unknown') : translated
 }
 
+const shouldSuppressCloudProgressModal = (error?: string) => error === 'cloud_sync_rate_limited'
+
 const handleGitHubLogin = async () => {
   const result = await window.electronAPI.settings.loginWithGitHub()
   if (!result.success) {
@@ -621,15 +632,16 @@ const runCloudAction = async (mode: 'upload' | 'download') => {
   cloudProgressMode.value = mode
   cloudProgressStage.value = 'checking'
   cloudProgress.value = 0
-  showCloudProgressModal.value = true
   try {
     const result = mode === 'upload'
       ? await window.electronAPI.settings.uploadCloudData()
       : await window.electronAPI.settings.downloadCloudData()
     if (!result.success) {
+      showCloudProgressModal.value = !shouldSuppressCloudProgressModal(result.error)
       message.error(cloudErrorText(result.error))
       return
     }
+    showCloudProgressModal.value = true
     await settingsStore.loadSettings()
     await refreshCloudStatus()
     if (settingsStore.settings) {
@@ -638,6 +650,7 @@ const runCloudAction = async (mode: 'upload' | 'download') => {
     }
     message.success(mode === 'upload' ? t('settings.cloudUploadSuccess') : t('settings.cloudDownloadSuccess'))
   } catch (error: any) {
+    showCloudProgressModal.value = false
     message.error(cloudErrorText(error?.message || String(error || '')))
   } finally {
     cloudProgress.value = 100

@@ -31,7 +31,7 @@ async function resolve(src: string) {
       MARKET_IMAGE_TTL_MS,
     );
     if (!controller.signal.aborted) {
-      resolvedSrc.value = dataUrl ?? src;
+      resolvedSrc.value = dataUrl || src;
     }
   } catch {
     if (!controller.signal.aborted) {

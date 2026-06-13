@@ -5,19 +5,26 @@ export type EffectiveTheme = 'light' | 'dark'
 const DARK_COLOR_MAX_LUMINANCE = 0.28
 const LIGHT_COLOR_MIN_LUMINANCE = 0.72
 
-function normalizeHexColor(color?: string): string | null {
+export function normalizeNicknameHexColor(color?: string): string | null {
   if (!color || color === 'inherit' || color === 'currentColor') return null
   const trimmed = color.trim()
   const shorthand = /^#([0-9a-f]{3})$/i.exec(trimmed)
   if (shorthand) {
     return `#${shorthand[1].split('').map((value) => value + value).join('')}`
   }
-  if (/^#[0-9a-f]{6}$/i.test(trimmed)) return trimmed
+  if (/^#[0-9a-f]{6}$/i.test(trimmed)) return trimmed.toLowerCase()
+  const rgb = /^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})(?:\s*,\s*(?:0|1|0?\.\d+))?\s*\)$/i.exec(trimmed)
+  if (rgb) {
+    const channels = rgb.slice(1, 4).map((value) => Number(value))
+    if (channels.every((value) => Number.isInteger(value) && value >= 0 && value <= 255)) {
+      return `#${channels.map((value) => value.toString(16).padStart(2, '0')).join('')}`
+    }
+  }
   return null
 }
 
 function getRelativeLuminance(color?: string): number | null {
-  const normalized = normalizeHexColor(color)
+  const normalized = normalizeNicknameHexColor(color)
   if (!normalized) return null
   const channels = [1, 3, 5].map((start) => {
     const value = parseInt(normalized.slice(start, start + 2), 16) / 255
@@ -27,7 +34,7 @@ function getRelativeLuminance(color?: string): number | null {
 }
 
 function getSymmetricColor(color?: string): string | undefined {
-  const normalized = normalizeHexColor(color)
+  const normalized = normalizeNicknameHexColor(color)
   if (!normalized) return color
   const channels = [1, 3, 5].map((start) => 255 - parseInt(normalized.slice(start, start + 2), 16))
   return `#${channels.map((value) => value.toString(16).padStart(2, '0')).join('')}`

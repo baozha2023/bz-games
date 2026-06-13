@@ -1,11 +1,11 @@
 import { normalizePassword } from "../utils/protocol.js";
+import { isValidRelayToken } from "../utils/relay-auth.js";
 
 export function createRoomService({ config, state, send }) {
   const { rooms, clients } = state;
 
   function verifyRelayToken(payload) {
-    if (!config.RELAY_TOKEN) return true;
-    return payload.token === config.RELAY_TOKEN;
+    return isValidRelayToken(config, payload.token);
   }
 
   function resolveRoom(value) {

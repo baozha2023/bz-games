@@ -100,7 +100,7 @@ export interface AppSettings {
   nicknameStyle?: NicknameStyle;
   libraryLayout?: LibraryLayout;
   lastJoinRoomAddress?: string;
-  language: "zh-CN" | "en-US" | "ja-JP";
+  language: "zh-CN" | "en-US" | "ja-JP" | "zh-TW" | "lzh" | "de-DE";
   theme: "dark" | "light" | "auto";
   defaultRoomPort: number;
   closeBehavior: "tray" | "exit";

@@ -7,12 +7,14 @@ import { electronApp, optimizer } from "@electron-toolkit/utils";
 import { storeService } from "./services/storage/StoreService";
 import { marketService } from "./services/market/MarketService";
 import { databaseService } from "./services/storage/DatabaseService";
-import { requestInterceptor } from "./services/market/MarketService";
+import { requestInterceptor } from "./utils/requestInterceptor";
 import { roomDiscoveryService } from "./services/room/RoomDiscoveryService";
 import { cloudSyncService } from "./services/system/CloudSyncService";
 
 const gotTheLock = app.requestSingleInstanceLock();
 const PROTOCOL_SCHEME = "bzgames";
+const pendingProtocolUrls: string[] = [];
+let appReadyForProtocol = false;
 
 function quoteWindowsArg(value: string): string {
   return `"${value.replace(/"/g, '\\"')}"`;
@@ -41,7 +43,30 @@ function showMainWindow(): void {
   if (!mainWindow) return;
   if (mainWindow.isMinimized()) mainWindow.restore();
   if (!mainWindow.isVisible()) mainWindow.show();
+  mainWindow.setAlwaysOnTop(true, "screen-saver");
+  mainWindow.moveTop();
   mainWindow.focus();
+  setTimeout(() => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.setAlwaysOnTop(false);
+    mainWindow.focus();
+  }, 300);
+}
+
+function handleProtocolUrl(url: string): void {
+  if (!url) return;
+  if (!appReadyForProtocol) {
+    pendingProtocolUrls.push(url);
+    return;
+  }
+  void cloudSyncService.completeOAuth(url).finally(showMainWindow);
+}
+
+function flushPendingProtocolUrls(): void {
+  const urls = pendingProtocolUrls.splice(0);
+  for (const url of urls) {
+    handleProtocolUrl(url);
+  }
 }
 
 registerProtocolClient();
@@ -52,16 +77,13 @@ if (!gotTheLock) {
 } else {
   app.on("second-instance", (_, argv) => {
     const protocolUrl = findProtocolUrl(argv);
-    if (protocolUrl) {
-      cloudSyncService.completeOAuth(protocolUrl);
-    }
-    showMainWindow();
+    handleProtocolUrl(protocolUrl);
+    if (!protocolUrl) showMainWindow();
   });
 
   app.on("open-url", (event, url) => {
     event.preventDefault();
-    cloudSyncService.completeOAuth(url);
-    showMainWindow();
+    handleProtocolUrl(url);
   });
 
   app.whenReady().then(async () => {
@@ -71,6 +93,7 @@ if (!gotTheLock) {
 
     await storeService.init();
     databaseService.init();
+    appReadyForProtocol = true;
     const settings = storeService.getSettings();
     app.setLoginItemSettings({
       openAtLogin: settings.autoLaunch,
@@ -89,9 +112,10 @@ if (!gotTheLock) {
     }
 
     if (launchProtocolUrl) {
-      cloudSyncService.completeOAuth(launchProtocolUrl);
-      showMainWindow();
+      handleProtocolUrl(launchProtocolUrl);
     }
+
+    flushPendingProtocolUrls();
 
     marketService.restorePendingTasks();
 
