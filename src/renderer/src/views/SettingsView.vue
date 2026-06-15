@@ -31,6 +31,19 @@
           <div class="cloud-action-line">
             <n-button type="primary" secondary :disabled="!cloudStatus.authenticated || cloudBusy" @click="handleCloudUpload">{{ t('settings.cloudUpload') }}</n-button>
             <n-button type="primary" secondary :disabled="!cloudStatus.authenticated || cloudBusy" @click="handleCloudDownload">{{ t('settings.cloudDownload') }}</n-button>
+            <n-tooltip trigger="hover" placement="top">
+              <template #trigger>
+                <button class="cloud-help-button" type="button" :aria-label="t('settings.cloudSyncHelpTitle')">
+                  <n-icon :size="18">
+                    <HelpCircleOutline />
+                  </n-icon>
+                </button>
+              </template>
+              <div class="cloud-help-content">
+                <div class="cloud-help-title">{{ t('settings.cloudSyncHelpTitle') }}</div>
+                <div>{{ t('settings.cloudSyncHelp') }}</div>
+              </div>
+            </n-tooltip>
             <n-text depth="3" class="cloud-upload-time">{{ cloudTimeText }}</n-text>
           </div>
         </div>
@@ -340,7 +353,7 @@ import AvatarWithFrame from '../components/AvatarWithFrame.vue'
 import type { AppSettings } from '../../../shared/types'
 import { getFrameImageFileName } from '../../../shared/avatar-frames'
 import { formatBytes } from '../utils/format'
-import { LogoGithub } from '@vicons/ionicons5'
+import { HelpCircleOutline, LogoGithub } from '@vicons/ionicons5'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -1059,6 +1072,32 @@ const confirmClearCache = async () => {
 .cloud-upload-time {
   flex: 1;
   text-align: right;
+}
+.cloud-help-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--n-text-color-3);
+  cursor: help;
+}
+.cloud-help-button:hover {
+  color: var(--n-primary-color);
+  background: var(--n-action-color);
+}
+.cloud-help-content {
+  max-width: 320px;
+  white-space: pre-line;
+  line-height: 1.6;
+}
+.cloud-help-title {
+  margin-bottom: 6px;
+  font-weight: 600;
 }
 .github-login-button {
   --n-color: #24292f !important;

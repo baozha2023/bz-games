@@ -10,7 +10,12 @@
         <n-spin :show="loading && activeTab === 'lan'" content-class="room-spin-content">
           <div class="room-tab-content">
             <n-alert type="info" style="margin-bottom: 16px;">
-              {{ t('roomDiscovery.lanDesc') }}
+              <n-space align="center" justify="space-between">
+                <span>{{ t('roomDiscovery.lanDesc') }}</span>
+                <n-button size="tiny" @click="showLanGuideModal = true">
+                  {{ t('room.lanGuideDetail') }}
+                </n-button>
+              </n-space>
             </n-alert>
             <RoomList />
           </div>
@@ -48,6 +53,8 @@
         :placeholder="t('room.joinPasswordInputPlaceholder')"
       />
     </n-modal>
+
+    <LanGuideModal v-model:show="showLanGuideModal" />
   </div>
 </template>
 
@@ -61,6 +68,7 @@ import { RoomConstants } from '../../../shared/RoomConstants'
 import { useGameStore } from '../stores/useGameStore'
 import { useRoomJoin } from '../composables/useRoomJoin'
 import NicknameText from '../components/NicknameText.vue'
+import LanGuideModal from '../components/room/LanGuideModal.vue'
 import { useSettingsStore } from '../stores/useSettingsStore'
 
 const { t } = useI18n()
@@ -71,6 +79,7 @@ const settingsStore = useSettingsStore()
 const { joinRoomByAddress } = useRoomJoin()
 
 const activeTab = ref<'lan' | 'relay'>('lan')
+const showLanGuideModal = ref(false)
 const loading = ref(false)
 const joiningRoomId = ref('')
 const lanRooms = ref<DiscoveredRoom[]>([])

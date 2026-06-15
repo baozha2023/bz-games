@@ -70,6 +70,15 @@ const defaultStore: AppStore = {
   recentPlayed: [],
 };
 
+const CLOUD_SETTINGS_UPLOAD_BLACKLIST: Array<keyof AppSettings> = [
+  "githubToken",
+  "cloudSessionToken",
+  "cloudSessionExpiresAt",
+  "cloudUserLogin",
+  "cloudUserName",
+  "cloudUserProfileUrl",
+];
+
 function createConfigCipherKey(): Buffer {
   return crypto.createHash("sha256").update(CONFIG_ENCRYPTION_SEED).digest();
 }
@@ -296,10 +305,36 @@ class StoreService {
     return this.getStore().path;
   }
 
-  replaceConfigFile(sourcePath: string): void {
-    const configPath = this.getConfigPath();
-    fsSync.copyFileSync(sourcePath, configPath);
-    this._initPromise = null;
+  createCloudConfigFile(targetPath: string): void {
+    const store = this.getStore();
+    const data = store.store as AppStore;
+    const settings = { ...(data.settings || {}) } as Partial<AppSettings>;
+    for (const key of CLOUD_SETTINGS_UPLOAD_BLACKLIST) {
+      delete settings[key];
+    }
+    fsSync.writeFileSync(targetPath, encryptConfigPayload({ ...data, settings } as AppStore));
+  }
+
+  applyCloudConfigFile(sourcePath: string): void {
+    const content = fsSync.readFileSync(sourcePath, "utf-8");
+    const cloudData = deserializeConfig(content) as Partial<AppStore>;
+    const store = this.getStore();
+    const currentSettings = this.getSettings();
+    const cloudSettings = cloudData.settings || {};
+
+    if (cloudData.games) {
+      store.set("games", cloudData.games);
+    }
+    if (cloudData.userData) {
+      store.set("userData", cloudData.userData);
+    }
+    if (cloudData.recentPlayed) {
+      store.set("recentPlayed", cloudData.recentPlayed);
+    }
+    store.set("settings", {
+      ...currentSettings,
+      ...cloudSettings,
+    });
   }
 
   private getStore(): ElectronStore<AppStore> {

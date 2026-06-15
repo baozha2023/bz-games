@@ -40,15 +40,15 @@
           >
             {{ t('nav.backToRoom') }}
           </n-button>
-          <n-button @click="router.push('/markets')">{{ t('nav.market') }}</n-button>
-          <n-button @click="router.push('/library')">{{ t('nav.myGames') }}</n-button>
-          <n-button @click="router.push('/statistics')">{{ t('statistics.title') }}</n-button>
+          <n-button :type="activeNavKey === 'market' ? 'primary' : 'default'" @click="router.push('/markets')">{{ t('nav.market') }}</n-button>
+          <n-button :type="activeNavKey === 'library' ? 'primary' : 'default'" @click="router.push('/library')">{{ t('nav.myGames') }}</n-button>
+          <n-button :type="activeNavKey === 'statistics' ? 'primary' : 'default'" @click="router.push('/statistics')">{{ t('statistics.title') }}</n-button>
           <div class="badge-wrapper">
             <span v-if="gameStore.newAchievements.size > 0" class="red-dot"></span>
-            <n-button @click="router.push('/achievements')">{{ t('achievement.title') }}</n-button>
+            <n-button :type="activeNavKey === 'achievements' ? 'primary' : 'default'" @click="router.push('/achievements')">{{ t('achievement.title') }}</n-button>
           </div>
-          <n-button @click="router.push('/rooms')">{{ t('nav.rooms') }}</n-button>
-          <n-button @click="router.push('/settings')">{{ t('nav.settings') }}</n-button>
+          <n-button :type="activeNavKey === 'rooms' ? 'primary' : 'default'" @click="router.push('/rooms')">{{ t('nav.rooms') }}</n-button>
+          <n-button :type="activeNavKey === 'settings' ? 'primary' : 'default'" @click="router.push('/settings')">{{ t('nav.settings') }}</n-button>
         </n-space>
       </n-space>
     </n-layout-header>
@@ -123,6 +123,16 @@ const topBarFrameFileName = computed(() => {
 
 const isPopupWindow = computed(() => {
   return route.name === 'Notification' || route.name === 'ChatPopout' || route.name === 'FloatBall';
+})
+
+const activeNavKey = computed(() => {
+  if (route.name === 'MarketList' || route.name === 'Market') return 'market'
+  if (route.name === 'Library' || route.name === 'GameDetail') return 'library'
+  if (route.name === 'Statistics') return 'statistics'
+  if (route.name === 'Achievements') return 'achievements'
+  if (route.name === 'RoomDiscovery' || route.name === 'Room') return 'rooms'
+  if (route.name === 'Settings') return 'settings'
+  return ''
 })
 
 const handleBackToRoom = () => {

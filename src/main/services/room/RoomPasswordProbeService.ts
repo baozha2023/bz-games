@@ -1,6 +1,7 @@
 import { WebSocket } from "ws";
 import { DEFAULT_RELAY_PUBLIC_HOST, DEFAULT_RELAY_SERVER_URL, DEFAULT_RELAY_TOKEN } from "../../../shared/AppConstants";
 import { requestInterceptor } from "../../utils/requestInterceptor";
+import { mapRelayCloseError } from "../../utils/relayCloseError";
 
 export interface RoomPasswordProbeResult {
   success: boolean;
@@ -24,10 +25,17 @@ class RoomPasswordProbeService {
     const targetUrl = this.toWebSocketUrl(address);
     return new Promise((resolve) => {
       const ws = new WebSocket(targetUrl, { rejectUnauthorized: false });
-      const timeout = setTimeout(() => {
+      let settled = false;
+      const finish = (result: RoomPasswordProbeResult) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
         ws.removeAllListeners();
         ws.close();
-        resolve({ success: false, hasPassword: false, error: "probe_timeout" });
+        resolve(result);
+      };
+      const timeout = setTimeout(() => {
+        finish({ success: false, hasPassword: false, error: "probe_timeout" });
       }, 5000);
 
       ws.once("open", () => {
@@ -38,26 +46,21 @@ class RoomPasswordProbeService {
         try {
           const message = JSON.parse(Buffer.isBuffer(data) ? data.toString("utf8") : Buffer.concat(data as Buffer[]).toString("utf8"));
           if (message?.type !== "room:password:probe:ack") return;
-          clearTimeout(timeout);
-          ws.removeAllListeners();
-          ws.close();
-          resolve({
+          finish({
             success: true,
             hasPassword: Boolean(message.payload?.hasPassword),
           });
         } catch {
-          clearTimeout(timeout);
-          ws.removeAllListeners();
-          ws.close();
-          resolve({ success: false, hasPassword: false, error: "probe_failed" });
+          finish({ success: false, hasPassword: false, error: "probe_failed" });
         }
       });
 
       ws.once("error", () => {
-        clearTimeout(timeout);
-        ws.removeAllListeners();
-        ws.close();
-        resolve({ success: false, hasPassword: false, error: "probe_failed" });
+        finish({ success: false, hasPassword: false, error: "probe_failed" });
+      });
+
+      ws.once("close", (code, reason) => {
+        finish({ success: false, hasPassword: false, error: mapRelayCloseError(code, reason, `probe_closed_${code}`) });
       });
     });
   }
@@ -67,10 +70,17 @@ class RoomPasswordProbeService {
     const roomCode = address.trim().split(":").pop() || "";
     return new Promise((resolve) => {
       const ws = new WebSocket(requestInterceptor.buildWebSocketUrl(relayUrl), { rejectUnauthorized: false });
-      const timeout = setTimeout(() => {
+      let settled = false;
+      const finish = (result: RoomPasswordProbeResult) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
         ws.removeAllListeners();
         ws.close();
-        resolve({ success: false, hasPassword: false, error: "probe_timeout" });
+        resolve(result);
+      };
+      const timeout = setTimeout(() => {
+        finish({ success: false, hasPassword: false, error: "probe_timeout" });
       }, 5000);
 
       ws.once("open", () => {
@@ -87,38 +97,30 @@ class RoomPasswordProbeService {
         try {
           const message = JSON.parse(Buffer.isBuffer(data) ? data.toString("utf8") : Buffer.concat(data as Buffer[]).toString("utf8"));
           if (message?.type === "relay:room:password:probe:ack") {
-            clearTimeout(timeout);
-            ws.removeAllListeners();
-            ws.close();
-            resolve({
+            finish({
               success: true,
               hasPassword: Boolean(message.payload?.hasPassword),
             });
             return;
           }
           if (message?.type === "relay:error") {
-            clearTimeout(timeout);
-            ws.removeAllListeners();
-            ws.close();
-            resolve({
+            finish({
               success: false,
               hasPassword: false,
               error: String(message.payload?.code || "probe_failed"),
             });
           }
         } catch {
-          clearTimeout(timeout);
-          ws.removeAllListeners();
-          ws.close();
-          resolve({ success: false, hasPassword: false, error: "probe_failed" });
+          finish({ success: false, hasPassword: false, error: "probe_failed" });
         }
       });
 
       ws.once("error", () => {
-        clearTimeout(timeout);
-        ws.removeAllListeners();
-        ws.close();
-        resolve({ success: false, hasPassword: false, error: "probe_failed" });
+        finish({ success: false, hasPassword: false, error: "probe_failed" });
+      });
+
+      ws.once("close", (code, reason) => {
+        finish({ success: false, hasPassword: false, error: mapRelayCloseError(code, reason, `probe_closed_${code}`) });
       });
     });
   }

@@ -125,6 +125,7 @@ bz-games/
 │   │   │   ├── room.ipc.ts                # 房间相关 IPC 处理器
 │   │   │   ├── system.ipc.ts              # 设置/系统/更新 IPC 处理器
 │   │   │   ├── storage.ipc.ts             # Web 游戏本地存储 IPC 处理器
+│   │   │   ├── log.ipc.ts                # 渲染进程错误日志回传 IPC 处理器
 │   │   │   └── statistics.ipc.ts          # 统计数据查询 IPC 处理器
 │   │   ├── services/
 │   │   │   ├── storage/
@@ -148,18 +149,20 @@ bz-games/
 │   │   │   ├── market/
 │   │   │   │   └── MarketService.ts       # 游戏市场索引拉取、下载、校验、解压与安装
 │   │   │   └── system/
-│   │       ├── CloudSyncService.ts    # 云端数据同步（GitHub OAuth 登录 / 配置与数据库上传下载 / 哈希校验 / 进度事件）
+│   │       ├── CloudSyncService.ts    # 云端数据同步（GitHub OAuth 登录 / 配置与数据库上传下载 / 哈希校验 / 进度事件 / 上传黑名单过滤敏感字段 / 下载选择性合并 config）
 │   │       ├── NotificationService.ts # 系统通知窗口服务
 │   │       └── UpdateService.ts       # 客户端更新检查/下载/安装服务
 │   │   └── utils/
 │   │       ├── appPath.ts                 # 应用根路径工具
 │   │       ├── fileUtils.ts               # 文件复制等通用文件工具
-│   │       ├── logger.ts                  # 日志输出封装（生产模式下 error 日志自动写入 exe 同级目录的 bz-games-error.log）
+│   │       ├── logger.ts                  # Logger 类：生产模式 error→文件日志；开发模式全量 console 输出；全局异常捕获（uncaughtException / unhandledRejection / render-process-gone / child-process-gone）；console 代理（log/warn/error 统一路由到 Logger）；渲染进程错误通过 IPC 回传主进程统一记录
 │   │       ├── portUtils.ts               # 可用端口探测工具
+│   │       ├── relayCloseError.ts         # WebSocket 关闭帧错误码映射工具（统一 mapRelayCloseError，三处 room 服务共用）
 │   │       └── requestInterceptor.ts      # HTTP 请求头统一注入（Referer 防盗链 + GitHub Token）
 │   │
 │   ├── preload/
 │   │   ├── api.ts                         # 暴露给渲染进程的安全 API
+│   │   ├── error-forwarding.ts            # 渲染进程错误捕获与回传（contextIsolated 双世界桥接、normalizeLogArg 序列化）
 │   │   ├── game.ts                        # Web 游戏 localStorage 接管
 │   │   └── index.ts                       # Preload 入口
 │   │
@@ -191,6 +194,7 @@ bz-games/
 │   │       │   ├── SettingsView.vue       # 设置页面
 │   │       │   └── StatisticsView.vue     # 统计页面
 │   │       ├── composables/
+│   │       │   ├── useGameListView.ts      # 游戏列表搜索/筛选/版本选择/交错渲染公共逻辑（AchievementsView 与 StatisticsView 共享）
 │   │       │   ├── useRoomJoin.ts          # 房间地址加入公共逻辑（服务器 Tab 与手动短地址共用）
 │   │       │   └── useImageCache.ts        # 统一图片缓存层（本地+远程）
 │   │       ├── components/
@@ -210,6 +214,7 @@ bz-games/
 │   │       │       ├── PlayerList.vue      # 房间玩家列表组件
 │   │       │       ├── GameReportCard.vue   # 战绩报告卡片组件（纯文本 / 内置布局 / 自定义 HTML 三种模式）
 │   │       │       ├── RoomChat.vue        # 房间聊天组件
+│   │       │       ├── LanGuideModal.vue    # 局域网联机引导弹窗组件（NatFrp + EasyTier 配置指引，RoomView 与 RoomDiscoveryView 共享）
 │   │       │       └── ImageViewer.vue      # 图片预览器（全屏蒙层，点击空白退出，自定义光标）
 │   │       ├── locales/
 │   │       │   ├── de-DE.ts                # 德文文案
@@ -763,6 +768,17 @@ interface AppSettings {
   `removeConfig()` 在游戏退出时自动删除残留的 `bz-config.js` 文件。`activeVersionPaths` Map 追踪版本目录路径，确保所有退出路径（窗口关闭、进程退出、主动停止、启动失败）都能正确清理。
 - **GameManager 生命周期**：`cleanupApiOnly()` 方法仅清理 WebSocket/HTTP 服务器资源，不终止游戏进程也不关闭窗口。当 API
   Server 超时自动停止时调用，避免误杀正在运行的游戏。
+- **Logger 类设计**：
+    - 模块级 `Logger` 类单例（`export const logger = new Logger()`）。`installGlobalHandlers()` 在 `index.ts` 入口处调用。
+    - **Console 代理**：`installConsoleProxy()` 将全局 `console.log`/`console.warn`/`console.error` 替换为 Logger 方法，统一所有日志路由。
+    - **双模式输出**：开发模式（`!app.isPackaged`）全部级别输出到控制台（调用保留下来的 `nativeConsole` 原始引用，避免无限递归）；生产模式 `info`/`warn` 静默丢弃，仅 `error` 写入 exe 同级 `bz-games-error.log` 文件。
+    - **全局异常捕获**：注册 `process.on("uncaughtException")`、`process.on("unhandledRejection")`、`app.on("render-process-gone")`、`app.on("child-process-gone")` 四个全局处理器，异常信息通过 Logger 统一写入错误日志。
+    - **渲染进程错误回传**：`captureRendererError()` 方法接收来自 preload 脚本通过 IPC `system:log:error` 回传的渲染进程错误，统一格式后按 error 级别处理。
+- **Renderer 错误捕获管线**：
+    - `src/preload/api.ts` 和 `src/preload/game.ts` 均在入口处覆盖 `console.error`：开发模式下保留原始控制台输出；所有错误通过 `ipcRenderer.send(IPC.SYSTEM_LOG_ERROR, ...)` 单向推送至主进程，无需返回值。
+    - Error 对象在跨进程传递前通过 `normalizeLogArg()` 序列化为 `{ name, message, stack }` 纯对象，避免结构化克隆失败。
+    - `window.addEventListener("error", ...)` 和 `window.addEventListener("unhandledrejection", ...)` 捕获未被 try-catch 覆盖的运行时异常。
+    - 主进程 `log.ipc.ts` 注册 `ipcMain.on(SYSTEM_LOG_ERROR)` 监听器，调用 `logger.captureRendererError()` 记录。
 - **游戏库布局状态**：`settings.libraryLayout` 持久化游戏库布局，取值为 `card`、`icon`、`steam`。`LibraryView` 挂载时必须先读取设置再渲染游戏库，避免启动时默认布局闪烁；Steam 布局右侧详情页使用嵌入式 `GameDetailView`，通过 `/library?steamGameId=<id>` 恢复来源游戏详情。
 - **游玩会话记录**：每次游戏启动（`spawnGameProcess` / `createGameWindow`）调用 `databaseService.startSession()` 在
   `play_sessions.db` 创建一条记录（含 `game_id`、`game_name`、`version`、`start_time`）；游戏退出时（
@@ -777,6 +793,11 @@ interface AppSettings {
     - `getRecentSessions(limit)`：按 `start_time DESC` 返回最近会话。
     - `getSessionsByDate(date)`：按本地自然日查询已结束会话，用于统计热力图点击日期后的当日记录弹窗。
     - 应用退出 (`before-quit`) 必须调用 `databaseService.close()` 正常关闭 WAL 连接，否则 WAL 文件不会自动合并。
+- **CloudSyncService 设计**：
+    - **上传黑名单**：`StoreService.CLOUD_SETTINGS_UPLOAD_BLACKLIST` 定义上传时排除的敏感字段（`githubToken`、`cloudSessionToken`、`cloudSessionExpiresAt`、`cloudUserLogin`、`cloudUserName`、`cloudUserProfileUrl`），`createCloudConfigFile()` 在写入临时上传文件前从 settings 副本中删除这些字段。
+    - **上传流程**：`upload()` 创建临时目录，调用 `createCloudConfigFile()` 生成脱敏后的 config 副本，与 `play_sessions.db` SQL 导出文件一起通过 `PUT /api/cloud/files/:fileKey` 按序上传。`try...finally` 确保临时目录在任何退出路径下都被清理。
+    - **下载选择性合并**：`download()` 下载完成后调用 `applyCloudConfigFile()` 而非之前的 `replaceConfigFile()` + `init(true)`。`applyCloudConfigFile()` 对 `games`、`userData`、`recentPlayed` 执行全量替换，对 `settings` 执行浅合并（`{ ...currentSettings, ...cloudSettings }`），云端没有的本地字段保留不丢失。不再需要重启 store 实例。
+    - **会话一致性**：上传时 `PUT` 请求可携带 `X-Cloud-Operation-Id` 请求头实现原子操作；下载时同样传递该请求头确保读到同一原子快照。
 - **MarketService 设计**：
     - **两级市场架构**：`getSources()` 拉取顶层市场目录（通过 `fetchDirectory()` 获取，主源 GitHub + 备源 OSS），
       `getIndex(sourceIdx)` 拉取指定市场源的游戏索引。sourceIdx=0 使用 `fetchIndexInternal()`（主备双源），sourceIdx>0 使用
@@ -863,7 +884,8 @@ interface AppSettings {
     - `dayLabels`、`monthNames`、`formatDurationMs` 均通过 `useI18n()` 实现三语切换，
       使用逗号分隔字符串 `t('statistics.weekDays')` / `t('statistics.monthNames')` 存储数组数据，`t('statistics.hour/minute')` 存储时间单位。
     - 每个格子通过 `n-tooltip` 展示日期和当天游玩时长。底部显示近一年总游玩时长。
-    - 每次打开统计页面 (`onMounted`) 自动拉取最新数据。
+    - 统计页默认不自动加载热力图数据，用户点击「加载热力图」按钮后按需加载（`hasLoadedHeatmap` 状态守卫防重复请求）。
+    - ResizeObserver 使用 `requestAnimationFrame` 节流 + 同值跳过，避免热力图容器宽度频繁变化引起的布局抖动。
 - **头像框系统（Avatar Frame）**：
     - **数据定义**：`src/shared/avatar-frames.ts` 导出 `AVATAR_FRAMES` 常量数组（8 款头像框），每款定义 `id`、`name`、`imageFileName`、`rarity`、`unlockMethod`（playtime/consecutive_checkin/total_checkin/bzcoin）、`unlockValue`。同时导出 `getFrameImageFileName(id)` 工具函数。
     - **类型定义**：`AvatarFrameDef` 和 `AvatarFrameUnlockMethod` 定义在 `src/shared/types/store.types.ts`，通过 `shared/types/index.ts` 统一导出。
@@ -898,6 +920,7 @@ interface AppSettings {
     - **密码同步**：房主更新密码时，`room.ipc.ts` 先更新本地 `RoomServer`，再调用 `RelayRoomService.syncRoomPassword()` 将密码同步给 relay-server，保证短地址准入规则与房主本地保持一致。
     - **容量保护**：官方中继通过 `MAX_ROOMS`、`MAX_CLIENTS`、`MAX_CLIENTS_PER_ROOM`、`MAX_EVENT_LOOP_DELAY_MS` 控制新房间与新玩家接入。
     - **切换安全**：房主切换 `lan` / `relay` 模式前必须先通知当前其他玩家离开并清理连接；官方服务器注册失败时 UI 回退到 `lan` 状态。
+    - **WebSocket 关闭错误映射**：`RelayRoomService`、`RoomClient`、`RoomPasswordProbeService` 均实现了 `mapRelayCloseError(code, reason)` 私有方法，将 WebSocket 关闭帧中的 `1008` + `"unauthorized"` reason 映射为 `"unauthorized"` 错误码供上层展示。三处均使用 `settled` 守卫模式防止 Promise 多重 resolve（timeout / error / close 竞态）。
 
 - **下载悬浮球系统（Float Ball）**：
     - **独立窗口架构**：悬浮球运行在独立的 `BrowserWindow` 中（透明无边框、置顶、72×72px），通过 `/float-ball` 路由加载 `FloatBallView.vue` 组件。`AppContent` 将其识别为弹窗窗口（`isPopupWindow`），跳过主菜单渲染。
@@ -1100,6 +1123,7 @@ interface AppSettings {
 - `system:checkUpdate`：检查是否有可用更新。
 - `system:downloadUpdate`：下载可用更新包。
 - `system:installUpdate`：安装更新并重启。
+- `system:log:error`：渲染进程错误日志回传主进程统一记录（`ipcRenderer.send` 单向推送，无需返回值）。
 - `room:event`：主进程推送房间事件给渲染层。
 - `game:process:started`：推送游戏进程启动事件。
 - `game:process:ended`：推送游戏进程结束事件。
@@ -1206,6 +1230,7 @@ interface AppSettings {
 - **设置页官网链接**：设置页需展示官方网址，使用 NaiveUI `n-a` 组件渲染为可点击链接，`
   @click.prevent` 拦截默认跳转后通过 `system:openUrl` IPC 调用 `shell.openExternal` 打开系统默认浏览器。
 - **GitHub Token 设置**：设置页提供 `githubToken` 字段（`n-input type="password"`，`@copy.prevent` + `@cut.prevent` 防剪贴板泄漏）。填写有效的 GitHub Personal Access Token 后，平台所有 GitHub API 请求自动携带 `Authorization: Bearer <token>`，将 API 限流从 60 次/小时提升至 5000 次/小时（用于 Release Asset 解析）。
+- **云端同步说明**：设置页 GitHub 登录区域在上传/下载按钮旁提供 `?` 帮助按钮，hover 展示 `cloudSyncHelp` tooltip，说明上传会排除 GitHub Token 与登录会话字段、下载 config.json 仅更新云端存在的字段。
 - **设置页数据自检**：设置页需提供"数据自检"按钮，展示 `config.json`、游戏目录、版本路径、Manifest 完整性等检查结果。
 - **更新错误诊断**：更新失败时前端展示归类后的错误码文案与技术摘要。
 - **设置页游戏库列表管理**：

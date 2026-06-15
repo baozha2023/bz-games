@@ -66,73 +66,7 @@
       </n-space>
     </n-alert>
 
-    <n-modal
-      v-model:show="showLanGuideModal"
-      preset="card"
-      :title="t('room.lanGuideTitle')"
-      style="width: 72vw; max-width: calc(100vw - 32px);"
-      :bordered="false"
-    >
-      <div ref="lanGuideModalContentRef" class="lan-guide-modal" tabindex="-1">
-        <n-alert type="info" class="lan-guide-overview">
-          {{ t('room.lanGuideOverview') }}
-        </n-alert>
-
-        <div class="lan-guide-grid">
-          <n-card size="small" embedded class="lan-guide-card">
-            <div class="lan-guide-card-header">
-              <div>
-                <div class="lan-guide-card-title">{{ t('room.lanGuideNatfrpTitle') }}</div>
-                <div class="lan-guide-card-subtitle">{{ t('room.lanGuideNatfrpSummary') }}</div>
-              </div>
-              <n-button size="tiny" @click="handleOpenExternalUrl(NATFRP_URL)">
-                {{ t('room.lanGuideOpenSite') }}
-              </n-button>
-            </div>
-            <div class="lan-guide-url-row">
-              <span class="lan-guide-url-label">{{ t('room.lanGuideSiteLabel') }}</span>
-              <span class="lan-guide-url">{{ NATFRP_URL }}</span>
-            </div>
-            <div class="lan-guide-section-title">{{ t('room.lanGuideRecommendedConfig') }}</div>
-            <ol class="lan-guide-steps">
-              <li>{{ t('room.lanGuideNatfrpStep1') }}</li>
-              <li>{{ t('room.lanGuideNatfrpStep2') }}</li>
-              <li>{{ t('room.lanGuideNatfrpStep3') }}</li>
-              <li>{{ t('room.lanGuideNatfrpStep4') }}</li>
-              <li>{{ t('room.lanGuideNatfrpStep5') }}</li>
-            </ol>
-          </n-card>
-
-          <n-card size="small" embedded class="lan-guide-card">
-            <div class="lan-guide-card-header">
-              <div>
-                <div class="lan-guide-card-title">{{ t('room.lanGuideEasyTierTitle') }}</div>
-                <div class="lan-guide-card-subtitle">{{ t('room.lanGuideEasyTierSummary') }}</div>
-              </div>
-              <n-button size="tiny" @click="handleOpenExternalUrl(EASYTIER_URL)">
-                {{ t('room.lanGuideOpenSite') }}
-              </n-button>
-            </div>
-            <div class="lan-guide-url-row">
-              <span class="lan-guide-url-label">{{ t('room.lanGuideSiteLabel') }}</span>
-              <span class="lan-guide-url">{{ EASYTIER_URL }}</span>
-            </div>
-            <div class="lan-guide-url-row">
-              <span class="lan-guide-url-label">{{ t('room.lanGuideEasyTierNodeLabel') }}</span>
-              <span class="lan-guide-url">{{ EASYTIER_BOOTSTRAP_NODE }}</span>
-            </div>
-            <div class="lan-guide-section-title">{{ t('room.lanGuideRecommendedConfig') }}</div>
-            <ol class="lan-guide-steps">
-              <li>{{ t('room.lanGuideEasyTierStep1') }}</li>
-              <li>{{ t('room.lanGuideEasyTierStep2') }}</li>
-              <li>{{ t('room.lanGuideEasyTierStep3') }}</li>
-              <li>{{ t('room.lanGuideEasyTierStep4') }}</li>
-              <li>{{ t('room.lanGuideEasyTierStep5') }}</li>
-            </ol>
-          </n-card>
-        </div>
-      </div>
-    </n-modal>
+    <LanGuideModal v-model:show="showLanGuideModal" />
 
     <n-modal
       v-model:show="showRoomPasswordModal"
@@ -212,7 +146,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, computed, nextTick, ref, watch } from 'vue'
+import { onMounted, onUnmounted, computed, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useMessage, useDialog } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
@@ -221,6 +155,7 @@ import { useSettingsStore } from '../stores/useSettingsStore'
 import { useGameStore } from '../stores/useGameStore'
 import PlayerList from '../components/room/PlayerList.vue'
 import RoomChat from '../components/room/RoomChat.vue'
+import LanGuideModal from '../components/room/LanGuideModal.vue'
 
 const STEAM_ROOM_RETURN_KEY = 'bz-games:steam-room-return-game-id'
 
@@ -244,14 +179,9 @@ const connectionMode = ref<HostConnectionMode>('lan')
 const previousConnectionMode = ref<HostConnectionMode>('lan')
 const relayPublicAddress = ref('')
 const showLanGuideModal = ref(false)
-const lanGuideModalContentRef = ref<HTMLElement | null>(null)
 const showRoomPasswordModal = ref(false)
 const roomPasswordDraft = ref('')
 const currentRoomPassword = ref('')
-
-const NATFRP_URL = 'https://www.natfrp.com/'
-const EASYTIER_URL = 'https://easytier.cn/'
-const EASYTIER_BOOTSTRAP_NODE = 'tcp 39.106.221.85:11010'
 
 const connectionModeOptions = computed(() => [
   { label: t('room.connectionModeLan'), value: 'lan' },
@@ -339,13 +269,6 @@ const copyRelayAddress = async () => {
   message.success(t('common.copied'))
 }
 
-const handleOpenExternalUrl = async (url: string) => {
-  const ok = await window.electronAPI.settings.openUrl(url)
-  if (!ok) {
-    message.error(t('common.error'))
-  }
-}
-
 const handleOpenRoomPasswordModal = () => {
   roomPasswordDraft.value = currentRoomPassword.value
   showRoomPasswordModal.value = true
@@ -378,12 +301,6 @@ watch(
     }
   },
 )
-
-watch(showLanGuideModal, async (show) => {
-  if (!show) return
-  await nextTick()
-  lanGuideModalContentRef.value?.focus()
-})
 
 if (route.query.fromSteam === '1' && roomRouteGameId.value) {
   sessionStorage.setItem(STEAM_ROOM_RETURN_KEY, roomRouteGameId.value)
@@ -710,82 +627,6 @@ const handleKickPlayer = async (playerId: string) => {
 
 .room-content {
   margin-top: 24px;
-}
-
-.lan-guide-modal {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  max-height: 80vh;
-  overflow-y: auto;
-  padding-right: 4px;
-  outline: none;
-}
-
-.lan-guide-overview {
-  margin-bottom: 0;
-}
-
-.lan-guide-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 16px;
-}
-
-.lan-guide-card {
-  height: 100%;
-}
-
-.lan-guide-card-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.lan-guide-card-title {
-  font-size: 16px;
-  font-weight: 600;
-  line-height: 1.4;
-}
-
-.lan-guide-card-subtitle {
-  margin-top: 4px;
-  color: var(--n-text-color-3);
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.lan-guide-url-row {
-  display: flex;
-  gap: 8px;
-  align-items: flex-start;
-  margin-bottom: 8px;
-  font-size: 13px;
-  line-height: 1.6;
-}
-
-.lan-guide-url-label {
-  flex-shrink: 0;
-  color: var(--n-text-color-3);
-}
-
-.lan-guide-url {
-  word-break: break-all;
-  font-family: Consolas, "Courier New", monospace;
-}
-
-.lan-guide-section-title {
-  margin: 12px 0 8px;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.lan-guide-steps {
-  margin: 0;
-  padding-left: 20px;
-  line-height: 1.8;
 }
 
 .room-main {

@@ -10,6 +10,9 @@ import { databaseService } from "./services/storage/DatabaseService";
 import { requestInterceptor } from "./utils/requestInterceptor";
 import { roomDiscoveryService } from "./services/room/RoomDiscoveryService";
 import { cloudSyncService } from "./services/system/CloudSyncService";
+import { logger } from "./utils/logger";
+
+logger.installGlobalHandlers();
 
 const gotTheLock = app.requestSingleInstanceLock();
 const PROTOCOL_SCHEME = "bzgames";

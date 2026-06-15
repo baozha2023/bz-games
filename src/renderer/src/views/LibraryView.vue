@@ -59,7 +59,7 @@
                 size="small"
               />
               <button
-                v-for="game in displayedGames"
+                v-for="game in visibleDisplayedGames"
                 v-else
                 :key="game.id"
                 type="button"
@@ -137,7 +137,7 @@
             />
             <div v-else class="steam-cover-grid">
               <div
-                v-for="(game, index) in displayedGames"
+                v-for="(game, index) in visibleDisplayedGames"
                 :key="game.id"
                 class="steam-card-shell"
                 :class="{ active: selectedSteamGameId === game.id, shake: isReorderMode }"
@@ -168,7 +168,7 @@
           responsive="screen"
         >
           <n-grid-item
-            v-for="(game, index) in displayedGames"
+            v-for="(game, index) in visibleDisplayedGames"
             :key="game.id"
             :draggable="isReorderMode"
             @dragstart="handleDragStart($event, index)"
@@ -381,7 +381,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, computed, watch, h, nextTick } from 'vue'
+import { onMounted, ref, computed, watch, h, nextTick, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useMessage, NIcon, NTooltip, NDropdown } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
@@ -431,6 +431,9 @@ const deleteGameId = ref<string | null>(null)
 const searchQuery = ref('')
 const sortMode = ref<LibrarySortMode>('custom')
 const selectedSteamGameId = ref('')
+const visibleCount = ref(0)
+const isStaggerEnabled = ref(false)
+let staggerTimer: ReturnType<typeof setTimeout> | null = null
 
 const draftForm = ref({
   id: '',
@@ -473,6 +476,61 @@ const nextLayoutLabel = computed(() => {
   return t('library.cardLayout')
 })
 
+function stopStaggerRendering() {
+  if (staggerTimer !== null) {
+    clearTimeout(staggerTimer)
+    staggerTimer = null
+  }
+}
+
+function scheduleStaggerRendering(delay = 20) {
+  const total = displayedGames.value.length
+  if (visibleCount.value >= total) {
+    visibleCount.value = total
+    return
+  }
+
+  const step = () => {
+    if (visibleCount.value < total) {
+      visibleCount.value += 1
+      staggerTimer = setTimeout(step, 20)
+    }
+  }
+
+  staggerTimer = setTimeout(step, delay)
+}
+
+function startStaggerRendering() {
+  stopStaggerRendering()
+  visibleCount.value = 0
+  if (displayedGames.value.length === 0) return
+
+  nextTick(() => {
+    scheduleStaggerRendering(16)
+  })
+}
+
+function continueStaggerRendering() {
+  stopStaggerRendering()
+  scheduleStaggerRendering(20)
+}
+
+function hasSameGameIds(a: Array<{ id: string }>, b: Array<{ id: string }>) {
+  if (a.length !== b.length) return false
+  const ids = new Set(a.map((game) => game.id))
+  return b.every((game) => ids.has(game.id))
+}
+
+function isSupersetById(superset: Array<{ id: string }>, subset: Array<{ id: string }>) {
+  const ids = new Set(superset.map((game) => game.id))
+  return subset.every((game) => ids.has(game.id))
+}
+
+function isSubsetById(subset: Array<{ id: string }>, superset: Array<{ id: string }>) {
+  const ids = new Set(superset.map((game) => game.id))
+  return subset.every((game) => ids.has(game.id))
+}
+
 const filteredGames = computed(() => {
   const keyword = searchQuery.value.trim().toLowerCase()
   if (!keyword) return gameStore.games
@@ -497,6 +555,8 @@ const displayedGames = computed(() => {
       return games
   }
 })
+
+const visibleDisplayedGames = computed(() => displayedGames.value.slice(0, visibleCount.value))
 
 const gameCountLabel = computed(() =>
   t('library.gameCount', {
@@ -631,9 +691,11 @@ onMounted(async () => {
   await settingsStore.loadSettings()
   layoutMode.value = settingsStore.settings?.libraryLayout || 'card'
   isLibraryReady.value = true
+  await gameStore.loadGames()
 
   const deletedGameId = route.query.deletedGameId as string | undefined
   if (deletedGameId) {
+    visibleCount.value = displayedGames.value.length
     await nextTick()
     await new Promise((r) => requestAnimationFrame(r))
     const deletedVersions = ((route.query.deletedVersions as string) || '').split(',').filter(Boolean)
@@ -646,13 +708,44 @@ onMounted(async () => {
     router.replace({ name: 'Library' })
     return
   }
-  await gameStore.loadGames()
+  isStaggerEnabled.value = true
+  startStaggerRendering()
   const steamGameId = route.query.steamGameId as string | undefined
   if (steamGameId && gameStore.games.some((game) => game.id === steamGameId)) {
     layoutMode.value = 'steam'
     selectedSteamGameId.value = steamGameId
     router.replace({ name: 'Library' })
   }
+})
+
+onUnmounted(() => {
+  stopStaggerRendering()
+})
+
+watch(layoutMode, async (nextLayout) => {
+  if (isStaggerEnabled.value && isLibraryReady.value && !gameStore.isLoading) {
+    startStaggerRendering()
+  }
+  if (!isLibraryReady.value) return
+  try {
+    await settingsStore.savePartialSettings({ libraryLayout: nextLayout })
+  } catch (error) {
+    console.error('[LibraryView] Failed to persist library layout:', error)
+  }
+})
+
+watch(displayedGames, (nextGames, prevGames) => {
+  if (!isStaggerEnabled.value || !isLibraryReady.value || gameStore.isLoading) return
+  if (hasSameGameIds(nextGames, prevGames)) return
+  if (isSupersetById(nextGames, prevGames)) {
+    continueStaggerRendering()
+    return
+  }
+  if (isSubsetById(nextGames, prevGames)) {
+    visibleCount.value = Math.min(visibleCount.value, nextGames.length)
+    return
+  }
+  startStaggerRendering()
 })
 
 watch(
@@ -667,15 +760,6 @@ watch(
   },
   { immediate: true }
 )
-
-watch(layoutMode, async (nextLayout) => {
-  if (!isLibraryReady.value) return
-  try {
-    await settingsStore.savePartialSettings({ libraryLayout: nextLayout })
-  } catch (error) {
-    console.error('[LibraryView] Failed to persist library layout:', error)
-  }
-})
 
 const showAddGameResult = (result: Awaited<ReturnType<typeof gameStore.addGame>>) => {
   if (result.success) {

@@ -171,13 +171,16 @@ class CloudSyncService {
     if (!this.baseUrl) return { success: false, error: "cloud_not_configured" };
     if (!storeService.getSettings().cloudSessionToken) return { success: false, error: "unauthorized" };
     progress?.({ stage: "checking", percentage: 5 });
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bz-cloud-sync-upload-"));
+    const cloudConfigPath = path.join(tempDir, "config.json");
+    storeService.createCloudConfigFile(cloudConfigPath);
     const sqlDump = databaseService.exportCloudSqlDump();
     const uploadSources: UploadSource[] = [
       {
         fileKey: "config.json",
         contentType: contentTypeFor("config.json"),
-        size: fs.statSync(storeService.getConfigPath()).size,
-        body: fs.createReadStream(storeService.getConfigPath()) as unknown as BodyInit,
+        size: fs.statSync(cloudConfigPath).size,
+        body: fs.createReadStream(cloudConfigPath) as unknown as BodyInit,
       },
       {
         fileKey: "play_sessions.db",
@@ -186,36 +189,40 @@ class CloudSyncService {
         body: sqlDump,
       },
     ];
-    const totalBytes = uploadSources.reduce((sum, source) => sum + source.size, 0) || 1;
-    let uploadedBytes = 0;
-    let latestUploadedAt = "";
-    let operationId = "";
-    for (const source of uploadSources) {
-      const url = `${this.baseUrl}/api/cloud/files/${encodeURIComponent(source.fileKey)}`;
-      const response = await fetch(url, {
-        method: "PUT",
-        headers: getCloudHeaders(url, {
-          "Content-Type": source.contentType,
-          "Content-Length": String(source.size),
-          ...(operationId ? { "X-Cloud-Operation-Id": operationId } : {}),
-        }),
-        body: source.body,
-        duplex: "half",
-      } as RequestInit);
-      operationId = response.headers.get("x-cloud-operation-id") || operationId;
-      if (!response.ok) {
-        const body = await response.json().catch(() => ({})) as { error?: string };
-        return { success: false, error: body.error || `upload_failed_${response.status}` };
+    try {
+      const totalBytes = uploadSources.reduce((sum, source) => sum + source.size, 0) || 1;
+      let uploadedBytes = 0;
+      let latestUploadedAt = "";
+      let operationId = "";
+      for (const source of uploadSources) {
+        const url = `${this.baseUrl}/api/cloud/files/${encodeURIComponent(source.fileKey)}`;
+        const response = await fetch(url, {
+          method: "PUT",
+          headers: getCloudHeaders(url, {
+            "Content-Type": source.contentType,
+            "Content-Length": String(source.size),
+            ...(operationId ? { "X-Cloud-Operation-Id": operationId } : {}),
+          }),
+          body: source.body,
+          duplex: "half",
+        } as RequestInit);
+        operationId = response.headers.get("x-cloud-operation-id") || operationId;
+        if (!response.ok) {
+          const body = await response.json().catch(() => ({})) as { error?: string };
+          return { success: false, error: body.error || `upload_failed_${response.status}` };
+        }
+        uploadedBytes += source.size;
+        progress?.({ stage: "uploading", percentage: Math.min(95, Math.round((uploadedBytes / totalBytes) * 90) + 5), fileKey: source.fileKey });
+        const body = await response.json() as { file?: CloudFileMeta };
+        if (body.file?.updatedAt) latestUploadedAt = body.file.updatedAt;
       }
-      uploadedBytes += source.size;
-      progress?.({ stage: "uploading", percentage: Math.min(95, Math.round((uploadedBytes / totalBytes) * 90) + 5), fileKey: source.fileKey });
-      const body = await response.json() as { file?: CloudFileMeta };
-      if (body.file?.updatedAt) latestUploadedAt = body.file.updatedAt;
+      const lastUploadedAt = latestUploadedAt || new Date().toISOString();
+      storeService.saveSettings({ cloudLastUploadedAt: lastUploadedAt });
+      progress?.({ stage: "completed", percentage: 100 });
+      return { success: true, lastUploadedAt };
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
     }
-    const lastUploadedAt = latestUploadedAt || new Date().toISOString();
-    storeService.saveSettings({ cloudLastUploadedAt: lastUploadedAt });
-    progress?.({ stage: "completed", percentage: 100 });
-    return { success: true, lastUploadedAt };
   }
 
   async download(progress?: CloudSyncProgressHandler): Promise<{ success: boolean; lastUploadedAt?: string; error?: string }> {
@@ -255,18 +262,9 @@ class CloudSyncService {
         progress?.({ stage: "downloading", percentage: Math.min(80, Math.round((downloadedBytes / totalBytes) * 75) + 5), fileKey });
       }
       progress?.({ stage: "applying", percentage: 90 });
-      const currentSettings = storeService.getSettings();
-      storeService.replaceConfigFile(path.join(tempDir, "config.json"));
-      await storeService.init(true);
+      storeService.applyCloudConfigFile(path.join(tempDir, "config.json"));
       databaseService.importCloudSqlDump(fs.readFileSync(path.join(tempDir, "play_sessions.db"), "utf8"));
-      storeService.saveSettings({
-        cloudLastUploadedAt: status.lastUploadedAt,
-        cloudSessionToken: currentSettings.cloudSessionToken,
-        cloudSessionExpiresAt: currentSettings.cloudSessionExpiresAt,
-        cloudUserLogin: currentSettings.cloudUserLogin,
-        cloudUserName: currentSettings.cloudUserName,
-        cloudUserProfileUrl: currentSettings.cloudUserProfileUrl,
-      });
+      storeService.saveSettings({ cloudLastUploadedAt: status.lastUploadedAt });
       progress?.({ stage: "completed", percentage: 100 });
       return { success: true, lastUploadedAt: status.lastUploadedAt };
     } finally {

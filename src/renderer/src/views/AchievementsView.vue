@@ -23,12 +23,12 @@
       </template>
     </n-page-header>
     
-    <div v-if="filteredDisplayGames.length === 0" style="margin-top: 24px;">
+    <div v-if="achievementCards.length === 0" style="margin-top: 24px;">
        <n-empty :description="t('achievement.noAchievements')" />
     </div>
 
     <n-list v-else style="margin-top: 24px; background: transparent;">
-      <n-list-item v-for="game in filteredDisplayGames" :key="game.id" :class="{ 'golden-card': getGameProgress(game.id).percentage === 100 }">
+      <n-list-item v-for="(game, index) in achievementCards" :key="game.id" v-show="index < visibleCount" :class="['stagger-card-enter', { 'golden-card': game.progress.percentage === 100 }]">
         <n-thing>
             <template #avatar>
                  <div class="game-icon-wrapper" style="width: 48px; height: 48px; overflow: hidden; border-radius: 4px; background: var(--bz-bg-card-placeholder);">
@@ -42,7 +42,7 @@
                 <n-space align="center">
                     <n-select 
                         v-model:value="selectedVersions[game.id]" 
-                        :options="game.versions.map(v => ({ label: v, value: v }))" 
+                        :options="game.versionOptions" 
                         size="small" 
                         style="width: 120px;"
                         @update:value="(v) => handleVersionChange(game.id, v)"
@@ -60,13 +60,13 @@
                 <div style="display: flex; align-items: center; gap: 12px;">
                     <n-progress 
                         type="line" 
-                        :percentage="getGameProgress(game.id).percentage" 
+                        :percentage="game.progress.percentage" 
                         :indicator-placement="'inside'" 
                         status="success"
                         style="max-width: 300px;"
                     />
                     <span style="font-size: 12px; color: var(--bz-text-secondary);">
-                        {{ t('achievement.progress', { current: getGameProgress(game.id).current, total: getGameProgress(game.id).total }) }}
+                        {{ t('achievement.progress', { current: game.progress.current, total: game.progress.total }) }}
                     </span>
                 </div>
             </template>
@@ -74,7 +74,7 @@
         
         <n-collapse-transition :show="expandedGames[game.id]">
             <n-grid :cols="1" md="2" lg="4" x-gap="12" y-gap="12" style="margin-top: 16px;">
-                <n-grid-item v-for="ach in getGameAchievements(game.id)" :key="ach.id">
+                <n-grid-item v-for="ach in game.achievements" :key="ach.id">
                     <n-card size="small" :style="{ opacity: ach.unlocked ? 1 : 0.6, borderColor: ach.unlocked ? '#f0a020' : undefined }">
                         <div v-if="ach.isNew" class="new-dot"></div>
                         <n-space align="center" :wrap="false" :size="24">
@@ -94,7 +94,7 @@
                         </n-space>
                     </n-card>
                 </n-grid-item>
-                <n-grid-item v-if="getGameAchievements(game.id).length === 0">
+                <n-grid-item v-if="game.achievements.length === 0">
                     <n-empty :description="t('achievement.noAchievementsVersion')" />
                 </n-grid-item>
             </n-grid>
@@ -110,35 +110,12 @@ import { useI18n } from 'vue-i18n';
 import { ChevronDown, ChevronUp, SearchOutline } from '@vicons/ionicons5';
 import { useGameStore } from '../stores/useGameStore';
 import GameIcon from '../components/game/GameIcon.vue';
-import type { GameManifest } from '../../../shared/game-manifest';
+import { useGameListView } from '../composables/useGameListView';
 
 const { t } = useI18n();
 const gameStore = useGameStore();
 
 const expandedGames = ref<Record<string, boolean>>({});
-const selectedVersions = ref<Record<string, string>>({});
-const manifestCache = ref<Record<string, GameManifest>>({}); // Key: gameId@version
-const searchKeyword = ref('');
-const isSearchExpanded = ref(false);
-
-onMounted(async () => {
-    await gameStore.loadGames();
-    
-    // Initialize state
-    gameStore.games.forEach(g => {
-        const latest = g.version;
-        
-        selectedVersions.value[g.id] = latest;
-        expandedGames.value[g.id] = false;
-        
-        // Cache initial manifest
-        manifestCache.value[`${g.id}@${latest}`] = g;
-    });
-});
-
-onUnmounted(() => {
-    gameStore.markAchievementsAsSeen();
-});
 
 const displayGames = computed(() => {
     return gameStore.games
@@ -155,42 +132,49 @@ const displayGames = computed(() => {
         });
 });
 
-const filteredDisplayGames = computed(() => {
-    const keyword = searchKeyword.value.trim().toLowerCase();
-    if (!keyword) return displayGames.value;
-    return displayGames.value.filter((game) => {
-        return game.name.toLowerCase().includes(keyword) || game.id.toLowerCase().includes(keyword);
+const {
+    searchKeyword,
+    isSearchExpanded,
+    selectedVersions,
+    visibleCount,
+    filteredItems: filteredDisplayGames,
+    toggleSearch,
+    handleSearchBlur,
+    activateStaggerRendering,
+    initializeManifestCache,
+    handleVersionChange,
+    getManifest,
+} = useGameListView(displayGames);
+
+onMounted(async () => {
+    await gameStore.loadGames();
+    initializeManifestCache(gameStore.games, (gameId) => {
+        if (expandedGames.value[gameId] === undefined) {
+            expandedGames.value[gameId] = false;
+        }
     });
+    activateStaggerRendering();
 });
 
-function toggleSearch() {
-    isSearchExpanded.value = true;
-}
+onUnmounted(() => {
+    gameStore.markAchievementsAsSeen();
+});
 
-function handleSearchBlur() {
-    if (!searchKeyword.value.trim()) {
-        isSearchExpanded.value = false;
-    }
-}
-
-function getManifest(gameId: string, version?: string): GameManifest | undefined {
-    if (!version) return undefined;
-    return manifestCache.value[`${gameId}@${version}`];
-}
-
-async function handleVersionChange(gameId: string, version: string) {
-    const key = `${gameId}@${version}`;
-    if (!manifestCache.value[key]) {
-        try {
-            const manifest = await window.electronAPI.game.getManifest(gameId, version);
-            if (manifest) {
-                manifestCache.value[key] = manifest;
-            }
-        } catch (e) {
-            console.error(e);
+const achievementCards = computed(() => filteredDisplayGames.value.map((game) => {
+    const achievements = getGameAchievements(game.id);
+    const total = achievements.length;
+    const current = achievements.filter(a => a.unlocked).length;
+    return {
+        ...game,
+        versionOptions: game.versions.map(v => ({ label: v, value: v })),
+        achievements,
+        progress: {
+            total,
+            current,
+            percentage: total > 0 ? Math.round((current / total) * 100) : 0
         }
-    }
-}
+    };
+}));
 
 function toggleExpand(gameId: string) {
     expandedGames.value[gameId] = !expandedGames.value[gameId];
@@ -216,24 +200,27 @@ function getGameAchievements(gameId: string) {
         };
     });
     
-    // Sort: Unlocked first
     mapped.sort((a, b) => (b.unlocked ? 1 : 0) - (a.unlocked ? 1 : 0));
     return mapped;
-}
-
-function getGameProgress(gameId: string) {
-    const achs = getGameAchievements(gameId);
-    const total = achs.length;
-    const current = achs.filter(a => a.unlocked).length;
-    return {
-        total,
-        current,
-        percentage: total > 0 ? Math.round((current / total) * 100) : 0
-    };
 }
 </script>
 
 <style scoped>
+.stagger-card-enter {
+    animation: stagger-fade-in 0.3s ease-out both;
+}
+
+@keyframes stagger-fade-in {
+    from {
+        opacity: 0;
+        transform: translateY(12px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
 .golden-card {
     position: relative;
     border: 1px solid var(--bz-gold);

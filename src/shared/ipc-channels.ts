@@ -110,6 +110,7 @@ export const IPC = {
   SYSTEM_GET_UPDATE_STATUS: "system:getUpdateStatus",
   SYSTEM_UPDATE_EVENT: "system:update:event",
   SYSTEM_CLEAR_CACHE: "system:clearCache",
+  SYSTEM_LOG_ERROR: "system:log:error",
 
   // ── 游戏数据存储 (Preload → Main) ──
   GAME_STORAGE_INIT: "game:storage:init",

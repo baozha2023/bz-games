@@ -21,6 +21,7 @@ import {
 import { RoomConstants } from "../../../shared/RoomConstants";
 import { DEFAULT_RELAY_PUBLIC_HOST, DEFAULT_RELAY_SERVER_URL, DEFAULT_RELAY_TOKEN } from "../../../shared/AppConstants";
 import { requestInterceptor } from "../../utils/requestInterceptor";
+import { mapRelayCloseError } from "../../utils/relayCloseError";
 
 type ConnectResult = { success: boolean; error?: string; message?: string };
 type BinaryRelayPayload = GameRelayPayload & { binaryData?: Buffer };
@@ -125,7 +126,7 @@ export class RoomClient {
 
     this.ws.on("open", () => this.handleOpen());
     this.ws.on("error", (err) => this.handleError(err));
-    this.ws.on("close", () => this.handleClose());
+    this.ws.on("close", (code, reason) => this.handleClose(code, reason));
     this.ws.on("message", (data, isBinary) => this.handleIncomingMessage(data, isBinary));
   }
 
@@ -178,18 +179,19 @@ export class RoomClient {
     }
   }
 
-  private handleClose() {
+  private handleClose(code: number, reason: Buffer) {
     const shouldReconnect =
       !this.manuallyDisconnected && this.shouldReconnect && this.hasJoinedRoom;
 
     if (this.connectionResolver) {
+      const closeReason = mapRelayCloseError(code, reason, "") || "Closed before join";
       this.emitConnectionStatus({
         status: "failed",
         attempts: this.reconnectAttempts,
         maxAttempts: this.maxReconnectAttempts,
-        reason: "Closed before join",
+        reason: closeReason,
       });
-      this.resolveConnection({ success: false, error: "Closed before join" });
+      this.resolveConnection({ success: false, error: closeReason });
     }
     this.stopLatencyProbe();
     if (shouldReconnect) {

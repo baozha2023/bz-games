@@ -10,6 +10,7 @@ import { RoomConstants } from "../../../shared/RoomConstants";
 import { mainWindow } from "../../window";
 import { IPC } from "../../../shared/ipc-channels";
 import { requestInterceptor } from "../../utils/requestInterceptor";
+import { mapRelayCloseError } from "../../utils/relayCloseError";
 
 export interface RelayHostResult {
   success: boolean;
@@ -39,9 +40,16 @@ export class RelayRoomService {
     return new Promise((resolve) => {
       const ws = new WebSocket(requestInterceptor.buildWebSocketUrl(relayUrl), { rejectUnauthorized: false });
       this.ws = ws;
+      let settled = false;
+      const finish = (result: RelayHostResult) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        resolve(result);
+      };
       const timeout = setTimeout(() => {
         this.disconnect();
-        resolve({ success: false, error: "relay_timeout" });
+        finish({ success: false, error: "relay_timeout" });
       }, 10000);
 
       ws.once("open", () => {
@@ -67,11 +75,10 @@ export class RelayRoomService {
       });
 
       const handleHostAck = (data: WebSocket.RawData) => {
-        clearTimeout(timeout);
         const message = this.parseMessage(data);
         if (message?.type !== "relay:host:ack") {
           this.disconnect();
-          resolve({ success: false, error: message?.payload?.code || "relay_rejected" });
+          finish({ success: false, error: message?.payload?.code || "relay_rejected" });
           return;
         }
         const roomCode = message.payload?.roomCode;
@@ -84,7 +91,7 @@ export class RelayRoomService {
         this.startLatencyProbe();
         ws.off("message", handleHostAck);
         ws.on("message", (relayData, isBinary) => this.handleRelayMessage(relayData, isBinary));
-        resolve({
+        finish({
           success: true,
           publicAddress,
         });
@@ -92,9 +99,14 @@ export class RelayRoomService {
       ws.on("message", handleHostAck);
 
       ws.once("error", (error) => {
-        clearTimeout(timeout);
         this.disconnect();
-        resolve({ success: false, error: error.message || "relay_error" });
+        finish({ success: false, error: error.message || "relay_error" });
+      });
+
+      ws.once("close", (code, reason) => {
+        if (settled) return;
+        this.disconnect();
+        finish({ success: false, error: mapRelayCloseError(code, reason, `relay_closed_${code}`) });
       });
     });
   }

@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import { IPC } from "../shared/ipc-channels";
+import { installErrorForwarding } from "./error-forwarding";
 import type {
   AppSettings,
   DataHealthReport,
@@ -15,6 +16,8 @@ import type {
   UpdateState,
   NicknameStyle,
 } from "../shared/types";
+
+installErrorForwarding("Window");
 
 export const electronAPI = {
   game: {

@@ -25,36 +25,41 @@
     <n-divider />
 
     <n-card style="margin-bottom: 16px;">
-      <div v-if="isLoadingHeatmap" class="heatmap-skeleton">
-        <n-skeleton height="20px" width="30%" style="margin-bottom: 16px;" />
-        <n-skeleton height="140px" />
-        <n-skeleton height="16px" width="40%" style="margin-top: 12px;" />
+      <div class="heatmap-wrapper">
+        <CalendarHeatmap
+          v-if="hasLoadedHeatmap"
+          :daily-durations="dailyDurations"
+          :selected-date="selectedDate"
+          @select-date="handleHeatmapDateSelect"
+        />
+        <div v-else class="heatmap-placeholder" />
+        <div v-if="!hasLoadedHeatmap" class="heatmap-mask">
+          <n-button type="primary" size="large" :loading="isLoadingHeatmap" @click="loadStatsData">
+            {{ t('statistics.loadHeatmap') }}
+          </n-button>
+        </div>
       </div>
-      <CalendarHeatmap
-        v-else
-        :daily-durations="dailyDurations"
-        :selected-date="selectedDate"
-        @select-date="handleHeatmapDateSelect"
-      />
     </n-card>
 
-    <n-grid x-gap="12" y-gap="12" :cols="1" md="2" lg="3">
-      <n-grid-item v-for="game in filteredGames" :key="game.id">
-        <n-card :title="game.name" hoverable>
+    <n-empty v-if="statCards.length === 0" :description="t('statistics.empty')" style="margin-top: 24px;" />
+
+    <n-list v-else style="margin-top: 16px; background: transparent;">
+      <n-list-item v-for="(card, index) in statCards" :key="card.id" v-show="index < visibleCount" class="stagger-card-enter">
+        <n-card :title="card.name" hoverable size="small">
           <template #header-extra>
             <n-select 
               size="small" 
               style="width: 120px;" 
-              :value="selectedVersions[game.id]" 
-              :options="getVersionOptions(game.id)"
-              @update:value="(v) => handleVersionChange(game.id, v)"
+              :value="selectedVersions[card.id]" 
+              :options="card.versionOptions"
+              @update:value="(v) => handleVersionChange(card.id, v)"
             />
           </template>
           
-          <div v-if="getStatKeys(game.id).length > 0">
+          <div v-if="card.stats.length > 0">
             <n-grid :cols="2" x-gap="12" y-gap="12">
-               <n-grid-item v-for="key in getStatKeys(game.id)" :key="key">
-                 <n-statistic :label="getLabel(game.id, key)" :value="getValue(game.id, key)" />
+               <n-grid-item v-for="stat in card.stats" :key="stat.key">
+                 <n-statistic :label="stat.label" :value="stat.value" />
                </n-grid-item>
             </n-grid>
           </div>
@@ -62,14 +67,12 @@
 
           <template #footer>
             <n-text depth="3" style="font-size: 12px;">
-              {{ t('statistics.lastPlayed') }}: {{ getLastPlayed(game.id) }}
+              {{ t('statistics.lastPlayed') }}: {{ card.lastPlayed }}
             </n-text>
           </template>
         </n-card>
-      </n-grid-item>
-    </n-grid>
-    
-    <n-empty v-if="filteredGames.length === 0" :description="t('statistics.empty')" style="margin-top: 100px;" />
+      </n-list-item>
+    </n-list>
 
     <n-modal
       v-model:show="showSessionModal"
@@ -115,12 +118,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { SearchOutline } from '@vicons/ionicons5'
 import { useGameStore } from '../stores/useGameStore'
 import CalendarHeatmap from '../components/CalendarHeatmap.vue'
-import type { GameManifest } from '../../../shared/game-manifest'
+import { useGameListView } from '../composables/useGameListView'
 
 const { t } = useI18n()
 const gameStore = useGameStore()
@@ -135,11 +138,8 @@ interface PlaySession {
   duration_ms: number | null
 }
 
-const selectedVersions = ref<Record<string, string>>({})
-const manifestCache = ref<Record<string, GameManifest>>({})
-const searchKeyword = ref('')
-const isSearchExpanded = ref(false)
-const isLoadingHeatmap = ref(true)
+const isLoadingHeatmap = ref(false)
+const hasLoadedHeatmap = ref(false)
 const dailyDurations = ref<{ date: string; total_duration_ms: number }[]>([])
 const selectedDate = ref('')
 const showSessionModal = ref(false)
@@ -147,28 +147,27 @@ const isLoadingSessions = ref(false)
 const selectedDateSessions = ref<PlaySession[]>([])
 
 const games = computed(() => gameStore.games)
-const filteredGames = computed(() => {
-  const keyword = searchKeyword.value.trim().toLowerCase()
-  if (!keyword) return games.value
-  return games.value.filter((game) => {
-    return game.name.toLowerCase().includes(keyword) || game.id.toLowerCase().includes(keyword)
-  })
-})
-
-function toggleSearch() {
-  isSearchExpanded.value = true
-}
-
-function handleSearchBlur() {
-  if (!searchKeyword.value.trim()) {
-    isSearchExpanded.value = false
-  }
-}
+const {
+  searchKeyword,
+  isSearchExpanded,
+  selectedVersions,
+  visibleCount,
+  filteredItems: filteredGames,
+  toggleSearch,
+  handleSearchBlur,
+  activateStaggerRendering,
+  initializeManifestCache,
+  handleVersionChange,
+  getManifest,
+} = useGameListView(games)
 
 async function loadStatsData() {
+  if (isLoadingHeatmap.value || hasLoadedHeatmap.value) return
+  isLoadingHeatmap.value = true
   try {
     const durations = await window.electronAPI.stats.getDailyPlayDurations(365)
     dailyDurations.value = durations
+    hasLoadedHeatmap.value = true
   } catch (e) {
     console.error('[StatisticsView] Failed to load stats data:', e)
   } finally {
@@ -190,53 +189,34 @@ async function handleHeatmapDateSelect(date: string) {
   }
 }
 
-const ensureDefaultVersionSelection = () => {
-  for (const game of games.value) {
-    if (!selectedVersions.value[game.id]) {
-      selectedVersions.value[game.id] = game.version
-      manifestCache.value[`${game.id}@${game.version}`] = game
-    }
-  }
-}
-
 onMounted(async () => {
   await gameStore.loadGames()
-  ensureDefaultVersionSelection()
-  loadStatsData()
+  initializeManifestCache(gameStore.games)
+  activateStaggerRendering()
 })
 
-watch(games, () => {
-  ensureDefaultVersionSelection()
-})
+const statCards = computed(() => filteredGames.value.map((game) => {
+  const keys = getStatKeys(game.id)
+  return {
+    id: game.id,
+    name: game.name,
+    versionOptions: buildVersionOptions(game.id),
+    stats: keys.map((key) => ({
+      key,
+      label: getLabel(game.id, key),
+      value: getValue(game.id, key),
+    })),
+    lastPlayed: getLastPlayed(game.id),
+  }
+}))
 
-function getVersionOptions(gameId: string) {
+function buildVersionOptions(gameId: string) {
   const record = gameStore.getGameRecord(gameId);
   if (!record || !record.versions) return [];
   return record.versions
     .map(v => v.version)
     .sort((a, b) => b.localeCompare(a, undefined, { numeric: true, sensitivity: 'base' }))
     .map(v => ({ label: v, value: v }));
-}
-
-async function handleVersionChange(gameId: string, version: string) {
-  selectedVersions.value[gameId] = version;
-  const key = `${gameId}@${version}`;
-  if (!manifestCache.value[key]) {
-      try {
-          const manifest = await window.electronAPI.game.getManifest(gameId, version);
-          if (manifest) {
-              manifestCache.value[key] = manifest;
-          }
-      } catch (e) {
-          console.error(e);
-      }
-  }
-}
-
-function getManifest(gameId: string): GameManifest | undefined {
-    const version = selectedVersions.value[gameId];
-    if (!version) return undefined;
-    return manifestCache.value[`${gameId}@${version}`];
 }
 
 function getStatKeys(gameId: string): string[] {
@@ -335,6 +315,41 @@ function getLabel(gameId: string, key: string): string {
 </script>
 
 <style scoped>
+.stagger-card-enter {
+  animation: stagger-fade-in 0.3s ease-out both;
+}
+
+@keyframes stagger-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.heatmap-wrapper {
+  position: relative;
+}
+
+.heatmap-placeholder {
+  min-height: 160px;
+}
+
+.heatmap-mask {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(3px);
+  z-index: 1;
+}
+
 .session-row {
   display: flex;
   justify-content: space-between;

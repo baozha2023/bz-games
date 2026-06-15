@@ -4,6 +4,7 @@ import fs from "fs";
 import path from "path";
 import { IPC } from "../../shared/ipc-channels";
 import { storeService } from "../services/storage/StoreService";
+import { logger } from "../utils/logger";
 
 function getStoragePath(gameId: string, version: string): string {
   return path.join(storeService.getGameVersionStoragePath(gameId, version), "gamedata.json");
@@ -131,7 +132,7 @@ export function registerStorageIpc() {
         event.returnValue = { data: {}, encrypted };
       }
     } catch (error) {
-      console.error(
+      logger.error(
         `[Storage] Failed to load data for ${gameId} @ ${version}:`,
         error,
       );
@@ -176,7 +177,7 @@ export function registerStorageIpc() {
       fs.writeFileSync(filePath, finalContent, "utf-8");
       event.returnValue = true;
     } catch (error) {
-      console.error(
+      logger.error(
         `[Storage] Failed to flush data for ${gameId} @ ${version}:`,
         error,
       );
@@ -208,7 +209,7 @@ function updateStorage(
         const encrypted = isEncryptedStorageEnabled(gameId, version);
         data = parseStorageFile(content, gameId, version, encrypted);
       } catch {
-        console.warn(
+        logger.warn(
           `[Storage] Corrupt storage file for ${gameId} @ ${version}, resetting.`,
         );
       }
@@ -221,7 +222,7 @@ function updateStorage(
       : JSON.stringify(data, null, 2);
     fs.writeFileSync(filePath, finalContent, "utf-8");
   } catch (error) {
-    console.error(
+    logger.error(
       `[Storage] Failed to save data for ${gameId} @ ${version}:`,
       error,
     );

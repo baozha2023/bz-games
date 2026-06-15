@@ -145,6 +145,7 @@ const containerRef = ref<HTMLElement | null>(null)
 const containerWidth = ref(640)
 
 let resizeObserver: ResizeObserver | null = null
+let resizeFrame = 0
 
 const cellSize = computed(() => {
   const w = containerWidth.value - CONTAINER_PADDING
@@ -169,17 +170,34 @@ function clampFont(raw: number, min: number, max: number): number {
   return Math.round(Math.max(min, Math.min(max, raw)))
 }
 
+function setContainerWidth(width: number): void {
+  const nextWidth = Math.round(width)
+  if (nextWidth <= 0 || nextWidth === containerWidth.value) return
+  containerWidth.value = nextWidth
+}
+
 onMounted(() => {
   if (!containerRef.value) return
+  setContainerWidth(containerRef.value.getBoundingClientRect().width)
   resizeObserver = new ResizeObserver((entries) => {
-    for (const entry of entries) {
-      containerWidth.value = entry.contentRect.width
-    }
+    const entry = entries[0]
+    if (!entry) return
+    const nextWidth = Math.round(entry.contentRect.width)
+    if (nextWidth === containerWidth.value) return
+    if (resizeFrame) cancelAnimationFrame(resizeFrame)
+    resizeFrame = requestAnimationFrame(() => {
+      resizeFrame = 0
+      setContainerWidth(nextWidth)
+    })
   })
   resizeObserver.observe(containerRef.value)
 })
 
 onUnmounted(() => {
+  if (resizeFrame) {
+    cancelAnimationFrame(resizeFrame)
+    resizeFrame = 0
+  }
   if (resizeObserver) {
     resizeObserver.disconnect()
     resizeObserver = null
@@ -325,6 +343,8 @@ function handleCellClick(date: string) {
 
 <style scoped>
 .calendar-heatmap {
+  width: 100%;
+  min-width: 0;
   padding: 16px 0;
   user-select: none;
 }
@@ -350,6 +370,7 @@ function handleCellClick(date: string) {
 }
 
 .heatmap-body {
+  min-width: 0;
   overflow-x: auto;
 }
 
