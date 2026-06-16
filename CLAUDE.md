@@ -37,7 +37,7 @@
 - 游戏市场（远程发现、详情展示、下载并安装到默认游戏库，GitHub Release Asset 自动补齐 sha256/size）
 - 个性化系统（头像框解锁、装备、预览，支持多场景展示）
 - 系统设置（玩家信息、主题、端口、语言、更新、游戏库列表、GitHub Token）
-- 官方登录与云同步服务（GitHub OAuth 登录；本地 `config.json` 与 `play_sessions.db` 上传云端 / 下载同步回本地，含进度条与哈希校验）
+- 官方登录与云同步服务（GitHub OAuth 登录；本地 `config.json` 与 `play_sessions.db` / `achievement_unlocks.db` / `stats_reports.db` 上传云端 / 下载同步回本地，含进度条与哈希校验）
 
 ***
 
@@ -57,7 +57,7 @@
 | 本地数据存储       | electron-store              | v10+ (ESM)，需在构建中配置 include     |
 | SQLite 数据存储      | better-sqlite3              | 游玩会话记录、日历热力图数据查询            |
 | 账号与云同步元数据 | MySQL                       | 官方登录服务用户资料、OAuth state、会话、云文件元数据 |
-| 云文件对象存储     | MongoDB GridFS              | 官方云同步服务保存 `config.json` / `play_sessions.db` |
+| 云文件对象存储     | MongoDB GridFS              | 官方云同步服务保存 `config.json` / `play_sessions.db` / `achievement_unlocks.db` / `stats_reports.db` |
 | 客户端更新        | electron-updater            | GitHub Releases 作为更新源          |
 | WebSocket 服务 | ws                          | Game API、Room Server、Room Client 均基于 WebSocket，v2 高频通信支持原始二进制帧 |
 | 版本比较         | semver                      | 用于平台版本与游戏版本兼容性检查               |
@@ -88,7 +88,7 @@ bz-games/
 │       ├── ws-server.js                   # WebSocket 服务创建与鉴权
 │       ├── services/
 │       │   ├── auth-service.js            # GitHub OAuth 认证与会话管理
-│       │   ├── cloud-data-service.js      # 云端文件同步（config.json / play_sessions.db）
+│       │   ├── cloud-data-service.js      # 云端文件同步（config.json / play_sessions.db / achievement_unlocks.db / stats_reports.db）
 │       │   ├── message-router.js          # WebSocket 消息路由分发
 │       │   ├── mongo-service.js           # MongoDB GridFS 连接管理
 │       │   ├── mysql-service.js           # MySQL 连接池与建表
@@ -108,7 +108,9 @@ bz-games/
 ├── electron.vite.config.ts               # Electron-Vite 构建配置（读取 private-build.config.json 注入构建期常量）
 ├── config.json                           # 本地持久化配置（运行生成）
 ├── db/                                   # SQLite 数据库目录（运行生成）
-│   └── play_sessions.db                  # 游玩会话数据库
+│   ├── play_sessions.db                  # 游玩会话数据库
+│   ├── achievement_unlocks.db            # 成就解锁历史数据库
+│   └── stats_reports.db                  # 统计上报历史数据库
 ├── games/                                # 首次初始化的默认游戏库目录（运行生成，可由用户迁移）
 │   └── <id>/
 │       └── <version>/
@@ -129,7 +131,11 @@ bz-games/
 │   │   │   └── statistics.ipc.ts          # 统计数据查询 IPC 处理器
 │   │   ├── services/
 │   │   │   ├── storage/
-│   │   │   │   ├── DatabaseService.ts     # SQLite 游玩会话记录与日历热力图数据查询
+│   │   │   │   ├── database/
+│   │   │   │   │   ├── AsyncSqliteDatabase.ts        # 通用异步 SQLite 引擎（Worker Thread 隔离，支持 run/get/all/exec + SQL dump 导入导出）
+│   │   │   │   │   ├── PlaySessionDatabaseService.ts # 游玩会话记录（启动/结束/查询/日历热力图/云端同步）
+│   │   │   │   │   ├── AchievementUnlockDatabaseService.ts # 成就解锁历史记录（写入/云端同步）
+│   │   │   │   │   └── StatsReportDatabaseService.ts # 统计上报历史记录（写入/云端同步）
 │   │   │   │   └── StoreService.ts        # 本地数据读写与业务数据维护
 │   │   │   ├── game/
 │   │   │   │   ├── GameEnvironment.ts     # 游戏启动环境变量、bz-config.js 生成与清理
@@ -155,14 +161,14 @@ bz-games/
 │   │   └── utils/
 │   │       ├── appPath.ts                 # 应用根路径工具
 │   │       ├── fileUtils.ts               # 文件复制等通用文件工具
-│   │       ├── logger.ts                  # Logger 类：生产模式 error→文件日志；开发模式全量 console 输出；全局异常捕获（uncaughtException / unhandledRejection / render-process-gone / child-process-gone）；console 代理（log/warn/error 统一路由到 Logger）；渲染进程错误通过 IPC 回传主进程统一记录
+│   │       ├── logger.ts                  # Logger 类：生产模式 error→文件日志（5MB 上限 + 3 份轮转备份）；开发模式全量 console 输出；全局异常捕获（uncaughtException / unhandledRejection / render-process-gone / child-process-gone）；console 代理（log/warn/error 统一路由到 Logger）；结构化渲染进程错误接收（RendererLogPayload）
 │   │       ├── portUtils.ts               # 可用端口探测工具
 │   │       ├── relayCloseError.ts         # WebSocket 关闭帧错误码映射工具（统一 mapRelayCloseError，三处 room 服务共用）
 │   │       └── requestInterceptor.ts      # HTTP 请求头统一注入（Referer 防盗链 + GitHub Token）
 │   │
 │   ├── preload/
 │   │   ├── api.ts                         # 暴露给渲染进程的安全 API
-│   │   ├── error-forwarding.ts            # 渲染进程错误捕获与回传（contextIsolated 双世界桥接、normalizeLogArg 序列化）
+│   │   ├── error-forwarding.ts            # 渲染进程错误捕获与回传（contextIsolated 双世界桥接、结构化 RendererLogPayload + 有界序列化）
 │   │   ├── game.ts                        # Web 游戏 localStorage 接管
 │   │   └── index.ts                       # Preload 入口
 │   │
@@ -238,6 +244,7 @@ bz-games/
 │       ├── binary-protocol.ts              # v2 二进制帧编码/解码工具（4字节头长度 + JSON header + binary body）
 │       ├── game-manifest.ts                # Game Manifest Schema 与类型
 │       ├── ipc-channels.ts                 # IPC 频道常量定义
+│       ├── log-serialization.ts            # 日志序列化工具（有界深度/数组/字符串截断 + RendererLogPayload 结构化格式）
 │       └── types/
 │   │       ├── game.types.ts               # Game API 消息类型
 │       ├── index.ts                    # 共享类型聚合导出
@@ -636,7 +643,9 @@ interface FloatBallProgress {
 - 运行 Game API Server（每次有游戏运行时）
 - 注册并处理所有 IPC Handler
 - 广播游戏进程生命周期事件（start/end）
-- 通过 `DatabaseService` 自动记录每次游戏启动→关闭为一次"游玩会话"（写入 SQLite `play_sessions.db`）
+- 通过 `PlaySessionDatabaseService` 自动记录每次游戏启动→关闭为一次"游玩会话"（写入 SQLite `play_sessions.db`）
+- 通过 `AchievementUnlockDatabaseService` 记录成就解锁历史（写入 SQLite `achievement_unlocks.db`）
+- 通过 `StatsReportDatabaseService` 记录统计上报历史（写入 SQLite `stats_reports.db`）
 - 系统托盘动态菜单：游戏退出时自动刷新「最近游玩」列表，支持从托盘快速启动最近玩过的游戏
 - 更新检查、下载、安装由 `UpdateService` 统一处理
 
@@ -772,31 +781,33 @@ interface AppSettings {
     - 模块级 `Logger` 类单例（`export const logger = new Logger()`）。`installGlobalHandlers()` 在 `index.ts` 入口处调用。
     - **Console 代理**：`installConsoleProxy()` 将全局 `console.log`/`console.warn`/`console.error` 替换为 Logger 方法，统一所有日志路由。
     - **双模式输出**：开发模式（`!app.isPackaged`）全部级别输出到控制台（调用保留下来的 `nativeConsole` 原始引用，避免无限递归）；生产模式 `info`/`warn` 静默丢弃，仅 `error` 写入 exe 同级 `bz-games-error.log` 文件。
+    - **错误日志轮转**：`rotateErrorLogsIfNeeded()` 在每次写入前检查文件大小，超过 `maxErrorLogBytes`（5MB）时执行轮转（保留 3 份历史备份 `bz-games-error.log.1`/`.2`/`.3`）。单条消息超过 5MB 时先轮转再写入（不拒绝超大消息）。
     - **全局异常捕获**：注册 `process.on("uncaughtException")`、`process.on("unhandledRejection")`、`app.on("render-process-gone")`、`app.on("child-process-gone")` 四个全局处理器，异常信息通过 Logger 统一写入错误日志。
-    - **渲染进程错误回传**：`captureRendererError()` 方法接收来自 preload 脚本通过 IPC `system:log:error` 回传的渲染进程错误，统一格式后按 error 级别处理。
+    - **结构化渲染进程错误**：`captureRendererError(payload)` 接收来自 preload 脚本的 `RendererLogPayload` 结构化对象（含 `context.source`/`url`/`userAgent`/`timestamp`/`gameId`/`version` + `args` 数组），通过 `normalizeRendererLogPayload()` 校验并补全默认值，格式化输出 `[Renderer:<source>]` 前缀日志。对非结构化旧格式数据也有降级处理。
 - **Renderer 错误捕获管线**：
-    - `src/preload/api.ts` 和 `src/preload/game.ts` 均在入口处覆盖 `console.error`：开发模式下保留原始控制台输出；所有错误通过 `ipcRenderer.send(IPC.SYSTEM_LOG_ERROR, ...)` 单向推送至主进程，无需返回值。
-    - Error 对象在跨进程传递前通过 `normalizeLogArg()` 序列化为 `{ name, message, stack }` 纯对象，避免结构化克隆失败。
+    - **共享序列化模块**：`src/shared/log-serialization.ts` 提供 `serializeLogArg()` / `serializeLogArgs()` / `formatLogValue()` / `normalizeRendererLogPayload()` 统一序列化工具。序列化有界保护：最大深度 6 层、数组最多 100 项、对象最多 100 键、字符串最长 20000 字符，超出截断并标记 `[truncated ...]`。定义 `LogSource` 联合类型（`main-window` / `game-window` / `chat-window` / `float-ball` / `notification-window`）和 `RendererLogPayload` / `RendererLogContext` 接口。
+    - **Preload 世界**：`installPreloadWorldForwarding()` 代理 `console.error`，调用 `buildContext()` 构建窗口身份上下文（source 通过 URL hash 自动识别窗口类型，game-window 额外附带 gameId/version），通过 `buildPayload()` 生成结构化 `RendererLogPayload` 后经 IPC `system:log:error` 发送至主进程。
+    - **Main World 桥接**（contextIsolated 模式）：注入精简版 `MAIN_WORLD_BRIDGE_SOURCE` 脚本，仅负责将原始 args 通过 CustomEvent 抛出，序列化统一在 preload 侧完成，消除双世界之间的序列化代码重复。
     - `window.addEventListener("error", ...)` 和 `window.addEventListener("unhandledrejection", ...)` 捕获未被 try-catch 覆盖的运行时异常。
-    - 主进程 `log.ipc.ts` 注册 `ipcMain.on(SYSTEM_LOG_ERROR)` 监听器，调用 `logger.captureRendererError()` 记录。
+    - 主进程 `log.ipc.ts` 注册 `ipcMain.on(SYSTEM_LOG_ERROR)` 监听器，接收 `RendererLogPayload` 并调用 `logger.captureRendererError()` 记录。
 - **游戏库布局状态**：`settings.libraryLayout` 持久化游戏库布局，取值为 `card`、`icon`、`steam`。`LibraryView` 挂载时必须先读取设置再渲染游戏库，避免启动时默认布局闪烁；Steam 布局右侧详情页使用嵌入式 `GameDetailView`，通过 `/library?steamGameId=<id>` 恢复来源游戏详情。
-- **游玩会话记录**：每次游戏启动（`spawnGameProcess` / `createGameWindow`）调用 `databaseService.startSession()` 在
+- **游玩会话记录**：每次游戏启动（`spawnGameProcess` / `createGameWindow`）调用 `playSessionDatabaseService.startSession()` 在
   `play_sessions.db` 创建一条记录（含 `game_id`、`game_name`、`version`、`start_time`）；游戏退出时（
-  `handleProcessExit` → `recordPlaytime`）调用 `databaseService.endSession()` 写入 `end_time` 和 `duration_ms`。
+  `handleProcessExit` → `recordPlaytime`）调用 `playSessionDatabaseService.endSession(sessionId, startTime)` 直接传入启动时间戳计算 duration_ms，避免额外的 DB 查询。
   `storeService.updatePlaytime()` 维护 JSON 汇总统计，SQLite 作为独立游玩历史记录层，为日历热力图和统计图表提供数据支撑。
   `handleProcessExit` 中通过动态 `import("../window")` 调用 `updateTrayMenu()` 刷新托盘快捷菜单。
-- **DatabaseService 设计**：
-    - SQLite WAL 模式：`journal_mode = WAL` 提升并发读写性能。
-    - 表结构 `play_sessions (id TEXT PK, game_id TEXT, game_name TEXT, version TEXT, start_time INTEGER, end_time INTEGER, duration_ms INTEGER)`，对 `game_id` 和 `start_time` 建立索引。
-    - `getRecentGames(limit)`：`GROUP BY game_id` 去重，返回最近玩过的游戏列表（供托盘快捷菜单使用）。
-    - `getDailyPlayDurations(days)`：按自然日聚合 `SUM(duration_ms)`，返回日历热力图数据源。
-    - `getRecentSessions(limit)`：按 `start_time DESC` 返回最近会话。
-    - `getSessionsByDate(date)`：按本地自然日查询已结束会话，用于统计热力图点击日期后的当日记录弹窗。
-    - 应用退出 (`before-quit`) 必须调用 `databaseService.close()` 正常关闭 WAL 连接，否则 WAL 文件不会自动合并。
+- **SQLite 异步架构**：
+    - **AsyncSqliteDatabase**：通用异步 SQLite 引擎，通过 `worker_threads` Worker 将 better-sqlite3 操作隔离到独立线程，避免阻塞主进程事件循环。Worker 脚本内联（`eval: true`），支持 `run`/`get`/`all`/`exec` 四种操作类型 + `close`。基于自增 `taskId` + `pendingTasks` Map 实现请求-响应匹配。`waitForIdle()` 在 close 前确保所有 pending 任务完成。`expectedWorkerExits` WeakSet 区分正常 terminate 与异常退出。
+    - **PlaySessionDatabaseService**：管理 `play_sessions` 表，提供 `startSession()`/`endSession()`（fire-and-forget 模式）、`getRecentSessions()`/`getSessionsByDate()`/`getRecentGames()`/`getDailyPlayDurations()`/`getTotalPlayDuration()` 查询方法，以及 `exportCloudSqlDump()`/`importCloudSqlDump()` 云端同步方法。
+    - **AchievementUnlockDatabaseService**：管理 `achievement_unlocks` 表，`recordUnlock()` 记录成就解锁事件（含 game_id/game_name/version/achievement_id/achievement_name/unlocked_at），支持云端同步。GameApiServer 在处理 `achievement.unlock` API 时自动写入。
+    - **StatsReportDatabaseService**：管理 `stats_reports` 表，`recordReport()` 记录统计上报事件（含 game_id/game_name/version/stat_id/stat_name/reported_at），支持云端同步。GameApiServer 在处理 `stats.report` API 时自动写入，`resolveStatName()` 从 Manifest 中解析统计项国际化名称。
+    - SQLite WAL 模式：`journal_mode = WAL` 提升并发读写性能（在 Worker 初始化时设置）。
+    - 应用退出 (`before-quit`) 必须调用各服务的 `close()` 正常关闭 WAL 连接，否则 WAL 文件不会自动合并。
 - **CloudSyncService 设计**：
+    - **同步文件范围**：v3.0.3 扩展为 4 个文件 — `config.json`（必需）、`play_sessions.db`（必需）、`achievement_unlocks.db`（可选）、`stats_reports.db`（可选）。必需文件缺失时拒绝下载（`cloud_data_incomplete`）；可选文件云端存在时自动同步，不存在时优雅跳过。
     - **上传黑名单**：`StoreService.CLOUD_SETTINGS_UPLOAD_BLACKLIST` 定义上传时排除的敏感字段（`githubToken`、`cloudSessionToken`、`cloudSessionExpiresAt`、`cloudUserLogin`、`cloudUserName`、`cloudUserProfileUrl`），`createCloudConfigFile()` 在写入临时上传文件前从 settings 副本中删除这些字段。
-    - **上传流程**：`upload()` 创建临时目录，调用 `createCloudConfigFile()` 生成脱敏后的 config 副本，与 `play_sessions.db` SQL 导出文件一起通过 `PUT /api/cloud/files/:fileKey` 按序上传。`try...finally` 确保临时目录在任何退出路径下都被清理。
-    - **下载选择性合并**：`download()` 下载完成后调用 `applyCloudConfigFile()` 而非之前的 `replaceConfigFile()` + `init(true)`。`applyCloudConfigFile()` 对 `games`、`userData`、`recentPlayed` 执行全量替换，对 `settings` 执行浅合并（`{ ...currentSettings, ...cloudSettings }`），云端没有的本地字段保留不丢失。不再需要重启 store 实例。
+    - **上传流程**：`upload()` 创建临时目录，调用 `createCloudConfigFile()` 生成脱敏后的 config 副本，遍历 `CLOUD_DATABASE_FILES` 通过 `exportDatabaseDump()` 生成各 DB 的 SQL dump，按序 `PUT /api/cloud/files/:fileKey`。`try...finally` 确保临时目录在任何退出路径下都被清理。
+    - **下载选择性合并**：`download()` 下载完成后调用 `applyCloudConfigFile()` 而非之前的 `replaceConfigFile()` + `init(true)`。`applyCloudConfigFile()` 对 `games`、`userData`、`recentPlayed` 执行全量替换，对 `settings` 执行浅合并（`{ ...currentSettings, ...cloudSettings }`），云端没有的本地字段保留不丢失。各 DB 文件通过 `importDatabaseDump()` 导入对应 SQLite 数据库。不再需要重启 store 实例。
     - **会话一致性**：上传时 `PUT` 请求可携带 `X-Cloud-Operation-Id` 请求头实现原子操作；下载时同样传递该请求头确保读到同一原子快照。
 - **MarketService 设计**：
     - **两级市场架构**：`getSources()` 拉取顶层市场目录（通过 `fetchDirectory()` 获取，主源 GitHub + 备源 OSS），
@@ -880,7 +891,7 @@ interface AppSettings {
 - **CalendarHeatmap 日历热力图组件**：
     - 纯 Vue 3 + CSS Grid 实现，不依赖第三方图表库，渲染 GitHub 贡献墙风格的 7×53+ 格子日历。
     - 颜色渐变 5 档（空 → `#39d353` → `#26a641` → `#006d32` → `#0e4429`），图例标注"少 ↔ 多"。
-    - 通过 IPC `stats:getDailyPlayDurations(365)` 从 `play_sessions.db` 加载近一年每日游玩时长。
+    - 通过 IPC `stats:getDailyPlayDurations(365)` 从 `PlaySessionDatabaseService`（内部查询 `play_sessions.db`）加载近一年每日游玩时长。
     - `dayLabels`、`monthNames`、`formatDurationMs` 均通过 `useI18n()` 实现三语切换，
       使用逗号分隔字符串 `t('statistics.weekDays')` / `t('statistics.monthNames')` 存储数组数据，`t('statistics.hour/minute')` 存储时间单位。
     - 每个格子通过 `n-tooltip` 展示日期和当天游玩时长。底部显示近一年总游玩时长。

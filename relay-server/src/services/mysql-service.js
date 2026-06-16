@@ -75,7 +75,6 @@ export function createMySqlService({ config }) {
         KEY idx_cloud_sync_limits_last_action_at (last_action_at)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
-    await pool.query("ALTER TABLE cloud_sync_limits ADD COLUMN operation_id VARCHAR(64) NOT NULL DEFAULT '' AFTER action_type").catch(() => {});
     await pool.query(`
       CREATE TABLE IF NOT EXISTS cloud_sync_operation_files (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,

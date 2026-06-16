@@ -2,7 +2,7 @@ import { ipcRenderer } from "electron";
 import { IPC } from "../shared/ipc-channels";
 import { installErrorForwarding } from "./error-forwarding";
 
-installErrorForwarding("GameWindow");
+installErrorForwarding("game-window");
 
 function resolveGameIdentity(): { gameId: string; version: string } {
   let gameId = "";

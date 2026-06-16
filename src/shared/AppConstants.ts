@@ -46,4 +46,8 @@ export const FLOAT_BALL_DEFAULT_SIZE = 72;
 
 export const DB_DIR = "db";
 
-export const DB_FILE_NAME = "db/play_sessions.db";
+export const PLAY_SESSIONS_DB_FILE_NAME = "db/play_sessions.db";
+
+export const ACHIEVEMENT_UNLOCKS_DB_FILE_NAME = "db/achievement_unlocks.db";
+
+export const STATS_REPORTS_DB_FILE_NAME = "db/stats_reports.db";

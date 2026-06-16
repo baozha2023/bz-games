@@ -104,13 +104,28 @@
       </n-form-item>
 
       <n-form-item :label="t('settings.githubToken')" path="githubToken">
-        <n-input
-          v-model:value="formValue.githubToken"
-          type="password"
-          :placeholder="t('settings.githubTokenPlaceholder')"
-          @copy.prevent
-          @cut.prevent
-        />
+        <div class="github-token-row">
+          <n-input
+            v-model:value="formValue.githubToken"
+            type="password"
+            :placeholder="t('settings.githubTokenPlaceholder')"
+            @copy.prevent
+            @cut.prevent
+          />
+          <n-tooltip trigger="hover" placement="top">
+            <template #trigger>
+              <button class="cloud-help-button" type="button" :aria-label="t('settings.githubTokenHelpTitle')">
+                <n-icon :size="18">
+                  <HelpCircleOutline />
+                </n-icon>
+              </button>
+            </template>
+            <div class="cloud-help-content">
+              <div class="cloud-help-title">{{ t('settings.githubTokenHelpTitle') }}</div>
+              <div>{{ t('settings.githubTokenHelp') }}</div>
+            </div>
+          </n-tooltip>
+        </div>
       </n-form-item>
 
       <n-form-item :label="t('settings.storagePathList')">
@@ -1068,6 +1083,15 @@ const confirmClearCache = async () => {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+.github-token-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+.github-token-row .n-input {
+  flex: 1;
 }
 .cloud-upload-time {
   flex: 1;

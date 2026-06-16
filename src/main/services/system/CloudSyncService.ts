@@ -6,12 +6,17 @@ import path from "path";
 import { DEFAULT_RELAY_SERVER_URL, OAUTH_RETURN_URL } from "../../../shared/AppConstants";
 import { requestInterceptor } from "../../utils/requestInterceptor";
 import { storeService } from "../storage/StoreService";
-import { databaseService } from "../storage/DatabaseService";
+import { playSessionDatabaseService } from "../storage/database/PlaySessionDatabaseService";
+import { achievementUnlockDatabaseService } from "../storage/database/AchievementUnlockDatabaseService";
+import { statsReportDatabaseService } from "../storage/database/StatsReportDatabaseService";
 
 export type CloudSyncProgressStage = "checking" | "uploading" | "downloading" | "applying" | "completed";
 
+type CloudFileKey = "config.json" | "play_sessions.db" | "achievement_unlocks.db" | "stats_reports.db";
+type CloudDatabaseFileKey = Exclude<CloudFileKey, "config.json">;
+
 export interface CloudFileMeta {
-  fileKey: "config.json" | "play_sessions.db";
+  fileKey: CloudFileKey;
   version: number;
   size: number;
   sha256: string;
@@ -37,7 +42,9 @@ export interface CloudSyncStatus {
 
 type CloudSyncProgressHandler = (progress: CloudSyncProgress) => void;
 
-const CLOUD_FILES: CloudFileMeta["fileKey"][] = ["config.json", "play_sessions.db"];
+const CLOUD_FILES: CloudFileKey[] = ["config.json", "play_sessions.db", "achievement_unlocks.db", "stats_reports.db"];
+const REQUIRED_CLOUD_FILES: CloudFileKey[] = ["config.json", "play_sessions.db"];
+const CLOUD_DATABASE_FILES: CloudDatabaseFileKey[] = ["play_sessions.db", "achievement_unlocks.db", "stats_reports.db"];
 
 interface UploadSource {
   fileKey: CloudFileMeta["fileKey"];
@@ -61,6 +68,24 @@ function getCloudHeaders(url: string, extra?: Record<string, string>): Record<st
 
 function contentTypeFor(fileKey: CloudFileMeta["fileKey"]): string {
   return fileKey === "config.json" ? "application/json" : "application/sql; charset=utf-8";
+}
+
+async function exportDatabaseDump(fileKey: CloudDatabaseFileKey): Promise<string> {
+  if (fileKey === "play_sessions.db") return playSessionDatabaseService.exportCloudSqlDump();
+  if (fileKey === "achievement_unlocks.db") return achievementUnlockDatabaseService.exportCloudSqlDump();
+  return statsReportDatabaseService.exportCloudSqlDump();
+}
+
+async function importDatabaseDump(fileKey: CloudDatabaseFileKey, sql: string): Promise<void> {
+  if (fileKey === "play_sessions.db") {
+    await playSessionDatabaseService.importCloudSqlDump(sql);
+    return;
+  }
+  if (fileKey === "achievement_unlocks.db") {
+    await achievementUnlockDatabaseService.importCloudSqlDump(sql);
+    return;
+  }
+  await statsReportDatabaseService.importCloudSqlDump(sql);
 }
 
 function sha256(buffer: Buffer): string {
@@ -174,7 +199,6 @@ class CloudSyncService {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bz-cloud-sync-upload-"));
     const cloudConfigPath = path.join(tempDir, "config.json");
     storeService.createCloudConfigFile(cloudConfigPath);
-    const sqlDump = databaseService.exportCloudSqlDump();
     const uploadSources: UploadSource[] = [
       {
         fileKey: "config.json",
@@ -182,13 +206,16 @@ class CloudSyncService {
         size: fs.statSync(cloudConfigPath).size,
         body: fs.createReadStream(cloudConfigPath) as unknown as BodyInit,
       },
-      {
-        fileKey: "play_sessions.db",
-        contentType: contentTypeFor("play_sessions.db"),
+    ];
+    for (const fileKey of CLOUD_DATABASE_FILES) {
+      const sqlDump = await exportDatabaseDump(fileKey);
+      uploadSources.push({
+        fileKey,
+        contentType: contentTypeFor(fileKey),
         size: Buffer.byteLength(sqlDump),
         body: sqlDump,
-      },
-    ];
+      });
+    }
     try {
       const totalBytes = uploadSources.reduce((sum, source) => sum + source.size, 0) || 1;
       let uploadedBytes = 0;
@@ -230,16 +257,16 @@ class CloudSyncService {
     if (!storeService.getSettings().cloudSessionToken) return { success: false, error: "unauthorized" };
     progress?.({ stage: "checking", percentage: 5 });
     const status = await this.getStatus();
-    const metas = CLOUD_FILES.map((fileKey) => status.files.find((item) => item?.fileKey === fileKey) || null);
-    if (metas.some((item) => !item)) return { success: false, error: "cloud_data_incomplete" };
+    const fileMetas = new Map(status.files.filter((item): item is CloudFileMeta => Boolean(item)).map((item) => [item.fileKey, item]));
+    if (REQUIRED_CLOUD_FILES.some((fileKey) => !fileMetas.has(fileKey))) return { success: false, error: "cloud_data_incomplete" };
+    const downloadFiles = CLOUD_FILES.filter((fileKey) => fileMetas.has(fileKey));
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bz-cloud-sync-"));
     try {
-      const totalBytes = metas.reduce((sum, item) => sum + (item?.size || 0), 0) || 1;
+      const totalBytes = downloadFiles.reduce((sum, fileKey) => sum + (fileMetas.get(fileKey)?.size || 0), 0) || 1;
       let downloadedBytes = 0;
       let operationId = "";
-      for (let index = 0; index < CLOUD_FILES.length; index += 1) {
-        const fileKey = CLOUD_FILES[index];
-        const meta = metas[index];
+      for (const fileKey of downloadFiles) {
+        const meta = fileMetas.get(fileKey);
         const url = `${this.baseUrl}/api/cloud/files/${encodeURIComponent(fileKey)}`;
         const response = await fetch(url, {
           headers: getCloudHeaders(url, {
@@ -263,7 +290,10 @@ class CloudSyncService {
       }
       progress?.({ stage: "applying", percentage: 90 });
       storeService.applyCloudConfigFile(path.join(tempDir, "config.json"));
-      databaseService.importCloudSqlDump(fs.readFileSync(path.join(tempDir, "play_sessions.db"), "utf8"));
+      for (const fileKey of CLOUD_DATABASE_FILES) {
+        if (!fileMetas.has(fileKey)) continue;
+        await importDatabaseDump(fileKey, fs.readFileSync(path.join(tempDir, fileKey), "utf8"));
+      }
       storeService.saveSettings({ cloudLastUploadedAt: status.lastUploadedAt });
       progress?.({ stage: "completed", percentage: 100 });
       return { success: true, lastUploadedAt: status.lastUploadedAt };

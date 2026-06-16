@@ -19,7 +19,7 @@ import { roomServer } from "../room/RoomServer";
 import { mainWindow } from "../../window";
 import { IPC } from "../../../shared/ipc-channels";
 import type { GameManifest } from "../../../shared/game-manifest";
-import { databaseService } from "../storage/DatabaseService";
+import { playSessionDatabaseService } from "../storage/database/PlaySessionDatabaseService";
 
 class GameManager {
   private activeProcesses: Map<string, ChildProcess> = new Map();
@@ -252,9 +252,10 @@ class GameManager {
     });
 
     this.activeWindows.set(id, win);
-    const sessionId = databaseService.startSession(id, manifest.name, manifest.version);
+    const sessionStart = Date.now();
+    const sessionId = playSessionDatabaseService.startSession(id, manifest.name, manifest.version, sessionStart);
     this.startTimes.set(id, {
-      start: Date.now(),
+      start: sessionStart,
       version: manifest.version,
       sessionId,
     });
@@ -316,9 +317,10 @@ class GameManager {
 
     cp.unref();
     this.activeProcesses.set(id, cp);
-    const sessionId = databaseService.startSession(id, manifest.name, manifest.version);
+    const sessionStart = Date.now();
+    const sessionId = playSessionDatabaseService.startSession(id, manifest.name, manifest.version, sessionStart);
     this.startTimes.set(id, {
-      start: Date.now(),
+      start: sessionStart,
       version: manifest.version,
       sessionId,
     });
@@ -355,7 +357,7 @@ class GameManager {
     if (startTimeData) {
       const durationMs = Date.now() - startTimeData.start;
       storeService.updatePlaytime(id, startTimeData.version, durationMs);
-      databaseService.endSession(startTimeData.sessionId);
+      playSessionDatabaseService.endSession(startTimeData.sessionId, startTimeData.start);
     }
     this.startTimes.delete(id);
   }

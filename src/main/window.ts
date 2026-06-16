@@ -2,7 +2,7 @@ import { BrowserWindow, shell, app, Menu, Tray, screen } from "electron";
 import { join } from "path";
 import { is } from "@electron-toolkit/utils";
 import { storeService } from "./services/storage/StoreService";
-import { databaseService } from "./services/storage/DatabaseService";
+import { playSessionDatabaseService } from "./services/storage/database/PlaySessionDatabaseService";
 import { IPC } from "../shared/ipc-channels";
 import { FLOAT_BALL_DEFAULT_SIZE } from "../shared/AppConstants";
 
@@ -16,8 +16,8 @@ export function markAppQuitting(): void {
   isQuitting = true;
 }
 
-function buildTrayMenu(): Menu {
-  const recentGames = databaseService.getRecentGames(5);
+async function buildTrayMenu(): Promise<Menu> {
+  const recentGames = await playSessionDatabaseService.getRecentGames(5).catch(() => []);
   const template: Electron.MenuItemConstructorOptions[] = [
     {
       label: "显示主窗口",
@@ -62,7 +62,7 @@ function buildTrayMenu(): Menu {
 
 export function updateTrayMenu(): void {
   if (tray) {
-    tray.setContextMenu(buildTrayMenu());
+    void buildTrayMenu().then((menu) => tray?.setContextMenu(menu));
   }
 }
 
@@ -73,7 +73,7 @@ function ensureTray(): void {
   }
   tray = new Tray(join(app.getAppPath(), "resources", "icon.png"));
   tray.setToolTip("BZ-Games");
-  tray.setContextMenu(buildTrayMenu());
+  void buildTrayMenu().then((menu) => tray?.setContextMenu(menu));
   tray.on("double-click", () => {
     mainWindow?.show();
     mainWindow?.focus();

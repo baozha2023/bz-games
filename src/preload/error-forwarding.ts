@@ -1,262 +1,98 @@
 import { ipcRenderer } from "electron";
 import { IPC } from "../shared/ipc-channels";
+import { normalizeRendererLogPayload, serializeLogArgs, type LogSource, type RendererLogContext, type RendererLogPayload } from "../shared/log-serialization";
 
-type SerializableValue =
-  | null
-  | boolean
-  | number
-  | string
-  | undefined
-  | SerializableValue[]
-  | { [key: string]: SerializableValue };
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  if (value === null || typeof value !== "object") return false;
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
-}
-
-function normalizeLogArg(arg: any, seen: WeakSet<object> = new WeakSet()): SerializableValue {
-  if (arg instanceof Error) {
-    return {
-      name: arg.name,
-      message: arg.message,
-      stack: arg.stack,
-    };
-  }
-  if (arg === null || arg === undefined) {
-    return null;
-  }
-  const valueType = typeof arg;
-  if (valueType === "string" || valueType === "number" || valueType === "boolean") {
-    return arg;
-  }
-  if (valueType === "bigint") {
-    return arg.toString();
-  }
-  if (valueType === "symbol") {
-    return arg.toString();
-  }
-  if (valueType === "function") {
-    return `[Function ${arg.name || "anonymous"}]`;
-  }
-  if (Array.isArray(arg)) {
-    if (seen.has(arg)) return "[Circular]";
-    seen.add(arg);
-    return arg.map((item) => normalizeLogArg(item, seen));
-  }
-  if (arg instanceof Map) {
-    if (seen.has(arg)) return "[Circular]";
-    seen.add(arg);
-    return {
-      type: "Map",
-      entries: Array.from(arg.entries()).map(([key, value]) => [normalizeLogArg(key, seen), normalizeLogArg(value, seen)]),
-    };
-  }
-  if (arg instanceof Set) {
-    if (seen.has(arg)) return "[Circular]";
-    seen.add(arg);
-    return {
-      type: "Set",
-      values: Array.from(arg.values()).map((value) => normalizeLogArg(value, seen)),
-    };
-  }
-  if (arg instanceof Date) {
-    return arg.toISOString();
-  }
-  if (arg instanceof RegExp) {
-    return arg.toString();
-  }
-  if (ArrayBuffer.isView(arg)) {
-    if (!("length" in arg)) {
-      return {
-        type: arg.constructor?.name || "ArrayBufferView",
-        byteLength: arg.byteLength,
-      };
-    }
-    return {
-      type: arg.constructor?.name || "TypedArray",
-      values: Array.from(arg as unknown as ArrayLike<number>).map((value) => value),
-    };
-  }
-  if (arg instanceof ArrayBuffer) {
-    return {
-      type: "ArrayBuffer",
-      byteLength: arg.byteLength,
-    };
-  }
-  if (typeof Node !== "undefined" && arg instanceof Node) {
-    const node = arg as Node & { outerHTML?: string; nodeName?: string };
-    return {
-      type: node.nodeName || "Node",
-      outerHTML: typeof node.outerHTML === "string" ? node.outerHTML : undefined,
-    };
-  }
-  if (isPlainObject(arg)) {
-    if (seen.has(arg)) return "[Circular]";
-    seen.add(arg);
-    const result: Record<string, SerializableValue> = {};
-    for (const [key, value] of Object.entries(arg)) {
-      result[key] = normalizeLogArg(value, seen);
-    }
-    return result;
-  }
-  try {
-    return JSON.parse(JSON.stringify(arg)) as SerializableValue;
-  } catch {
-    return Object.prototype.toString.call(arg);
-  }
-}
-
-const mainWorldForwardingSource = String.raw`
-(() => {
+const MAIN_WORLD_BRIDGE_SOURCE = `(() => {
   if (window.__bzGamesErrorForwardingInstalled) return;
   window.__bzGamesErrorForwardingInstalled = true;
-
   const nativeConsoleError = console.error.bind(console);
-
-  function isPlainObject(value) {
-    if (value === null || typeof value !== "object") return false;
-    const prototype = Object.getPrototypeOf(value);
-    return prototype === Object.prototype || prototype === null;
-  }
-
-  function normalizeLogArg(arg, seen = new WeakSet()) {
-    if (arg instanceof Error) {
-      return {
-        name: arg.name,
-        message: arg.message,
-        stack: arg.stack,
-      };
-    }
-    if (arg === null || arg === undefined) return null;
-    const valueType = typeof arg;
-    if (valueType === "string" || valueType === "number" || valueType === "boolean") return arg;
-    if (valueType === "bigint" || valueType === "symbol") return arg.toString();
-    if (valueType === "function") return "[Function " + (arg.name || "anonymous") + "]";
-    if (Array.isArray(arg)) {
-      if (seen.has(arg)) return "[Circular]";
-      seen.add(arg);
-      return arg.map((item) => normalizeLogArg(item, seen));
-    }
-    if (arg instanceof Map) {
-      if (seen.has(arg)) return "[Circular]";
-      seen.add(arg);
-      return {
-        type: "Map",
-        entries: Array.from(arg.entries()).map(([key, value]) => [normalizeLogArg(key, seen), normalizeLogArg(value, seen)]),
-      };
-    }
-    if (arg instanceof Set) {
-      if (seen.has(arg)) return "[Circular]";
-      seen.add(arg);
-      return {
-        type: "Set",
-        values: Array.from(arg.values()).map((value) => normalizeLogArg(value, seen)),
-      };
-    }
-    if (arg instanceof Date) return arg.toISOString();
-    if (arg instanceof RegExp) return arg.toString();
-    if (ArrayBuffer.isView(arg)) {
-      if (!("length" in arg)) {
-        return {
-          type: arg.constructor?.name || "ArrayBufferView",
-          byteLength: arg.byteLength,
-        };
-      }
-      return {
-        type: arg.constructor?.name || "TypedArray",
-        values: Array.from(arg),
-      };
-    }
-    if (arg instanceof ArrayBuffer) {
-      return {
-        type: "ArrayBuffer",
-        byteLength: arg.byteLength,
-      };
-    }
-    if (typeof Node !== "undefined" && arg instanceof Node) {
-      return {
-        type: arg.nodeName || "Node",
-        outerHTML: typeof arg.outerHTML === "string" ? arg.outerHTML : undefined,
-      };
-    }
-    if (isPlainObject(arg)) {
-      if (seen.has(arg)) return "[Circular]";
-      seen.add(arg);
-      const result = {};
-      for (const [key, value] of Object.entries(arg)) {
-        result[key] = normalizeLogArg(value, seen);
-      }
-      return result;
-    }
-    try {
-      return JSON.parse(JSON.stringify(arg));
-    } catch {
-      return Object.prototype.toString.call(arg);
-    }
-  }
-
-  function forward(args) {
-    window.dispatchEvent(new CustomEvent("bz-games:renderer-error", {
-      detail: args.map((arg) => normalizeLogArg(arg)),
-    }));
-  }
-
+  const forward = (args) => window.dispatchEvent(new CustomEvent("bz-games:renderer-error", { detail: Array.from(args) }));
   console.error = (...args) => {
     nativeConsoleError(...args);
     forward(args);
   };
-
-  window.addEventListener("error", (event) => {
-    console.error("[__BZ_ERROR_PREFIX__] Unhandled error", event.error || event.message);
-  });
-
-  window.addEventListener("unhandledrejection", (event) => {
-    console.error("[__BZ_ERROR_PREFIX__] Unhandled rejection", event.reason);
-  });
+  window.addEventListener("error", (event) => console.error("[Window] Unhandled error", event.error || event.message));
+  window.addEventListener("unhandledrejection", (event) => console.error("[Window] Unhandled rejection", event.reason));
 })();`;
 
-function installMainWorldForwarding(errorPrefix: string) {
-  if (!process.contextIsolated) return;
-  window.addEventListener("bz-games:renderer-error", (event) => {
-    const detail = (event as CustomEvent).detail;
-    ipcRenderer.send(IPC.SYSTEM_LOG_ERROR, Array.isArray(detail) ? detail : [normalizeLogArg(detail)]);
-  });
-  const source = mainWorldForwardingSource.replaceAll("__BZ_ERROR_PREFIX__", errorPrefix);
-  const inject = () => {
-    const script = document.createElement("script");
-    script.textContent = source;
-    (document.documentElement || document.head || document.body).appendChild(script);
-    script.remove();
+function resolveGameIdentity() {
+  const params = new URLSearchParams(window.location.search);
+  return {
+    gameId: params.get("gameId") || process.argv.find((arg) => arg.startsWith("--bz-game-id="))?.slice("--bz-game-id=".length),
+    version: params.get("version") || process.argv.find((arg) => arg.startsWith("--bz-game-version="))?.slice("--bz-game-version=".length),
   };
-  if (document.documentElement) {
-    inject();
-  } else {
-    window.addEventListener("DOMContentLoaded", inject, { once: true });
-  }
 }
 
-export function installErrorForwarding(errorPrefix: string) {
+function resolveSource(defaultSource: LogSource): LogSource {
+  const hash = window.location.hash;
+  if (hash.startsWith("#/chat-popout")) return "chat-window";
+  if (hash.startsWith("#/float-ball")) return "float-ball";
+  if (hash.startsWith("#/notification")) return "notification-window";
+  return defaultSource;
+}
+
+function buildContext(defaultSource: LogSource): RendererLogContext {
+  const identity: { gameId?: string; version?: string } = defaultSource === "game-window" ? resolveGameIdentity() : {};
+  return {
+    source: resolveSource(defaultSource),
+    url: window.location.href,
+    userAgent: navigator.userAgent,
+    timestamp: new Date().toISOString(),
+    gameId: identity.gameId,
+    version: identity.version,
+  };
+}
+
+function sendRendererLog(payload: RendererLogPayload) {
+  ipcRenderer.send(IPC.SYSTEM_LOG_ERROR, payload);
+}
+
+function buildPayload(defaultSource: LogSource, args: unknown[]): RendererLogPayload {
+  return {
+    context: buildContext(defaultSource),
+    args: serializeLogArgs(args),
+  };
+}
+
+function installPreloadWorldForwarding(defaultSource: LogSource) {
   const nativeConsoleError = console.error.bind(console);
   const shouldWriteErrorToConsole = process.env.NODE_ENV === "development" || !!process.env.ELECTRON_RENDERER_URL;
-
-  console.error = (...args: any[]) => {
-    if (shouldWriteErrorToConsole) {
-      nativeConsoleError(...args);
-    }
-    ipcRenderer.send(IPC.SYSTEM_LOG_ERROR, args.map((arg) => normalizeLogArg(arg)));
+  console.error = (...args: unknown[]) => {
+    if (shouldWriteErrorToConsole) nativeConsoleError(...args);
+    sendRendererLog(buildPayload(defaultSource, args));
   };
+}
 
+function installMainWorldForwarding(defaultSource: LogSource) {
+  window.addEventListener("bz-games:renderer-error", (event) => {
+    const detail = (event as CustomEvent).detail;
+    const payload = normalizeRendererLogPayload(detail) || buildPayload(defaultSource, Array.isArray(detail) ? detail : [detail]);
+    sendRendererLog(payload);
+  });
+  const inject = () => {
+    const script = document.createElement("script");
+    script.textContent = MAIN_WORLD_BRIDGE_SOURCE;
+    document.documentElement.appendChild(script);
+    script.remove();
+  };
+  if (document.documentElement) inject();
+  else window.addEventListener("DOMContentLoaded", inject, { once: true });
+}
+
+function installPreloadUnhandledForwarding() {
+  window.addEventListener("error", (event) => {
+    console.error("[Window] Unhandled error", event.error || event.message);
+  });
+  window.addEventListener("unhandledrejection", (event) => {
+    console.error("[Window] Unhandled rejection", event.reason);
+  });
+}
+
+export function installErrorForwarding(defaultSource: LogSource) {
+  installPreloadWorldForwarding(defaultSource);
   if (process.contextIsolated) {
-    installMainWorldForwarding(errorPrefix);
+    installMainWorldForwarding(defaultSource);
   } else {
-    window.addEventListener("error", (event) => {
-      console.error(`[${errorPrefix}] Unhandled error`, event.error || event.message);
-    });
-
-    window.addEventListener("unhandledrejection", (event) => {
-      console.error(`[${errorPrefix}] Unhandled rejection`, event.reason);
-    });
+    installPreloadUnhandledForwarding();
   }
 }

@@ -17,7 +17,7 @@ import type {
   NicknameStyle,
 } from "../shared/types";
 
-installErrorForwarding("Window");
+installErrorForwarding("main-window");
 
 export const electronAPI = {
   game: {

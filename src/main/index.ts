@@ -6,7 +6,9 @@ import { registerAllIpc } from "./ipc";
 import { electronApp, optimizer } from "@electron-toolkit/utils";
 import { storeService } from "./services/storage/StoreService";
 import { marketService } from "./services/market/MarketService";
-import { databaseService } from "./services/storage/DatabaseService";
+import { playSessionDatabaseService } from "./services/storage/database/PlaySessionDatabaseService";
+import { achievementUnlockDatabaseService } from "./services/storage/database/AchievementUnlockDatabaseService";
+import { statsReportDatabaseService } from "./services/storage/database/StatsReportDatabaseService";
 import { requestInterceptor } from "./utils/requestInterceptor";
 import { roomDiscoveryService } from "./services/room/RoomDiscoveryService";
 import { cloudSyncService } from "./services/system/CloudSyncService";
@@ -95,7 +97,9 @@ if (!gotTheLock) {
     requestInterceptor.registerSessionHandler(session.defaultSession);
 
     await storeService.init();
-    databaseService.init();
+    playSessionDatabaseService.init();
+    achievementUnlockDatabaseService.init();
+    statsReportDatabaseService.init();
     appReadyForProtocol = true;
     const settings = storeService.getSettings();
     app.setLoginItemSettings({
@@ -131,7 +135,9 @@ if (!gotTheLock) {
 app.on("before-quit", () => {
   storeService.recordAppClosed();
   roomDiscoveryService.stop();
-  databaseService.close();
+  void playSessionDatabaseService.close();
+  void achievementUnlockDatabaseService.close();
+  void statsReportDatabaseService.close();
   markAppQuitting();
 });
 

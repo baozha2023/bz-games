@@ -25,13 +25,33 @@ import { mainWindow } from "../../window";
 import { IPC } from "../../../shared/ipc-channels";
 import { notificationService } from "../system/NotificationService";
 import { GameLoader } from "../game/GameLoader";
+import { achievementUnlockDatabaseService } from "../storage/database/AchievementUnlockDatabaseService";
+import { statsReportDatabaseService } from "../storage/database/StatsReportDatabaseService";
 import { encodeBinaryEnvelope } from "../../../shared/binary-protocol";
 import { V1GameApiProtocol } from "./V1GameApiProtocol";
 import { V2GameApiProtocol } from "./V2GameApiProtocol";
 import { RoomConstants } from "../../../shared/RoomConstants";
+import type { GameManifest } from "../../../shared/game-manifest";
 
 type BinaryRelayPayload = GameRelayPayload & { binaryData?: Buffer };
 type GameApiProtocolVersion = 1 | 2;
+
+type GameStatDefinition = NonNullable<GameManifest["statistics"]>[number];
+
+function resolveStatName(stat: GameStatDefinition, statId: string): string {
+  if (typeof stat === "string") return stat === statId ? stat : "";
+  if (!stat || typeof stat !== "object") return "";
+  const entries = Object.entries(stat as Record<string, unknown>);
+  const match = entries.find(([key]) => key === statId);
+  if (!match) return "";
+  const value = match[1];
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object") {
+    const label = (value as { label?: unknown }).label;
+    if (typeof label === "string" && label.trim()) return label;
+  }
+  return statId;
+}
 
 export class GameApiServer {
   private wss: WebSocketServer | null = null;
@@ -406,6 +426,7 @@ export class GameApiServer {
       playerId?: string;
     };
     const currentSettings = storeService.getSettings();
+    const manifest = await GameLoader.getManifest(this.gameId, this.gameVersion);
 
     if (playerId && playerId !== currentSettings.playerId) {
       this.sendResponse(ws, req.id, "achievement.unlock", {
@@ -425,6 +446,15 @@ export class GameApiServer {
         gameId: this.gameId,
         version: this.gameVersion,
         achievementId,
+      });
+      const achievement = manifest?.achievements?.find((item) => item.id === achievementId);
+      void achievementUnlockDatabaseService.recordUnlock({
+        game_id: this.gameId,
+        game_name: manifest?.name || this.gameId,
+        version: this.gameVersion,
+        achievement_id: achievementId,
+        achievement_name: achievement?.title || achievementId,
+        unlocked_at: Date.now(),
       });
       this.showAchievementNotification(achievementId);
     }
@@ -454,6 +484,20 @@ export class GameApiServer {
         });
       }
       storeService.updateGameStats(this.gameId, this.gameVersion, stats, modes);
+      const reportedAt = Date.now();
+      for (const statId of Object.keys(stats)) {
+        const statName = manifest?.statistics
+          ?.map((stat) => resolveStatName(stat, statId))
+          .find(Boolean) || statId;
+        void statsReportDatabaseService.recordReport({
+          game_id: this.gameId,
+          game_name: manifest?.name || this.gameId,
+          version: this.gameVersion,
+          stat_id: statId,
+          stat_name: statName,
+          reported_at: reportedAt,
+        });
+      }
       this.sendResponse(ws, req.id, "stats.report", { success: true });
     } else {
       this.sendError(ws, req.id, "stats.report", {

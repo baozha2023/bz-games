@@ -1,6 +1,7 @@
 import { app } from "electron";
 import fs from "fs";
 import path from "path";
+import { formatLogValue, normalizeRendererLogPayload, type RendererLogPayload } from "../../shared/log-serialization";
 
 type LogLevel = "info" | "warn" | "error";
 
@@ -14,6 +15,8 @@ const nativeConsole: Record<LogLevel, ConsoleMethod> = {
 
 class Logger {
   private readonly errorLogFileName = "bz-games-error.log";
+  private readonly maxErrorLogBytes = 5 * 1024 * 1024;
+  private readonly maxRotatedErrorLogs = 3;
   private consoleInstalled = false;
 
   installGlobalHandlers(): void {
@@ -52,8 +55,13 @@ class Logger {
     this.write("error", args);
   }
 
-  captureRendererError(args: any[]): void {
-    this.error("[Renderer]", ...args);
+  captureRendererError(payload: unknown): void {
+    const normalized = normalizeRendererLogPayload(payload);
+    if (!normalized) {
+      this.error("[Renderer]", payload);
+      return;
+    }
+    this.error(this.formatRendererPayload(normalized));
   }
 
   private installConsoleProxy(): void {
@@ -96,19 +104,13 @@ class Logger {
   }
 
   private formatArg(arg: any): string {
-    if (arg instanceof Error) {
-      return arg.stack || arg.message;
-    }
+    return formatLogValue(arg);
+  }
 
-    if (typeof arg === "object" && arg !== null) {
-      try {
-        return JSON.stringify(arg);
-      } catch {
-        return String(arg);
-      }
-    }
-
-    return String(arg);
+  private formatRendererPayload(payload: RendererLogPayload): string {
+    const { context, args } = payload;
+    const identity = context.gameId ? ` game=${context.gameId}@${context.version || "latest"}` : "";
+    return `[Renderer:${context.source}] [${context.timestamp}]${identity} url=${context.url} ua=${context.userAgent} ${this.formatArgs(args)}`;
   }
 
   private getErrorLogPath(): string | null {
@@ -125,8 +127,32 @@ class Logger {
     if (!logPath) return;
 
     try {
+      this.rotateErrorLogsIfNeeded(logPath, Buffer.byteLength(message, "utf8"));
       fs.appendFileSync(logPath, message, "utf8");
     } catch {}
+  }
+
+  private rotateErrorLogsIfNeeded(logPath: string, incomingBytes: number): void {
+    if (incomingBytes > this.maxErrorLogBytes) {
+      for (let index = this.maxRotatedErrorLogs; index >= 1; index--) {
+        const source = index === 1 ? logPath : `${logPath}.${index - 1}`;
+        const target = `${logPath}.${index}`;
+        if (!fs.existsSync(source)) continue;
+        if (index === this.maxRotatedErrorLogs && fs.existsSync(target)) fs.rmSync(target, { force: true });
+        fs.renameSync(source, target);
+      }
+      return;
+    }
+    if (!fs.existsSync(logPath)) return;
+    const currentBytes = fs.statSync(logPath).size;
+    if (currentBytes + incomingBytes <= this.maxErrorLogBytes) return;
+    for (let index = this.maxRotatedErrorLogs; index >= 1; index--) {
+      const source = index === 1 ? logPath : `${logPath}.${index - 1}`;
+      const target = `${logPath}.${index}`;
+      if (!fs.existsSync(source)) continue;
+      if (index === this.maxRotatedErrorLogs && fs.existsSync(target)) fs.rmSync(target, { force: true });
+      fs.renameSync(source, target);
+    }
   }
 }
 
