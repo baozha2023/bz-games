@@ -4,7 +4,7 @@
     <n-divider />
     <n-form ref="formRef" :model="formValue" :rules="rules" v-if="formValue" label-placement="left" label-width="120">
       <n-form-item :label="t('settings.playerName')" path="playerName">
-        <n-input v-model:value="formValue.playerName" :placeholder="t('settings.playerNamePlaceholder')" />
+        <n-input v-model:value="formValue.playerName" :placeholder="t('settings.playerNamePlaceholder')" maxlength="16" show-count />
       </n-form-item>
 
       <n-form-item :label="t('settings.cloudSync')">
@@ -432,8 +432,14 @@ const settingsFrameFileName = computed(() => {
   return getFrameImageFileName(frameId)
 })
 
+const nicknameValid = computed(() => {
+  const name = formValue.value?.playerName?.trim()
+  if (!name) return false
+  return name.length <= 16 && /^[^<>"'`&\\/]+$/.test(name)
+})
+
 const canSave = computed(() => {
-  return formValue.value?.playerName?.trim() && formValue.value?.defaultRoomPort
+  return nicknameValid.value && formValue.value?.defaultRoomPort
 })
 
 const hasUnsavedChanges = computed(() => {
@@ -442,7 +448,15 @@ const hasUnsavedChanges = computed(() => {
 })
 
 const rules = {
-  playerName: { required: true, message: () => t('settings.enterName'), trigger: 'blur' },
+  playerName: [
+    { required: true, message: () => t('settings.enterName'), trigger: 'blur' },
+    { max: 16, message: () => t('settings.nameTooLong'), trigger: ['blur', 'change'] },
+    {
+      validator: (_rule: unknown, value: string) => !value || /^[^<>"'`&\\/]+$/.test(value),
+      message: () => t('settings.nameInvalidChars'),
+      trigger: ['blur', 'change'],
+    },
+  ],
   defaultRoomPort: [
     { required: true, type: 'number', message: () => t('settings.enterPort'), trigger: ['blur', 'change'] },
     { validator: (_rule: unknown, value: number) => value !== 38081, message: () => t('settings.enterPortReserved'), trigger: ['blur', 'change'] },

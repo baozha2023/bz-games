@@ -811,7 +811,7 @@ __relayTo -> relayTo -> to -> targetPlayerId -> payload.__relayTo
 | --- | --- | --- |
 | `GITHUB_CLIENT_ID` | 空字符串 | GitHub OAuth App Client ID |
 | `GITHUB_CLIENT_SECRET` | 空字符串 | GitHub OAuth App Client Secret |
-| `GITHUB_CALLBACK_URL` | 空字符串 | OAuth 回调地址（如 `http://39.106.221.85:38090/auth/github/callback`） |
+| `GITHUB_CALLBACK_URL` | 空字符串 | OAuth 回调地址（如 `http://relay.example.com:38090/auth/github/callback`） |
 | `GITHUB_OAUTH_SCOPE` | `read:user user:email` | OAuth 授权范围 |
 | `SESSION_COOKIE_NAME` | `bz_games_session` | Session Cookie 名称 |
 | `OAUTH_SESSION_TTL_MS` | `2592000000` | 登录 session 有效期（毫秒，默认 30 天） |

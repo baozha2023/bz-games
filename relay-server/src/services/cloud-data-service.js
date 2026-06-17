@@ -19,7 +19,7 @@ const SUPPORTED_FILES = {
 
 const SUPPORTED_FILE_KEYS = Object.keys(SUPPORTED_FILES);
 
-const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
+const RATE_LIMIT_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 function normalizeVersion(value) {
     if (!value) return null;

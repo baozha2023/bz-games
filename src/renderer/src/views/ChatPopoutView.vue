@@ -59,7 +59,7 @@
           quaternary
           :title="t('chat.importImage')"
           @click="handleImportImage"
-          :disabled="isRecording"
+          :disabled="isRecording || isRelayRoom"
         >
           <template #icon>
             <n-icon><Image /></n-icon>
@@ -104,6 +104,7 @@ const isRecording = ref(false)
 const playingAudioId = ref<string | null>(null)
 const playerId = ref('')
 const roomName = ref('')
+const isRelayRoom = ref(false)
 
 let mediaRecorder: MediaRecorder | null = null
 let audioChunks: Blob[] = []
@@ -153,7 +154,7 @@ function startResize(event: MouseEvent) {
 
 const handleSend = async () => {
   const hasText = inputValue.value.trim().length > 0
-  const hasImages = pendingImages.value.length > 0
+  const hasImages = !isRelayRoom.value && pendingImages.value.length > 0
   if (!hasText && !hasImages) return
 
   try {
@@ -270,6 +271,7 @@ function openImageViewer(src: string) {
 }
 
 function addImageFromFile(file: File) {
+  if (isRelayRoom.value) return
   if (!file.type.startsWith('image/')) return
   if (file.size > MAX_IMAGE_SIZE) {
     message.warning(t('chat.imageTooLarge'))
@@ -290,6 +292,7 @@ function removePendingImage(id: string) {
 }
 
 function handlePaste(e: ClipboardEvent) {
+  if (isRelayRoom.value) return
   const items = e.clipboardData?.items
   if (!items) return
   for (let i = 0; i < items.length; i++) {
@@ -303,6 +306,7 @@ function handlePaste(e: ClipboardEvent) {
 }
 
 function handleDragOver() {
+  if (isRelayRoom.value) return
   isDragOver.value = true
 }
 function handleDragLeave() {
@@ -310,6 +314,7 @@ function handleDragLeave() {
 }
 function handleDrop(e: DragEvent) {
   isDragOver.value = false
+  if (isRelayRoom.value) return
   const files = e.dataTransfer?.files
   if (!files) return
   for (let i = 0; i < files.length; i++) {
@@ -318,6 +323,7 @@ function handleDrop(e: DragEvent) {
 }
 
 function handleImportImage() {
+  if (isRelayRoom.value) return
   fileInputRef.value?.click()
 }
 
@@ -337,10 +343,19 @@ const handleRoomEvent = (event: RoomEvent) => {
   } else if (event.type === 'room:chat:history:sync') {
     chatMessages.value = event.payload as ChatPayload[]
   } else if (event.type === 'room:state:sync') {
-    const room = event.payload as any
-    roomName.value = room?.gameId || ''
+    updateRoomState(event.payload)
   } else if (event.type === 'room:disbanded' || event.type === 'room:kicked') {
     chatMessages.value = []
+  }
+}
+
+function updateRoomState(state: unknown) {
+  const room = state as { gameId?: string; hostConnectionMode?: string } | null
+  roomName.value = room?.gameId || ''
+  isRelayRoom.value = room?.hostConnectionMode === 'relay'
+  if (isRelayRoom.value) {
+    pendingImages.value = []
+    isDragOver.value = false
   }
 }
 
@@ -361,7 +376,7 @@ onMounted(async () => {
   try {
     const state = await window.electronAPI.room.getState()
     if (state) {
-      roomName.value = (state as any).gameId || ''
+      updateRoomState(state)
     }
   } catch {
     // ignore

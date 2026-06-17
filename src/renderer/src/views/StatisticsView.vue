@@ -82,10 +82,8 @@
       :bordered="false"
     >
       <div class="session-modal-content">
-        <div v-if="isLoadingSessions">
-          <n-space vertical :size="12">
-            <n-skeleton height="56px" :repeat="3" />
-          </n-space>
+        <div v-if="isLoadingSessions" class="session-loading">
+          <n-spin size="large" />
         </div>
         <n-empty
           v-else-if="selectedDateSessions.length === 0"
@@ -118,7 +116,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { SearchOutline } from '@vicons/ionicons5'
 import { useGameStore } from '../stores/useGameStore'
@@ -164,8 +162,12 @@ const {
 async function loadStatsData() {
   if (isLoadingHeatmap.value || hasLoadedHeatmap.value) return
   isLoadingHeatmap.value = true
+  await nextTick()
   try {
-    const durations = await window.electronAPI.stats.getDailyPlayDurations(365)
+    const [durations] = await Promise.all([
+      window.electronAPI.stats.getDailyPlayDurations(365),
+      new Promise((resolve) => setTimeout(resolve, 180)),
+    ])
     dailyDurations.value = durations
     hasLoadedHeatmap.value = true
   } catch (e) {
@@ -177,10 +179,16 @@ async function loadStatsData() {
 
 async function handleHeatmapDateSelect(date: string) {
   selectedDate.value = date
+  selectedDateSessions.value = []
   showSessionModal.value = true
   isLoadingSessions.value = true
+  await nextTick()
   try {
-    selectedDateSessions.value = await window.electronAPI.stats.getSessionsByDate(date)
+    const [sessions] = await Promise.all([
+      window.electronAPI.stats.getSessionsByDate(date),
+      new Promise((resolve) => setTimeout(resolve, 180)),
+    ])
+    selectedDateSessions.value = sessions
   } catch (e) {
     console.error('[StatisticsView] Failed to load sessions by date:', e)
     selectedDateSessions.value = []
@@ -359,8 +367,16 @@ function getLabel(gameId: string, key: string): string {
 
 .session-modal-content {
   max-height: 80vh;
+  min-height: 160px;
   overflow-y: auto;
   padding-right: 4px;
+}
+
+.session-loading {
+  min-height: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .session-game {

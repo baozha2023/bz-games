@@ -50,10 +50,6 @@
             <span class="lan-guide-url-label">{{ t('room.lanGuideSiteLabel') }}</span>
             <span class="lan-guide-url">{{ EASYTIER_URL }}</span>
           </div>
-          <div class="lan-guide-url-row">
-            <span class="lan-guide-url-label">{{ t('room.lanGuideEasyTierNodeLabel') }}</span>
-            <span class="lan-guide-url">{{ EASYTIER_BOOTSTRAP_NODE }}</span>
-          </div>
           <div class="lan-guide-section-title">{{ t('room.lanGuideRecommendedConfig') }}</div>
           <ol class="lan-guide-steps">
             <li>{{ t('room.lanGuideEasyTierStep1') }}</li>
@@ -75,7 +71,6 @@ import { useMessage } from 'naive-ui'
 
 const NATFRP_URL = 'https://www.natfrp.com/'
 const EASYTIER_URL = 'https://easytier.cn/'
-const EASYTIER_BOOTSTRAP_NODE = 'tcp 39.106.221.85:11010'
 
 const props = defineProps<{
   show: boolean

@@ -80,6 +80,8 @@ bz-games/
 │   ├── DATA_MODEL.md                      # MySQL/MongoDB 数据模型说明
 │   ├── DEPLOY.md                          # 中继服务器部署手册
 │   ├── package.json                       # 中继服务器独立依赖
+│   ├── scripts/
+│   │   └── relay-e2e-test.js             # 中继服务器端到端测试（房间、密码、延迟、敏感词过滤、二进制帧）
 │   └── src/
 │       ├── index.js                       # 中继服务器入口（HTTP + WebSocket 统一启动）
 │       ├── state.js                       # 共享运行时状态（rooms / clients Map）
@@ -89,10 +91,12 @@ bz-games/
 │       ├── services/
 │       │   ├── auth-service.js            # GitHub OAuth 认证与会话管理
 │       │   ├── cloud-data-service.js      # 云端文件同步（config.json / play_sessions.db / achievement_unlocks.db / stats_reports.db）
-│       │   ├── message-router.js          # WebSocket 消息路由分发
+│       │   ├── message-router.js          # WebSocket 消息路由分发（含中继侧敏感词过滤与图片拦截）
 │       │   ├── mongo-service.js           # MongoDB GridFS 连接管理
 │       │   ├── mysql-service.js           # MySQL 连接池与建表
-│       │   └── room-service.js            # 房间创建、加入、密码、清理
+│       │   ├── room-service.js            # 房间创建、加入、密码、清理
+│       │   └── sensitive-word-service.js  # 中继侧敏感词过滤服务（词库加载 + Unicode 安全字符级掩码）
+│       ├── vocabulary/                    # 敏感词词库目录（15 个分类 .txt 文件）
 │       └── utils/
 │           ├── http.js                    # HTTP 工具（Cookie / Bearer / redirect / JSON 响应）
 │           ├── protocol.js                # 通信协议常量（relay:* 指令集）
@@ -220,7 +224,7 @@ bz-games/
 │   │       │       ├── PlayerList.vue      # 房间玩家列表组件
 │   │       │       ├── GameReportCard.vue   # 战绩报告卡片组件（纯文本 / 内置布局 / 自定义 HTML 三种模式）
 │   │       │       ├── RoomChat.vue        # 房间聊天组件
-│   │       │       ├── LanGuideModal.vue    # 局域网联机引导弹窗组件（NatFrp + EasyTier 配置指引，RoomView 与 RoomDiscoveryView 共享）
+│   │       │       ├── LanGuideModal.vue    # 局域网联机引导弹窗组件（NatFrp + EasyTier 配置指引，不再硬编码引导节点地址，RoomView 与 RoomDiscoveryView 共享）
 │   │       │       └── ImageViewer.vue      # 图片预览器（全屏蒙层，点击空白退出，自定义光标）
 │   │       ├── locales/
 │   │       │   ├── de-DE.ts                # 德文文案
@@ -891,11 +895,12 @@ interface AppSettings {
 - **CalendarHeatmap 日历热力图组件**：
     - 纯 Vue 3 + CSS Grid 实现，不依赖第三方图表库，渲染 GitHub 贡献墙风格的 7×53+ 格子日历。
     - 颜色渐变 5 档（空 → `#39d353` → `#26a641` → `#006d32` → `#0e4429`），图例标注"少 ↔ 多"。
-    - 通过 IPC `stats:getDailyPlayDurations(365)` 从 `PlaySessionDatabaseService`（内部查询 `play_sessions.db`）加载近一年每日游玩时长。
+    - 通过 IPC `stats:getDailyPlayDurations(365)` 从 `PlaySessionDatabaseService`（内部查询 `play_sessions.db`）加载近一年每日游玩时长。起始日期为当前日期向前 364 天并回退到周日，确保覆盖最近约 52 周（365 天数据点）。
     - `dayLabels`、`monthNames`、`formatDurationMs` 均通过 `useI18n()` 实现三语切换，
       使用逗号分隔字符串 `t('statistics.weekDays')` / `t('statistics.monthNames')` 存储数组数据，`t('statistics.hour/minute')` 存储时间单位。
     - 每个格子通过 `n-tooltip` 展示日期和当天游玩时长。底部显示近一年总游玩时长。
-    - 统计页默认不自动加载热力图数据，用户点击「加载热力图」按钮后按需加载（`hasLoadedHeatmap` 状态守卫防重复请求）。
+    - 统计页默认不自动加载热力图数据，用户点击「加载热力图」按钮后按需加载（`hasLoadedHeatmap` 状态守卫防重复请求）。加载期间通过 `await nextTick()` 先提交 DOM 更新（确保 loading 状态渲染）再发起异步 IPC；异步操作保证至少 180ms 延迟（`Promise.all` + `setTimeout`），防止数据瞬间返回导致的 loading 闪烁。
+    - 日期点击弹出会话详情弹窗时：先清空 `selectedDateSessions`、设置 `isLoadingSessions = true` 并 `await nextTick()` 确保弹窗以 loading 态打开，再发起 IPC 查询。会话加载中展示居中的 `n-spin` 旋转指示器（最小高度 160px），替代骨架屏，视觉上更轻量且无布局抖动。
     - ResizeObserver 使用 `requestAnimationFrame` 节流 + 同值跳过，避免热力图容器宽度频繁变化引起的布局抖动。
 - **头像框系统（Avatar Frame）**：
     - **数据定义**：`src/shared/avatar-frames.ts` 导出 `AVATAR_FRAMES` 常量数组（8 款头像框），每款定义 `id`、`name`、`imageFileName`、`rarity`、`unlockMethod`（playtime/consecutive_checkin/total_checkin/bzcoin）、`unlockValue`。同时导出 `getFrameImageFileName(id)` 工具函数。
@@ -920,6 +925,11 @@ interface AppSettings {
 - **官方中继联机系统**：
     - **公网入口模型**：房间模式仅允许 `lan` 与 `relay` 两种。`RoomServer` 始终监听 `settings.defaultRoomPort`（默认 38080），无论房主当前选择局域网还是官方服务器模式，本地物理局域网 IP、虚拟局域网 IP 和用户自备 frp 地址都仍然可以直连；官方服务器模式只是在此基础上额外注册一个短地址入口。
     - **中继服务职责**：`relay-server/src/index.js` 处理 `relay:host`、`relay:join`、`relay:leave`、`relay:latency:ping`、`relay:latency:probe`、`relay:latency:pong` 等控制信令；RoomMessage、Game API v1 JSON 和 Game API v2 binary frame 均透明转发。中继服务端使用 `roomId` 管理内部房间，只发送和识别 `roomCode`。
+    - **中继聊天内容安全**：中继服务器对转发的聊天消息执行内容安全过滤，作为独立于客户端过滤的第二道防线：
+        - **敏感词过滤**：`sensitive-word-service.js` 从 `vocabulary/` 目录加载 15 个分类词库文件，按长度降序排序后使用 Unicode 安全算法（`Array.from()` + code-unit→char-index 映射表）对 `contentType` 为 `text` 或 `mixed` 的聊天消息执行字符级掩码替换（敏感词 → `*`）。词库文件缺失时 `hasWords()` 返回 `false`，`message-router.js` 通过 `canFilterRelayChatMessage()` 门控静默丢弃无法过滤的文字消息（fail-closed 安全设计）。
+        - **图片拦截**：`isBlockedRelayChatMessage()` 拦截并静默丢弃以下三类聊天消息：① `contentType === "image"` 的纯图片消息；② content 字段为 `data:image/` base64 的嵌入式图片；③ `images[]` 数组非空的带图消息。拦截在消息级执行，不等同于逐图片扫描。
+        - **透传放行**：`contentType === "audio"` 的语音消息不经过滤直接转发。
+        - **游戏消息不受影响**：`game:message:relay`、`game:broadcast:relay`、`game:message:ack` 等游戏中继消息不经过上述过滤管线。
     - **短地址加入**：房主注册成功后服务端返回 `roomCode`；平台按 `DEFAULT_RELAY_PUBLIC_HOST + roomCode` 拼接短地址。平台展示、复制、服务器 Tab 和手动输入统一使用短地址；客机 `RoomClient` 识别短地址后提取 `roomCode`，连接 `DEFAULT_RELAY_SERVER_URL` 并发送 `relay:join`，收到 `relay:join:ack` 后再发送标准 `room:join`。
     - **加入入口统一**：服务器 Tab、局域网卡片加入和游戏详情页手动地址加入共用 `useRoomJoin.ts`，地址标准化、短地址识别、加入调用、错误提示保持一致；列表按钮状态仅用于展示，真实连接结果由 `RoomClient` / `RoomServer` / relay-server 联合决定。
     - **密码模型**：房间密码只保存在房主本地 `RoomServer.roomPassword` 与 relay-server 内存中，房间状态与发现结果只暴露 `hasPassword`，绝不广播真实密码。
@@ -1197,6 +1207,7 @@ interface AppSettings {
     - 主进程 `sendRoomEventToChat()` 统一转发所有房间事件（聊天消息、状态同步、连接状态等）给弹窗。
     - 弹窗输入框使用原生 `<textarea>` 替代 `<n-input>`，支持 Shift+Enter 换行、Enter 发送。
     - 输入框底部拖动条（`.chat-resize-handle`）可调整输入区高度（60px~260px），高度持久化到 `chatInputHeight`。
+    - **中继房间图片限制**：当房间处于官方中继模式（`hostConnectionMode === 'relay'`）时，弹窗关闭图片发送功能：① 发送图片按钮 disabled + hover 提示；② `handleSend` 跳过 pending images；③ `addImageFromFile` / `handlePaste` / `handleDrop` / `handleImportImage` 均通过 `isRelayRoom` 门控直接返回；④ 切换至中继房间时立即清空 `pendingImages` 并重置拖拽状态。`isRelayRoom` 从 `room:state:sync` 事件中的 `hostConnectionMode` 字段派生。
 - **聊天图片消息**：
     - 弹窗聊天框支持 Ctrl+V 粘贴图片、拖拽图片文件和点击"发送图片"按钮选择图片发送，单张限制 5MB。
     - 点击"发送图片"按钮（📷 图标）触发隐藏的 `<input type="file" accept="image/*" multiple>`，支持批量选择。选择后和粘贴/拖拽统一走 `addImageFromFile()` 处理。
@@ -1215,9 +1226,9 @@ interface AppSettings {
     - `ChatMessageList.vue` 为 RoomChat 与 ChatPopoutView 提供统一的聊天消息渲染（文本、图片、语音、GameReportCard），消除两处重复代码。
     - 组件通过 props 接收消息列表、玩家 ID、播放状态、敏感词过滤开关与词库，通过 emits 向外传递图片预览和语音播放事件。
 - **敏感词过滤**：
-    - 客户端侧功能，默认开启；由 `SettingsView` 中的 `sensitiveWordFilter` 开关控制，持久化于 `AppSettings.sensitiveWordFilter`。
-    - 词库存储在 `resources/vocabulary/*.txt`，主进程 `system:getSensitiveWords` 加载并缓存，渲染进程通过 `sensitiveWordFilter.ts` 的 `filterSensitiveText()` 对消息文本进行字符级掩码替换（敏感词替换为 `*`）。
-    - 算法通过 `Array.from()` 正确处理 Unicode 字符，使用 code-unit→char-index 映射表定位，词库按长度降序排序后逐词扫描，被命中的字符位置标记后批量替换。
+    - **客户端侧**（第一道防线）：功能默认开启；由 `SettingsView` 中的 `sensitiveWordFilter` 开关控制，持久化于 `AppSettings.sensitiveWordFilter`。词库存储在 `resources/vocabulary/*.txt`，主进程 `system:getSensitiveWords` 加载并缓存，渲染进程通过 `sensitiveWordFilter.ts` 的 `filterSensitiveText()` 对消息文本进行字符级掩码替换（敏感词替换为 `*`）。用户可以关闭。
+    - **中继服务器侧**（第二道防线）：对所有经中继转发的聊天消息强制执行，用户不可关闭。图片消息被拦截丢弃，文字/混合消息经敏感词过滤后转发。词库文件缺失时自动丢弃所有文字消息（fail-closed），确保中继链路不会成为未过滤内容的通道。详见「官方中继联机系统 → 中继聊天内容安全」。
+    - 双端共用同一套 Unicode 安全算法（`Array.from()` + code-unit→char-index 映射表定位，词库按长度降序排序后逐词扫描，被命中的字符位置标记后批量替换为 `*`）。
 - **游戏详情页**：
     - 删除游戏功能使用模态框，支持多选版本进行删除，默认选中当前版本。
     - 若 Manifest 配置了 `video` 字段，详情页进入后自动播放预览视频；视频结束后自动回退显示封面。
@@ -1228,6 +1239,7 @@ interface AppSettings {
 - **客机重连按钮**：客机游戏进程意外退出后，由 `RoomServer` 将 `playerId` 加入 `RoomInfo.reconnectPlayerIds` 并广播状态同步。前端 `isReconnectMode` 从该数组派生，无需手动管理。重连状态下 Ready/Unready 按钮位替换为"重连"按钮。点击后重新 `launch()` 同一游戏版本。`room:game:start` 或 `playing→waiting` 时 `reconnectPlayerIds` 被清空，按钮恢复原状。
 - **统计界面**：卡片右上角需展示该游戏的所有版本号，使用自动换行布局。
 - **设置页更新入口**：设置页需提供「检查更新」按钮，点击后弹出更新状态弹层，显示下载进度与安装按钮。
+- **玩家昵称校验**：昵称输入框限制 16 个字符（`maxlength="16" show-count`），表单校验规则包含三个维度：① 非空（`required`）；② 最长 16 字符（`max: 16`）；③ 禁止 `< > " ' \` & \\ /` 等特殊字符（正则 `/^[^<>\"'\`&\\\\/]+$/`）。`canSave` computed 通过 `nicknameValid` 门控：空名或包含非法字符时保存按钮 disabled。所有 6 种语言均提供 `nameTooLong` / `nameInvalidChars` 错误提示。
 - **设置页卸载入口**：设置页底部（与保存按钮同行，`justify-content: space-between`）提供"卸载客户端"按钮（
   `type="error" secondary`），右侧提供"清除缓存"按钮。点击卸载弹出 NaiveUI 自定义确认弹窗，包含不可撤销的警告文案、是否同时删除所有游戏库目录的勾选项、以及删除路径列表预览。确认后调用
   `system:uninstall` IPC 执行卸载。若处于开发模式或卸载程序不可用，弹出友好提示。

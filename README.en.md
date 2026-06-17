@@ -4,7 +4,7 @@
 [![Vue](https://img.shields.io/badge/Vue-v3-green)](https://vuejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-v5-blue)](https://www.typescriptlang.org/)
 
-[中文](./README.md) | English | [日本語](./README.ja.md)
+[简体中文](./README.md) | English | [日本語](./README.ja.md) | [Deutsch](./README.de.md) | [繁體中文](./README.zh-TW.md) | [文言文](./README.lzh.md)
 
 **BZ-Games** is a **serverless local game platform** designed for Windows. It allows users to import local games and play multiplayer with friends through the built-in P2P room system, without relying on any third-party game servers.
 
@@ -19,7 +19,7 @@
 - **🏪 Game Market**: Built-in game market for remote game discovery, browsing, downloading and installation. Supports `.zip` and `.7z` formats.
 - **🏆 Achievements & Statistics**: Each game can define achievement lists and statistics, automatically tracked and displayed by the platform.
 - **🪙 Economy System**: Daily check-in rewards with BZ Coins, automatic rewards for cumulative playtime.
-- **🌍 Internationalization**: Supports Chinese, English, and Japanese.
+- **🌍 Internationalization**: Supports Chinese (Simplified & Traditional), English, Japanese, German, and Classical Chinese.
 
 ## 📸 Screenshots
 

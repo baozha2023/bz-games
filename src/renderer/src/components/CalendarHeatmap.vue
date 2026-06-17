@@ -262,7 +262,7 @@ const cells = computed<CellData[]>(() => {
   const now = new Date()
   const endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const startDate = new Date(endDate)
-  startDate.setDate(startDate.getDate() - 371)
+  startDate.setDate(startDate.getDate() - 364)
 
   const dayOfWeek = startDate.getDay()
   if (dayOfWeek > 0) {
@@ -292,7 +292,7 @@ const monthLabels = computed<MonthLabel[]>(() => {
   const now = new Date()
   const endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const startDate = new Date(endDate)
-  startDate.setDate(startDate.getDate() - 371)
+  startDate.setDate(startDate.getDate() - 364)
 
   const dayOfWeek = startDate.getDay()
   if (dayOfWeek > 0) {

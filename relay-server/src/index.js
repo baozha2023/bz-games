@@ -8,6 +8,7 @@ import { createRoomService } from "./services/room-service.js";
 import { createMessageRouter } from "./services/message-router.js";
 import { createMongoService } from "./services/mongo-service.js";
 import { createMySqlService } from "./services/mysql-service.js";
+import { createSensitiveWordService } from "./services/sensitive-word-service.js";
 import { createRelayState } from "./state.js";
 import { send } from "./utils/ws.js";
 import { registerWebSocketHandlers } from "./ws-server.js";
@@ -18,7 +19,8 @@ const mySqlService = createMySqlService({ config });
 const authService = createAuthService({ config, mySqlService });
 const cloudDataService = createCloudDataService({ config, authService, mongoService, mySqlService });
 const roomService = createRoomService({ config, state, send });
-const messageRouter = createMessageRouter({ config, roomService, send });
+const sensitiveWordService = createSensitiveWordService();
+const messageRouter = createMessageRouter({ config, roomService, send, sensitiveWordService });
 const server = createHttpServer({ config, state, roomService, authService, cloudDataService });
 const wss = new WebSocketServer({ server, maxPayload: config.MAX_BINARY_BYTES });
 

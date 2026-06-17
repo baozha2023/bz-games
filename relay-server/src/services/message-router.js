@@ -2,7 +2,10 @@ import { WebSocket } from "ws";
 
 import { decodeBinaryEnvelope, normalizeBuffer, resolveTargetPlayerId } from "../utils/protocol.js";
 
-export function createMessageRouter({ config, roomService, send }) {
+const FILTERABLE_CHAT_CONTENT_TYPES = new Set([undefined, "text", "mixed"]);
+const BLOCKED_RELAY_CHAT_CONTENT_TYPES = new Set(["image"]);
+
+export function createMessageRouter({ config, roomService, send, sensitiveWordService }) {
   function resolveTargets(client, payload) {
     const room = roomService.getRoom(client.roomId);
     if (!room) return [];
@@ -25,10 +28,45 @@ export function createMessageRouter({ config, roomService, send }) {
 
   function forwardText(client, message, rawText) {
     const targets = resolveTargets(client, message);
+    const outgoingText = filterRelayChatMessage(message, rawText);
     for (const target of targets) {
-      if (target.ws.readyState === WebSocket.OPEN) target.ws.send(rawText);
+      if (target.ws.readyState === WebSocket.OPEN) target.ws.send(outgoingText);
     }
     roomService.touchRoom(client.roomId);
+  }
+
+  function filterRelayChatMessage(message, rawText) {
+    if (message.type !== "room:chat") return rawText;
+    const payload = message.payload;
+    if (!payload || typeof payload !== "object") return rawText;
+    if (!FILTERABLE_CHAT_CONTENT_TYPES.has(payload.contentType)) return rawText;
+    if (typeof payload.content !== "string" || !payload.content) return rawText;
+    const filteredContent = sensitiveWordService.filterText(payload.content);
+    if (filteredContent === payload.content) return rawText;
+    return JSON.stringify({
+      ...message,
+      payload: {
+        ...payload,
+        content: filteredContent,
+      },
+    });
+  }
+
+  function isBlockedRelayChatMessage(message) {
+    if (message.type !== "room:chat") return false;
+    const payload = message.payload;
+    if (!payload || typeof payload !== "object") return true;
+    if (BLOCKED_RELAY_CHAT_CONTENT_TYPES.has(payload.contentType)) return true;
+    if (typeof payload.content === "string" && payload.content.startsWith("data:image/")) return true;
+    return Array.isArray(payload.images) && payload.images.length > 0;
+  }
+
+  function canFilterRelayChatMessage(message) {
+    if (message.type !== "room:chat") return true;
+    const payload = message.payload;
+    if (!payload || typeof payload !== "object") return false;
+    if (!FILTERABLE_CHAT_CONTENT_TYPES.has(payload.contentType)) return true;
+    return sensitiveWordService.hasWords();
   }
 
   function forwardBinary(client, data) {
@@ -94,6 +132,8 @@ export function createMessageRouter({ config, roomService, send }) {
       return;
     }
     if (handleRoomControlMessage(client, message)) return;
+    if (isBlockedRelayChatMessage(message)) return;
+    if (!canFilterRelayChatMessage(message)) return;
     forwardText(client, message, rawText);
   }
 

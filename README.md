@@ -4,7 +4,7 @@
 [![Vue](https://img.shields.io/badge/Vue-v3-green)](https://vuejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-v5-blue)](https://www.typescriptlang.org/)
 
-中文 | [English](./README.en.md) | [日本語](./README.ja.md)
+简体中文 | [English](./README.en.md) | [日本語](./README.ja.md) | [Deutsch](./README.de.md) | [繁體中文](./README.zh-TW.md) | [文言文](./README.lzh.md)
 
 **BZ-Games** 是一个**本地优先的 Windows 游戏平台**，专为 Windows 设计。它允许用户导入本地游戏，并通过内置的 P2P 联机房间系统与好友进行多人游戏。支持局域网发现、用户自备 frp 直连、官方中继短地址三种联机入口，并提供 GitHub OAuth 登录与云端数据同步服务。
 
@@ -20,7 +20,7 @@
 - **🪙 经济系统**：签到领 BZ 币，累计游玩时长自动奖励。头像框解锁与装备、昵称颜色/字体/特效个性化。
 - **🚀 进程管理**：自动启动/关闭游戏进程，处理异常退出。
 - **🔄 版本管理**：支持同一游戏的多版本共存与切换。
-- **🌍 国际化**：支持简体中文、英文、日文三语。
+- **🌍 国际化**：支持简体中文、繁体中文、英文、日文、德文、文言文。
 
 ## 📸 界面预览
 

@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node src/index.js"
+    "start": "node src/index.js",
+    "test:e2e": "node scripts/relay-e2e-test.js"
   },
   "dependencies": {
     "mongodb": "^6.21.0",
