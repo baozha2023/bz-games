@@ -795,6 +795,9 @@ export class MarketService {
       marketId: z.string().min(1),
       marketName: z.string().min(1),
       generatedAt: z.string().datetime(),
+      updatedAt: z.string().datetime(),
+      author: z.string().min(1).max(100).optional(),
+      repository: z.string().url().optional(),
       games: z.array(z.unknown()),
     });
     const top = TopLevelSchema.parse(raw);
@@ -823,6 +826,9 @@ export class MarketService {
       marketId: top.marketId,
       marketName: top.marketName,
       generatedAt: top.generatedAt,
+      updatedAt: top.updatedAt,
+      author: top.author,
+      repository: top.repository,
       games: validGames.filter((game) => game.visibility !== "hidden"),
     };
   }

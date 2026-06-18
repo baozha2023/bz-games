@@ -129,6 +129,9 @@ export const MarketIndexSchema = z.object({
   marketId: z.string().min(1),
   marketName: z.string().min(1),
   generatedAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+  repository: z.string().url().optional(),
+  author: z.string().min(1).max(100).optional(),
   games: z.array(MarketGameSchema),
 });
 

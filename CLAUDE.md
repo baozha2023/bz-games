@@ -391,6 +391,9 @@ bz-games/
   "marketId": "official",
   "marketName": "BZ Games Market",
   "generatedAt": "2026-05-22T04:21:02.000Z",
+  "updatedAt": "2026-06-16T10:32:44.000Z",
+  "repository": "https://github.com/baozha2023/bz-games-market.git",
+  "author": "baozha2023",
   "sources": [
     {
       "marketId": "official",
@@ -414,7 +417,10 @@ bz-games/
 | `schemaVersion` | `string`         | 是  | 市场索引格式版本，使用语义化版本，供兼容逻辑识别。                        |
 | `marketId`      | `string`         | 是  | 当前市场的唯一标识，与 `sources[0].marketId` 一致。                 |
 | `marketName`    | `string`         | 是  | 当前市场的显示名称。                                            |
-| `generatedAt`   | `string`         | 是  | 索引生成时间，ISO 8601 格式。平台在市场页面标题下方展示该时间（本地化格式）。           |
+| `generatedAt`   | `string`         | 是  | 索引生成时间，ISO 8601 格式。首次创建时填写。                                |
+| `updatedAt`     | `string`         | 是  | 索引最后更新时间，ISO 8601 格式。每次更新需刷新。                              |
+| `repository`    | `string`         | 否  | 该市场的 GitHub 仓库地址。                                               |
+| `author`        | `string`         | 否  | 该市场的维护作者。                                                       |
 | `sources`       | `MarketSource[]` | 是  | 市场源列表，至少 1 项。平台一级界面展示所有 `visibility !== "hidden"` 的源。 |
 | `games`         | `MarketGame[]`   | 是  | 当前市场（sources[0]）中的游戏列表。                               |
 
@@ -637,6 +643,7 @@ interface FloatBallProgress {
 
 - BrowserWindow 生命周期管理
 - **单实例锁**：`app.requestSingleInstanceLock()` 确保同一时间仅运行一个平台实例；第二实例启动时自动聚焦并恢复已有主窗口（最小化时恢复，不可见时显示）
+- **生产环境 DevTools 锁定**：通过 `app.on("browser-window-created")` 拦截所有窗口的 F12 / Ctrl+Shift+I 快捷键，并监听 `devtools-opened` 事件自动关闭 DevTools；同时启用 F11 全屏切换。开发模式（`!app.isPackaged`）保留 DevTools 功能。
 - 读写本地存储（electron-store），**配置与数据均存储于应用根目录**
 - 调用系统 API（文件对话框、环境变量、子进程）
 - 游戏进程启动 / 管理 / 终止（`child_process.spawn`，支持 Windows 隐藏窗口）
@@ -990,7 +997,7 @@ interface AppSettings {
 - **拖拽路径解析统一**：游戏库拖拽导入路径统一使用 `webUtils.getPathForFile(file)` 获取。
 - **市场入口拉取策略**：进入"游戏市场"页面时，若缓存有效（1 小时内且未重启应用）则直接使用缓存数据；超过 1 小时或首次进入则自动请求远程
   `market.json`。用户可点击"刷新"按钮强制重新拉取。应用重启后缓存自动失效（仅内存缓存，不落盘）。
-- **市场索引更新时间展示**：`MarketView` 从 `index.generatedAt` 读取时间戳，在标题"游戏市场"右侧以小字展示（格式
+- **市场索引更新时间展示**：`MarketView` 从 `index.updatedAt` 读取时间戳，在标题"游戏市场"右侧以小字展示（格式
   `YYYY-MM-DD HH:mm`），使用 `updatedAtLabel` computed 实现，三语 i18n 支持。
 - **私有资源防盗链 Referer**：所有指向私有 CDN/OSS 的请求均携带构建期注入的 Referer。实现分两层：`fetch` 请求通过 `RequestInterceptor.buildHeaders()` 统一注入；`<img>` 标签等渲染层请求由 `RequestInterceptor.registerSessionHandler()` 注册的 Electron 全局拦截器注入。
 - **市场下载暂存**：市场安装包应先下载到应用可控的临时目录（如 `.market-cache/`）中，校验通过后再解压并导入。
@@ -1169,8 +1176,8 @@ interface AppSettings {
 - **市场刷新行为**：市场列表和游戏索引均有 1
   小时内存缓存。首次进入或缓存过期时自动拉取最新数据；加载中展示骨架屏或加载态；全部来源失败时展示错误态与重试按钮。用户可通过"
   刷新"按钮强制拉取最新数据。缓存有效期内重复进入复用缓存。
-- **市场索引时间展示**：市场页面标题"游戏市场"右侧以小字展示索引更新时间（`generatedAt` 字段，格式 `YYYY-MM-DD HH:mm`
-  ），安装目录另起一行独立展示。
+- **市场索引时间展示**：市场页面标题"游戏市场"右侧以小字展示索引更新时间（`updatedAt` 字段，格式 `YYYY-MM-DD HH:mm`
+  ），安装目录另起一行独立展示。标题栏右侧提供市场源信息按钮（ⓘ），点击弹出模态框展示 `schemaVersion`、`marketId`、`marketName`、`generatedAt`、`updatedAt`、`author`、`repository`（可点击跳转）及游戏数量。
 - **市场展示内容**：市场列表至少展示封面/图标、游戏名、作者、类型、标签、简介、最新版本、安装状态与下载按钮。
 - **市场详情与安装**
   ：用户可查看游戏简介、当前选中版本详情、版本列表、平台兼容要求、包体大小；当前选中版本的说明与下载操作区紧跟在选中游戏信息下方展示；点击下载后展示下载进度、校验中、安装中、完成/失败等明确状态。
@@ -1226,7 +1233,7 @@ interface AppSettings {
     - `ChatMessageList.vue` 为 RoomChat 与 ChatPopoutView 提供统一的聊天消息渲染（文本、图片、语音、GameReportCard），消除两处重复代码。
     - 组件通过 props 接收消息列表、玩家 ID、播放状态、敏感词过滤开关与词库，通过 emits 向外传递图片预览和语音播放事件。
 - **敏感词过滤**：
-    - **客户端侧**（第一道防线）：功能默认开启；由 `SettingsView` 中的 `sensitiveWordFilter` 开关控制，持久化于 `AppSettings.sensitiveWordFilter`。词库存储在 `resources/vocabulary/*.txt`，主进程 `system:getSensitiveWords` 加载并缓存，渲染进程通过 `sensitiveWordFilter.ts` 的 `filterSensitiveText()` 对消息文本进行字符级掩码替换（敏感词替换为 `*`）。用户可以关闭。
+    - **客户端侧**（第一道防线）：功能默认开启；由 `SettingsView` 中的 `sensitiveWordFilter` 开关控制，持久化于 `AppSettings.sensitiveWordFilter`。词库存储在 `resources/vocabulary/*.txt`，主进程 `system:getSensitiveWords` 加载并缓存，渲染进程通过 `sensitiveWordFilter.ts` 的 `filterSensitiveText()` 对消息文本进行字符级掩码替换（敏感词替换为 `*`）。用户可以关闭。设置项旁提供帮助按钮（?），hover 展示说明：中继服务器房间由服务端自动过滤与本地开关无关，局域网/虚拟局域网房间由本地开关控制。
     - **中继服务器侧**（第二道防线）：对所有经中继转发的聊天消息强制执行，用户不可关闭。图片消息被拦截丢弃，文字/混合消息经敏感词过滤后转发。词库文件缺失时自动丢弃所有文字消息（fail-closed），确保中继链路不会成为未过滤内容的通道。详见「官方中继联机系统 → 中继聊天内容安全」。
     - 双端共用同一套 Unicode 安全算法（`Array.from()` + code-unit→char-index 映射表定位，词库按长度降序排序后逐词扫描，被命中的字符位置标记后批量替换为 `*`）。
 - **游戏详情页**：

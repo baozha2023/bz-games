@@ -97,10 +97,25 @@
       </n-form-item>
 
       <n-form-item :label="t('settings.sensitiveWordFilter')" path="sensitiveWordFilter">
-        <n-radio-group v-model:value="formValue.sensitiveWordFilter">
-          <n-radio :value="true">{{ t('settings.sensitiveWordFilterOn') }}</n-radio>
-          <n-radio :value="false">{{ t('settings.sensitiveWordFilterOff') }}</n-radio>
-        </n-radio-group>
+        <div class="github-token-row">
+          <n-radio-group v-model:value="formValue.sensitiveWordFilter">
+            <n-radio :value="true">{{ t('settings.sensitiveWordFilterOn') }}</n-radio>
+            <n-radio :value="false">{{ t('settings.sensitiveWordFilterOff') }}</n-radio>
+          </n-radio-group>
+          <n-tooltip trigger="hover" placement="top">
+            <template #trigger>
+              <button class="cloud-help-button" type="button" :aria-label="t('settings.sensitiveWordFilterHelpTitle')">
+                <n-icon :size="18">
+                  <HelpCircleOutline />
+                </n-icon>
+              </button>
+            </template>
+            <div class="cloud-help-content">
+              <div class="cloud-help-title">{{ t('settings.sensitiveWordFilterHelpTitle') }}</div>
+              <div>{{ t('settings.sensitiveWordFilterHelp') }}</div>
+            </div>
+          </n-tooltip>
+        </div>
       </n-form-item>
 
       <n-form-item :label="t('settings.githubToken')" path="githubToken">

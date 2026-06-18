@@ -9,8 +9,8 @@
             </template>
           </n-button>
           <h1 style="margin: 0;">{{ marketName || t("market.title") }}</h1>
-          <n-text v-if="createdAtLabel" depth="3" style="font-size: 14px;">
-            {{ createdAtLabel }}
+          <n-text v-if="updatedAtLabel" depth="3" style="font-size: 14px;">
+            {{ updatedAtLabel }}
           </n-text>
         </n-space>
         <n-text depth="3">
@@ -30,6 +30,11 @@
         <n-button quaternary circle @click="toggleSearch">
           <template #icon>
             <n-icon><SearchOutline /></n-icon>
+          </template>
+        </n-button>
+        <n-button quaternary circle @click="showInfoModal = true">
+          <template #icon>
+            <n-icon><InformationCircleOutline /></n-icon>
           </template>
         </n-button>
         <n-button :loading="isLoading" @click="loadIndex(true)">
@@ -422,6 +427,21 @@
         </div>
       </div>
   </div>
+
+  <n-modal v-model:show="showInfoModal" preset="card" :title="t('market.sourceInfo')" style="width: 680px;">
+    <n-descriptions v-if="marketIndex" :column="1" label-placement="left" bordered>
+      <n-descriptions-item v-for="item in marketInfoItems" :key="item.label" :label="item.label">
+        <template v-if="item.label === 'repository' && item.value !== '-'">
+          <n-button text type="info" @click="handleOpenRepo(item.value)">
+            {{ item.value }}
+          </n-button>
+        </template>
+        <template v-else>
+          {{ item.value }}
+        </template>
+      </n-descriptions-item>
+    </n-descriptions>
+  </n-modal>
 </template>
 
 <script setup lang="ts">
@@ -429,11 +449,12 @@ import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { useDialog, useMessage } from "naive-ui";
-import { ChevronBack, ChevronDown, ChevronUp, CloseOutline, OpenOutline, RefreshOutline, SearchOutline } from "@vicons/ionicons5";
+import { ChevronBack, ChevronDown, ChevronUp, CloseOutline, InformationCircleOutline, OpenOutline, RefreshOutline, SearchOutline } from "@vicons/ionicons5";
 import semver from "semver";
 import type {
   MarketGame,
   MarketGameVersion,
+  MarketIndex,
   MarketTaskState,
   MarketTaskStatus,
 } from "../../../shared/types";
@@ -468,6 +489,9 @@ const selectedVersions = ref<Record<string, string>>({});
 const appVersion = ref("");
 const marketName = ref("");
 const generatedAt = ref("");
+const updatedAt = ref("");
+const marketIndex = ref<MarketIndex | null>(null);
+const showInfoModal = ref(false);
 const refreshCounter = ref(0);
 const resolvedAssets = ref<Record<string, { sha256?: string; size?: number }>>({});
 const loadingAssetUrls = ref(new Set<string>());
@@ -516,9 +540,24 @@ const installPathLabel = computed(() => {
   return settingsStore.settings?.gameStoragePath || "games/";
 });
 
-const createdAtLabel = computed(() => {
-  const time = formatDateTime(generatedAt.value);
-  return time ? t("market.createdAt", { time }) : "";
+const updatedAtLabel = computed(() => {
+  const time = formatDateTime(updatedAt.value);
+  return time ? t("market.updatedAt", { time }) : "";
+});
+
+const marketInfoItems = computed(() => {
+  const idx = marketIndex.value;
+  if (!idx) return [];
+  return [
+    { label: "schemaVersion", value: idx.schemaVersion },
+    { label: "marketId", value: idx.marketId },
+    { label: "marketName", value: idx.marketName },
+    { label: "generatedAt", value: formatDateTime(idx.generatedAt) },
+    { label: "updatedAt", value: formatDateTime(idx.updatedAt) },
+    { label: "author", value: idx.author || "-" },
+    { label: "repository", value: idx.repository || "-" },
+    { label: "games", value: `${idx.games.length}` },
+  ];
 });
 
 function formatDateTime(value: string | undefined): string {
@@ -653,6 +692,10 @@ function handleOpenAuthorUrl(url: string) {
   window.electronAPI.settings.openUrl(url);
 }
 
+function handleOpenRepo(url: string) {
+  window.electronAPI.settings.openUrl(url);
+}
+
 function formatSize(version: { downloadUrl: string; size?: number } | null): string {
   if (!version) return "-";
   const resolvedSize = getResolvedSize(version);
@@ -779,9 +822,11 @@ async function loadIndex(forceRefresh = false): Promise<void> {
   }
   try {
     const index = await window.electronAPI.market.getIndex(sourceIdx.value, forceRefresh);
+    marketIndex.value = index;
     games.value = index.games;
     marketName.value = index.marketName || "";
     generatedAt.value = index.generatedAt || "";
+    updatedAt.value = index.updatedAt || "";
     for (const game of index.games) {
       if (!(game.id in expandedGames.value)) {
         expandedGames.value[game.id] = false;

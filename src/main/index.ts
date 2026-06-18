@@ -3,7 +3,7 @@ import { spawnSync } from "child_process";
 import path from "path";
 import { createWindow, markAppQuitting, mainWindow, createFloatBallWindow } from "./window";
 import { registerAllIpc } from "./ipc";
-import { electronApp, optimizer } from "@electron-toolkit/utils";
+import { electronApp } from "@electron-toolkit/utils";
 import { storeService } from "./services/storage/StoreService";
 import { marketService } from "./services/market/MarketService";
 import { playSessionDatabaseService } from "./services/storage/database/PlaySessionDatabaseService";
@@ -107,7 +107,28 @@ if (!gotTheLock) {
     });
 
     app.on("browser-window-created", (_, window) => {
-      optimizer.watchWindowShortcuts(window);
+      // 开发模式保留 DevTools
+      if (!app.isPackaged) return;
+
+      window.webContents.on("before-input-event", (_event, input) => {
+        // 禁止 F12 / Ctrl+Shift+I 打开 DevTools
+        if (
+          input.key === "F12" ||
+          (input.control && input.shift && input.key.toLowerCase() === "i")
+        ) {
+          _event.preventDefault();
+          return;
+        }
+        // F11 全屏切换
+        if (input.key === "F11") {
+          _event.preventDefault();
+          window.setFullScreen(!window.isFullScreen());
+        }
+      });
+      // 兜底：若 DevTools 以其他方式打开则立即关闭
+      window.webContents.on("devtools-opened", () => {
+        window.webContents.closeDevTools();
+      });
     });
 
     registerAllIpc();
