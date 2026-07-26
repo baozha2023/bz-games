@@ -4,78 +4,184 @@
       <template #extra>
         <n-space>
           <n-button @click="handleToggleFavorite">
-             <template #icon>
-                <n-icon :color="isFavorite ? '#d03050' : undefined">
-                    <Heart v-if="isFavorite" />
-                    <HeartOutline v-else />
-                </n-icon>
-             </template>
-             {{ t('gameDetail.favorite') }}
+            <template #icon>
+              <n-icon :color="isFavorite ? '#d03050' : undefined">
+                <Heart v-if="isFavorite" />
+                <HeartOutline v-else />
+              </n-icon>
+            </template>
+            {{ t("gameDetail.favorite") }}
           </n-button>
-          <n-button @click="showAchievements = true">{{ t('achievement.title') }}</n-button>
-          <n-button type="error" @click="handleRemove" :disabled="roomStore.room !== null || isRunning">{{ t('gameDetail.deleteGame') }}</n-button>
+          <n-button @click="showAchievements = true">{{
+            t("achievement.title")
+          }}</n-button>
+          <n-button
+            type="error"
+            @click="handleRemove"
+            :disabled="roomStore.room !== null || isRunning"
+            >{{ t("gameDetail.deleteGame") }}</n-button
+          >
         </n-space>
       </template>
     </n-page-header>
-    
-    <n-grid x-gap="24" :cols="1" md="2" style="margin-top: 24px;">
+
+    <n-grid x-gap="24" :cols="1" md="2" style="margin-top: 24px">
       <n-grid-item>
-        <div style="width: 100%; display: flex; justify-content: center; background: var(--bz-bg-overlay); border-radius: 8px; overflow: hidden;">
-          <GameCover :game-id="game.id" :version="selectedVersion" :autoplay-video="true" style="width: 100%; height: auto; max-height: 400px; object-fit: contain;" />
+        <div
+          style="
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            background: var(--bz-bg-overlay);
+            border-radius: 8px;
+            overflow: hidden;
+          "
+        >
+          <GameCover
+            :game-id="game.id"
+            :version="selectedVersion"
+            :autoplay-video="true"
+            style="
+              width: 100%;
+              height: auto;
+              max-height: 400px;
+              object-fit: contain;
+            "
+          />
         </div>
       </n-grid-item>
-      
+
       <n-grid-item>
         <n-descriptions bordered column="1">
-          <n-descriptions-item v-if="!isNetworkGame" :label="t('gameDetail.version')">
-             <n-select v-if="versions.length > 0" v-model:value="selectedVersion" :options="versionOptions" size="small" style="width: 120px; display: inline-block; vertical-align: middle;" @update:value="handleVersionChange" />
-             <span v-else>{{ game.version }}</span>
+          <n-descriptions-item
+            v-if="!isNetworkGame"
+            :label="t('gameDetail.version')"
+          >
+            <n-select
+              v-if="versions.length > 0"
+              v-model:value="selectedVersion"
+              :options="versionOptions"
+              size="small"
+              style="
+                width: 120px;
+                display: inline-block;
+                vertical-align: middle;
+              "
+              @update:value="handleVersionChange"
+            />
+            <span v-else>{{ game.version }}</span>
           </n-descriptions-item>
           <n-descriptions-item :label="t('gameDetail.author')">
             <n-space align="center" :size="4">
-              <span>{{ (currentManifest?.author) || (isLatestVersion ? game.author : '') }}</span>
-              <n-button v-if="authorUrl" text size="tiny" @click="handleOpenAuthorUrl" style="font-size: 16px;">
+              <span>{{
+                currentManifest?.author || (isLatestVersion ? game.author : "")
+              }}</span>
+              <n-button
+                v-if="authorUrl"
+                text
+                size="tiny"
+                @click="handleOpenAuthorUrl"
+                style="font-size: 16px"
+              >
                 <n-icon><OpenOutline /></n-icon>
               </n-button>
             </n-space>
           </n-descriptions-item>
-          <n-descriptions-item :label="t('gameDetail.type')">{{ typeLabel }}</n-descriptions-item>
-          <n-descriptions-item :label="t('gameDetail.description')" v-if="(currentManifest?.description) || (isLatestVersion ? game.description : '')">{{ (currentManifest?.description) || (isLatestVersion ? game.description : '') }}</n-descriptions-item>
+          <n-descriptions-item :label="t('gameDetail.type')">{{
+            typeLabel
+          }}</n-descriptions-item>
+          <n-descriptions-item
+            :label="t('gameDetail.description')"
+            v-if="
+              currentManifest?.description ||
+              (isLatestVersion ? game.description : '')
+            "
+            >{{
+              currentManifest?.description ||
+              (isLatestVersion ? game.description : "")
+            }}</n-descriptions-item
+          >
         </n-descriptions>
-        
-        <div style="margin-top: 24px;">
+
+        <div style="margin-top: 24px">
           <template v-if="resolvedType === GameType.Singleplayer">
-            <n-button type="primary" size="large" @click="handleLaunch" :disabled="isRunning">
-              {{ isRunning ? t('gameDetail.gameRunning') : t('gameDetail.launchGame') }}
+            <n-button
+              type="primary"
+              size="large"
+              @click="handleLaunch"
+              :disabled="isRunning"
+            >
+              {{
+                isRunning
+                  ? t("gameDetail.gameRunning")
+                  : t("gameDetail.launchGame")
+              }}
             </n-button>
           </template>
           <template v-else-if="resolvedType === GameType.NetworkGame">
-            <n-button type="primary" size="large" @click="handleLaunch" :disabled="isRunning">
-              {{ isRunning ? t('gameDetail.gameRunning') : t('gameDetail.launchGame') }}
+            <n-button
+              type="primary"
+              size="large"
+              @click="handleLaunch"
+              :disabled="isRunning"
+            >
+              {{
+                isRunning
+                  ? t("gameDetail.gameRunning")
+                  : t("gameDetail.launchGame")
+              }}
             </n-button>
           </template>
           <template v-else-if="resolvedType === GameType.Multiplayer">
             <n-space>
-              <n-button type="primary" size="large" @click="createRoom">{{ t('gameDetail.createRoom') }}</n-button>
-              <n-button size="large" @click="showJoinModal = true">{{ t('gameDetail.joinRoom') }}</n-button>
+              <n-button type="primary" size="large" @click="createRoom">{{
+                t("gameDetail.createRoom")
+              }}</n-button>
+              <n-button size="large" @click="showJoinModal = true">{{
+                t("gameDetail.joinRoom")
+              }}</n-button>
             </n-space>
           </template>
           <template v-else>
             <n-space>
-              <n-button type="primary" size="large" @click="handleLaunch" :disabled="isRunning">
-                {{ isRunning ? t('gameDetail.gameRunning') : t('gameDetail.launchGame') }}
+              <n-button
+                type="primary"
+                size="large"
+                @click="handleLaunch"
+                :disabled="isRunning"
+              >
+                {{
+                  isRunning
+                    ? t("gameDetail.gameRunning")
+                    : t("gameDetail.launchGame")
+                }}
               </n-button>
-              <n-button type="primary" size="large" @click="createRoom">{{ t('gameDetail.createRoom') }}</n-button>
-              <n-button size="large" @click="showJoinModal = true">{{ t('gameDetail.joinRoom') }}</n-button>
+              <n-button type="primary" size="large" @click="createRoom">{{
+                t("gameDetail.createRoom")
+              }}</n-button>
+              <n-button size="large" @click="showJoinModal = true">{{
+                t("gameDetail.joinRoom")
+              }}</n-button>
             </n-space>
           </template>
         </div>
       </n-grid-item>
     </n-grid>
 
-    <n-modal v-model:show="showJoinModal" preset="dialog" :title="t('gameDetail.joinRoom')" :positive-text="t('common.join')" :negative-text="t('common.cancel')" @positive-click="handleJoin" :loading="roomStore.isConnecting">
+    <n-modal
+      v-model:show="showJoinModal"
+      preset="dialog"
+      :title="t('gameDetail.joinRoom')"
+      :positive-text="t('common.join')"
+      :negative-text="t('common.cancel')"
+      @positive-click="handleJoin"
+      :loading="roomStore.isConnecting"
+    >
       <n-space vertical :size="12">
-        <n-input v-model:value="joinAddress" :placeholder="t('gameDetail.joinAddressPlaceholder')" />
+        <n-input
+          v-model:value="joinAddress"
+          :placeholder="t('gameDetail.joinAddressPlaceholder')"
+        />
         <n-input
           v-model:value="joinPassword"
           type="password"
@@ -86,310 +192,376 @@
       </n-space>
     </n-modal>
 
-    <GameDeleteModal 
-        v-model:show="showDeleteModal" 
-        :versions="versions" 
-        :initial-selected="[selectedVersion]" 
-        :loading="isDeleting"
-        @confirm="confirmDelete" 
+    <GameDeleteModal
+      v-model:show="showDeleteModal"
+      :versions="versions"
+      :initial-selected="[selectedVersion]"
+      :loading="isDeleting"
+      @confirm="confirmDelete"
     />
 
-    <GameAchievementsModal 
-        v-model:show="showAchievements" 
-        :achievements="gameAchievements" 
+    <GameAchievementsModal
+      v-model:show="showAchievements"
+      :achievements="gameAchievements"
+      :game-id="effectiveGameId"
+      :version="selectedVersion"
     />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { useMessage } from 'naive-ui'
-import { useI18n } from 'vue-i18n'
-import { Heart, HeartOutline, OpenOutline } from '@vicons/ionicons5'
-import { useGameStore } from '../stores/useGameStore'
-import { useRoomStore } from '../stores/useRoomStore'
-import { useSettingsStore } from '../stores/useSettingsStore'
-import { useRoomJoin } from '../composables/useRoomJoin'
-import GameCover from '../components/game/GameCover.vue'
-import GameAchievementsModal from '../components/game/GameAchievementsModal.vue'
-import GameDeleteModal from '../components/game/GameDeleteModal.vue'
-import type { GameManifest } from '../../../shared/game-manifest'
-import { GameType } from '../../../shared/types'
+import { computed, ref, onMounted, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import { useMessage } from "naive-ui";
+import { useI18n } from "vue-i18n";
+import { Heart, HeartOutline, OpenOutline } from "@vicons/ionicons5";
+import { useGameStore } from "../stores/useGameStore";
+import { useRoomStore } from "../stores/useRoomStore";
+import { useSettingsStore } from "../stores/useSettingsStore";
+import { useRoomJoin } from "../composables/useRoomJoin";
+import GameCover from "../components/game/GameCover.vue";
+import GameAchievementsModal from "../components/game/GameAchievementsModal.vue";
+import GameDeleteModal from "../components/game/GameDeleteModal.vue";
+import {
+  compareGameVersionsDescending,
+  type GameManifest,
+} from "../../../shared/game-manifest";
+import { GameType } from "../../../shared/types";
 
-const props = withDefaults(defineProps<{
-  gameId?: string
-  embedded?: boolean
-}>(), {
-  gameId: '',
-  embedded: false
-})
+const props = withDefaults(
+  defineProps<{
+    gameId?: string;
+    embedded?: boolean;
+  }>(),
+  {
+    gameId: "",
+    embedded: false,
+  },
+);
 
 const emit = defineEmits<{
-  back: []
-  deleted: [gameId: string]
-}>()
+  back: [];
+  deleted: [gameId: string];
+}>();
 
-const { t } = useI18n()
-const route = useRoute()
-const router = useRouter()
-const message = useMessage()
-const gameStore = useGameStore()
-const roomStore = useRoomStore()
-const settingsStore = useSettingsStore()
-const { joinRoomByAddress } = useRoomJoin()
+const { t } = useI18n();
+const route = useRoute();
+const router = useRouter();
+const message = useMessage();
+const gameStore = useGameStore();
+const roomStore = useRoomStore();
+const settingsStore = useSettingsStore();
+const { joinRoomByAddress } = useRoomJoin();
 
-const effectiveGameId = computed(() => props.gameId || route.params.id as string)
-const game = computed(() => gameStore.games.find(g => g.id === effectiveGameId.value))
-const isRunning = computed(() => gameStore.runningGameIds.has(effectiveGameId.value))
+const effectiveGameId = computed(
+  () => props.gameId || (route.params.id as string),
+);
+const game = computed(() =>
+  gameStore.games.find((g) => g.id === effectiveGameId.value),
+);
+const isRunning = computed(() =>
+  gameStore.runningGameIds.has(effectiveGameId.value),
+);
 
-const versions = ref<string[]>([])
-const selectedVersion = ref('')
-const currentManifest = ref<GameManifest | null>(null)
-const versionOptions = computed(() => versions.value.map(v => ({ label: v, value: v })))
-const isLatestVersion = computed(() => !game.value || selectedVersion.value === game.value.version)
-const isNetworkGame = computed(() => resolvedType.value === GameType.NetworkGame)
-const resolvedType = computed(() => (currentManifest.value?.type) || (isLatestVersion.value ? game.value?.type : '') || GameType.Singleplayer)
+const versions = ref<string[]>([]);
+const selectedVersion = ref("");
+const currentManifest = ref<GameManifest | null>(null);
+const versionOptions = computed(() =>
+  versions.value.map((v) => ({ label: v, value: v })),
+);
+const isLatestVersion = computed(
+  () => !game.value || selectedVersion.value === game.value.version,
+);
+const isNetworkGame = computed(
+  () => resolvedType.value === GameType.NetworkGame,
+);
+const resolvedType = computed(
+  () =>
+    currentManifest.value?.type ||
+    (isLatestVersion.value ? game.value?.type : "") ||
+    GameType.Singleplayer,
+);
 const typeLabel = computed(() => {
-    if (resolvedType.value === GameType.NetworkGame) return t('gameDetail.typeNetworkGame')
-    if (resolvedType.value === GameType.Multiplayer) return t('gameDetail.typeMultiplayer')
-    if (resolvedType.value === GameType.SingleMultiple) return t('gameDetail.typeSingleMultiple')
-    return t('gameDetail.typeSingleplayer')
-})
+  if (resolvedType.value === GameType.NetworkGame)
+    return t("gameDetail.typeNetworkGame");
+  if (resolvedType.value === GameType.Multiplayer)
+    return t("gameDetail.typeMultiplayer");
+  if (resolvedType.value === GameType.SingleMultiple)
+    return t("gameDetail.typeSingleMultiple");
+  return t("gameDetail.typeSingleplayer");
+});
 
-const showJoinModal = ref(false)
-const joinAddress = ref('')
-const joinPassword = ref('')
-const showAchievements = ref(false)
+const showJoinModal = ref(false);
+const joinAddress = ref("");
+const joinPassword = ref("");
+const showAchievements = ref(false);
 
 const authorUrl = computed(() => {
-  if (currentManifest.value?.author_url) return currentManifest.value.author_url
-  if (isLatestVersion.value && game.value?.author_url) return game.value.author_url
-  return ''
-})
+  if (currentManifest.value?.author_url)
+    return currentManifest.value.author_url;
+  if (isLatestVersion.value && game.value?.author_url)
+    return game.value.author_url;
+  return "";
+});
 
 const handleOpenAuthorUrl = () => {
-  const url = authorUrl.value
+  const url = authorUrl.value;
   if (url) {
-    window.electronAPI.settings.openUrl(url)
+    window.electronAPI.settings.openUrl(url);
   }
-}
+};
 
 const gameAchievements = computed(() => {
-    let achievements;
-    if (currentManifest.value) {
-        achievements = currentManifest.value.achievements;
-    } else if (isLatestVersion.value) {
-        achievements = game.value?.achievements;
-    } else {
-        achievements = [];
-    }
-    
-    if (!achievements || achievements.length === 0) return [];
+  let achievements;
+  if (currentManifest.value) {
+    achievements = currentManifest.value.achievements;
+  } else if (isLatestVersion.value) {
+    achievements = game.value?.achievements;
+  } else {
+    achievements = [];
+  }
 
-    const unlocked = gameStore.getUnlockedAchievements(effectiveGameId.value, selectedVersion.value);
-    return achievements.map(a => {
-        const u = unlocked.find(ua => ua.id === a.id);
-        return {
-            ...a,
-            unlocked: !!u,
-            unlockedAt: u?.unlockedAt
-        }
-    }).sort((a, b) => (b.unlocked ? 1 : 0) - (a.unlocked ? 1 : 0));
+  if (!achievements || achievements.length === 0) return [];
+
+  const unlocked = gameStore.getUnlockedAchievements(
+    effectiveGameId.value,
+    selectedVersion.value,
+  );
+  return achievements
+    .map((a) => {
+      const u = unlocked.find((ua) => ua.id === a.id);
+      return {
+        ...a,
+        unlocked: !!u,
+        unlockedAt: u?.unlockedAt,
+      };
+    })
+    .sort((a, b) => (b.unlocked ? 1 : 0) - (a.unlocked ? 1 : 0));
 });
 
 const loadGameDetail = async () => {
   if (!settingsStore.settings) {
-    await settingsStore.loadSettings()
+    await settingsStore.loadSettings();
   }
   if (settingsStore.settings?.lastJoinRoomAddress) {
-    joinAddress.value = settingsStore.settings.lastJoinRoomAddress
+    joinAddress.value = settingsStore.settings.lastJoinRoomAddress;
   }
   if (game.value) {
-    selectedVersion.value = game.value.version
+    selectedVersion.value = game.value.version;
     try {
-      const v = await window.electronAPI.game.getVersions(effectiveGameId.value);
+      const v = await window.electronAPI.game.getVersions(
+        effectiveGameId.value,
+      );
       if (v && v.length > 0) {
         versions.value = v;
-        if (!selectedVersion.value || !versions.value.includes(selectedVersion.value)) {
-             versions.value.sort((a, b) => b.localeCompare(a, undefined, { numeric: true, sensitivity: 'base' }));
-             selectedVersion.value = versions.value[0];
+        if (
+          !selectedVersion.value ||
+          !versions.value.includes(selectedVersion.value)
+        ) {
+          versions.value.sort(compareGameVersionsDescending);
+          selectedVersion.value = versions.value[0];
         }
       }
       await handleVersionChange(selectedVersion.value);
     } catch {}
   }
-}
+};
 
 onMounted(async () => {
-  await loadGameDetail()
-})
+  await loadGameDetail();
+});
 
 watch(effectiveGameId, async () => {
-  versions.value = []
-  selectedVersion.value = ''
-  currentManifest.value = null
-  showJoinModal.value = false
-  showAchievements.value = false
-  await loadGameDetail()
-})
+  versions.value = [];
+  selectedVersion.value = "";
+  currentManifest.value = null;
+  showJoinModal.value = false;
+  showAchievements.value = false;
+  await loadGameDetail();
+});
 
 watch(showJoinModal, (open) => {
   if (open && settingsStore.settings?.lastJoinRoomAddress) {
-    joinAddress.value = settingsStore.settings.lastJoinRoomAddress
+    joinAddress.value = settingsStore.settings.lastJoinRoomAddress;
   }
   if (open) {
-    joinPassword.value = ''
+    joinPassword.value = "";
   }
-})
+});
 
 const handleVersionChange = async (version: string) => {
-    selectedVersion.value = version;
-    currentManifest.value = null;
-    try {
-        const manifest = await window.electronAPI.game.getManifest(effectiveGameId.value, version);
-        if (manifest) {
-            currentManifest.value = manifest;
-        }
-    } catch (e) {
-        console.error('Failed to load manifest for version', version, e);
+  selectedVersion.value = version;
+  currentManifest.value = null;
+  try {
+    const manifest = await window.electronAPI.game.getManifest(
+      effectiveGameId.value,
+      version,
+    );
+    if (manifest) {
+      currentManifest.value = manifest;
     }
-}
+  } catch (e) {
+    console.error("Failed to load manifest for version", version, e);
+  }
+};
 
-const handleLaunch = () => {
-  gameStore.launchGame(effectiveGameId.value, selectedVersion.value)
-  message.success(t('gameDetail.launchSuccess'))
-}
+const handleLaunch = async () => {
+  const launched = await gameStore.launchGame(
+    effectiveGameId.value,
+    selectedVersion.value,
+  );
+  if (launched) {
+    message.success(t("gameDetail.launchSuccess"));
+  } else {
+    message.error(t("gameDetail.launchFailed"));
+  }
+};
 
-const showDeleteModal = ref(false)
-const isDeleting = ref(false)
+const showDeleteModal = ref(false);
+const isDeleting = ref(false);
 
 const isFavorite = computed(() => {
-    const record = gameStore.getGameRecord(effectiveGameId.value);
-    return record?.isFavorite || false;
-})
+  const record = gameStore.getGameRecord(effectiveGameId.value);
+  return record?.isFavorite || false;
+});
 
 const handleToggleFavorite = async (e: MouseEvent) => {
-    try {
-        const newState = await gameStore.toggleFavorite(effectiveGameId.value);
-        if (newState) {
-            spawnHeartParticles(e.clientX, e.clientY);
-        }
-    } catch (e) {
-        message.error(t('common.error'));
+  try {
+    const newState = await gameStore.toggleFavorite(effectiveGameId.value);
+    if (newState) {
+      spawnHeartParticles(e.clientX, e.clientY);
     }
-}
+  } catch (e) {
+    message.error(t("common.error"));
+  }
+};
 
 const handleRemove = () => {
   showDeleteModal.value = true;
-}
+};
 
 const confirmDelete = async (versionsToDelete: string[]) => {
   if (isDeleting.value) return;
   isDeleting.value = true;
   try {
-    const isFullDelete = !game.value || versionsToDelete.length === 0 ||
-      versionsToDelete.length >= versions.value.length
+    const isFullDelete =
+      !game.value ||
+      versionsToDelete.length === 0 ||
+      versionsToDelete.length >= versions.value.length;
 
-    showDeleteModal.value = false
+    showDeleteModal.value = false;
 
     if (isFullDelete) {
       if (props.embedded) {
-        await gameStore.removeGame(effectiveGameId.value, [...versionsToDelete])
-        message.success(t('gameDetail.deleteSuccess'))
-        emit('deleted', effectiveGameId.value)
+        await gameStore.removeGame(effectiveGameId.value, [
+          ...versionsToDelete,
+        ]);
+        message.success(t("gameDetail.deleteSuccess"));
+        emit("deleted", effectiveGameId.value);
       } else {
         await router.push({
-          name: 'Library',
+          name: "Library",
           query: {
             deletedGameId: effectiveGameId.value,
-            deletedVersions: versionsToDelete.join(','),
+            deletedVersions: versionsToDelete.join(","),
           },
-        })
+        });
       }
     } else {
-      await gameStore.removeGame(effectiveGameId.value, [...versionsToDelete])
-      message.success(t('gameDetail.deleteSuccess'))
-      const v = await window.electronAPI.game.getVersions(effectiveGameId.value)
+      await gameStore.removeGame(effectiveGameId.value, [...versionsToDelete]);
+      message.success(t("gameDetail.deleteSuccess"));
+      const v = await window.electronAPI.game.getVersions(
+        effectiveGameId.value,
+      );
       if (v) {
-        versions.value = v
-        versions.value.sort((a, b) => b.localeCompare(a, undefined, { numeric: true, sensitivity: 'base' }))
+        versions.value = v;
+        versions.value.sort(compareGameVersionsDescending);
         if (!versions.value.includes(selectedVersion.value)) {
           if (versions.value.length > 0) {
-            selectedVersion.value = versions.value[0]
-            await handleVersionChange(selectedVersion.value)
+            selectedVersion.value = versions.value[0];
+            await handleVersionChange(selectedVersion.value);
           }
         }
       }
     }
   } catch (e) {
-    message.error(t('common.error'))
+    message.error(t("common.error"));
   } finally {
     isDeleting.value = false;
   }
-}
+};
 
 function spawnHeartParticles(x: number, y: number) {
-    const container = document.createElement('div');
-    container.style.position = 'fixed';
-    container.style.left = '0';
-    container.style.top = '0';
-    container.style.width = '100%';
-    container.style.height = '100%';
-    container.style.pointerEvents = 'none';
-    container.style.zIndex = '9999';
-    document.body.appendChild(container);
+  const container = document.createElement("div");
+  container.style.position = "fixed";
+  container.style.left = "0";
+  container.style.top = "0";
+  container.style.width = "100%";
+  container.style.height = "100%";
+  container.style.pointerEvents = "none";
+  container.style.zIndex = "9999";
+  document.body.appendChild(container);
 
-    const count = 10;
-    for (let i = 0; i < count; i++) {
-        const heart = document.createElement('div');
-        heart.innerHTML = '❤️';
-        heart.style.position = 'absolute';
-        heart.style.left = `${x}px`;
-        heart.style.top = `${y}px`;
-        heart.style.fontSize = `${20 + Math.random() * 20}px`;
-        heart.style.userSelect = 'none';
-        
-        // Random velocity
-        const vx = (Math.random() - 0.5) * 100;
-        const vy = -100 - Math.random() * 100;
-        
-        heart.animate([
-            { transform: `translate(0, 0) scale(1)`, opacity: 1 },
-            { transform: `translate(${vx}px, ${vy}px) scale(0)`, opacity: 0 }
-        ], {
-            duration: 800 + Math.random() * 400,
-            easing: 'ease-out'
-        }).onfinish = () => {
-            heart.remove();
-            if (container.childNodes.length === 0) {
-                container.remove();
-            }
-        };
-        
-        container.appendChild(heart);
-    }
+  const count = 10;
+  for (let i = 0; i < count; i++) {
+    const heart = document.createElement("div");
+    heart.innerHTML = "❤️";
+    heart.style.position = "absolute";
+    heart.style.left = `${x}px`;
+    heart.style.top = `${y}px`;
+    heart.style.fontSize = `${20 + Math.random() * 20}px`;
+    heart.style.userSelect = "none";
+
+    // Random velocity
+    const vx = (Math.random() - 0.5) * 100;
+    const vy = -100 - Math.random() * 100;
+
+    heart.animate(
+      [
+        { transform: `translate(0, 0) scale(1)`, opacity: 1 },
+        { transform: `translate(${vx}px, ${vy}px) scale(0)`, opacity: 0 },
+      ],
+      {
+        duration: 800 + Math.random() * 400,
+        easing: "ease-out",
+      },
+    ).onfinish = () => {
+      heart.remove();
+      if (container.childNodes.length === 0) {
+        container.remove();
+      }
+    };
+
+    container.appendChild(heart);
+  }
 }
 
 const createRoom = async () => {
   try {
-    await roomStore.createRoom(effectiveGameId.value, selectedVersion.value)
+    await roomStore.createRoom(effectiveGameId.value, selectedVersion.value);
     router.push({
-      name: 'Room',
+      name: "Room",
       params: { id: effectiveGameId.value },
-      query: props.embedded ? { fromSteam: '1' } : undefined
-    })
+      query: props.embedded ? { fromSteam: "1" } : undefined,
+    });
   } catch (e: any) {
-    if (e.message === 'ALREADY_IN_ROOM') {
-      message.error(t('room.alreadyInRoom'))
+    if (e.message === "ALREADY_IN_ROOM") {
+      message.error(t("room.alreadyInRoom"));
     } else {
-      message.error(e.message || t('room.createFailed'))
+      const errorKey = `room.createError.${e.message || "createFailed"}`;
+      const translated = t(errorKey);
+      message.error(
+        translated === errorKey ? t("room.createFailed") : translated,
+      );
     }
   }
-}
+};
 
 const handleJoin = async () => {
-  if (!joinAddress.value) { message.error(t('gameDetail.addressEmpty')); return false; }
+  if (!joinAddress.value) {
+    message.error(t("gameDetail.addressEmpty"));
+    return false;
+  }
   const result = await joinRoomByAddress({
     gameId: effectiveGameId.value,
     address: joinAddress.value,
@@ -400,23 +572,23 @@ const handleJoin = async () => {
     saveLastAddress: true,
     fromSteam: props.embedded,
     close: () => {
-      showJoinModal.value = false
+      showJoinModal.value = false;
     },
-  })
-  joinAddress.value = result.address
+  });
+  joinAddress.value = result.address;
   if (result.success) {
-    joinPassword.value = ''
+    joinPassword.value = "";
   }
-  return result.success
-}
+  return result.success;
+};
 
 const handleBack = () => {
   if (props.embedded) {
-    emit('back')
-    return
+    emit("back");
+    return;
   }
-  router.back()
-}
+  router.back();
+};
 </script>
 
 <style scoped>

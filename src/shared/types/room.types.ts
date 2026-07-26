@@ -167,6 +167,17 @@ export interface RoomJoinRefusedPayload {
   message: string;
 }
 
+export interface RoomConnectResult {
+  success: boolean;
+  error?: string;
+  message?: string;
+  params?: Record<string, unknown>;
+}
+
+export interface RoomCreateResult extends RoomConnectResult {
+  port?: number;
+}
+
 export interface RoomPasswordProbeAckPayload {
   hasPassword: boolean;
 }

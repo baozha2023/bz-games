@@ -8,6 +8,7 @@ import type {
   RoomConnectionStatusPayload,
   GameRelayPayload,
   RoomRelayLatencyPayload,
+  RoomConnectResult,
 } from "../../../shared/types";
 import { storeService } from "../storage/StoreService";
 import { mainWindow } from "../../window";
@@ -23,7 +24,6 @@ import { DEFAULT_RELAY_PUBLIC_HOST, DEFAULT_RELAY_SERVER_URL, DEFAULT_RELAY_TOKE
 import { requestInterceptor } from "../../utils/requestInterceptor";
 import { mapRelayCloseError } from "../../utils/relayCloseError";
 
-type ConnectResult = { success: boolean; error?: string; message?: string };
 type BinaryRelayPayload = GameRelayPayload & { binaryData?: Buffer };
 
 export class RoomClient {
@@ -45,7 +45,8 @@ export class RoomClient {
   private pendingLatencyProbes: Map<string, NodeJS.Timeout> = new Map();
   private readonly maxReconnectAttempts = RoomConstants.ROOM_MAX_RECONNECT_ATTEMPTS;
 
-  private connectionResolver: ((result: ConnectResult) => void) | null = null;
+  private connectionResolver: ((result: RoomConnectResult) => void) | null =
+    null;
   private msgHandler: ((gameId: string, msg: RoomMessage) => void) | null =
     null;
   private recentMessageIds: string[] = [];
@@ -59,7 +60,7 @@ export class RoomClient {
     gameId: string,
     gameVersion?: string,
     password?: string,
-  ): Promise<ConnectResult> {
+  ): Promise<RoomConnectResult> {
     this.manuallyDisconnected = true;
     this.shouldReconnect = false;
     this.cleanup();
@@ -449,7 +450,7 @@ export class RoomClient {
     });
   }
 
-  private resolveConnection(result: ConnectResult) {
+  private resolveConnection(result: RoomConnectResult) {
     if (this.connectionResolver) {
       this.connectionResolver(result);
       this.connectionResolver = null;

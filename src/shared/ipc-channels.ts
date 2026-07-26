@@ -8,6 +8,7 @@ export const IPC = {
   GAME_GET_COVER: "game:getCover",
   GAME_GET_VIDEO: "game:getVideo",
   GAME_GET_ICON: "game:getIcon",
+  GAME_GET_ACHIEVEMENT_ICON: "game:getAchievementIcon",
   GAME_GET_VERSIONS: "game:getVersions",
   GAME_GET_INSTALL_PATH: "game:getInstallPath",
   GAME_GET_MANIFEST: "game:getManifest",
@@ -85,8 +86,10 @@ export const IPC = {
   SYSTEM_SET_IGNORED_UPDATE_VERSION: "system:setIgnoredUpdateVersion",
   SYSTEM_UPLOAD_AVATAR: "system:uploadAvatar",
   SYSTEM_SELECT_GAME_STORAGE_PATH: "system:selectGameStoragePath",
-  SYSTEM_SELECT_GAME_STORAGE_PATH_RELAXED: "system:selectGameStoragePathRelaxed",
-  SYSTEM_GET_DEFAULT_GAMES_MIGRATION_STATUS: "system:getDefaultGamesMigrationStatus",
+  SYSTEM_SELECT_GAME_STORAGE_PATH_RELAXED:
+    "system:selectGameStoragePathRelaxed",
+  SYSTEM_GET_DEFAULT_GAMES_MIGRATION_STATUS:
+    "system:getDefaultGamesMigrationStatus",
   SYSTEM_GET_GAME_STORAGE_PATHS: "system:getGameStoragePaths",
   SYSTEM_ADD_GAME_STORAGE_PATH: "system:addGameStoragePath",
   SYSTEM_SET_DEFAULT_GAME_STORAGE_PATH: "system:setDefaultGameStoragePath",
@@ -111,6 +114,7 @@ export const IPC = {
   SYSTEM_UPDATE_EVENT: "system:update:event",
   SYSTEM_CLEAR_CACHE: "system:clearCache",
   SYSTEM_LOG_ERROR: "system:log:error",
+  SYSTEM_SAVE_PNG: "system:savePng",
 
   // ── 游戏数据存储 (Preload → Main) ──
   GAME_STORAGE_INIT: "game:storage:init",

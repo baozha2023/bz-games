@@ -98,9 +98,27 @@
       </div>
     </div>
     <div class="heatmap-total" :style="{ marginTop: `${gap * 2}px` }">
-      <n-text depth="3" :style="{ fontSize: `${clampFont(cellSize * 0.8, 10, 14)}px` }">
-        {{ t('statistics.totalPlaytime') }}: {{ formatTotalDuration(totalDurationMs) }}
-      </n-text>
+      <div class="heatmap-total-inner">
+        <n-tooltip trigger="hover">
+          <template #trigger>
+            <n-button
+              size="tiny"
+              quaternary
+              @click.stop="emit('share')"
+            >
+              <template #icon>
+                <n-icon :size="14">
+                  <ShareOutline />
+                </n-icon>
+              </template>
+            </n-button>
+          </template>
+          {{ t('statistics.shareHeatmap') }}
+        </n-tooltip>
+        <n-text depth="3" :style="{ fontSize: `${clampFont(cellSize * 0.8, 10, 14)}px` }">
+          {{ t('statistics.totalPlaytime') }}: {{ formatTotalDuration(totalDurationMs) }}
+        </n-text>
+      </div>
     </div>
   </div>
 </template>
@@ -108,7 +126,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { NTooltip, NText } from 'naive-ui'
+import { NTooltip, NText, NButton, NIcon } from 'naive-ui'
+import { ShareOutline } from '@vicons/ionicons5'
 
 const { t } = useI18n()
 
@@ -132,6 +151,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'select-date', date: string): void
+  (e: 'share'): void
 }>()
 
 const CONTAINER_PADDING = 32
@@ -429,6 +449,14 @@ function handleCellClick(date: string) {
 }
 
 .heatmap-total {
-  text-align: right;
+  display: table;
+  margin: 0 auto;
+}
+
+.heatmap-total-inner {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
 }
 </style>

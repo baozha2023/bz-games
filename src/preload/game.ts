@@ -8,23 +8,13 @@ function resolveGameIdentity(): { gameId: string; version: string } {
   let gameId = "";
   let version = "";
 
-  try {
-    const params = new URLSearchParams(window.location.search);
-    gameId = params.get("gameId") || "";
-    version = params.get("version") || "";
-  } catch (e) {
-    console.error("[GamePreload] Failed to parse URL params", e);
-  }
-
-  if (!gameId || !version) {
-    const argv = process.argv || [];
-    for (const arg of argv) {
-      if (!gameId && arg.startsWith("--bz-game-id=")) {
-        gameId = arg.slice("--bz-game-id=".length);
-      }
-      if (!version && arg.startsWith("--bz-game-version=")) {
-        version = arg.slice("--bz-game-version=".length);
-      }
+  const argv = process.argv || [];
+  for (const arg of argv) {
+    if (!gameId && arg.startsWith("--bz-game-id=")) {
+      gameId = arg.slice("--bz-game-id=".length);
+    }
+    if (!version && arg.startsWith("--bz-game-version=")) {
+      version = arg.slice("--bz-game-version=".length);
     }
   }
 
@@ -34,9 +24,10 @@ function resolveGameIdentity(): { gameId: string; version: string } {
   };
 }
 
-function normalizeStorageInitResponse(
-  payload: unknown,
-): { data: Record<string, string>; encrypted: boolean } {
+function normalizeStorageInitResponse(payload: unknown): {
+  data: Record<string, string>;
+  encrypted: boolean;
+} {
   if (!payload || typeof payload !== "object") {
     return { data: {}, encrypted: false };
   }
@@ -51,7 +42,7 @@ function normalizeStorageInitResponse(
 }
 
 class GameStorage {
-  private _data: Record<string, string> = {};
+  private _data: Record<string, string> = Object.create(null);
   private _gameId: string;
   private _version: string;
   private _flushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -63,12 +54,15 @@ class GameStorage {
   }
 
   init(data: Record<string, string>) {
-    this._data = Object.fromEntries(
-      Object.entries(data).map(([key, value]) => [
-        key,
-        typeof value === "string" ? value : String(value),
-      ]),
-    );
+    this._data = Object.create(null);
+    for (const [key, value] of Object.entries(data)) {
+      Object.defineProperty(this._data, key, {
+        value: typeof value === "string" ? value : String(value),
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      });
+    }
   }
 
   get length(): number {
@@ -76,12 +70,14 @@ class GameStorage {
   }
 
   clear(): void {
-    this._data = {};
+    this._data = Object.create(null);
     this._markDirty();
   }
 
   getItem(key: string): string | null {
-    return this._data.hasOwnProperty(key) ? this._data[key] : null;
+    return Object.prototype.hasOwnProperty.call(this._data, key)
+      ? this._data[key]
+      : null;
   }
 
   key(index: number): string | null {
@@ -95,7 +91,12 @@ class GameStorage {
   }
 
   setItem(key: string, value: string): void {
-    this._data[key] = String(value);
+    Object.defineProperty(this._data, String(key), {
+      value: String(value),
+      enumerable: true,
+      configurable: true,
+      writable: true,
+    });
     this._markDirty();
   }
 
@@ -116,12 +117,9 @@ class GameStorage {
     }
     if (!this._dirty) return;
     this._dirty = false;
-    ipcRenderer.send(
-      IPC.GAME_STORAGE_FLUSH,
-      this._gameId,
-      this._version,
-      { ...this._data },
-    );
+    ipcRenderer.send(IPC.GAME_STORAGE_FLUSH, this._gameId, this._version, {
+      ...this._data,
+    });
   }
 }
 

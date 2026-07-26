@@ -6,10 +6,62 @@ import { storeService } from "../services/storage/StoreService";
 import { updateService } from "../services/system/UpdateService";
 import { logger } from "../utils/logger";
 import type { AppSettings, NicknameStyle } from "../../shared/types";
-import { createFloatBallWindow, destroyFloatBallWindow, mainWindow } from "../window";
+import {
+  createFloatBallWindow,
+  destroyFloatBallWindow,
+  mainWindow,
+} from "../window";
 import { cloudSyncService } from "../services/system/CloudSyncService";
+import { AVATAR_FRAMES } from "../../shared/avatar-frames";
+import { openExternalHttpUrl } from "../utils/externalUrl";
 
 let sensitiveWordCache: string[] | null = null;
+const ALLOWED_AVATAR_FRAME_FILES = new Set(
+  AVATAR_FRAMES.map((frame) => frame.imageFileName),
+);
+const PNG_DATA_URL_PREFIX = "data:image/png;base64,";
+const MAX_SAVED_PNG_BYTES = 16 * 1024 * 1024;
+const PNG_SIGNATURE = Buffer.from([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+]);
+
+function decodePngDataUrl(dataUrl: unknown): Buffer {
+  if (typeof dataUrl !== "string" || !dataUrl.startsWith(PNG_DATA_URL_PREFIX)) {
+    throw new Error("invalid_png_data_url");
+  }
+
+  const base64 = dataUrl.slice(PNG_DATA_URL_PREFIX.length);
+  const maxBase64Length = Math.ceil(MAX_SAVED_PNG_BYTES / 3) * 4;
+  if (
+    base64.length === 0 ||
+    base64.length > maxBase64Length ||
+    base64.length % 4 !== 0 ||
+    !/^[A-Za-z0-9+/]+={0,2}$/.test(base64)
+  ) {
+    throw new Error("invalid_png_data");
+  }
+
+  const buffer = Buffer.from(base64, "base64");
+  if (
+    buffer.length === 0 ||
+    buffer.length > MAX_SAVED_PNG_BYTES ||
+    buffer.toString("base64") !== base64 ||
+    !buffer.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE)
+  ) {
+    throw new Error("invalid_png_data");
+  }
+  return buffer;
+}
+
+function sanitizePngDefaultName(value: unknown): string {
+  if (typeof value !== "string") return "BZ-Games-Heatmap.png";
+  const baseName = path
+    .basename(value)
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_")
+    .trim();
+  if (!baseName) return "BZ-Games-Heatmap.png";
+  return baseName.toLowerCase().endsWith(".png") ? baseName : `${baseName}.png`;
+}
 
 function loadSensitiveWords(): string[] {
   if (sensitiveWordCache) return sensitiveWordCache;
@@ -28,7 +80,9 @@ function loadSensitiveWords(): string[] {
           .map((word) => word.trim())
           .filter(Boolean);
       });
-    sensitiveWordCache = Array.from(new Set(words)).sort((a, b) => b.length - a.length);
+    sensitiveWordCache = Array.from(new Set(words)).sort(
+      (a, b) => b.length - a.length,
+    );
   } catch (error) {
     logger.error("[SystemIPC] Failed to load sensitive vocabulary:", error);
     sensitiveWordCache = [];
@@ -103,14 +157,20 @@ export function registerSystemIpc() {
     },
   );
 
-  ipcMain.handle(IPC.SYSTEM_SET_IGNORED_UPDATE_VERSION, async (_, version: string) => {
-    storeService.performIgnoreUpdateVersion(version);
-    return true;
-  });
+  ipcMain.handle(
+    IPC.SYSTEM_SET_IGNORED_UPDATE_VERSION,
+    async (_, version: string) => {
+      storeService.performIgnoreUpdateVersion(version);
+      return true;
+    },
+  );
 
-  ipcMain.handle(IPC.SYSTEM_SAVE_NICKNAME_STYLE, async (_, style: NicknameStyle) => {
-    return storeService.performSaveNicknameStyle(style, 30);
-  });
+  ipcMain.handle(
+    IPC.SYSTEM_SAVE_NICKNAME_STYLE,
+    async (_, style: NicknameStyle) => {
+      return storeService.performSaveNicknameStyle(style, 30);
+    },
+  );
 
   ipcMain.handle(IPC.SYSTEM_UPLOAD_AVATAR, async () => {
     const { canceled, filePaths } = await dialog.showOpenDialog({
@@ -134,7 +194,10 @@ export function registerSystemIpc() {
       }
 
       const ext = path.extname(sourcePath).toLowerCase();
-      const mimeMap: Record<string, string> = { ".png": "image/png", ".webp": "image/webp" };
+      const mimeMap: Record<string, string> = {
+        ".png": "image/png",
+        ".webp": "image/webp",
+      };
       const mimeType = mimeMap[ext] || "image/jpeg";
       const dataUrl = `data:${mimeType};base64,${buffer.toString("base64")}`;
       logger.info("[SystemIPC] Avatar raw loaded, length:", dataUrl.length);
@@ -180,13 +243,19 @@ export function registerSystemIpc() {
     return storeService.getGameStoragePathItems();
   });
 
-  ipcMain.handle(IPC.SYSTEM_ADD_GAME_STORAGE_PATH, async (_, targetPath: string) => {
-    return storeService.addGameStoragePath(targetPath);
-  });
+  ipcMain.handle(
+    IPC.SYSTEM_ADD_GAME_STORAGE_PATH,
+    async (_, targetPath: string) => {
+      return storeService.addGameStoragePath(targetPath);
+    },
+  );
 
-  ipcMain.handle(IPC.SYSTEM_SET_DEFAULT_GAME_STORAGE_PATH, async (_, targetPath: string) => {
-    return storeService.setDefaultGameStoragePath(targetPath);
-  });
+  ipcMain.handle(
+    IPC.SYSTEM_SET_DEFAULT_GAME_STORAGE_PATH,
+    async (_, targetPath: string) => {
+      return storeService.setDefaultGameStoragePath(targetPath);
+    },
+  );
 
   ipcMain.handle(
     IPC.SYSTEM_MIGRATE_DEFAULT_GAMES_LIBRARY,
@@ -201,7 +270,9 @@ export function registerSystemIpc() {
           return { success: false, error: "target_path_required" };
         }
 
-        const result = await storeService.migrateDefaultGamesLibrary(payload.targetPath);
+        const result = await storeService.migrateDefaultGamesLibrary(
+          payload.targetPath,
+        );
         return { success: true, ...result };
       } catch (error) {
         return {
@@ -242,12 +313,8 @@ export function registerSystemIpc() {
     return result === "";
   });
 
-  ipcMain.handle(IPC.SYSTEM_OPEN_URL, async (_, url: string) => {
-    if (!url || typeof url !== "string") {
-      return false;
-    }
-    await shell.openExternal(url);
-    return true;
+  ipcMain.handle(IPC.SYSTEM_OPEN_URL, async (_, value: unknown) => {
+    return openExternalHttpUrl(value);
   });
 
   ipcMain.handle(
@@ -269,8 +336,8 @@ export function registerSystemIpc() {
     return storeService.getUserData();
   });
 
-  ipcMain.handle(IPC.SYSTEM_BUY_FRAME, async (_, frameId: string, coinCost: number) => {
-    return storeService.performBuyFrame(frameId, coinCost);
+  ipcMain.handle(IPC.SYSTEM_BUY_FRAME, async (_, frameId: string) => {
+    return storeService.performBuyFrame(frameId);
   });
 
   ipcMain.handle(IPC.SYSTEM_EQUIP_FRAME, async (_, frameId: string) => {
@@ -287,23 +354,43 @@ export function registerSystemIpc() {
     return storeService.performCheckIn();
   });
 
-  ipcMain.handle(IPC.SYSTEM_GET_AVATAR_FRAME_IMAGE, async (_, fileName: string) => {
-    try {
-      const framePath = path.join(app.getAppPath(), "resources", "avatar-frames", fileName);
-      if (!fs.existsSync(framePath)) {
-        logger.warn(`[SystemIPC] Avatar frame image not found: ${framePath}`);
+  ipcMain.handle(
+    IPC.SYSTEM_GET_AVATAR_FRAME_IMAGE,
+    async (_, fileName: unknown) => {
+      try {
+        if (
+          typeof fileName !== "string" ||
+          !ALLOWED_AVATAR_FRAME_FILES.has(fileName)
+        ) {
+          logger.warn("[SystemIPC] Rejected invalid avatar frame file name");
+          return null;
+        }
+        const framePath = path.join(
+          app.getAppPath(),
+          "resources",
+          "avatar-frames",
+          fileName,
+        );
+        if (!fs.existsSync(framePath)) {
+          logger.warn(`[SystemIPC] Avatar frame image not found: ${framePath}`);
+          return null;
+        }
+        const buffer = fs.readFileSync(framePath);
+        const ext = path.extname(fileName).toLowerCase();
+        const mimeType =
+          ext === ".png"
+            ? "image/png"
+            : ext === ".webp"
+              ? "image/webp"
+              : "image/png";
+        const dataUrl = `data:${mimeType};base64,${buffer.toString("base64")}`;
+        return dataUrl;
+      } catch (e) {
+        logger.error("[SystemIPC] Failed to load avatar frame image:", e);
         return null;
       }
-      const buffer = fs.readFileSync(framePath);
-      const ext = path.extname(fileName).toLowerCase();
-      const mimeType = ext === ".png" ? "image/png" : ext === ".webp" ? "image/webp" : "image/png";
-      const dataUrl = `data:${mimeType};base64,${buffer.toString("base64")}`;
-      return dataUrl;
-    } catch (e) {
-      logger.error("[SystemIPC] Failed to load avatar frame image:", e);
-      return null;
-    }
-  });
+    },
+  );
 
   ipcMain.handle(IPC.SYSTEM_DATA_HEALTH_CHECK, async () => {
     return await storeService.healthCheck();
@@ -326,27 +413,60 @@ export function registerSystemIpc() {
     return true;
   });
 
-  ipcMain.handle(IPC.SYSTEM_UNINSTALL, async (_, payload?: { deleteGames?: boolean }) => {
-    const exeDir = path.dirname(app.getPath("exe"));
-    const uninstaller = path.join(exeDir, "Uninstall BZ-Games.exe");
-    if (!fs.existsSync(uninstaller)) {
-      return { success: false, error: "uninstaller_not_found" };
-    }
-    if (payload?.deleteGames) {
-      const roots = storeService.getGameStorageRoots();
-      for (const root of roots) {
-        try {
-          fs.rmSync(root, { recursive: true, force: true });
-          logger.info(`[SystemIPC] Removed storage root before uninstall: ${root}`);
-        } catch (error) {
-          logger.warn(`[SystemIPC] Failed to remove storage root: ${root}`, error);
+  ipcMain.handle(
+    IPC.SYSTEM_UNINSTALL,
+    async (_, payload?: { deleteGames?: boolean }) => {
+      const exeDir = path.dirname(app.getPath("exe"));
+      const uninstaller = path.join(exeDir, "Uninstall BZ-Games.exe");
+      if (!fs.existsSync(uninstaller)) {
+        return { success: false, error: "uninstaller_not_found" };
+      }
+      if (payload?.deleteGames) {
+        const roots = storeService.getGameStorageRoots();
+        for (const root of roots) {
+          try {
+            fs.rmSync(root, { recursive: true, force: true });
+            logger.info(
+              `[SystemIPC] Removed storage root before uninstall: ${root}`,
+            );
+          } catch (error) {
+            logger.warn(
+              `[SystemIPC] Failed to remove storage root: ${root}`,
+              error,
+            );
+          }
         }
       }
-    }
-    shell.openPath(uninstaller);
-    app.quit();
-    return { success: true };
-  });
+      shell.openPath(uninstaller);
+      app.quit();
+      return { success: true };
+    },
+  );
+
+  ipcMain.handle(
+    IPC.SYSTEM_SAVE_PNG,
+    async (_, dataUrl: unknown, defaultName: unknown) => {
+      try {
+        const png = decodePngDataUrl(dataUrl);
+        const { canceled, filePath } = await dialog.showSaveDialog({
+          title: "Save Image",
+          defaultPath: sanitizePngDefaultName(defaultName),
+          filters: [{ name: "PNG Image", extensions: ["png"] }],
+        });
+        if (canceled || !filePath) {
+          return { success: false, canceled: true };
+        }
+        await fs.promises.writeFile(filePath, png);
+        return { success: true, filePath };
+      } catch (error) {
+        logger.error("[SystemIPC] Failed to save PNG:", error);
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+    },
+  );
 
   ipcMain.handle(IPC.SYSTEM_CLEAR_CACHE, async () => {
     const targets: string[] = [
@@ -370,9 +490,13 @@ export function registerSystemIpc() {
             } else {
               size += fs.statSync(fullPath).size;
             }
-          } catch { /* skip */ }
+          } catch {
+            /* skip */
+          }
         }
-      } catch { /* skip */ }
+      } catch {
+        /* skip */
+      }
       return size;
     }
 
@@ -389,8 +513,15 @@ export function registerSystemIpc() {
         for (const entry of entries) {
           const fullPath = path.join(target, entry.name);
           try {
-            const entrySize = entry.isDirectory() ? calcDirSize(fullPath) : fs.statSync(fullPath).size;
-            fs.rmSync(fullPath, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 });
+            const entrySize = entry.isDirectory()
+              ? calcDirSize(fullPath)
+              : fs.statSync(fullPath).size;
+            fs.rmSync(fullPath, {
+              recursive: true,
+              force: true,
+              maxRetries: 3,
+              retryDelay: 200,
+            });
             clearedSize += entrySize;
           } catch {
             logger.warn(`[SystemIPC] Cache clear skipped: ${fullPath}`);

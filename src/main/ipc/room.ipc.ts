@@ -5,29 +5,102 @@ import { roomClient } from "../services/room/RoomClient";
 import { storeService } from "../services/storage/StoreService";
 import { gameManager } from "../services/game/GameManager";
 import { mainWindow } from "../window";
-import { createChatWindow, closeChatWindow, sendRoomEventToChat, getCachedChatHistory } from "../chat-window";
+import {
+  createChatWindow,
+  closeChatWindow,
+  sendRoomEventToChat,
+  getCachedChatHistory,
+} from "../chat-window";
 import crypto from "crypto";
-import type { RoomMessage, ChatPayload, DiscoveredRoom } from "../../shared/types";
+import type {
+  RoomMessage,
+  ChatPayload,
+  DiscoveredRoom,
+} from "../../shared/types";
 import { roomDiscoveryService } from "../services/room/RoomDiscoveryService";
 import { relayRoomService } from "../services/room/RelayRoomService";
 import { roomPasswordProbeService } from "../services/room/RoomPasswordProbeService";
+import { GameLoader } from "../services/game/GameLoader";
+import { GameType } from "../../shared/types";
+
+async function validateLocalRoomManifest(gameId: string, version?: string) {
+  const manifest = await GameLoader.getManifest(gameId, version);
+  if (
+    !manifest ||
+    manifest.id !== gameId ||
+    (version !== undefined && manifest.version !== version)
+  ) {
+    throw { code: "manifestInvalid" };
+  }
+  if (
+    manifest.type !== GameType.Multiplayer &&
+    manifest.type !== GameType.SingleMultiple
+  ) {
+    throw { code: "gameTypeNotMultiplayer" };
+  }
+  if (!manifest.multiplayer) {
+    throw { code: "multiplayerConfigMissing" };
+  }
+  GameLoader.assertPlatformCompatible(manifest);
+  return manifest;
+}
 
 export function registerRoomIpc() {
   ipcMain.handle(
     IPC.ROOM_CREATE,
     async (_, gameId: string, version?: string) => {
-      const port = await roomServer.start(gameId, version);
-      await roomClient.connect(`127.0.0.1:${port}`, gameId, version);
-      return { port };
+      try {
+        const port = await roomServer.start(gameId, version);
+        const connected = await roomClient.connect(
+          `127.0.0.1:${port}`,
+          gameId,
+          roomServer.room?.gameVersion,
+        );
+        if (!connected.success) {
+          await roomServer.stop();
+          return {
+            success: false,
+            error: connected.error || "localRoomConnectFailed",
+          };
+        }
+        return { success: true, port };
+      } catch (error: any) {
+        await roomServer.stop().catch(() => undefined);
+        return {
+          success: false,
+          error: error?.code || "createFailed",
+          params: error?.params,
+        };
+      }
     },
   );
 
   ipcMain.handle(
     IPC.ROOM_JOIN,
-    async (_, gameId: string, address: string, version?: string, password?: string) => {
+    async (
+      _,
+      gameId: string,
+      address: string,
+      version?: string,
+      password?: string,
+    ) => {
+      try {
+        const manifest = await validateLocalRoomManifest(gameId, version);
+        version = manifest.version;
+      } catch (error: any) {
+        return {
+          success: false,
+          error: error?.code || "manifestInvalid",
+          params: error?.params,
+        };
+      }
       const localPlayerId = storeService.getSettings().playerId;
       if (roomServer.room?.hostId === localPlayerId) {
-        return { success: false, error: "own_room", message: "Cannot join your own room" };
+        return {
+          success: false,
+          error: "own_room",
+          message: "Cannot join your own room",
+        };
       }
       return await roomClient.connect(address, gameId, version, password);
     },
@@ -49,24 +122,44 @@ export function registerRoomIpc() {
 
   ipcMain.handle(IPC.ROOM_READY, async () => {
     const localPlayerId = storeService.getSettings().playerId;
-    roomClient.send({ type: "room:player:ready", payload: { playerId: localPlayerId } });
+    roomClient.send({
+      type: "room:player:ready",
+      payload: { playerId: localPlayerId },
+    });
   });
 
   ipcMain.handle(IPC.ROOM_UNREADY, async () => {
     const localPlayerId = storeService.getSettings().playerId;
-    roomClient.send({ type: "room:player:unready", payload: { playerId: localPlayerId } });
+    roomClient.send({
+      type: "room:player:unready",
+      payload: { playerId: localPlayerId },
+    });
   });
 
   ipcMain.handle(IPC.ROOM_START, async () => {
-    if (roomServer.room && roomServer.room.state === "waiting") {
-      roomServer.room.state = "playing";
-      roomServer.broadcast({ type: "room:game:start", payload: {} });
-      roomServer.broadcastState();
-      await gameManager.launch(
-        roomServer.room.gameId,
-        roomServer.room.gameVersion,
-      );
+    if (!(await roomServer.canStartGame())) return false;
+    const room = roomServer.room;
+    if (!room) return false;
+
+    room.state = "starting";
+    roomServer.broadcastState();
+    const launched = await gameManager.launch(room.gameId, room.gameVersion);
+    if (
+      !launched ||
+      !gameManager.isRunning(room.gameId) ||
+      roomServer.room !== room ||
+      room.state !== "starting"
+    ) {
+      if (roomServer.room === room) {
+        room.state = "waiting";
+        roomServer.broadcastState();
+      }
+      return false;
     }
+    room.state = "playing";
+    roomServer.broadcast({ type: "room:game:start", payload: {} });
+    roomServer.broadcastState();
+    return true;
   });
 
   ipcMain.handle(IPC.ROOM_SET_ADDRESS, async (_, address: string) => {
@@ -103,7 +196,12 @@ export function registerRoomIpc() {
 
   ipcMain.handle(
     IPC.ROOM_SEND_CHAT,
-    async (_, content: string, type: "text" | "audio" | "image" = "text", images?: string[]) => {
+    async (
+      _,
+      content: string,
+      type: "text" | "audio" | "image" = "text",
+      images?: string[],
+    ) => {
       const settings = storeService.getSettings();
       const msg: RoomMessage<ChatPayload> = {
         type: "room:chat",
@@ -141,11 +239,12 @@ export function registerRoomIpc() {
       roomClient.room &&
       roomClient.room.reconnectPlayerIds.includes(playerId)
     ) {
-      await gameManager.launch(
+      return await gameManager.launch(
         roomClient.room.gameId,
         roomClient.room.gameVersion,
       );
     }
+    return false;
   });
 
   ipcMain.handle(IPC.ROOM_DISCOVER_LAN, async () => {
@@ -164,9 +263,12 @@ export function registerRoomIpc() {
     return await roomDiscoveryService.measureRelayLatency();
   });
 
-  ipcMain.handle(IPC.ROOM_VALIDATE_DISCOVERED, async (_, room: DiscoveredRoom) => {
-    return roomDiscoveryService.validateDiscoveredRoom(room);
-  });
+  ipcMain.handle(
+    IPC.ROOM_VALIDATE_DISCOVERED,
+    async (_, room: DiscoveredRoom) => {
+      return roomDiscoveryService.validateDiscoveredRoom(room);
+    },
+  );
 
   ipcMain.handle(IPC.ROOM_SET_DIRECT_HOST_MODE, async (_, mode: "lan") => {
     relayRoomService.disconnect();

@@ -43,6 +43,10 @@ export const useRoomJoin = () => {
     if (error === 'own_room') return t('room.joinError.ownRoom')
     if (error === 'password_required') return t('room.joinError.passwordRequired')
     if (error === 'password_incorrect') return t('room.joinError.passwordIncorrect')
+    if (error === 'manifestInvalid') return t('room.joinError.manifestInvalid')
+    if (error === 'gameTypeNotMultiplayer') return t('room.joinError.gameTypeNotMultiplayer')
+    if (error === 'multiplayerConfigMissing') return t('room.joinError.multiplayerConfigMissing')
+    if (error === 'platformVersionMismatch') return t('room.joinError.platformVersionMismatch')
     return error || t('gameDetail.joinFail')
   }
 

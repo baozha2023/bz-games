@@ -3,7 +3,6 @@ import crypto from "crypto";
 import path from "path";
 import fs from "fs";
 import { nativeImage } from "electron";
-import { findAvailablePort } from "../../utils/portUtils";
 import type {
   GameApiMessage,
   GameApiRequest,
@@ -32,6 +31,7 @@ import { V1GameApiProtocol } from "./V1GameApiProtocol";
 import { V2GameApiProtocol } from "./V2GameApiProtocol";
 import { RoomConstants } from "../../../shared/RoomConstants";
 import type { GameManifest } from "../../../shared/game-manifest";
+import { logger } from "../../utils/logger";
 
 type BinaryRelayPayload = GameRelayPayload & { binaryData?: Buffer };
 type GameApiProtocolVersion = 1 | 2;
@@ -73,18 +73,26 @@ export class GameApiServer {
   }
 
   async start(): Promise<{ port: number; token: string }> {
-    this.port = await findAvailablePort();
     this.token = crypto.randomUUID();
-
-    this.startAutoShutdownTimer();
 
     return new Promise((resolve, reject) => {
       try {
-        this.wss = new WebSocketServer({ port: this.port, host: "127.0.0.1" });
+        this.wss = new WebSocketServer({ port: 0, host: "127.0.0.1" });
 
-        this.wss.on("listening", () => resolve({ port: this.port, token: this.token }));
+        this.wss.once("listening", () => {
+          const address = this.wss?.address();
+          if (!address || typeof address === "string") {
+            this.wss?.close();
+            this.wss = null;
+            reject(new Error("Failed to resolve the Game API listen port"));
+            return;
+          }
+          this.port = address.port;
+          this.startAutoShutdownTimer();
+          resolve({ port: this.port, token: this.token });
+        });
 
-        this.wss.on("error", (err) => reject(err));
+        this.wss.once("error", (err) => reject(err));
         this.wss.on("connection", (ws) => this.handleConnection(ws));
       } catch (error) {
         reject(error);
@@ -122,12 +130,17 @@ export class GameApiServer {
           return;
         }
         const rawData = data.toString();
-        if (Buffer.byteLength(rawData, "utf8") > RoomConstants.GAME_API_MAX_MESSAGE_BYTES) {
+        if (
+          Buffer.byteLength(rawData, "utf8") >
+          RoomConstants.GAME_API_MAX_MESSAGE_BYTES
+        ) {
           if (authenticated) {
             this.sendError(ws, "", "message.publish", {
               code: GameApiErrorCode.MessageTooLarge,
               message: "Message payload is too large",
-              detail: { maxMessageBytes: RoomConstants.GAME_API_MAX_MESSAGE_BYTES },
+              detail: {
+                maxMessageBytes: RoomConstants.GAME_API_MAX_MESSAGE_BYTES,
+              },
             });
           }
           return;
@@ -166,7 +179,9 @@ export class GameApiServer {
   private handleAuth(ws: WebSocket, msg: GameApiMessage): boolean {
     if (msg.type !== "request" || msg.action !== "auth") return false;
 
-    const payload = msg.payload as { token?: string; protocolVersion?: number } | undefined;
+    const payload = msg.payload as
+      | { token?: string; protocolVersion?: number }
+      | undefined;
     if (payload?.token === this.token) {
       const settings = storeService.getSettings();
       const isHost = roomServer.room?.hostId === settings.playerId;
@@ -177,9 +192,13 @@ export class GameApiServer {
         success: true,
         player: { id: settings.playerId, name: settings.playerName, isHost },
         protocolVersion,
-        capabilities: protocolVersion === 2 ? this.getCapabilities() : undefined,
+        capabilities:
+          protocolVersion === 2 ? this.getCapabilities() : undefined,
       });
-      this.channelSubscriptions.set(ws, new Set([RoomConstants.GAME_API_CHANNEL_ALL]));
+      this.channelSubscriptions.set(
+        ws,
+        new Set([RoomConstants.GAME_API_CHANNEL_ALL]),
+      );
       this.protocolVersions.set(ws, protocolVersion);
       return true;
     } else {
@@ -279,7 +298,9 @@ export class GameApiServer {
   }
 
   private getProtocol(ws: WebSocket): V1GameApiProtocol | V2GameApiProtocol {
-    return this.getProtocolVersion(ws) === 2 ? this.v2Protocol : this.v1Protocol;
+    return this.getProtocolVersion(ws) === 2
+      ? this.v2Protocol
+      : this.v1Protocol;
   }
 
   private handleBinaryRequest(ws: WebSocket, data: Buffer) {
@@ -360,14 +381,18 @@ export class GameApiServer {
     }
   }
 
-  private withReportPlayerSnapshot(payload: GameReportPayload): GameReportPayload {
+  private withReportPlayerSnapshot(
+    payload: GameReportPayload,
+  ): GameReportPayload {
     if (payload.mode !== "structured") return payload;
     if (payload.data.layout !== "scoreboard") return payload;
     const room = roomServer.room || roomClient.room;
     if (!room) return payload;
     const structuredPayload = payload as GameReportStructuredPayload;
     const data = structuredPayload.data as GameReportScoreboardData;
-    const config = structuredPayload.config as GameReportScoreboardConfig | undefined;
+    const config = structuredPayload.config as
+      | GameReportScoreboardConfig
+      | undefined;
     const playerColumns = (config?.columns || []).filter(
       (column) => column.render === "avatar" || column.render === "playerName",
     );
@@ -426,12 +451,25 @@ export class GameApiServer {
       playerId?: string;
     };
     const currentSettings = storeService.getSettings();
-    const manifest = await GameLoader.getManifest(this.gameId, this.gameVersion);
+    const manifest = await GameLoader.getManifest(
+      this.gameId,
+      this.gameVersion,
+    );
+    const achievement = manifest?.achievements?.find(
+      (item) => item.id === achievementId,
+    );
 
     if (playerId && playerId !== currentSettings.playerId) {
       this.sendResponse(ws, req.id, "achievement.unlock", {
         success: false,
         reason: "Player mismatch",
+      });
+      return;
+    }
+    if (!achievement) {
+      this.sendResponse(ws, req.id, "achievement.unlock", {
+        success: false,
+        reason: "Achievement is not declared in game.json",
       });
       return;
     }
@@ -447,7 +485,6 @@ export class GameApiServer {
         version: this.gameVersion,
         achievementId,
       });
-      const achievement = manifest?.achievements?.find((item) => item.id === achievementId);
       void achievementUnlockDatabaseService.recordUnlock({
         game_id: this.gameId,
         game_name: manifest?.name || this.gameId,
@@ -466,29 +503,60 @@ export class GameApiServer {
   }
 
   private async handleStatsReport(ws: WebSocket, req: GameApiRequest) {
-    const stats = req.payload as Record<string, number>;
-    if (stats && typeof stats === "object") {
+    const stats = req.payload;
+    if (stats && typeof stats === "object" && !Array.isArray(stats)) {
       const manifest = await GameLoader.getManifest(
         this.gameId,
         this.gameVersion,
       );
       const modes: Record<string, "increment" | "full"> = {};
+      const declaredStatIds = new Set<string>();
       if (manifest?.statistics) {
         manifest.statistics.forEach((stat) => {
-          if (typeof stat === "string") return;
-          const key = Object.keys(stat)[0];
-          const value = (stat as any)[key];
-          if (value && typeof value === "object" && value.mode) {
-            modes[key] = value.mode === "full" ? "full" : "increment";
+          if (typeof stat === "string") {
+            declaredStatIds.add(stat);
+            return;
+          }
+          for (const [key, value] of Object.entries(stat)) {
+            declaredStatIds.add(key);
+            if (value && typeof value === "object" && value.mode) {
+              modes[key] = value.mode === "full" ? "full" : "increment";
+            }
           }
         });
       }
-      storeService.updateGameStats(this.gameId, this.gameVersion, stats, modes);
+      const entries = Object.entries(stats as Record<string, unknown>);
+      const hasInvalidStat = entries.some(
+        ([key, value]) =>
+          !declaredStatIds.has(key) ||
+          key === "time" ||
+          typeof value !== "number" ||
+          !Number.isFinite(value),
+      );
+      if (entries.length === 0 || hasInvalidStat) {
+        this.sendError(ws, req.id, "stats.report", {
+          code: GameApiErrorCode.InvalidPayload,
+          message:
+            "Stats must be finite numbers declared in game.json; time is platform-managed",
+        });
+        return;
+      }
+      const validatedStats = Object.fromEntries(entries) as Record<
+        string,
+        number
+      >;
+      storeService.updateGameStats(
+        this.gameId,
+        this.gameVersion,
+        validatedStats,
+        modes,
+      );
       const reportedAt = Date.now();
-      for (const statId of Object.keys(stats)) {
-        const statName = manifest?.statistics
-          ?.map((stat) => resolveStatName(stat, statId))
-          .find(Boolean) || statId;
+      for (const statId of Object.keys(validatedStats)) {
+        const statName =
+          manifest?.statistics
+            ?.map((stat) => resolveStatName(stat, statId))
+            .find(Boolean) || statId;
         void statsReportDatabaseService.recordReport({
           game_id: this.gameId,
           game_name: manifest?.name || this.gameId,
@@ -509,20 +577,24 @@ export class GameApiServer {
 
   private async showAchievementNotification(achievementId: string) {
     try {
-      const manifest = await GameLoader.getManifest(this.gameId, this.gameVersion);
+      const manifest = await GameLoader.getManifest(
+        this.gameId,
+        this.gameVersion,
+      );
       if (manifest) {
         const achievement = manifest.achievements?.find(
           (a) => a.id === achievementId,
         );
         if (achievement) {
           let iconDataUrl = "";
-          if (manifest.icon) {
+          const icon = achievement.icon || manifest.icon;
+          if (icon) {
             const versionPath = await GameLoader.getVersionPath(
               this.gameId,
               this.gameVersion,
             );
             if (versionPath) {
-              const iconPath = path.join(versionPath, manifest.icon);
+              const iconPath = path.join(versionPath, icon);
               if (fs.existsSync(iconPath)) {
                 iconDataUrl = nativeImage.createFromPath(iconPath).toDataURL();
               }
@@ -537,19 +609,24 @@ export class GameApiServer {
           );
         }
       }
-    } catch {}
+    } catch (error) {
+      logger.warn(
+        `[GameApiServer] Failed to show achievement notification for ${this.gameId} @ ${this.gameVersion} / ${achievementId}`,
+        error,
+      );
+    }
   }
 
-  public sendResponse(
-    ws: WebSocket,
-    id: string,
-    action: string,
-    payload: any,
-  ) {
+  public sendResponse(ws: WebSocket, id: string, action: string, payload: any) {
     ws.send(JSON.stringify({ id, type: "response", action, payload }));
   }
 
-  public sendError(ws: WebSocket, id: string, action: string, error: string | GameApiError) {
+  public sendError(
+    ws: WebSocket,
+    id: string,
+    action: string,
+    error: string | GameApiError,
+  ) {
     ws.send(JSON.stringify({ id, type: "response", action, error }));
   }
 
@@ -599,17 +676,24 @@ export class GameApiServer {
     this.clients.forEach((c) => {
       if (
         c.readyState === WebSocket.OPEN &&
-        (action !== "event.message" || this.shouldDeliverEventToClient(c, payload as GameRelayPayload))
+        (action !== "event.message" ||
+          this.shouldDeliverEventToClient(c, payload as GameRelayPayload))
       ) {
-        const msg = binaryBody && this.getProtocolVersion(c) === 2
-          ? encodeBinaryEnvelope(event, binaryBody)
-          : jsonMsg;
+        const msg =
+          binaryBody && this.getProtocolVersion(c) === 2
+            ? encodeBinaryEnvelope(event, binaryBody)
+            : jsonMsg;
         c.send(msg);
       }
     });
   }
 
-  sendMessageAck(payload: { messageId: string; senderId: string; to: string; sentAt: number }) {
+  sendMessageAck(payload: {
+    messageId: string;
+    senderId: string;
+    to: string;
+    sentAt: number;
+  }) {
     this.sendEvent("event.messageAck", payload);
   }
 
@@ -617,7 +701,10 @@ export class GameApiServer {
     if (!payload.channel) return true;
     const channels = this.channelSubscriptions.get(ws);
     if (!channels || channels.size === 0) return true;
-    return channels.has(RoomConstants.GAME_API_CHANNEL_ALL) || channels.has(payload.channel);
+    return (
+      channels.has(RoomConstants.GAME_API_CHANNEL_ALL) ||
+      channels.has(payload.channel)
+    );
   }
 
   private stripBinaryData<T>(payload: T): T {

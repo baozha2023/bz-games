@@ -13,6 +13,13 @@
 | 通信接口 | `message.send`、`message.broadcast` | `message.send`、`message.broadcast`、`message.publish`、`message.batch`、`message.subscribe`、`message.unsubscribe` |
 | 主要用途 | 聊天、回合制事件、棋牌、轻量同步 | 高频输入、状态同步、频道事件、二进制快照 |
 
+## 连接配置来源
+
+- 本地 HTML/Serve 游戏必须在自身脚本前加载平台临时生成的 `bz-config.js`，并从 `window.BZ_CONFIG.apiPort` 和 `window.BZ_CONFIG.token` 获取连接配置。
+- Native 游戏从 `BZ_API_PORT` 和 `BZ_API_TOKEN` 环境变量获取连接配置。
+- 启动 URL 查询参数只包含用于页面识别的 `gameId` 和 `version`，不提供 API Token，不能作为认证配置来源。
+- `entry=url` 的远程网页游戏不生成 `bz-config.js`、不提供 `window.BZ_CONFIG`，也不启动本地 Game API Server。
+
 ## 协议识别
 
 - 游戏连接本地 Game API WebSocket 地址后首先发送 `auth` 请求。
@@ -68,23 +75,37 @@
 - 传输：JSON text frame
 - 请求参数：`{ reason?: string }`
 - 响应：`{ success: true }`
-- 说明：游戏通知平台本局游戏结束。
+- 说明：预留接口。当前版本仅返回成功，不结束游戏进程、不修改房间状态，也不广播游戏结束事件。
 
 ### `achievement.list`
 
 - 方向：Game → Platform
 - 传输：JSON text frame
 - 请求参数：`{}`
-- 响应：`Achievement[]`
+- 响应：`Achievement[]`，每项结构为 `{ id, title, description, icon?, unlocked, unlockedAt? }`
 - 说明：游戏获取当前游戏的成就列表和解锁状态。
+
+`Achievement` 字段：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `id` | `string` | Manifest 中声明的成就 ID |
+| `title` | `string` | 成就标题 |
+| `description` | `string` | 成就描述 |
+| `icon` | `string?` | 成就自定义图标在游戏目录内的安全相对路径 |
+| `unlocked` | `boolean` | 当前玩家是否已解锁 |
+| `unlockedAt` | `number?` | 首次解锁时间戳；未解锁时省略 |
+
+Manifest 中的成就 ID 必须唯一。自定义图标用于平台成就页、详情弹窗和解锁通知；UI 加载失败时显示默认奖杯，系统通知按“成就图标 → 游戏图标 → 无图标”回退。
 
 ### `achievement.unlock`
 
 - 方向：Game → Platform
 - 传输：JSON text frame
 - 请求参数：`{ achievementId: string, playerId?: string }`
-- 响应：`{ success: true, new: boolean }`
-- 说明：游戏解锁当前本地玩家的指定成就。
+- 成功响应：`{ success: true, new: boolean }`
+- 业务失败响应：`{ success: false, reason: string }`
+- 说明：游戏解锁当前本地玩家的指定成就。`achievementId` 必须在当前版本 Manifest 中声明；重复调用保持幂等，`new` 仅在首次解锁时为 `true`。`playerId` 省略时使用当前玩家，显式传入时必须与当前玩家一致。
 
 ### `stats.report`
 
@@ -92,7 +113,7 @@
 - 传输：JSON text frame
 - 请求参数：`Record<string, number>`
 - 响应：`{ success: true }`
-- 说明：游戏上报统计数据。统计项由游戏 manifest 定义。
+- 说明：游戏上报统计数据。payload 必须为非空对象，key 必须已在当前版本 Manifest 的 `statistics` 中声明，值必须为有限数值。未声明字段、非数值、非有限数值和平台管理的 `time` 均返回 `INVALID_PAYLOAD`。
 
 ## v1 通信接口
 

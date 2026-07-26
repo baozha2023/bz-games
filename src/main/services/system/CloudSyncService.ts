@@ -1,4 +1,3 @@
-import { shell } from "electron";
 import crypto from "crypto";
 import fs from "fs";
 import os from "os";
@@ -9,6 +8,7 @@ import { storeService } from "../storage/StoreService";
 import { playSessionDatabaseService } from "../storage/database/PlaySessionDatabaseService";
 import { achievementUnlockDatabaseService } from "../storage/database/AchievementUnlockDatabaseService";
 import { statsReportDatabaseService } from "../storage/database/StatsReportDatabaseService";
+import { openExternalHttpUrl } from "../../utils/externalUrl";
 
 export type CloudSyncProgressStage = "checking" | "uploading" | "downloading" | "applying" | "completed";
 
@@ -104,7 +104,9 @@ class CloudSyncService {
     const returnTo = OAUTH_RETURN_URL || "bzgames://oauth-complete";
     const url = new URL(`${this.baseUrl}/auth/github/start`);
     url.searchParams.set("returnTo", returnTo);
-    await shell.openExternal(url.toString());
+    if (!(await openExternalHttpUrl(url.toString()))) {
+      throw new Error("invalid_oauth_url");
+    }
     return { success: true };
   }
 

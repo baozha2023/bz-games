@@ -1,6 +1,9 @@
 <template>
-  <div style="padding: 24px;">
-    <n-page-header :title="t('achievement.title')" @back="$router.push({ name: 'Library' })">
+  <div style="padding: 24px">
+    <n-page-header
+      :title="t('achievement.title')"
+      @back="$router.push({ name: 'Library' })"
+    >
       <template #extra>
         <n-space align="center" :size="8">
           <n-input
@@ -9,7 +12,7 @@
             clearable
             autofocus
             :placeholder="t('common.searchGame')"
-            style="width: 260px;"
+            style="width: 260px"
             @blur="handleSearchBlur"
           />
           <n-button quaternary circle @click="toggleSearch">
@@ -22,82 +25,161 @@
         </n-space>
       </template>
     </n-page-header>
-    
-    <div v-if="achievementCards.length === 0" style="margin-top: 24px;">
-       <n-empty :description="t('achievement.noAchievements')" />
+
+    <div v-if="achievementCards.length === 0" style="margin-top: 24px">
+      <n-empty :description="t('achievement.noAchievements')" />
     </div>
 
-    <n-list v-else style="margin-top: 24px; background: transparent;">
-      <n-list-item v-for="(game, index) in achievementCards" :key="game.id" v-show="index < visibleCount" :class="['stagger-card-enter', { 'golden-card': game.progress.percentage === 100 }]">
+    <n-list v-else style="margin-top: 24px; background: transparent">
+      <n-list-item
+        v-for="(game, index) in achievementCards"
+        :key="game.id"
+        v-show="index < visibleCount"
+        :class="[
+          'stagger-card-enter',
+          { 'golden-card': game.progress.percentage === 100 },
+        ]"
+      >
         <n-thing>
-            <template #avatar>
-                 <div class="game-icon-wrapper" style="width: 48px; height: 48px; overflow: hidden; border-radius: 4px; background: var(--bz-bg-card-placeholder);">
-                    <GameIcon :game-id="game.id" :game-name="game.name" :version="selectedVersions[game.id]" style="width: 100%; height: 100%; object-fit: cover;" />
-                 </div>
-            </template>
-            <template #header>
-                {{ game.name }}
-            </template>
-            <template #header-extra>
-                <n-space align="center">
-                    <n-select 
-                        v-model:value="selectedVersions[game.id]" 
-                        :options="game.versionOptions" 
-                        size="small" 
-                        style="width: 120px;"
-                        @update:value="(v) => handleVersionChange(game.id, v)"
-                    />
+          <template #avatar>
+            <div
+              class="game-icon-wrapper"
+              style="
+                width: 48px;
+                height: 48px;
+                overflow: hidden;
+                border-radius: 4px;
+                background: var(--bz-bg-card-placeholder);
+              "
+            >
+              <GameIcon
+                :game-id="game.id"
+                :game-name="game.name"
+                :version="selectedVersions[game.id]"
+                style="width: 100%; height: 100%; object-fit: cover"
+              />
+            </div>
+          </template>
+          <template #header>
+            {{ game.name }}
+          </template>
+          <template #header-extra>
+            <n-space align="center">
+              <n-select
+                v-model:value="selectedVersions[game.id]"
+                :options="game.versionOptions"
+                size="small"
+                style="width: 120px"
+                @update:value="(v) => handleVersionChange(game.id, v)"
+              />
 
-                    <n-button text style="font-size: 20px;" @click="toggleExpand(game.id)">
-                        <n-icon>
-                            <ChevronUp v-if="expandedGames[game.id]" />
-                            <ChevronDown v-else />
-                        </n-icon>
-                    </n-button>
-                </n-space>
-            </template>
-            <template #description>
-                <div style="display: flex; align-items: center; gap: 12px;">
-                    <n-progress 
-                        type="line" 
-                        :percentage="game.progress.percentage" 
-                        :indicator-placement="'inside'" 
-                        status="success"
-                        style="max-width: 300px;"
-                    />
-                    <span style="font-size: 12px; color: var(--bz-text-secondary);">
-                        {{ t('achievement.progress', { current: game.progress.current, total: game.progress.total }) }}
-                    </span>
-                </div>
-            </template>
+              <n-button
+                text
+                style="font-size: 20px"
+                @click="toggleExpand(game.id)"
+              >
+                <n-icon>
+                  <ChevronUp v-if="expandedGames[game.id]" />
+                  <ChevronDown v-else />
+                </n-icon>
+              </n-button>
+            </n-space>
+          </template>
+          <template #description>
+            <div style="display: flex; align-items: center; gap: 12px">
+              <n-progress
+                type="line"
+                :percentage="game.progress.percentage"
+                :indicator-placement="'inside'"
+                status="success"
+                style="max-width: 300px"
+              />
+              <span style="font-size: 12px; color: var(--bz-text-secondary)">
+                {{
+                  t("achievement.progress", {
+                    current: game.progress.current,
+                    total: game.progress.total,
+                  })
+                }}
+              </span>
+            </div>
+          </template>
         </n-thing>
-        
+
         <n-collapse-transition :show="expandedGames[game.id]">
-            <n-grid :cols="1" md="2" lg="4" x-gap="12" y-gap="12" style="margin-top: 16px;">
-                <n-grid-item v-for="ach in game.achievements" :key="ach.id">
-                    <n-card size="small" :style="{ opacity: ach.unlocked ? 1 : 0.6, borderColor: ach.unlocked ? '#f0a020' : undefined }">
-                        <div v-if="ach.isNew" class="new-dot"></div>
-                        <n-space align="center" :wrap="false" :size="24">
-                            <div style="width: 56px; height: 56px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                                <n-icon size="48" :color="ach.unlocked ? 'var(--bz-amber)' : 'var(--bz-icon-locked)'">
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M20.2 2H3.8C2.8 2 2 2.8 2 3.8v4.4c0 1 .8 1.8 1.8 1.8h.4c.5 2.8 3 4.9 6 5v.5c0 .8.7 1.5 1.5 1.5h.6v2h-2c-1.1 0-2 .9-2 2s.9 2 2 2h7.4c1.1 0 2-.9 2-2s-.9-2-2-2h-2v-2h.6c.8 0 1.5-.7 1.5-1.5v-.5c3-.1 5.5-2.2 6-5h.4c1 0 1.8-.8 1.8-1.8V3.8C22 2.8 21.2 2 20.2 2M5.8 8h-2V4h2zm14.4 0h-2V4h2z"/></svg>
-                                </n-icon>
-                            </div>
-                            <div style="flex: 1; min-width: 0;">
-                                <div style="font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ ach.title }}</div>
-                                <div style="font-size: 12px; color: var(--bz-text-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" :title="ach.description">{{ ach.description }}</div>
-                                <div v-if="ach.unlocked" style="font-size: 10px; color: var(--bz-amber);">
-                                    {{ t('achievement.unlockedAt', { date: new Date(ach.unlockedAt!).toLocaleString() }) }}
-                                </div>
-                                <div v-else style="font-size: 10px; color: var(--bz-text-secondary);">{{ t('achievement.locked') }}</div>
-                            </div>
-                        </n-space>
-                    </n-card>
-                </n-grid-item>
-                <n-grid-item v-if="game.achievements.length === 0">
-                    <n-empty :description="t('achievement.noAchievementsVersion')" />
-                </n-grid-item>
-            </n-grid>
+          <n-grid
+            :cols="1"
+            md="2"
+            lg="4"
+            x-gap="12"
+            y-gap="12"
+            style="margin-top: 16px"
+          >
+            <n-grid-item v-for="ach in game.achievements" :key="ach.id">
+              <n-card
+                size="small"
+                :style="{
+                  opacity: ach.unlocked ? 1 : 0.6,
+                  borderColor: ach.unlocked ? '#f0a020' : undefined,
+                }"
+              >
+                <div v-if="ach.isNew" class="new-dot"></div>
+                <n-space align="center" :wrap="false" :size="24">
+                  <AchievementIcon
+                    :game-id="game.id"
+                    :version="selectedVersions[game.id]"
+                    :achievement-id="ach.id"
+                    :has-custom-icon="!!ach.icon"
+                    :locked="!ach.unlocked"
+                    :size="48"
+                  />
+                  <div style="flex: 1; min-width: 0">
+                    <div
+                      style="
+                        font-weight: bold;
+                        white-space: nowrap;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                      "
+                    >
+                      {{ ach.title }}
+                    </div>
+                    <div
+                      style="
+                        font-size: 12px;
+                        color: var(--bz-text-tertiary);
+                        white-space: nowrap;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                      "
+                      :title="ach.description"
+                    >
+                      {{ ach.description }}
+                    </div>
+                    <div
+                      v-if="ach.unlocked"
+                      style="font-size: 10px; color: var(--bz-amber)"
+                    >
+                      {{
+                        t("achievement.unlockedAt", {
+                          date: new Date(ach.unlockedAt!).toLocaleString(),
+                        })
+                      }}
+                    </div>
+                    <div
+                      v-else
+                      style="font-size: 10px; color: var(--bz-text-secondary)"
+                    >
+                      {{ t("achievement.locked") }}
+                    </div>
+                  </div>
+                </n-space>
+              </n-card>
+            </n-grid-item>
+            <n-grid-item v-if="game.achievements.length === 0">
+              <n-empty :description="t('achievement.noAchievementsVersion')" />
+            </n-grid-item>
+          </n-grid>
         </n-collapse-transition>
       </n-list-item>
     </n-list>
@@ -105,12 +187,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue';
-import { useI18n } from 'vue-i18n';
-import { ChevronDown, ChevronUp, SearchOutline } from '@vicons/ionicons5';
-import { useGameStore } from '../stores/useGameStore';
-import GameIcon from '../components/game/GameIcon.vue';
-import { useGameListView } from '../composables/useGameListView';
+import { ref, onMounted, onUnmounted, computed } from "vue";
+import { useI18n } from "vue-i18n";
+import { ChevronDown, ChevronUp, SearchOutline } from "@vicons/ionicons5";
+import { useGameStore } from "../stores/useGameStore";
+import GameIcon from "../components/game/GameIcon.vue";
+import AchievementIcon from "../components/game/AchievementIcon.vue";
+import { useGameListView } from "../composables/useGameListView";
+import { compareGameVersionsDescending } from "../../../shared/game-manifest";
 
 const { t } = useI18n();
 const gameStore = useGameStore();
@@ -118,153 +202,158 @@ const gameStore = useGameStore();
 const expandedGames = ref<Record<string, boolean>>({});
 
 const displayGames = computed(() => {
-    return gameStore.games
-        .map(g => {
-            const record = gameStore.getGameRecord(g.id);
-            const versions = record?.versions.map(v => v.version).sort((a, b) => b.localeCompare(a, undefined, { numeric: true })) || [g.version];
-            
-            return {
-                id: g.id,
-                name: g.name,
-                latestVersion: g.version,
-                versions
-            };
-        });
+  return gameStore.games.map((g) => {
+    const record = gameStore.getGameRecord(g.id);
+    const versions = record?.versions
+      .map((v) => v.version)
+      .sort(compareGameVersionsDescending) || [
+      g.version,
+    ];
+
+    return {
+      id: g.id,
+      name: g.name,
+      latestVersion: g.version,
+      versions,
+    };
+  });
 });
 
 const {
-    searchKeyword,
-    isSearchExpanded,
-    selectedVersions,
-    visibleCount,
-    filteredItems: filteredDisplayGames,
-    toggleSearch,
-    handleSearchBlur,
-    activateStaggerRendering,
-    initializeManifestCache,
-    handleVersionChange,
-    getManifest,
+  searchKeyword,
+  isSearchExpanded,
+  selectedVersions,
+  visibleCount,
+  filteredItems: filteredDisplayGames,
+  toggleSearch,
+  handleSearchBlur,
+  activateStaggerRendering,
+  initializeManifestCache,
+  handleVersionChange,
+  getManifest,
 } = useGameListView(displayGames);
 
 onMounted(async () => {
-    await gameStore.loadGames();
-    initializeManifestCache(gameStore.games, (gameId) => {
-        if (expandedGames.value[gameId] === undefined) {
-            expandedGames.value[gameId] = false;
-        }
-    });
-    activateStaggerRendering();
+  await gameStore.loadGames();
+  initializeManifestCache(gameStore.games, (gameId) => {
+    if (expandedGames.value[gameId] === undefined) {
+      expandedGames.value[gameId] = false;
+    }
+  });
+  activateStaggerRendering();
 });
 
 onUnmounted(() => {
-    gameStore.markAchievementsAsSeen();
+  gameStore.markAchievementsAsSeen();
 });
 
-const achievementCards = computed(() => filteredDisplayGames.value.map((game) => {
+const achievementCards = computed(() =>
+  filteredDisplayGames.value.map((game) => {
     const achievements = getGameAchievements(game.id);
     const total = achievements.length;
-    const current = achievements.filter(a => a.unlocked).length;
+    const current = achievements.filter((a) => a.unlocked).length;
     return {
-        ...game,
-        versionOptions: game.versions.map(v => ({ label: v, value: v })),
-        achievements,
-        progress: {
-            total,
-            current,
-            percentage: total > 0 ? Math.round((current / total) * 100) : 0
-        }
+      ...game,
+      versionOptions: game.versions.map((v) => ({ label: v, value: v })),
+      achievements,
+      progress: {
+        total,
+        current,
+        percentage: total > 0 ? Math.round((current / total) * 100) : 0,
+      },
     };
-}));
+  }),
+);
 
 function toggleExpand(gameId: string) {
-    expandedGames.value[gameId] = !expandedGames.value[gameId];
+  expandedGames.value[gameId] = !expandedGames.value[gameId];
 }
 
 function getGameAchievements(gameId: string) {
-    const version = selectedVersions.value[gameId];
-    if (!version) return [];
-    
-    const manifest = getManifest(gameId, version);
-    if (!manifest || !manifest.achievements) return [];
-    
-    const unlocked = gameStore.getUnlockedAchievements(gameId, version);
-    
-    const mapped = manifest.achievements.map(a => {
-        const u = unlocked.find(ua => ua.id === a.id);
-        const isNew = gameStore.newAchievements.has(`${gameId}@${version}@${a.id}`);
-        return {
-            ...a,
-            unlocked: !!u,
-            unlockedAt: u?.unlockedAt,
-            isNew
-        };
-    });
-    
-    mapped.sort((a, b) => (b.unlocked ? 1 : 0) - (a.unlocked ? 1 : 0));
-    return mapped;
+  const version = selectedVersions.value[gameId];
+  if (!version) return [];
+
+  const manifest = getManifest(gameId, version);
+  if (!manifest || !manifest.achievements) return [];
+
+  const unlocked = gameStore.getUnlockedAchievements(gameId, version);
+
+  const mapped = manifest.achievements.map((a) => {
+    const u = unlocked.find((ua) => ua.id === a.id);
+    const isNew = gameStore.newAchievements.has(`${gameId}@${version}@${a.id}`);
+    return {
+      ...a,
+      unlocked: !!u,
+      unlockedAt: u?.unlockedAt,
+      isNew,
+    };
+  });
+
+  mapped.sort((a, b) => (b.unlocked ? 1 : 0) - (a.unlocked ? 1 : 0));
+  return mapped;
 }
 </script>
 
 <style scoped>
 .stagger-card-enter {
-    animation: stagger-fade-in 0.3s ease-out both;
+  animation: stagger-fade-in 0.3s ease-out both;
 }
 
 @keyframes stagger-fade-in {
-    from {
-        opacity: 0;
-        transform: translateY(12px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .golden-card {
-    position: relative;
-    border: 1px solid var(--bz-gold);
-    box-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
-    transition: all 0.3s ease;
-    border-radius: 4px;
-    animation: golden-burn 2s ease-in-out infinite alternate;
+  position: relative;
+  border: 1px solid var(--bz-gold);
+  box-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+  transition: all 0.3s ease;
+  border-radius: 4px;
+  animation: golden-burn 2s ease-in-out infinite alternate;
 }
 
 .golden-card :deep(.n-thing) {
-    z-index: 1;
-    position: relative;
+  z-index: 1;
+  position: relative;
 }
 
 .golden-card .game-icon-wrapper {
-    box-shadow: 0 0 8px rgba(255, 215, 0, 0.6);
-    border: 1px solid rgba(255, 215, 0, 0.5);
+  box-shadow: 0 0 8px rgba(255, 215, 0, 0.6);
+  border: 1px solid rgba(255, 215, 0, 0.5);
 }
 
 @keyframes golden-burn {
-    0% {
-        box-shadow: 
-            0 0 5px var(--bz-gold),
-            0 0 10px rgba(255, 215, 0, 0.5),
-            inset 0 0 5px rgba(255, 215, 0, 0.2);
-        border-color: var(--bz-gold);
-    }
-    100% {
-        box-shadow: 
-            0 0 15px var(--bz-gold),
-            0 0 25px rgba(255, 140, 0, 0.6),
-            inset 0 0 10px rgba(255, 215, 0, 0.4);
-        border-color: #ffaa00;
-    }
+  0% {
+    box-shadow:
+      0 0 5px var(--bz-gold),
+      0 0 10px rgba(255, 215, 0, 0.5),
+      inset 0 0 5px rgba(255, 215, 0, 0.2);
+    border-color: var(--bz-gold);
+  }
+  100% {
+    box-shadow:
+      0 0 15px var(--bz-gold),
+      0 0 25px rgba(255, 140, 0, 0.6),
+      inset 0 0 10px rgba(255, 215, 0, 0.4);
+    border-color: #ffaa00;
+  }
 }
 
 .new-dot {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    width: 8px;
-    height: 8px;
-    background-color: var(--bz-red);
-    border-radius: 50%;
-    box-shadow: 0 0 4px rgba(208, 48, 80, 0.4);
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 8px;
+  height: 8px;
+  background-color: var(--bz-red);
+  border-radius: 50%;
+  box-shadow: 0 0 4px rgba(208, 48, 80, 0.4);
 }
 </style>

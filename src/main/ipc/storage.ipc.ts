@@ -1,31 +1,74 @@
-import { ipcMain } from "electron";
+import { ipcMain, type IpcMainEvent } from "electron";
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import { IPC } from "../../shared/ipc-channels";
 import { storeService } from "../services/storage/StoreService";
 import { logger } from "../utils/logger";
+import { readGameManifestFile } from "../services/game/GameManifestFileService";
+import { GameIdSchema, GameVersionSchema } from "../../shared/game-manifest";
+import { gameWindowIdentityRegistry } from "../services/game/GameWindowIdentityRegistry";
+
+const MAX_STORAGE_FILE_BYTES = 5 * 1024 * 1024;
+
+function authorizeStorageRequest(
+  event: IpcMainEvent,
+  gameId: unknown,
+  version: unknown,
+): { gameId: string; version: string } | null {
+  const parsedGameId = GameIdSchema.safeParse(gameId);
+  const parsedVersion = GameVersionSchema.safeParse(version);
+  if (!parsedGameId.success || !parsedVersion.success) return null;
+
+  if (
+    !gameWindowIdentityRegistry.matches(
+      event.sender.id,
+      parsedGameId.data,
+      parsedVersion.data,
+    )
+  ) {
+    return null;
+  }
+  return { gameId: parsedGameId.data, version: parsedVersion.data };
+}
+
+function readStorageContent(filePath: string): string {
+  if (fs.statSync(filePath).size > MAX_STORAGE_FILE_BYTES) {
+    throw new Error("game_storage_too_large");
+  }
+  return fs.readFileSync(filePath, "utf-8");
+}
+
+function writeStorageContent(filePath: string, content: string): void {
+  if (Buffer.byteLength(content, "utf8") > MAX_STORAGE_FILE_BYTES) {
+    throw new Error("game_storage_too_large");
+  }
+  fs.writeFileSync(filePath, content, "utf-8");
+}
 
 function getStoragePath(gameId: string, version: string): string {
-  return path.join(storeService.getGameVersionStoragePath(gameId, version), "gamedata.json");
+  return path.join(
+    storeService.getGameVersionStoragePath(gameId, version),
+    "gamedata.json",
+  );
 }
 
 function getManifestPath(gameId: string, version: string): string {
-  return path.join(storeService.getGameVersionStoragePath(gameId, version), "game.json");
+  return path.join(
+    storeService.getGameVersionStoragePath(gameId, version),
+    "game.json",
+  );
 }
 
 function isEncryptedStorageEnabled(gameId: string, version: string): boolean {
-  try {
-    const manifestPath = getManifestPath(gameId, version);
-    if (!fs.existsSync(manifestPath)) {
-      return false;
-    }
-    const content = fs.readFileSync(manifestPath, "utf-8");
-    const manifest = JSON.parse(content);
-    return manifest?.encryptLocalStorage === true;
-  } catch {
+  const manifestPath = getManifestPath(gameId, version);
+  if (!fs.existsSync(manifestPath)) {
     return false;
   }
+  const manifest = readGameManifestFile(manifestPath, {
+    migratePlaintext: true,
+  });
+  return manifest.encryptLocalStorage === true;
 }
 
 function createCipherKey(gameId: string, version: string): Buffer {
@@ -80,7 +123,9 @@ function tryDecryptStoragePayload(
       decipher.final(),
     ]).toString("utf8");
     const parsed = JSON.parse(decrypted);
-    return typeof parsed === "object" && parsed ? parsed : {};
+    return typeof parsed === "object" && parsed && !Array.isArray(parsed)
+      ? parsed
+      : {};
   } catch {
     return {};
   }
@@ -98,7 +143,7 @@ function parseStorageFile(
     return decrypted || {};
   }
 
-  if (typeof parsed === "object" && parsed) {
+  if (typeof parsed === "object" && parsed && !Array.isArray(parsed)) {
     return parsed;
   }
   return {};
@@ -107,15 +152,17 @@ function parseStorageFile(
 export function registerStorageIpc() {
   ipcMain.on(IPC.GAME_STORAGE_INIT, (event, gameId, version) => {
     try {
-      if (!gameId) {
+      const identity = authorizeStorageRequest(event, gameId, version);
+      if (!identity) {
         event.returnValue = { data: {}, encrypted: false };
         return;
       }
+      ({ gameId, version } = identity);
 
       const encrypted = isEncryptedStorageEnabled(gameId, version);
       const filePath = getStoragePath(gameId, version);
       if (fs.existsSync(filePath)) {
-        const content = fs.readFileSync(filePath, "utf-8");
+        const content = readStorageContent(filePath);
         event.returnValue = {
           data: parseStorageFile(content, gameId, version, encrypted),
           encrypted,
@@ -128,7 +175,7 @@ export function registerStorageIpc() {
         const initialContent = encrypted
           ? encryptStoragePayload({}, gameId, version)
           : JSON.stringify({}, null, 2);
-        fs.writeFileSync(filePath, initialContent, "utf-8");
+        writeStorageContent(filePath, initialContent);
         event.returnValue = { data: {}, encrypted };
       }
     } catch (error) {
@@ -140,26 +187,43 @@ export function registerStorageIpc() {
     }
   });
 
-  ipcMain.on(IPC.GAME_STORAGE_SAVE, (_, gameId, version, key, value) => {
-    updateStorage(gameId, version, (data) => {
-      data[key] = value;
+  ipcMain.on(IPC.GAME_STORAGE_SAVE, (event, gameId, version, key, value) => {
+    const identity = authorizeStorageRequest(event, gameId, version);
+    if (!identity || typeof key !== "string" || typeof value !== "string")
+      return;
+    updateStorage(identity.gameId, identity.version, (data) => {
+      Object.defineProperty(data, key, {
+        value,
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      });
     });
   });
 
-  ipcMain.on(IPC.GAME_STORAGE_REMOVE, (_, gameId, version, key) => {
-    updateStorage(gameId, version, (data) => {
+  ipcMain.on(IPC.GAME_STORAGE_REMOVE, (event, gameId, version, key) => {
+    const identity = authorizeStorageRequest(event, gameId, version);
+    if (!identity || typeof key !== "string") return;
+    updateStorage(identity.gameId, identity.version, (data) => {
       delete data[key];
     });
   });
 
-  ipcMain.on(IPC.GAME_STORAGE_CLEAR, (_, gameId, version) => {
-    updateStorage(gameId, version, (data) => {
+  ipcMain.on(IPC.GAME_STORAGE_CLEAR, (event, gameId, version) => {
+    const identity = authorizeStorageRequest(event, gameId, version);
+    if (!identity) return;
+    updateStorage(identity.gameId, identity.version, (data) => {
       for (const k in data) delete data[k];
     });
   });
 
   ipcMain.on(IPC.GAME_STORAGE_FLUSH, (event, gameId, version, data) => {
-    if (!gameId) return;
+    const identity = authorizeStorageRequest(event, gameId, version);
+    if (!identity) {
+      event.returnValue = false;
+      return;
+    }
+    ({ gameId, version } = identity);
     try {
       const filePath = getStoragePath(gameId, version);
       const dirPath = path.dirname(filePath);
@@ -170,11 +234,15 @@ export function registerStorageIpc() {
 
       const encrypted = isEncryptedStorageEnabled(gameId, version);
       const safeData =
-        typeof data === "object" && data ? data : {};
+        typeof data === "object" && data && !Array.isArray(data) ? data : {};
       const finalContent = encrypted
-        ? encryptStoragePayload(safeData as Record<string, any>, gameId, version)
+        ? encryptStoragePayload(
+            safeData as Record<string, any>,
+            gameId,
+            version,
+          )
         : JSON.stringify(safeData, null, 2);
-      fs.writeFileSync(filePath, finalContent, "utf-8");
+      writeStorageContent(filePath, finalContent);
       event.returnValue = true;
     } catch (error) {
       logger.error(
@@ -202,11 +270,11 @@ function updateStorage(
     }
 
     let data: Record<string, any> = {};
+    const encrypted = isEncryptedStorageEnabled(gameId, version);
 
     if (fs.existsSync(filePath)) {
       try {
-        const content = fs.readFileSync(filePath, "utf-8");
-        const encrypted = isEncryptedStorageEnabled(gameId, version);
+        const content = readStorageContent(filePath);
         data = parseStorageFile(content, gameId, version, encrypted);
       } catch {
         logger.warn(
@@ -216,11 +284,10 @@ function updateStorage(
     }
 
     updateFn(data);
-    const encrypted = isEncryptedStorageEnabled(gameId, version);
     const finalContent = encrypted
       ? encryptStoragePayload(data, gameId, version)
       : JSON.stringify(data, null, 2);
-    fs.writeFileSync(filePath, finalContent, "utf-8");
+    writeStorageContent(filePath, finalContent);
   } catch (error) {
     logger.error(
       `[Storage] Failed to save data for ${gameId} @ ${version}:`,

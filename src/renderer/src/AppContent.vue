@@ -244,6 +244,8 @@ const handleGameStorageStartupPrompt = async (): Promise<boolean> => {
     content: t('settings.defaultGamesMigrationContent', { path: status.defaultGamesPath }),
     positiveText: t('settings.migrateNow'),
     negativeText: t('settings.doNotRemind'),
+    maskClosable: false,
+    closable: false,
     onPositiveClick: async () => {
       const result = await window.electronAPI.settings.selectGameStoragePathRelaxed()
       if (!result) return false

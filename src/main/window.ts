@@ -1,10 +1,11 @@
-import { BrowserWindow, shell, app, Menu, Tray, screen } from "electron";
+import { BrowserWindow, app, Menu, Tray, screen } from "electron";
 import { join } from "path";
 import { is } from "@electron-toolkit/utils";
 import { storeService } from "./services/storage/StoreService";
 import { playSessionDatabaseService } from "./services/storage/database/PlaySessionDatabaseService";
 import { IPC } from "../shared/ipc-channels";
 import { FLOAT_BALL_DEFAULT_SIZE } from "../shared/AppConstants";
+import { openExternalHttpUrl } from "./utils/externalUrl";
 
 export let mainWindow: BrowserWindow | null = null;
 export let floatBallWindow: BrowserWindow | null = null;
@@ -113,7 +114,7 @@ export function createWindow(): void {
   });
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url);
+    void openExternalHttpUrl(details.url);
     return { action: "deny" };
   });
 

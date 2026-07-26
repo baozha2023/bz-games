@@ -1,51 +1,21 @@
 import { z } from "zod";
 import { GameType } from "./game.types";
+import {
+  GameManifestBaseSchema,
+  GameVersionSchema,
+  PlatformVersionRangeSchema,
+} from "../game-manifest";
 
-export const GameManifestOverrideSchema = z.object({
-  name: z.string().min(1).max(100).optional(),
-  description: z.string().max(500).optional(),
-  author: z.string().min(1).max(100).optional(),
-  author_url: z.string().url().optional(),
-  platformVersion: z.union([z.string(), z.tuple([z.string(), z.string()])]).optional(),
-  entry: z.string().optional(),
-  web_url: z.string().url().optional(),
-  icon: z.string().optional(),
-  cover: z.string().optional(),
-  video: z.string().optional(),
-  encryptLocalStorage: z.boolean().optional(),
-  type: z.nativeEnum(GameType).optional(),
-  statistics: z.array(
-    z.union([
-      z.string(),
-      z.record(z.string()),
-      z.record(
-        z.object({
-          label: z.string(),
-          mode: z.enum(["increment", "full"]).optional(),
-        }),
-      ),
-    ]),
-  ).optional(),
-  multiplayer: z.object({
-    minPlayers: z.number().int().min(1),
-    maxPlayers: z.number().int().min(1),
-  }).optional(),
-  args: z.array(z.string()).optional(),
-  env: z.record(z.string()).optional(),
-  achievements: z.array(
-    z.object({
-      id: z.string(),
-      title: z.string(),
-      description: z.string(),
-      icon: z.string().optional(),
-    }),
-  ).optional(),
-});
+export const GameManifestOverrideSchema = GameManifestBaseSchema.omit({
+  $schema: true,
+  id: true,
+  version: true,
+}).partial();
 
 export const MarketGameVersionSchema = z.object({
-  version: z.string().regex(/^\d+\.\d+\.\d+$/),
+  version: GameVersionSchema,
   description: z.string().min(1),
-  platformVersion: z.string().min(1),
+  platformVersion: PlatformVersionRangeSchema,
   downloadUrl: z.string(),
   sha256: z.string().optional(),
   size: z.number().int().nonnegative().optional(),
@@ -77,7 +47,11 @@ export function isMissingSize(v: { size?: number }): boolean {
 }
 
 /** 运行时校验版本是否可下载：downloadUrl 合法，sha256 格式合法（若有），非 GitHub 直链时 size 必填 */
-export function isVersionDownloadable(v: { downloadUrl: string; sha256?: string; size?: number }): boolean {
+export function isVersionDownloadable(v: {
+  downloadUrl: string;
+  sha256?: string;
+  size?: number;
+}): boolean {
   if (!isValidDownloadUrl(v.downloadUrl)) return false;
   if (!isValidSha256Format(v.sha256)) return false;
   if (isMissingSize(v) && !isGitHubReleaseUrl(v.downloadUrl)) return false;
@@ -104,7 +78,7 @@ export const MarketGameSchema = z.object({
   visibility: z.enum(["public", "hidden", "deprecated"]).optional(),
   minPlayers: z.number().int().min(1).optional(),
   maxPlayers: z.number().int().min(1).optional(),
-  latestVersion: z.string().regex(/^\d+\.\d+\.\d+$/),
+  latestVersion: GameVersionSchema,
   versions: z.array(MarketGameVersionSchema).min(1),
 });
 

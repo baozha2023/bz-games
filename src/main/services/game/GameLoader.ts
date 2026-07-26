@@ -4,12 +4,18 @@ import path from "path";
 import semver from "semver";
 import {
   GameManifestSchema,
+  compareGameVersionsDescending,
   type GameManifest,
 } from "../../../shared/game-manifest";
 import { storeService } from "../storage/StoreService";
 import { GameType, type GameRecord } from "../../../shared/types";
 import { logger } from "../../utils/logger";
 import { copyFolderRecursiveSync } from "../../utils/fileUtils";
+import {
+  GameManifestFileError,
+  readGameManifestFile,
+  writeEncryptedGameManifestFile,
+} from "./GameManifestFileService";
 
 export interface ImportPreparationResult {
   sourcePath: string;
@@ -97,15 +103,15 @@ export class GameLoader {
     try {
       const manifest = await this.validateManifestFile(resolvedSourcePath);
       this.verifyManifestVersion(manifest);
-      this.checkPlatformVersion(manifest);
+      this.assertPlatformCompatible(manifest);
       this.checkEntryFile(resolvedSourcePath, manifest);
+      this.checkOptionalManifestFiles(resolvedSourcePath, manifest);
       if (manifest.type === GameType.NetworkGame) {
         await this.ensureGameIdNotExists(manifest.id);
       } else {
         await this.ensureVersionNotExists(manifest.id, manifest.version);
       }
-      const targetPath = this.installGameFiles(resolvedSourcePath, manifest);
-      await this.updateGameRecord(manifest, targetPath);
+      await this.installAndRecordGame(resolvedSourcePath, manifest);
 
       this.cache = null;
       return { success: true, manifest };
@@ -131,7 +137,9 @@ export class GameLoader {
     }
 
     const folderName = path.basename(resolvedSourcePath);
-    const hasManifest = fs.existsSync(path.join(resolvedSourcePath, "game.json"));
+    const hasManifest = fs.existsSync(
+      path.join(resolvedSourcePath, "game.json"),
+    );
     const suggestedEntry = (() => {
       try {
         return this.detectEntryFile(resolvedSourcePath);
@@ -166,22 +174,15 @@ export class GameLoader {
     try {
       const manifest = this.buildManualManifestDraft(draft);
       this.verifyManifestVersion(manifest);
-      this.checkPlatformVersion(manifest);
+      this.assertPlatformCompatible(manifest);
       this.checkEntryFile(resolvedSourcePath, manifest);
-      this.checkOptionalFile(resolvedSourcePath, manifest.icon, "iconNotFound");
-      this.checkOptionalFile(resolvedSourcePath, manifest.cover, "coverNotFound");
+      this.checkOptionalManifestFiles(resolvedSourcePath, manifest);
       await this.ensureGameIdNotExists(manifest.id);
       if (manifest.type !== GameType.NetworkGame) {
         await this.ensureVersionNotExists(manifest.id, manifest.version);
       }
 
-      const targetPath = this.installGameFiles(resolvedSourcePath, manifest);
-      fs.writeFileSync(
-        path.join(targetPath, "game.json"),
-        JSON.stringify(manifest, null, 2),
-        "utf8",
-      );
-      await this.updateGameRecord(manifest, targetPath);
+      await this.installAndRecordGame(resolvedSourcePath, manifest);
 
       this.cache = null;
       return { success: true, manifest };
@@ -216,6 +217,9 @@ export class GameLoader {
     try {
       return this.loadManifest(jsonPath);
     } catch (e: any) {
+      if (e instanceof GameManifestFileError) {
+        throw { code: e.code, params: { message: e.message } };
+      }
       logger.warn(`Invalid manifest at ${jsonPath}`, e);
       const { z } = await import("zod");
       let msg = e.message;
@@ -313,7 +317,13 @@ export class GameLoader {
       "saves",
       "screenshots",
     ]);
-    const allowedExtensions = new Set([".html", ".htm", ".exe", ".bat", ".cmd"]);
+    const allowedExtensions = new Set([
+      ".html",
+      ".htm",
+      ".exe",
+      ".bat",
+      ".cmd",
+    ]);
     const candidates: EntryCandidate[] = [];
     const walk = (directory: string, depth: number) => {
       if (depth > 3) return;
@@ -385,11 +395,15 @@ export class GameLoader {
     folderName: string,
   ) {
     const lowerName = candidate.name.toLowerCase();
-    const baseName = path.basename(candidate.name, candidate.extension).toLowerCase();
+    const baseName = path
+      .basename(candidate.name, candidate.extension)
+      .toLowerCase();
     const lowerPath = candidate.relativePath.toLowerCase();
     let score = 100 - candidate.depth * 18;
     if (lowerName === "index.html" || lowerName === "index.htm") score += 80;
-    if (["main", "game", "play", "start", "launch", "launcher"].includes(baseName)) {
+    if (
+      ["main", "game", "play", "start", "launch", "launcher"].includes(baseName)
+    ) {
       score += 65;
     }
     if (baseName === folderName) score += 70;
@@ -400,12 +414,20 @@ export class GameLoader {
     ) {
       score += 18;
     }
-    if (candidate.extension === ".exe") score += Math.min(35, Math.floor(candidate.size / 1024 / 1024));
-    if (lowerName.includes("unins") || lowerName.includes("setup") || lowerName.includes("install")) score -= 120;
+    if (candidate.extension === ".exe")
+      score += Math.min(35, Math.floor(candidate.size / 1024 / 1024));
+    if (
+      lowerName.includes("unins") ||
+      lowerName.includes("setup") ||
+      lowerName.includes("install")
+    )
+      score -= 120;
     return score;
   }
 
-  private static buildManualManifestDraft(draft: ManualManifestDraft): GameManifest {
+  private static buildManualManifestDraft(
+    draft: ManualManifestDraft,
+  ): GameManifest {
     const entry = draft.entry?.trim();
     if (!entry) {
       throw { code: "entryNotFound", params: { entry: entry || "" } };
@@ -420,7 +442,8 @@ export class GameLoader {
     const minPlayers = draft.minPlayers || 2;
     const maxPlayers = draft.maxPlayers || Math.max(minPlayers, 4);
     const needsMultiplayerConfig =
-      draft.type === GameType.Multiplayer || draft.type === GameType.SingleMultiple;
+      draft.type === GameType.Multiplayer ||
+      draft.type === GameType.SingleMultiple;
     if (
       needsMultiplayerConfig &&
       (!Number.isInteger(minPlayers) ||
@@ -453,7 +476,6 @@ export class GameLoader {
   }
 
   private static verifyManifestVersion(manifest: GameManifest): void {
-    if (manifest.type === GameType.NetworkGame) return;
     if (!semver.valid(manifest.version)) {
       throw { code: "versionInvalid" };
     }
@@ -469,8 +491,20 @@ export class GameLoader {
       throw { code };
     }
     const absolute = path.join(sourcePath, filePath);
-    if (!fs.existsSync(absolute)) {
+    if (!fs.existsSync(absolute) || !fs.statSync(absolute).isFile()) {
       throw { code, params: { file: filePath } };
+    }
+  }
+
+  private static checkOptionalManifestFiles(
+    sourcePath: string,
+    manifest: GameManifest,
+  ): void {
+    this.checkOptionalFile(sourcePath, manifest.icon, "iconNotFound");
+    this.checkOptionalFile(sourcePath, manifest.cover, "coverNotFound");
+    this.checkOptionalFile(sourcePath, manifest.video, "videoNotFound");
+    for (const achievement of manifest.achievements || []) {
+      this.checkOptionalFile(sourcePath, achievement.icon, "iconNotFound");
     }
   }
 
@@ -480,7 +514,9 @@ export class GameLoader {
   ): Promise<void> {
     const games = await storeService.getGames();
     const existingRecord = games.find((g) => g.id === id);
-    const versionExists = existingRecord?.versions.some((v) => v.version === version);
+    const versionExists = existingRecord?.versions.some(
+      (v) => v.version === version,
+    );
     if (versionExists) {
       throw { code: "versionExists", params: { version } };
     }
@@ -493,7 +529,7 @@ export class GameLoader {
     }
   }
 
-  private static checkPlatformVersion(manifest: GameManifest): void {
+  static assertPlatformCompatible(manifest: GameManifest): void {
     const currentVersion = app.getVersion();
     let isCompatible = false;
 
@@ -517,21 +553,19 @@ export class GameLoader {
     sourcePath: string,
     manifest: GameManifest,
   ): void {
-    if (manifest.entry === "serve" || manifest.entry === "url") {
+    if (manifest.entry === "url") {
       return;
     }
-    if (!manifest.entry.toLowerCase().endsWith(".html")) {
-      return;
-    }
-    const entryPath = path.join(sourcePath, manifest.entry);
-    if (!fs.existsSync(entryPath)) {
-      throw { code: "entryNotFound", params: { entry: manifest.entry } };
+    const relativeEntry =
+      manifest.entry === "serve" ? "index.html" : manifest.entry;
+    const entryPath = path.join(sourcePath, relativeEntry);
+    if (!fs.existsSync(entryPath) || !fs.statSync(entryPath).isFile()) {
+      throw { code: "entryNotFound", params: { entry: relativeEntry } };
     }
   }
 
   private static loadManifest(jsonPath: string): GameManifest {
-    const raw = JSON.parse(fs.readFileSync(jsonPath, "utf8"));
-    return GameManifestSchema.parse(raw);
+    return readGameManifestFile(jsonPath);
   }
 
   private static installGameFiles(
@@ -546,19 +580,78 @@ export class GameLoader {
     const gameRootDir = path.join(gamesDir, manifest.id);
 
     if (fs.existsSync(gameRootDir) && !fs.statSync(gameRootDir).isDirectory()) {
-      fs.rmSync(gameRootDir, { force: true, maxRetries: 10, retryDelay: 500 });
+      throw {
+        code: "versionExists",
+        params: { id: manifest.id, version: manifest.version },
+      };
     }
 
     const targetPath = path.join(gameRootDir, manifest.version);
 
     if (fs.existsSync(targetPath)) {
-      fs.rmSync(targetPath, { recursive: true, force: true, maxRetries: 10, retryDelay: 500 });
+      throw {
+        code: "versionExists",
+        params: { id: manifest.id, version: manifest.version },
+      };
     }
 
     logger.info(`Copying game files from ${sourcePath} to ${targetPath}`);
-    copyFolderRecursiveSync(sourcePath, targetPath);
+    try {
+      copyFolderRecursiveSync(sourcePath, targetPath);
+      writeEncryptedGameManifestFile(
+        path.join(targetPath, "game.json"),
+        manifest,
+      );
+      return targetPath;
+    } catch (error) {
+      this.removeIncompleteInstall(targetPath);
+      throw error;
+    }
+  }
 
-    return targetPath;
+  private static async installAndRecordGame(
+    sourcePath: string,
+    manifest: GameManifest,
+  ): Promise<void> {
+    const targetPath = this.installGameFiles(sourcePath, manifest);
+    try {
+      await this.updateGameRecord(manifest, targetPath);
+    } catch (error) {
+      this.removeIncompleteInstall(targetPath);
+      throw error;
+    }
+  }
+
+  private static removeIncompleteInstall(targetPath: string): void {
+    try {
+      if (fs.existsSync(targetPath)) {
+        fs.rmSync(targetPath, {
+          recursive: true,
+          force: true,
+          maxRetries: 10,
+          retryDelay: 500,
+        });
+      }
+    } catch (error) {
+      logger.error(`Failed to clean incomplete install: ${targetPath}`, error);
+      return;
+    }
+
+    const gameRootDir = path.dirname(targetPath);
+    try {
+      if (
+        fs.existsSync(gameRootDir) &&
+        fs.statSync(gameRootDir).isDirectory() &&
+        fs.readdirSync(gameRootDir).length === 0
+      ) {
+        fs.rmdirSync(gameRootDir);
+      }
+    } catch (error) {
+      logger.warn(
+        `Failed to clean empty game directory: ${gameRootDir}`,
+        error,
+      );
+    }
   }
 
   private static async updateGameRecord(
@@ -615,10 +708,7 @@ export class GameLoader {
 
       // Update latest version
       record.latestVersion = record.versions.sort((a, b) =>
-        b.version.localeCompare(a.version, undefined, {
-          numeric: true,
-          sensitivity: "base",
-        }),
+        compareGameVersionsDescending(a.version, b.version),
       )[0].version;
     } else {
       // Create new record
@@ -660,10 +750,11 @@ export class GameLoader {
         const jsonPath = path.join(latest.path, "game.json");
         if (fs.existsSync(jsonPath)) {
           try {
-            const raw = JSON.parse(fs.readFileSync(jsonPath, "utf8"));
-            manifests.push(GameManifestSchema.parse(raw));
+            manifests.push(
+              readGameManifestFile(jsonPath, { migratePlaintext: true }),
+            );
           } catch (e) {
-            logger.warn(`Failed to parse ${jsonPath}`);
+            logger.warn(`Failed to parse ${jsonPath}`, e);
           }
         }
       }
@@ -741,10 +832,7 @@ export class GameLoader {
       if (validVersions.length > 0) {
         // Sort versions descending
         validVersions.sort((a, b) =>
-          b.version.localeCompare(a.version, undefined, {
-            numeric: true,
-            sensitivity: "base",
-          }),
+          compareGameVersionsDescending(a.version, b.version),
         );
 
         record.versions = validVersions;
@@ -770,10 +858,7 @@ export class GameLoader {
 
       // Sort versions
       gameVersions.sort((a, b) =>
-        b.version.localeCompare(a.version, undefined, {
-          numeric: true,
-          sensitivity: "base",
-        }),
+        compareGameVersionsDescending(a.version, b.version),
       );
 
       newRecords.push({
@@ -843,13 +928,13 @@ export class GameLoader {
     if (!fs.existsSync(jsonPath)) return null;
 
     try {
-      const raw = JSON.parse(fs.readFileSync(jsonPath, "utf8"));
-      return GameManifestSchema.parse(raw);
+      return readGameManifestFile(jsonPath, { migratePlaintext: true });
     } catch (e) {
       logger.warn(
         `Failed to parse manifest for ${gameId} version ${version || "latest"}`,
         e,
       );
+      if (e instanceof GameManifestFileError) throw e;
       return null;
     }
   }

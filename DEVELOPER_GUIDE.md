@@ -31,7 +31,9 @@ my-game/
 ├── icon.png           # [推荐] 游戏图标 (建议 256x256)
 ├── cover.png          # [推荐] 游戏封面 (建议 16:9，如 1920x1080)
 ├── preview.mp4        # [可选] 游戏详情页预览视频
-└── assets/            # 其他资源文件
+└── assets/
+    └── achievements/
+        └── first-win.png # [可选] 成就自定义图标
 ```
 
 ### 2.1 游戏清单 (game.json)
@@ -48,7 +50,6 @@ my-game/
   "author_url": "https://github.com/developer",
   "platformVersion": ">=1.0.0",
   "entry": "index.html",
-  "web_url": "https://example.com",
   "icon": "icon.png",
   "cover": "cover.png",
   "video": "preview.mp4",
@@ -61,7 +62,8 @@ my-game/
     {
       "id": "first_win",
       "title": "初次胜利",
-      "description": "赢得一场比赛"
+      "description": "赢得一场比赛",
+      "icon": "assets/achievements/first-win.png"
     }
   ],
   "statistics": [
@@ -74,13 +76,7 @@ my-game/
         "mode": "increment"
       }
     }
-  ],
-  "args": [
-    "--fullscreen"
-  ],
-  "env": {
-    "MY_VAR": "custom_value"
-  }
+  ]
 }
 ```
 
@@ -88,25 +84,92 @@ my-game/
 
 | 字段 | 类型 | 必填 | 说明 |
 | :--- | :--- | :--- | :--- |
-| `id` | string | 是 | 全局唯一标识，建议使用反向域名格式 (如 `com.studio.game`) |
-| `name` | string | 是 | 游戏显示名称 |
-| `version` | string | 是 | 游戏版本号 (SemVer 格式，如 `1.0.0`)。`networkgame` 类型游戏版本号不参与校验与去重，仅以 `id` 判断唯一性。 |
-| `description` | string | 否 | 游戏描述 |
-| `author` | string | 否 | 作者名称 |
-| `author_url` | string | 否 | 作者主页链接，游戏详情页与市场页将在作者名称旁显示跳转图标 |
-| `platformVersion`| string/array | 是 | 兼容的平台版本范围 (如 `">=1.0.0"` 或 `["1.0.0", "2.0.0"]`) |
-| `entry` | string | 是 | 启动入口。支持本地入口文件（如 `index.html`、`game.exe`）、`serve` 或 `url` |
-| `web_url` | string | `entry=url` 时必填 | 远程网页地址（必须为合法 `https?://` URL） |
-| `type` | string | 是 | `"singleplayer"` (单机) / `"multiplayer"` (联机) / `"singlemultiple"` (单人+联机) / `"networkgame"` (网页游戏，仅网页直连启动，**忽略版本号，仅以 ID 去重**) |
-| `multiplayer` | object | 联机必填 | 包含 `minPlayers` 和 `maxPlayers` (整数)，`type` 为 `multiplayer` 或 `singlemultiple` 时必填 |
-| `icon` | string | 否 | 图标路径 |
-| `cover` | string | 否 | 封面路径 |
-| `video` | string | 否 | 详情页预览视频路径，支持 `mp4/webm/ogv/mov/m4v`，自动播放一次后回到封面 |
+| `$schema` | string | 否 | JSON Schema 地址或清单格式标识，平台不依赖该字段启动游戏 |
+| `id` | string | 是 | 长度 3–200 的全局唯一标识，必须使用小写反向域名格式，如 `com.studio.game` |
+| `name` | string | 是 | 游戏显示名称，长度 1–100 |
+| `version` | string | 是 | 最长 100 字符的完整 SemVer，如 `1.0.0`。`networkgame` 仍需合法版本号，但安装去重仅以 `id` 判断唯一性 |
+| `description` | string | 否 | 游戏描述，最长 500 字符 |
+| `author` | string | 是 | 作者名称，长度 1–100 |
+| `author_url` | string | 否 | 最长 2048 字符的 HTTP(S) 作者主页链接，游戏详情页与市场页将在作者名称旁显示跳转图标 |
+| `platformVersion`| string/array | 是 | 最长 200 字符的有效 SemVer 兼容范围（如 `">=1.0.0"`）或闭区间（如 `["1.0.0", "2.0.0"]`）；闭区间最小值不得大于最大值，导入和每次启动都会校验 |
+| `entry` | string | 是 | 最长 500 字符的启动入口。支持游戏目录内的安全相对路径（如 `index.html`、`play.htm`、`game.exe`）、`serve` 或 `url`；`serve` 要求根目录存在 `index.html` |
+| `web_url` | string | `entry=url` 时必填 | 最长 2048 字符的远程网页地址，必须为合法 HTTP(S) URL |
+| `type` | string | 是 | `"singleplayer"` (单机) / `"multiplayer"` (仅从匹配房间启动) / `"singlemultiple"` (可单人或联机) / `"networkgame"` (远程网页游戏，必须使用 `entry=url`，安装仅以 ID 去重) |
+| `multiplayer` | object | 联机必填 | 包含 `minPlayers` 和 `maxPlayers`（正整数且 `minPlayers <= maxPlayers`），`type` 为 `multiplayer` 或 `singlemultiple` 时必填；主进程会据此限制开局人数与房间容量 |
+| `icon` | string | 否 | 最长 500 字符的游戏图标安全相对路径 |
+| `cover` | string | 否 | 最长 500 字符的游戏封面安全相对路径 |
+| `video` | string | 否 | 最长 500 字符的预览视频安全相对路径，支持 `mp4/webm/ogv/mov/m4v` |
 | `encryptLocalStorage` | boolean | 否 | 是否启用 `gamedata.json` 加密持久化，仅对 Web 游戏 `localStorage` 生效，默认 `false` |
-| `achievements` | array | 否 | 成就列表定义 |
-| `statistics` | array | 否 | 统计指标列表，支持字符串或键值对格式，如 `["time", {"score": "得分"}, {"gamesPlayed": { "label": "局数", "mode": "increment" }}]`。`mode` 为 `increment` 或 `full`，默认为 `increment`。`time` (游玩时长) 由平台自动统计，无需在此定义。 |
-| `args` | array | 否 | 启动参数列表 (仅 Native 游戏有效) |
-| `env` | object | 否 | 注入的环境变量 (仅 Native 游戏有效) |
+| `achievements` | array | 否 | 成就列表，最多 1000 项；字段见下方“成就定义” |
+| `statistics` | array | 否 | 统计指标列表，支持字符串、显示名称和带更新模式的对象格式；字段见下方“统计定义” |
+| `args` | string[] | 否 | 仅 Native 入口可用；最多 256 项，每项最长 8192 字符，按数组顺序原样传给目标进程 |
+| `env` | object | 否 | 仅 Native 入口可用；变量名最长 255 字符且需匹配 `[A-Za-z_][A-Za-z0-9_]*`，值最长 32768 字符，禁止使用 `BZ_` 前缀以及 `__proto__`、`prototype`、`constructor` |
+
+#### Multiplayer 定义
+
+`type` 为 `multiplayer` 或 `singlemultiple` 时必须声明；其他游戏类型不得声明。
+
+| 字段 | 类型 | 必填 | 说明 |
+| :--- | :--- | :--- | :--- |
+| `minPlayers` | integer | 是 | 最少开局人数，必须大于等于 1；允许设为 `1` 以支持通过房间启动的单人玩法 |
+| `maxPlayers` | integer | 是 | 房间最大人数，必须大于等于 `minPlayers` |
+
+#### 成就定义
+
+```json
+{
+  "id": "first_win",
+  "title": "初次胜利",
+  "description": "赢得一场比赛",
+  "icon": "assets/achievements/first-win.png"
+}
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+| :--- | :--- | :--- | :--- |
+| `id` | string | 是 | 当前游戏内唯一的成就 ID，长度 1–200；同一 Manifest 中不得重复 |
+| `title` | string | 是 | 成就标题，长度 1–200 |
+| `description` | string | 是 | 成就描述，最长 1000 字符 |
+| `icon` | string | 否 | 游戏目录内的安全相对路径，最长 500 字符；推荐 PNG、WebP 或 JPEG |
+
+平台导入和设置页数据自检都会验证已声明的成就图标是否为实际文件。安装到游戏库后，即使 `game.json` 已加密，平台仍会在内存中透明解密并解析图标路径。
+
+自定义图标用于成就页、游戏详情成就弹窗和系统解锁通知。平台 UI 无法加载自定义图标时显示默认奖杯；系统通知按“成就图标 → 游戏图标 → 无图标”顺序回退。
+
+#### 统计定义
+
+以下三种写法可以混用：
+
+```json
+[
+  "kills",
+  { "score": "得分" },
+  { "gamesPlayed": { "label": "游戏局数", "mode": "increment" } },
+  { "endless_high_score": { "label": "无尽最高分", "mode": "full" } }
+]
+```
+
+| 写法 | 说明 |
+| :--- | :--- |
+| `"kills"` | 使用统计 ID 作为平台显示名称，默认采用 `increment` |
+| `{ "score": "得分" }` | 为统计项指定显示名称，默认采用 `increment` |
+| `{ "key": { "label": "名称", "mode": "increment" \| "full" } }` | 同时指定显示名称和更新模式 |
+
+统计 ID 长度为 1–200，不能使用 `__proto__`、`prototype` 或 `constructor`；显示名称长度为 1–200。`increment` 表示把本次值累加到已有值，`full` 表示使用本次值覆盖已有值。
+
+`time` 是平台管理的游玩时长统计项，无需在 Manifest 中定义，也不得通过 `stats.report` 上报。
+
+#### 字段组合约束
+
+- `entry=url` 必须提供 `web_url`；其他入口不得声明 `web_url`。
+- `.html`、`.htm`、`serve` 和 `url` 属于 Web 入口，不得声明非空 `args` 或 `env`。
+- Native 入口不得启用 `encryptLocalStorage`。
+- `networkgame` 必须使用 `entry=url`。
+- 所有文件路径均须为游戏目录内的安全相对路径，禁止空路径、绝对路径、盘符、空字节以及 `.` / `..` 路径段。
+
+> 游戏包中的 `game.json` 始终使用上述明文 JSON 格式。平台导入游戏后，会在游戏库目录中自动加密该文件；该过程不会修改开发者选择的原始游戏目录或市场发布包。
+>
+> `game.json` 与 `bz-config.js` 是游戏根目录中的平台保留文件名，接入游戏不得将其用于游戏自身的同名内容。
 
 ---
 
@@ -116,7 +179,7 @@ my-game/
 
 ### 3.1 Web 游戏 (HTML5)
 
-对于 `entry` 为 `.html` 和 `serve` 的游戏，平台会在游戏根目录生成临时配置文件。推荐使用 `bz-config.js`，并在 HTML 中引入：
+对于 `entry` 为 `.html`、`.htm` 和 `serve` 的游戏，平台会在游戏根目录生成临时配置文件。游戏需要使用 Game API 时，应在 HTML 中引入：
 
 ```html
 
@@ -132,37 +195,52 @@ window.BZ_CONFIG = {
     playerId: "uuid-...",     // 当前玩家 ID
     playerName: "PlayerName", // 当前玩家昵称
     playerAvatar: "data:image/png;base64,...", // 玩家头像 (Base64)
+    gameId: "com.developer.mygame",
+    gameVersion: "1.0.0",
+    platformVersion: "3.1.0",
     roomId: "room-uuid",      // 当前房间 ID，单机为空字符串
     isHost: true,             // 当前玩家是否为房主
     isMultiple: true          // 当前是否为联机模式
 };
 ```
 
-如果你自行管理配置文件，也可使用 `bz-config`（无扩展名）或 `bz-config.json`。建议游戏按以下顺序读取：
+平台只保证通过 `window.BZ_CONFIG` 提供上述 Game API 配置。启动 URL 中的 `gameId` 和 `version` 仅用于页面识别与兼容，不包含 API Token，不能替代 `bz-config.js`。
 
-1. `window.BZ_CONFIG`
-2. `bz-config.js` / `bz-config` / `bz-config.json`
-3. URL 参数
-
-**备选方案**：如果上述配置都不存在，游戏应尝试从 URL 参数获取配置：
-`index.html?apiPort=12345&token=...&playerId=...&playerAvatar=...&roomId=...&isHost=1&isMultiple=1`
 **注意**：
-- `entry=serve` 时，游戏平台会使用静态托管方式启动并访问本地 `index.html`。
+- `entry=serve` 时，平台仅在 `127.0.0.1` 提供静态服务，并将根路径 `/` 解析为 `index.html`。
 - `entry=url` 时，游戏平台会直接打开 `web_url` 指向的网站，不会生成/注入 `bz-config.js`，也不会注入 `window.BZ_CONFIG`。
+- `bz-config.js` 只在本地 Web 游戏运行期间存在，游戏退出或启动失败后由平台删除。
 
 ### 3.2 Native 游戏 (Exe/Executable)
 
 对于可执行文件，平台通过 **环境变量** 传递配置：
 
+```json
+{
+  "entry": "game.exe",
+  "args": ["--fullscreen", "--profile=default"],
+  "env": {
+    "MY_VAR": "custom_value"
+  }
+}
+```
+
 | 环境变量名 | 说明 |
 | :--- | :--- |
+| `BZ_PLATFORM` | 是否由 BZ-Games 平台启动，固定为 `"1"` |
+| `BZ_PLATFORM_VERSION` | 当前 BZ-Games 客户端版本 |
 | `BZ_API_PORT` | 本地 WebSocket 端口 |
 | `BZ_API_TOKEN` | 认证 Token |
 | `BZ_PLAYER_ID` | 当前玩家 ID |
 | `BZ_PLAYER_NAME` | 当前玩家昵称 |
 | `BZ_PLAYER_AVATAR` | 当前玩家头像 (Base64) |
+| `BZ_GAME_ID` | 当前游戏 ID |
+| `BZ_GAME_VERSION` | 当前游戏版本 |
 | `BZ_ROOM_ID` | 当前房间 ID (仅联机模式) |
 | `BZ_IS_HOST` | 是否为房主 (`"1"` 或 `"0"`) |
+| `BZ_IS_MULTIPLE` | 当前是否处于联机房间 (`"1"` 或 `"0"`) |
+
+平台会先移除继承环境中的 `ELECTRON_`、`NODE_`、`NPM_`、`VSCODE_` 前缀变量，再合并 Manifest 的 `env`，最后注入上述 `BZ_` 保留变量。`args` 会按 `game.json` 中的数组顺序原样传入 Native 进程。
 
 ### 3.3 数据持久化注意事项 (Web 游戏)
 
@@ -170,9 +248,9 @@ Web 游戏通常使用 `localStorage` 或 `IndexedDB` 存储本地数据（如�
 
 * **平台接管机制**：平台通过预加载脚本 (`preload/game.js`) 自动接管并覆盖了游戏的 `localStorage` 接口。
 * **统一存储路径**：所有 `localStorage` 数据会被重定向存储到 `games/<id>/<version>/gamedata.json` 文件中。
-* **版本隔离**：非 `networkgame` 类型游戏的不同版本拥有独立的 `gamedata.json`，确保存档互不干扰。`networkgame` 类型游戏版本不参与隔离，同一 `id` 始终共享同一份数据。
+* **版本隔离**：每个已安装的 `id/version` 使用各自目录中的 `gamedata.json`。`networkgame` 同一 ID 只保留一个已安装版本，因此不会同时存在多版本存档。
 * **可选加密**：当 Manifest 配置 `"encryptLocalStorage": true` 时，平台会对 `gamedata.json` 进行加密存储；不配置时默认明文。
-* **启动模式互通**：无论使用 `index.html` 还是 `serve` 模式启动，只要是同一游戏同一版本（`networkgame` 类型为同一 `id`），都将读取同一个 `gamedata.json`
+* **启动模式互通**：无论使用 `index.html` 还是 `serve` 模式启动，只要是同一游戏同一版本，都将读取同一个 `gamedata.json`
   ，彻底解决了浏览器同源策略导致的存档隔离问题。
     * **开发者提示**：你无需修改游戏代码，只需像往常一样使用 `localStorage.getItem()` 和 `setItem()` 即可。
 
@@ -978,8 +1056,8 @@ v2 通信接口失败时返回结构化错误对象：
     "id": "first_win",
     "title": "初次胜利",
     "description": "赢得一场比赛",
-    "unlocked": false,
-    "unlockedAt": null
+    "icon": "assets/achievements/first-win.png",
+    "unlocked": false
   }
 ]
 ```
@@ -989,14 +1067,15 @@ v2 通信接口失败时返回结构化错误对象：
 | `id` | `string` | 成就 ID，对应 `game.json` |
 | `title` | `string` | 成就标题 |
 | `description` | `string` | 成就描述 |
+| `icon` | `string?` | 成就自定义图标在游戏目录内的相对路径；未声明时省略 |
 | `unlocked` | `boolean` | 是否已解锁 |
-| `unlockedAt` | `number?` | 首次解锁时间戳（毫秒），未解锁为 `null` |
+| `unlockedAt` | `number?` | 首次解锁时间戳（毫秒），未解锁时省略 |
 
 ---
 
 #### `achievement.unlock` — 解锁成就
 
-触发成就解锁。重复解锁自动忽略（幂等）。
+触发成就解锁。`achievementId` 必须已在当前版本 `game.json` 的 `achievements` 中声明；未声明时返回失败。重复解锁自动忽略（幂等），并通过 `new` 字段表明是否为首次解锁。
 
 **Request**
 
@@ -1029,8 +1108,10 @@ v2 通信接口失败时返回结构化错误对象：
 **Response（失败）**
 
 ```json
-{ "success": false, "reason": "Player mismatch" }
+{ "success": false, "reason": "Achievement is not declared in game.json" }
 ```
+
+失败原因包括成就未在当前版本 Manifest 中声明，或显式传入的 `playerId` 与当前本地玩家不一致。业务校验失败时不会创建解锁记录或显示通知。
 
 ---
 
@@ -1040,7 +1121,7 @@ v2 通信接口失败时返回结构化错误对象：
 
 上报游戏内统计数据。统计项需在 `game.json` 的 `statistics` 字段中预先定义。
 
-> `time`（游玩时长）由平台自动统计，**无需上报**。
+> `time`（游玩时长）由平台自动统计，不能通过此接口上报。
 
 **`game.json` 中 `statistics` 的定义方式**：
 
@@ -1067,7 +1148,7 @@ v2 通信接口失败时返回结构化错误对象：
 }
 ```
 
-payload 的 key 必须与 `game.json` 中定义的统计项名称一致。
+payload 必须是非空对象。每个 key 必须与 `game.json` 中定义的统计项 ID 一致，每个值必须是有限数值；未声明字段、`NaN`、正负无穷以及平台保留的 `time` 都会以 `INVALID_PAYLOAD` 拒绝。
 
 **Response**
 
@@ -1163,15 +1244,12 @@ payload 的 key 必须与 `game.json` 中定义的统计项名称一致。
 ```javascript
 // ── 1. 获取配置 ──
 function getConfig() {
-  if (window.BZ_CONFIG) return window.BZ_CONFIG;
-  const p = new URLSearchParams(location.search);
-  return {
-    apiPort: p.get('apiPort'),
-    token: p.get('token'),
-    playerId: p.get('playerId'),
-    playerName: 'Unknown',
-    isMultiple: p.get('isMultiple') === '1'
-  };
+  if (!window.BZ_CONFIG) {
+    throw new Error(
+      'BZ_CONFIG 不可用：请使用本地 HTML/Serve 入口并在游戏脚本前加载 bz-config.js'
+    );
+  }
+  return window.BZ_CONFIG;
 }
 
 const config = getConfig();

@@ -9,3 +9,5 @@ onlyBuiltDependencies:
   - esbuild
   - electron
   - vue-demi
+overrides:
+  fast-uri: 3.1.4

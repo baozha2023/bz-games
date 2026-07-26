@@ -79,7 +79,7 @@ export const useGameStore = defineStore("game", () => {
   }
 
   async function launchGame(id: string, version?: string) {
-    await window.electronAPI.game.launch(id, version);
+    return await window.electronAPI.game.launch(id, version);
   }
 
   async function reorderGames(newOrderIds: string[]) {

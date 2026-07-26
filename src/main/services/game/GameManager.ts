@@ -1,18 +1,19 @@
 import { ChildProcess, spawn } from "child_process";
-import { BrowserWindow, shell } from "electron";
+import { BrowserWindow } from "electron";
 import path from "path";
 import fs from "fs";
 import { createServer, Server } from "http";
-import handler from "serve-handler";
-import { findAvailablePort } from "../../utils/portUtils";
+import serveStatic from "serve-static";
 import { GameLoader } from "./GameLoader";
 import { GameApiServer } from "../game-api/GameApiServer";
 import { storeService } from "../storage/StoreService";
 import { GameEnvironment } from "./GameEnvironment";
-import type {
-  GameMessageAckPayload,
-  GameRelayPayload,
-  RoomMessage,
+import {
+  GameType,
+  type GameMessageAckPayload,
+  type GameRelayPayload,
+  type RoomMessage,
+  type GameLaunchFailurePayload,
 } from "../../../shared/types";
 import { roomClient } from "../room/RoomClient";
 import { roomServer } from "../room/RoomServer";
@@ -20,15 +21,23 @@ import { mainWindow } from "../../window";
 import { IPC } from "../../../shared/ipc-channels";
 import type { GameManifest } from "../../../shared/game-manifest";
 import { playSessionDatabaseService } from "../storage/database/PlaySessionDatabaseService";
+import { openExternalHttpUrl } from "../../utils/externalUrl";
+import { gameWindowIdentityRegistry } from "./GameWindowIdentityRegistry";
+import { resolveGameEntryMode } from "../../../shared/game-launch";
+import { findMatchingRoom } from "../room/RoomContext";
 
 class GameManager {
   private activeProcesses: Map<string, ChildProcess> = new Map();
   private activeWindows: Map<string, BrowserWindow> = new Map();
   private activeServers: Map<string, Server> = new Map();
-  private activeVersionPaths: Map<string, string> = new Map();
+  private activeConfigPaths: Map<string, string> = new Map();
   private gameApiServers: Map<string, GameApiServer> = new Map();
-  private startTimes: Map<string, { start: number; version: string; sessionId: string }> =
-    new Map();
+  private launchingGames: Set<string> = new Set();
+  private finishingGames: Set<string> = new Set();
+  private startTimes: Map<
+    string,
+    { start: number; version: string; sessionId: string }
+  > = new Map();
 
   constructor() {
     this.initializeHandlers();
@@ -46,45 +55,96 @@ class GameManager {
   }
 
   async launch(id: string, version?: string): Promise<boolean> {
-    if (this.isGameRunning(id)) {
+    if (this.isGameRunning(id) || this.launchingGames.has(id)) {
       return false;
     }
 
+    this.launchingGames.add(id);
     try {
       const { path: versionPath, manifest } = await this.prepareGame(
         id,
         version,
       );
+      if (manifest.type === GameType.Multiplayer) {
+        const room = findMatchingRoom(manifest.id, manifest.version);
+        const localPlayerId = storeService.getSettings().playerId;
+        if (
+          !room ||
+          !room.players.some((player) => player.id === localPlayerId)
+        ) {
+          throw {
+            code: "roomRequired",
+            params: {
+              gameId: manifest.id,
+              version: manifest.version,
+            },
+          };
+        }
+      }
 
-      this.activeVersionPaths.set(id, versionPath);
-
-      if (manifest.entry === "url") {
+      const entryMode = resolveGameEntryMode(manifest.entry);
+      if (entryMode === "url") {
         return this.launchRemoteWebGame(id, versionPath, manifest);
       }
 
       const { port, token } = await this.startApiServer(id, manifest.version);
 
       const settings = storeService.getSettings();
-      const env = GameEnvironment.prepare(id, manifest, port, token, settings);
 
-      GameEnvironment.writeConfig(versionPath, port, token, settings);
-
-      if (manifest.entry === "serve") {
+      if (entryMode === "serve") {
+        this.writeWebGameConfig(
+          id,
+          versionPath,
+          manifest,
+          port,
+          token,
+          settings,
+        );
         return this.launchServeGame(id, versionPath, manifest);
-      } else if (manifest.entry.endsWith(".html")) {
+      } else if (entryMode === "html") {
+        this.writeWebGameConfig(
+          id,
+          versionPath,
+          manifest,
+          port,
+          token,
+          settings,
+        );
         return this.launchWebGame(id, versionPath, manifest);
       } else {
+        const env = GameEnvironment.prepare(
+          id,
+          manifest,
+          port,
+          token,
+          settings,
+        );
         return this.spawnGameProcess(id, versionPath, manifest, env);
       }
     } catch (error: any) {
-      this.notifyLaunchFailure(id, error.message || "Unknown error");
+      this.notifyLaunchFailure(
+        id,
+        error?.code || "unknown",
+        error?.params,
+        error?.message,
+      );
       this.cleanup(id);
       return false;
+    } finally {
+      this.launchingGames.delete(id);
     }
   }
 
   stop(id: string): void {
-    this.cleanup(id);
+    if (this.isGameRunning(id) || this.startTimes.has(id)) {
+      this.handleProcessExit(id, null);
+    } else {
+      this.cleanup(id);
+    }
+  }
+
+  isRunning(id: string): boolean {
+    return this.isGameRunning(id);
   }
 
   relayToGame(gameId: string, msg: RoomMessage) {
@@ -97,7 +157,8 @@ class GameManager {
       const payload = msg.payload as GameRelayPayload;
       if (payload.mode === "batch" && Array.isArray(payload.messages)) {
         for (const message of payload.messages as GameRelayPayload[]) {
-          if (payload.channel && !message.channel) message.channel = payload.channel;
+          if (payload.channel && !message.channel)
+            message.channel = payload.channel;
           api.sendEvent("event.message", message);
         }
         return;
@@ -116,13 +177,27 @@ class GameManager {
   ): Promise<{ path: string; manifest: GameManifest }> {
     const versionPath = await GameLoader.getVersionPath(id, version);
     if (!versionPath) {
-      throw new Error(`Game version not found: ${id} @ ${version || "latest"}`);
+      throw {
+        code: "versionNotFound",
+        params: { gameId: id, version: version || "latest" },
+      };
     }
 
     const manifest = await GameLoader.getManifest(id, version);
     if (!manifest) {
-      throw new Error(`Manifest missing or invalid for ${id}`);
+      throw {
+        code: "manifestInvalid",
+        params: { gameId: id, version: version || "latest" },
+      };
     }
+    const expectedVersion = version || path.basename(versionPath);
+    if (manifest.id !== id || manifest.version !== expectedVersion) {
+      throw {
+        code: "manifestIdentityMismatch",
+        params: { gameId: id, version: expectedVersion },
+      };
+    }
+    GameLoader.assertPlatformCompatible(manifest);
 
     return { path: versionPath, manifest };
   }
@@ -145,82 +220,147 @@ class GameManager {
     return { port, token };
   }
 
+  private writeWebGameConfig(
+    id: string,
+    versionPath: string,
+    manifest: GameManifest,
+    port: number,
+    token: string,
+    settings: ReturnType<typeof storeService.getSettings>,
+  ): void {
+    GameEnvironment.writeConfig(
+      versionPath,
+      id,
+      manifest,
+      port,
+      token,
+      settings,
+    );
+    this.activeConfigPaths.set(id, versionPath);
+  }
+
   private async launchServeGame(
     id: string,
     versionPath: string,
     manifest: GameManifest,
   ): Promise<boolean> {
-    const port = await findAvailablePort();
+    let serveOrigin = "";
+    const staticFiles = serveStatic(versionPath, {
+      cacheControl: false,
+      etag: false,
+      fallthrough: false,
+      index: ["index.html"],
+      setHeaders(response) {
+        response.setHeader("X-Content-Type-Options", "nosniff");
+        response.setHeader(
+          "Cache-Control",
+          "no-store, no-cache, must-revalidate, proxy-revalidate",
+        );
+        response.setHeader("Pragma", "no-cache");
+        response.setHeader("Expires", "0");
+      },
+    });
 
     const server = createServer((request, response) => {
-      return handler(request, response, {
-        public: versionPath,
-        headers: [
-          {
-            source: "**",
-            headers: [
-              { key: "Access-Control-Allow-Origin", value: "*" },
-              {
-                key: "Cache-Control",
-                value: "no-store, no-cache, must-revalidate, proxy-revalidate",
-              },
-              { key: "Pragma", value: "no-cache" },
-              { key: "Expires", value: "0" },
-            ],
-          },
-        ],
+      const fetchSite = request.headers["sec-fetch-site"];
+      const origin = request.headers.origin;
+      if (
+        fetchSite === "cross-site" ||
+        (origin !== undefined && origin !== serveOrigin)
+      ) {
+        response.statusCode = 403;
+        response.end("Forbidden");
+        return;
+      }
+      staticFiles(request, response, (error?: unknown) => {
+        if (response.headersSent) return;
+
+        const statusCode =
+          typeof error === "object" &&
+          error !== null &&
+          "statusCode" in error &&
+          typeof error.statusCode === "number"
+            ? error.statusCode
+            : 500;
+        response.statusCode = statusCode;
+        response.end(
+          statusCode === 404 ? "Not Found" : "Internal Server Error",
+        );
       });
     });
 
-    server.listen(port);
+    const port = await new Promise<number>((resolve, reject) => {
+      const handleError = (error: Error) => {
+        server.off("listening", handleListening);
+        reject(error);
+      };
+      const handleListening = () => {
+        server.off("error", handleError);
+        const address = server.address();
+        if (!address || typeof address === "string") {
+          server.close();
+          reject(new Error("Failed to resolve the static server listen port"));
+          return;
+        }
+        resolve(address.port);
+      };
+      server.once("error", handleError);
+      server.once("listening", handleListening);
+      server.listen(0, "127.0.0.1");
+    });
 
+    serveOrigin = `http://127.0.0.1:${port}`;
     this.activeServers.set(id, server);
 
-    const url = `http://localhost:${port}/index.html?gameId=${id}&version=${manifest.version}`;
-    this.createGameWindow(id, manifest, versionPath, url, false);
+    const url = `${serveOrigin}/?gameId=${encodeURIComponent(id)}&version=${encodeURIComponent(manifest.version)}`;
+    await this.createGameWindow(id, manifest, versionPath, url, false);
     return true;
   }
 
-  private launchWebGame(
+  private async launchWebGame(
     id: string,
     versionPath: string,
     manifest: GameManifest,
-  ): boolean {
+  ): Promise<boolean> {
     const entryPath = path.join(versionPath, manifest.entry);
 
     if (!fs.existsSync(entryPath)) {
-      throw new Error(`Entry file not found: ${manifest.entry}`);
+      throw { code: "entryNotFound", params: { entry: manifest.entry } };
     }
 
-    this.createGameWindow(id, manifest, versionPath, entryPath, true);
+    await this.createGameWindow(id, manifest, versionPath, entryPath, true);
     return true;
   }
 
-  private launchRemoteWebGame(
+  private async launchRemoteWebGame(
     id: string,
     versionPath: string,
     manifest: GameManifest,
-  ): boolean {
+  ): Promise<boolean> {
     if (!manifest.web_url) {
-      throw new Error("entry=url requires web_url in game.json");
+      throw { code: "webUrlMissing" };
     }
-    this.createGameWindow(id, manifest, versionPath, manifest.web_url, false);
+    await this.createGameWindow(
+      id,
+      manifest,
+      versionPath,
+      manifest.web_url,
+      false,
+    );
     return true;
   }
 
-  private createGameWindow(
+  private async createGameWindow(
     id: string,
     manifest: GameManifest,
     versionPath: string,
     urlOrPath: string,
     isFile: boolean,
-  ): BrowserWindow {
-    const windowArgs = this.parseWindowArgs(manifest.args || []);
+  ): Promise<BrowserWindow> {
     const win = new BrowserWindow({
-      width: windowArgs.width ?? 1280,
-      height: windowArgs.height ?? 720,
-      fullscreen: windowArgs.fullscreen,
-      kiosk: windowArgs.kiosk,
+      width: 1280,
+      height: 720,
+      show: false,
       title: manifest.name,
       icon: manifest.icon ? path.join(versionPath, manifest.icon) : undefined,
       autoHideMenuBar: true,
@@ -237,74 +377,72 @@ class GameManager {
         ],
       },
     });
-
-    if (isFile) {
-      win.loadFile(urlOrPath, {
-        search: `gameId=${id}&version=${manifest.version}`,
-      });
-    } else {
-      win.loadURL(urlOrPath);
-    }
+    const webContentsId = win.webContents.id;
+    gameWindowIdentityRegistry.register(webContentsId, {
+      gameId: id,
+      version: manifest.version,
+    });
 
     win.webContents.setWindowOpenHandler(({ url }) => {
-      shell.openExternal(url);
+      void openExternalHttpUrl(url);
       return { action: "deny" };
     });
 
     this.activeWindows.set(id, win);
+    let launchCompleted = false;
+    win.on("closed", () => {
+      gameWindowIdentityRegistry.unregister(webContentsId);
+      if (launchCompleted && this.activeWindows.get(id) === win) {
+        this.handleProcessExit(id, 0);
+      } else if (this.activeWindows.get(id) === win) {
+        this.activeWindows.delete(id);
+      }
+    });
+
+    if (isFile) {
+      await win.loadFile(urlOrPath, {
+        search: `gameId=${encodeURIComponent(id)}&version=${encodeURIComponent(manifest.version)}`,
+      });
+    } else {
+      await win.loadURL(urlOrPath);
+    }
+
     const sessionStart = Date.now();
-    const sessionId = playSessionDatabaseService.startSession(id, manifest.name, manifest.version, sessionStart);
+    const sessionId = playSessionDatabaseService.startSession(
+      id,
+      manifest.name,
+      manifest.version,
+      sessionStart,
+    );
     this.startTimes.set(id, {
       start: sessionStart,
       version: manifest.version,
       sessionId,
     });
 
+    launchCompleted = true;
+    win.show();
     mainWindow?.webContents.send(IPC.GAME_PROCESS_STARTED, id);
-
-    win.on("closed", () => {
-      this.handleProcessExit(id, 0);
-      this.activeWindows.delete(id);
-    });
 
     return win;
   }
 
-  private parseWindowArgs(args: string[]) {
-    const lowered = args.map((arg) => arg.toLowerCase());
-    const getValue = (prefix: string) => {
-      const match = lowered.find((arg) => arg.startsWith(prefix));
-      if (!match) return undefined;
-      const parts = match.split("=");
-      if (parts.length < 2) return undefined;
-      const value = Number(parts[1]);
-      return Number.isFinite(value) ? value : undefined;
-    };
-
-    return {
-      fullscreen:
-        lowered.includes("--fullscreen") && !lowered.includes("--fullscreen=false"),
-      kiosk:
-        lowered.includes("--kiosk") && !lowered.includes("--kiosk=false"),
-      width: getValue("--width"),
-      height: getValue("--height"),
-    };
-  }
-
-  private spawnGameProcess(
+  private async spawnGameProcess(
     id: string,
     versionPath: string,
     manifest: GameManifest,
-    env: any,
-  ): boolean {
+    env: NodeJS.ProcessEnv,
+  ): Promise<boolean> {
     const entryPath = path.join(versionPath, manifest.entry);
 
     if (!fs.existsSync(entryPath)) {
-      throw new Error(`Entry file not found: ${manifest.entry}`);
+      throw { code: "entryNotFound", params: { entry: manifest.entry } };
     }
 
     const isWindows = process.platform === "win32";
-    const isBatch = entryPath.endsWith(".bat") || entryPath.endsWith(".cmd");
+    const normalizedExtension = path.extname(entryPath).toLowerCase();
+    const isBatch =
+      normalizedExtension === ".bat" || normalizedExtension === ".cmd";
 
     const cp = spawn(entryPath, manifest.args || [], {
       cwd: versionPath,
@@ -315,32 +453,76 @@ class GameManager {
       windowsHide: false,
     });
 
+    let processTracked = false;
+    let exitedBeforeTracking = false;
+    let earlyExitCode: number | null = null;
+    cp.once("exit", (code) => {
+      if (!processTracked) {
+        exitedBeforeTracking = true;
+        earlyExitCode = code;
+        return;
+      }
+      if (this.activeProcesses.get(id) === cp) {
+        this.handleProcessExit(id, code);
+      }
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      const handleError = (error: Error) => {
+        cp.off("spawn", handleSpawn);
+        reject(error);
+      };
+      const handleSpawn = () => {
+        cp.off("error", handleError);
+        resolve();
+      };
+      cp.once("error", handleError);
+      cp.once("spawn", handleSpawn);
+    });
+
+    cp.on("error", (error) => {
+      this.notifyLaunchFailure(id, "processLaunchFailed", undefined, error.message);
+      if (this.activeProcesses.get(id) === cp) {
+        this.handleProcessExit(id, null);
+      }
+    });
     cp.unref();
     this.activeProcesses.set(id, cp);
     const sessionStart = Date.now();
-    const sessionId = playSessionDatabaseService.startSession(id, manifest.name, manifest.version, sessionStart);
+    const sessionId = playSessionDatabaseService.startSession(
+      id,
+      manifest.name,
+      manifest.version,
+      sessionStart,
+    );
     this.startTimes.set(id, {
       start: sessionStart,
       version: manifest.version,
       sessionId,
     });
+    processTracked = true;
 
     mainWindow?.webContents.send(IPC.GAME_PROCESS_STARTED, id);
-
-    cp.on("exit", (code) => this.handleProcessExit(id, code));
+    if (exitedBeforeTracking) {
+      this.handleProcessExit(id, earlyExitCode);
+    }
 
     return true;
   }
 
   private handleProcessExit(id: string, _code: number | null) {
-    this.recordPlaytime(id);
-    // 通知 RoomServer 本局结束（仅 host 端 RoomServer 在线时生效）
-    this.notifyRoomGameEnd(id);
-    // 客户端：通知房主需要重连
-    this.notifyRoomReconnectNeeded(id);
-    this.stop(id);
-    mainWindow?.webContents.send(IPC.GAME_PROCESS_ENDED, id);
-    import("../../window").then(({ updateTrayMenu }) => updateTrayMenu());
+    if (this.finishingGames.has(id)) return;
+    this.finishingGames.add(id);
+    try {
+      this.recordPlaytime(id);
+      this.notifyRoomGameEnd(id);
+      this.notifyRoomReconnectNeeded(id);
+      this.cleanup(id);
+      mainWindow?.webContents.send(IPC.GAME_PROCESS_ENDED, id);
+      import("../../window").then(({ updateTrayMenu }) => updateTrayMenu());
+    } finally {
+      this.finishingGames.delete(id);
+    }
   }
 
   private notifyRoomReconnectNeeded(gameId: string) {
@@ -349,7 +531,10 @@ class GameManager {
     if (!roomClient.room || roomClient.room.state !== "playing") return;
     if (roomClient.room.gameId !== gameId) return;
     const playerId = storeService.getSettings().playerId;
-    roomClient.send({ type: "room:player:reconnect-needed", payload: { playerId } });
+    roomClient.send({
+      type: "room:player:reconnect-needed",
+      payload: { playerId },
+    });
   }
 
   private recordPlaytime(id: string) {
@@ -357,7 +542,10 @@ class GameManager {
     if (startTimeData) {
       const durationMs = Date.now() - startTimeData.start;
       storeService.updatePlaytime(id, startTimeData.version, durationMs);
-      playSessionDatabaseService.endSession(startTimeData.sessionId, startTimeData.start);
+      playSessionDatabaseService.endSession(
+        startTimeData.sessionId,
+        startTimeData.start,
+      );
     }
     this.startTimes.delete(id);
   }
@@ -366,7 +554,8 @@ class GameManager {
     if (
       roomServer.room &&
       roomServer.room.gameId === id &&
-      roomServer.room.state === "playing"
+      (roomServer.room.state === "starting" ||
+        roomServer.room.state === "playing")
     ) {
       roomServer.room.state = "waiting";
       roomServer.room.reconnectPlayerIds = [];
@@ -376,10 +565,10 @@ class GameManager {
   }
 
   private cleanup(id: string) {
-    const versionPath = this.activeVersionPaths.get(id);
-    if (versionPath) {
-      GameEnvironment.removeConfig(versionPath);
-      this.activeVersionPaths.delete(id);
+    const activeConfigPath = this.activeConfigPaths.get(id);
+    if (activeConfigPath) {
+      GameEnvironment.removeConfig(activeConfigPath);
+      this.activeConfigPaths.delete(id);
     }
 
     const cp = this.activeProcesses.get(id);
@@ -423,8 +612,19 @@ class GameManager {
     }
   }
 
-  private notifyLaunchFailure(id: string, reason: string) {
-    mainWindow?.webContents.send(IPC.GAME_LAUNCH_FAILED, { id, reason });
+  private notifyLaunchFailure(
+    id: string,
+    code: string,
+    params?: Record<string, unknown>,
+    detail?: string,
+  ) {
+    const payload: GameLaunchFailurePayload = {
+      id,
+      code,
+      params,
+      detail,
+    };
+    mainWindow?.webContents.send(IPC.GAME_LAUNCH_FAILED, payload);
   }
 }
 

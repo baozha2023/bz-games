@@ -44,11 +44,14 @@ export const useRoomStore = defineStore("room", () => {
     if (room.value) {
       throw new Error("ALREADY_IN_ROOM");
     }
-    const { port } = await window.electronAPI.room.create(gameId, version);
+    const result = await window.electronAPI.room.create(gameId, version);
+    if (!result.success || result.port === undefined) {
+      throw new Error(result.error || "createFailed");
+    }
     room.value = await window.electronAPI.room.getState();
     chatMessages.value = [];
     relayLatency.value = null;
-    return port;
+    return result.port;
   }
 
   async function joinRoom(gameId: string, address: string, version?: string, password?: string) {
@@ -92,11 +95,17 @@ export const useRoomStore = defineStore("room", () => {
     if (isStartCooldown.value) {
       throw new Error("START_COOLDOWN");
     }
-    await window.electronAPI.room.start();
+    const started = await window.electronAPI.room.start();
+    if (!started) {
+      throw new Error("START_REJECTED");
+    }
   }
 
   async function reconnectGame() {
-    await window.electronAPI.room.reconnect();
+    const reconnected = await window.electronAPI.room.reconnect();
+    if (!reconnected) {
+      throw new Error("RECONNECT_REJECTED");
+    }
   }
 
   async function sendChatMessage(

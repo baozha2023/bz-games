@@ -119,13 +119,12 @@ export class RoomDiscoveryService {
   private getReachableDiscoveredRoom(remoteAddress: string): DiscoveredRoom | null {
     const room = roomServer.room;
     if (!room) return null;
-    const settings = storeService.getSettings();
     const matchedInterface = localNetworkService.resolveReachableInterface(remoteAddress);
     if (!matchedInterface) return null;
     return this.buildDiscoveredRoom(
       room,
       matchedInterface.address,
-      settings.defaultRoomPort,
+      roomServer.listeningPort ?? storeService.getSettings().defaultRoomPort,
       matchedInterface.source,
     );
   }
@@ -133,14 +132,15 @@ export class RoomDiscoveryService {
   private getSelfDiscoveredRoomsBySource(source: LocalDiscoverySource): DiscoveredRoom[] {
     const room = roomServer.room;
     if (!room) return [];
-    const settings = storeService.getSettings();
+    const port =
+      roomServer.listeningPort ?? storeService.getSettings().defaultRoomPort;
     return localNetworkService.listReachableInterfaces()
       .filter((entry) => entry.source === source)
       .map((entry) =>
         this.buildDiscoveredRoom(
           room,
           entry.address,
-          settings.defaultRoomPort,
+          port,
           entry.source,
         ),
       );

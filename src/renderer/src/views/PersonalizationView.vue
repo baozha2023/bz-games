@@ -1,29 +1,18 @@
 <template>
-  <div style="padding: 24px;">
+  <div style="padding: 24px">
     <n-tabs v-model:value="activeTab" type="line" animated>
       <n-tab-pane name="avatarFrame" :tab="t('personalization.avatarFrame')">
-        <div style="padding-top: 16px;">
-          <n-empty
-            v-if="frames.length === 0"
-            :description="t('personalization.noFrames')"
-            style="margin-top: 60px;"
-          />
-          <n-grid
-            v-else
-            :x-gap="16"
-            :y-gap="16"
-            :cols="'2 s:3 m:4 l:4 xl:5'"
-            responsive="screen"
-          >
+        <div style="padding-top: 16px">
+          <n-empty v-if="frames.length === 0" :description="t('personalization.noFrames')" style="margin-top: 60px" />
+          <n-grid v-else :x-gap="16" :y-gap="16" :cols="'2 s:3 m:4 l:4 xl:5'" responsive="screen">
             <n-grid-item v-for="frame in frames" :key="frame.id">
-              <div
-                class="frame-card"
-                :class="{ 'frame-equipped': isEquipped(frame.id) }"
-              >
+              <div class="frame-card" :class="{ 'frame-equipped': isEquipped(frame.id) }">
                 <div class="frame-preview" @click="handleEquipOrToggle(frame)">
                   <div class="frame-preview-badge" v-if="isEquipped(frame.id)">
                     <n-icon :size="18" :color="'#fff'">
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                        <path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
+                      </svg>
                     </n-icon>
                   </div>
                   <AvatarWithFrame
@@ -75,13 +64,7 @@
                     >
                       {{ unlockText(frame) }}
                     </n-button>
-                    <n-button
-                      v-else
-                      size="small"
-                      block
-                      disabled
-                      quaternary
-                    >
+                    <n-button v-else size="small" block disabled quaternary>
                       {{ unlockText(frame) }}
                     </n-button>
                   </div>
@@ -134,7 +117,11 @@
               </n-form-item>
               <template v-if="supportsGradient">
                 <n-form-item :label="t('personalization.gradientStart')">
-                  <n-color-picker v-model:value="nicknameStyleForm.gradientStart" :show-alpha="false" :modes="['hex']" />
+                  <n-color-picker
+                    v-model:value="nicknameStyleForm.gradientStart"
+                    :show-alpha="false"
+                    :modes="['hex']"
+                  />
                 </n-form-item>
                 <n-form-item :label="t('personalization.gradientEnd')">
                   <n-color-picker v-model:value="nicknameStyleForm.gradientEnd" :show-alpha="false" :modes="['hex']" />
@@ -143,7 +130,11 @@
               <n-space justify="end">
                 <n-button @click="resetNicknameStyle">{{ t('personalization.resetNicknameStyle') }}</n-button>
                 <n-button type="primary" :disabled="!canSaveNicknameStyle" @click="saveNicknameStyle">
-                  {{ t('personalization.saveNicknameStyleCost', { coins: NICKNAME_STYLE_SAVE_COST }) }}
+                  {{
+                    t('personalization.saveNicknameStyleCost', {
+                      coins: NICKNAME_STYLE_SAVE_COST,
+                    })
+                  }}
                 </n-button>
               </n-space>
             </n-form>
@@ -165,7 +156,11 @@ import NicknameText from '../components/NicknameText.vue'
 import { DEFAULT_NICKNAME_STYLE } from '../../../shared/types'
 import type { AvatarFrameDef, NicknameEffect, NicknameFont, NicknameStyle } from '../../../shared/types'
 import { AVATAR_FRAMES } from '../../../shared/avatar-frames'
-import { adaptNicknameStyleForTheme, isNicknameColorAllowedForTheme, normalizeNicknameHexColor } from '../utils/nicknameColor'
+import {
+  adaptNicknameStyleForTheme,
+  isNicknameColorAllowedForTheme,
+  normalizeNicknameHexColor,
+} from '../utils/nicknameColor'
 
 const { t } = useI18n()
 const settingsStore = useSettingsStore()
@@ -180,35 +175,55 @@ const userData = computed(() => settingsStore.userData)
 const equippedFrame = computed(() => userData.value?.equippedFrame)
 const gradientEffects: NicknameEffect[] = ['flame', 'neon', 'aurora', 'stardust', 'crystal', 'comet']
 const supportsGradient = computed(() => gradientEffects.includes(nicknameStyleForm.value.effect))
-const canSaveNicknameStyle = computed(() => isNicknameColorAllowedForTheme(nicknameStyleForm.value.color, settingsStore.effectiveTheme))
+const canSaveNicknameStyle = computed(() =>
+  isNicknameColorAllowedForTheme(nicknameStyleForm.value.color, settingsStore.effectiveTheme),
+)
 
-const fontOptions = computed(() => ([
+const fontOptions = computed(() => [
   { label: t('personalization.fontSystem'), value: 'system' as NicknameFont },
   { label: t('personalization.fontRounded'), value: 'rounded' as NicknameFont },
   { label: t('personalization.fontSerif'), value: 'serif' as NicknameFont },
   { label: t('personalization.fontMono'), value: 'mono' as NicknameFont },
   { label: t('personalization.fontFantasy'), value: 'fantasy' as NicknameFont },
-]))
+])
 
-const weightOptions = computed(() => ([
+const weightOptions = computed(() => [
   { label: t('personalization.weightNormal'), value: 'normal' },
   { label: t('personalization.weightSemibold'), value: 'semibold' },
   { label: t('personalization.weightBold'), value: 'bold' },
-]))
+])
 
-const effectOptions = computed(() => ([
+const effectOptions = computed(() => [
   { label: t('personalization.effectNone'), value: 'none' as NicknameEffect },
   { label: t('personalization.effectGlow'), value: 'glow' as NicknameEffect },
-  { label: t('personalization.effectSparkle'), value: 'sparkle' as NicknameEffect },
+  {
+    label: t('personalization.effectSparkle'),
+    value: 'sparkle' as NicknameEffect,
+  },
   { label: t('personalization.effectFlame'), value: 'flame' as NicknameEffect },
   { label: t('personalization.effectNeon'), value: 'neon' as NicknameEffect },
-  { label: t('personalization.effectRainbow'), value: 'rainbow' as NicknameEffect },
-  { label: t('personalization.effectAurora'), value: 'aurora' as NicknameEffect },
-  { label: t('personalization.effectStardust'), value: 'stardust' as NicknameEffect },
-  { label: t('personalization.effectCrystal'), value: 'crystal' as NicknameEffect },
+  {
+    label: t('personalization.effectRainbow'),
+    value: 'rainbow' as NicknameEffect,
+  },
+  {
+    label: t('personalization.effectAurora'),
+    value: 'aurora' as NicknameEffect,
+  },
+  {
+    label: t('personalization.effectStardust'),
+    value: 'stardust' as NicknameEffect,
+  },
+  {
+    label: t('personalization.effectCrystal'),
+    value: 'crystal' as NicknameEffect,
+  },
   { label: t('personalization.effectComet'), value: 'comet' as NicknameEffect },
-  { label: t('personalization.effectHeartbeat'), value: 'heartbeat' as NicknameEffect },
-]))
+  {
+    label: t('personalization.effectHeartbeat'),
+    value: 'heartbeat' as NicknameEffect,
+  },
+])
 
 function normalizeNicknameStyleHexColors(style: NicknameStyle): NicknameStyle {
   return {
@@ -220,10 +235,13 @@ function normalizeNicknameStyleHexColors(style: NicknameStyle): NicknameStyle {
 }
 
 function syncNicknameStyleForm() {
-  const style = adaptNicknameStyleForTheme({
-    ...DEFAULT_NICKNAME_STYLE,
-    ...(settingsStore.settings?.nicknameStyle || {}),
-  }, settingsStore.effectiveTheme) || { ...DEFAULT_NICKNAME_STYLE }
+  const style = adaptNicknameStyleForTheme(
+    {
+      ...DEFAULT_NICKNAME_STYLE,
+      ...(settingsStore.settings?.nicknameStyle || {}),
+    },
+    settingsStore.effectiveTheme,
+  ) || { ...DEFAULT_NICKNAME_STYLE }
   nicknameStyleForm.value = normalizeNicknameStyleHexColors(style)
 }
 
@@ -239,11 +257,17 @@ function isUnlocked(frame: AvatarFrameDef): boolean {
 function unlockText(frame: AvatarFrameDef): string {
   switch (frame.unlockMethod) {
     case 'playtime':
-      return t('personalization.unlockPlaytime', { hours: Math.max(1, Math.floor(frame.unlockValue / 3600000)) })
+      return t('personalization.unlockPlaytime', {
+        hours: Math.max(1, Math.floor(frame.unlockValue / 3600000)),
+      })
     case 'consecutive_checkin':
-      return t('personalization.unlockConsecutiveCheckIn', { days: frame.unlockValue })
+      return t('personalization.unlockConsecutiveCheckIn', {
+        days: frame.unlockValue,
+      })
     case 'total_checkin':
-      return t('personalization.unlockTotalCheckIn', { days: frame.unlockValue })
+      return t('personalization.unlockTotalCheckIn', {
+        days: frame.unlockValue,
+      })
     case 'bzcoin':
       return t('personalization.unlockBzCoin', { coins: frame.unlockValue })
     default:
@@ -253,11 +277,16 @@ function unlockText(frame: AvatarFrameDef): string {
 
 function unlockIcon(frame: AvatarFrameDef) {
   switch (frame.unlockMethod) {
-    case 'playtime': return TimeOutline
-    case 'consecutive_checkin': return TodayOutline
-    case 'total_checkin': return CalendarOutline
-    case 'bzcoin': return WalletOutline
-    default: return TimeOutline
+    case 'playtime':
+      return TimeOutline
+    case 'consecutive_checkin':
+      return TodayOutline
+    case 'total_checkin':
+      return CalendarOutline
+    case 'bzcoin':
+      return WalletOutline
+    default:
+      return TimeOutline
   }
 }
 
@@ -280,7 +309,7 @@ async function handleUnequip(frameId: string) {
 }
 
 async function handleBuy(frame: AvatarFrameDef) {
-  const result = await window.electronAPI.user.buyFrame(frame.id, frame.unlockValue)
+  const result = await window.electronAPI.user.buyFrame(frame.id)
   if (result.success) {
     await settingsStore.loadUserData()
   }
@@ -291,10 +320,16 @@ async function saveNicknameStyle() {
     message.warning(t('personalization.nicknameColorContrastWarning'))
     return
   }
-  const result = await window.electronAPI.settings.saveNicknameStyle({ ...nicknameStyleForm.value })
+  const result = await window.electronAPI.settings.saveNicknameStyle({
+    ...nicknameStyleForm.value,
+  })
   if (!result.success) {
     if (result.code === 'insufficient_coins') {
-      message.error(t('personalization.nicknameStyleInsufficientCoins', { coins: NICKNAME_STYLE_SAVE_COST }))
+      message.error(
+        t('personalization.nicknameStyleInsufficientCoins', {
+          coins: NICKNAME_STYLE_SAVE_COST,
+        }),
+      )
     } else {
       message.error(t('settings.saveFail'))
     }
@@ -303,7 +338,11 @@ async function saveNicknameStyle() {
   await settingsStore.loadSettings()
   await settingsStore.loadUserData()
   syncNicknameStyleForm()
-  message.success(t('personalization.nicknameStyleSaved', { coins: NICKNAME_STYLE_SAVE_COST }))
+  message.success(
+    t('personalization.nicknameStyleSaved', {
+      coins: NICKNAME_STYLE_SAVE_COST,
+    }),
+  )
 }
 
 async function resetNicknameStyle() {
@@ -317,9 +356,13 @@ onMounted(async () => {
   syncNicknameStyleForm()
 })
 
-watch(() => settingsStore.effectiveTheme, () => {
-  nicknameStyleForm.value = adaptNicknameStyleForTheme(nicknameStyleForm.value, settingsStore.effectiveTheme) || nicknameStyleForm.value
-})
+watch(
+  () => settingsStore.effectiveTheme,
+  () => {
+    nicknameStyleForm.value =
+      adaptNicknameStyleForTheme(nicknameStyleForm.value, settingsStore.effectiveTheme) || nicknameStyleForm.value
+  },
+)
 </script>
 
 <style scoped>

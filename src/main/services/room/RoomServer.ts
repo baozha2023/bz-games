@@ -1,7 +1,8 @@
 import { WebSocketServer, WebSocket } from "ws";
 import crypto from "crypto";
-import type {
-  RoomInfo,
+import {
+  GameType,
+  type RoomInfo,
   RoomMessage,
   RoomJoinPayload,
   RoomJoinAckPayload,
@@ -30,6 +31,7 @@ type RoomSocket = WebSocket | RelaySocket;
 
 export class RoomServer {
   private wss: WebSocketServer | null = null;
+  private boundPort: number | null = null;
   public room: RoomInfo | null = null;
   private roomPassword = "";
   private playerConnections: Map<string, RoomSocket> = new Map();
@@ -46,17 +48,42 @@ export class RoomServer {
 
   async start(gameId: string, version?: string): Promise<number> {
     const port = storeService.getSettings().defaultRoomPort;
-    const maxPlayers = await this.getMaxPlayers(gameId, version);
-    const gameVersion = await this.getGameVersion(gameId, version);
+    const manifest = await GameLoader.getManifest(gameId, version);
+    if (!manifest || manifest.id !== gameId) {
+      throw new Error("room_game_manifest_invalid");
+    }
+    if (
+      manifest.type !== GameType.Multiplayer &&
+      manifest.type !== GameType.SingleMultiple
+    ) {
+      throw new Error("room_game_type_not_multiplayer");
+    }
+    if (!manifest.multiplayer) {
+      throw new Error("room_multiplayer_config_missing");
+    }
+    GameLoader.assertPlatformCompatible(manifest);
+    const maxPlayers = manifest.multiplayer.maxPlayers;
+    const gameVersion = manifest.version;
 
     this.initializeRoom(gameId, gameVersion, maxPlayers);
     this.roomPassword = "";
     this.kickedPlayers.clear();
     this.resetRelayState();
 
-    const startedPort = await this.startWebSocketServer(port);
+    let startedPort: number;
+    try {
+      startedPort = await this.startWebSocketServer(port);
+    } catch (error: any) {
+      if (error?.code !== "roomPortInUse") throw error;
+      startedPort = await this.startWebSocketServer(0);
+    }
+    this.boundPort = startedPort;
     this.startHeartbeat();
     return startedPort;
+  }
+
+  get listeningPort(): number | null {
+    return this.boundPort;
   }
 
   private resetRelayState() {
@@ -76,7 +103,9 @@ export class RoomServer {
       if (this.room) {
         this.broadcast({ type: "room:disbanded", payload: {} });
       }
-      await new Promise((resolve) => setTimeout(resolve, RoomConstants.ROOM_DISBAND_BROADCAST_DELAY_MS));
+      await new Promise((resolve) =>
+        setTimeout(resolve, RoomConstants.ROOM_DISBAND_BROADCAST_DELAY_MS),
+      );
 
       await new Promise<void>((resolve) => {
         this.wss?.close(() => {
@@ -90,6 +119,7 @@ export class RoomServer {
     }
 
     this.room = null;
+    this.boundPort = null;
     this.roomPassword = "";
     this.playerConnections.clear();
     this.relayConnections.clear();
@@ -110,7 +140,9 @@ export class RoomServer {
     });
   }
 
-  setLocalRelayHandler(handler: ((gameId: string, msg: RoomMessage) => void) | null) {
+  setLocalRelayHandler(
+    handler: ((gameId: string, msg: RoomMessage) => void) | null,
+  ) {
     this.localRelayHandler = handler;
   }
 
@@ -118,21 +150,30 @@ export class RoomServer {
     this.stateSyncHandler = handler;
   }
 
-  private async getMaxPlayers(
-    gameId: string,
-    version?: string,
-  ): Promise<number> {
-    const manifest = await GameLoader.getManifest(gameId, version);
-    return manifest?.multiplayer?.maxPlayers || 4;
-  }
-
-  private async getGameVersion(
-    gameId: string,
-    version?: string,
-  ): Promise<string> {
-    if (version) return version;
-    const manifest = await GameLoader.getManifest(gameId);
-    return manifest?.version || "unknown";
+  async canStartGame(): Promise<boolean> {
+    if (!this.room || this.room.state !== "waiting") return false;
+    try {
+      const manifest = await GameLoader.getManifest(
+        this.room.gameId,
+        this.room.gameVersion,
+      );
+      if (
+        !manifest?.multiplayer ||
+        manifest.id !== this.room.gameId ||
+        manifest.version !== this.room.gameVersion ||
+        (manifest.type !== GameType.Multiplayer &&
+          manifest.type !== GameType.SingleMultiple)
+      ) {
+        return false;
+      }
+      GameLoader.assertPlatformCompatible(manifest);
+      return (
+        this.room.players.length >= manifest.multiplayer.minPlayers &&
+        this.room.players.every((player) => player.isHost || player.isReady)
+      );
+    } catch {
+      return false;
+    }
   }
 
   private initializeRoom(
@@ -159,17 +200,27 @@ export class RoomServer {
   private startWebSocketServer(port: number): Promise<number> {
     return new Promise((resolve, reject) => {
       try {
-        this.wss = new WebSocketServer({ port });
+        const wss = new WebSocketServer({ port });
+        this.wss = wss;
 
-        this.wss.on("listening", () => {
-          resolve(port);
+        wss.once("listening", () => {
+          const address = wss.address();
+          if (!address || typeof address === "string") {
+            wss.close();
+            this.wss = null;
+            reject(new Error("room_server_port_unavailable"));
+            return;
+          }
+          resolve(address.port);
         });
 
-        this.wss.on("error", (err: any) =>
-          this.handleServerError(err, port, reject),
-        );
-        this.wss.on("connection", (ws: WebSocket) => this.handleConnection(ws));
+        wss.once("error", (err: any) => {
+          if (this.wss === wss) this.wss = null;
+          this.handleServerError(err, port, reject);
+        });
+        wss.on("connection", (ws: WebSocket) => this.handleConnection(ws));
       } catch (e) {
+        this.wss = null;
         reject(e);
       }
     });
@@ -181,7 +232,7 @@ export class RoomServer {
     reject: (reason?: any) => void,
   ) {
     if (err.code === "EADDRINUSE") {
-      reject(new Error(`端口 ${port} 被占用，请检查是否有其他房间正在运行`));
+      reject({ code: "roomPortInUse", params: { port } });
     } else {
       reject(err);
     }
@@ -220,7 +271,11 @@ export class RoomServer {
     }, RoomConstants.ROOM_HEARTBEAT_INTERVAL_MS);
   }
 
-  public handleRelayRawMessage(data: WebSocket.RawData, isBinary: boolean, sendToRelay: (data: string | Buffer, targetPlayerId?: string) => void) {
+  public handleRelayRawMessage(
+    data: WebSocket.RawData,
+    isBinary: boolean,
+    sendToRelay: (data: string | Buffer, targetPlayerId?: string) => void,
+  ) {
     const msg = this.deserializeRoomMessage(data, isBinary);
     if (!msg) return;
     const playerId = this.resolveRelaySenderId(msg);
@@ -228,7 +283,11 @@ export class RoomServer {
     if (msg.type !== "room:join") {
       if (!playerId) return;
       const existingSocket = this.playerConnections.get(playerId);
-      if (!existingSocket || !this.relayConnections.has(existingSocket as RelaySocket)) return;
+      if (
+        !existingSocket ||
+        !this.relayConnections.has(existingSocket as RelaySocket)
+      )
+        return;
       this.handleMessage(existingSocket, msg);
       return;
     }
@@ -245,7 +304,9 @@ export class RoomServer {
       case "room:password:probe":
         this.send(ws, {
           type: "room:password:probe:ack",
-          payload: { hasPassword: Boolean(this.room?.hasPassword) } as RoomPasswordProbeAckPayload,
+          payload: {
+            hasPassword: Boolean(this.room?.hasPassword),
+          } as RoomPasswordProbeAckPayload,
         });
         break;
       case "room:player:ready":
@@ -303,7 +364,9 @@ export class RoomServer {
       (p) => p.id !== payload.playerId,
     );
     // 重连玩家：从重连列表中移除
-    this.room.reconnectPlayerIds = this.room.reconnectPlayerIds.filter(id => id !== payload.playerId);
+    this.room.reconnectPlayerIds = this.room.reconnectPlayerIds.filter(
+      (id) => id !== payload.playerId,
+    );
     this.room.players.push(newPlayer);
     this.playerConnections.set(payload.playerId, ws);
     if (this.isRelaySocket(ws)) {
@@ -378,7 +441,8 @@ export class RoomServer {
   private handleReconnectNeeded(payload: { playerId: string }) {
     if (!this.room) return;
     // 仅 non-host 玩家在 playing 状态下才记录重连需求
-    if (this.room.state !== "playing" || payload.playerId === this.room.hostId) return;
+    if (this.room.state !== "playing" || payload.playerId === this.room.hostId)
+      return;
     if (!this.room.players.some((p) => p.id === payload.playerId)) return;
     if (!this.room.reconnectPlayerIds.includes(payload.playerId)) {
       this.room.reconnectPlayerIds.push(payload.playerId);
@@ -404,7 +468,10 @@ export class RoomServer {
     }
   }
 
-  private updatePlayerState(playerId: string | undefined, updates: Partial<PlayerInRoom>) {
+  private updatePlayerState(
+    playerId: string | undefined,
+    updates: Partial<PlayerInRoom>,
+  ) {
     if (!this.room) return;
     if (playerId) {
       const player = this.room.players.find((p) => p.id === playerId);
@@ -456,8 +523,12 @@ export class RoomServer {
     if (!targetPlayer) return false;
 
     this.kickedPlayers.add(targetPlayerId);
-    this.room.players = this.room.players.filter((p) => p.id !== targetPlayerId);
-    this.room.reconnectPlayerIds = this.room.reconnectPlayerIds.filter(id => id !== targetPlayerId);
+    this.room.players = this.room.players.filter(
+      (p) => p.id !== targetPlayerId,
+    );
+    this.room.reconnectPlayerIds = this.room.reconnectPlayerIds.filter(
+      (id) => id !== targetPlayerId,
+    );
     const targetSocket = this.playerConnections.get(targetPlayerId);
     this.playerConnections.delete(targetPlayerId);
     if (targetSocket && this.isRelaySocket(targetSocket)) {
@@ -475,7 +546,11 @@ export class RoomServer {
 
     this.broadcast({
       type: "room:player:kicked",
-      payload: { playerId: targetPlayerId, byPlayerId, name: targetPlayer.name },
+      payload: {
+        playerId: targetPlayerId,
+        byPlayerId,
+        name: targetPlayer.name,
+      },
     });
     this.broadcastState();
     return true;
@@ -504,7 +579,9 @@ export class RoomServer {
     }
     this.relayConnections.forEach((socket) => socket.close());
     this.relayConnections.clear();
-    this.room.players = this.room.players.filter((player) => player.id === hostId);
+    this.room.players = this.room.players.filter(
+      (player) => player.id === hostId,
+    );
     this.room.reconnectPlayerIds = [];
     this.broadcastState();
   }
@@ -636,7 +713,10 @@ export class RoomServer {
     }
   }
 
-  private sendAckToSender(senderId: string | undefined, payload: GameRelayPayload) {
+  private sendAckToSender(
+    senderId: string | undefined,
+    payload: GameRelayPayload,
+  ) {
     if (
       !senderId ||
       (payload.reliable !== true && payload.delivery !== "reliable") ||
@@ -661,14 +741,20 @@ export class RoomServer {
     if (!messageId || this.recentMessageIdSet.has(messageId)) return;
     this.recentMessageIds.push(messageId);
     this.recentMessageIdSet.add(messageId);
-    while (this.recentMessageIds.length > RoomConstants.MAX_RECENT_MESSAGE_IDS) {
+    while (
+      this.recentMessageIds.length > RoomConstants.MAX_RECENT_MESSAGE_IDS
+    ) {
       const expired = this.recentMessageIds.shift();
       if (expired) this.recentMessageIdSet.delete(expired);
     }
   }
 
   private trackDelivery(payload: GameRelayPayload) {
-    if (payload.delivery !== "ordered" || !payload.channel || typeof payload.seq !== "number") {
+    if (
+      payload.delivery !== "ordered" ||
+      !payload.channel ||
+      typeof payload.seq !== "number"
+    ) {
       return true;
     }
     const key = `${payload.senderId}:${payload.channel}`;
@@ -680,10 +766,7 @@ export class RoomServer {
     return true;
   }
 
-  public relayMessageFromLocal(
-    senderId: string,
-    payload: BinaryRelayPayload,
-  ) {
+  public relayMessageFromLocal(senderId: string, payload: BinaryRelayPayload) {
     this.relayMessage(senderId, payload);
   }
 
@@ -696,10 +779,13 @@ export class RoomServer {
 
   public broadcastState(exclude?: RoomSocket) {
     if (this.room) {
-      this.broadcast({
-        type: "room:state:sync",
-        payload: this.room,
-      }, exclude);
+      this.broadcast(
+        {
+          type: "room:state:sync",
+          payload: this.room,
+        },
+        exclude,
+      );
       this.stateSyncHandler?.();
     }
   }
@@ -722,12 +808,18 @@ export class RoomServer {
     );
   }
 
-  private deserializeRoomMessage(data: WebSocket.RawData, isBinary: boolean): RoomMessage | null {
+  private deserializeRoomMessage(
+    data: WebSocket.RawData,
+    isBinary: boolean,
+  ): RoomMessage | null {
     const rawData = this.rawDataToBuffer(data);
     if (rawData.byteLength > RoomConstants.MAX_ROOM_MESSAGE_BYTES) return null;
     if (!isBinary) {
       const msg = JSON.parse(rawData.toString()) as RoomMessage;
-      if (this.isGameRelayMessageType(msg.type) && rawData.byteLength > RoomConstants.MAX_GAME_RELAY_MESSAGE_BYTES) {
+      if (
+        this.isGameRelayMessageType(msg.type) &&
+        rawData.byteLength > RoomConstants.MAX_GAME_RELAY_MESSAGE_BYTES
+      ) {
         return null;
       }
       return msg;
@@ -774,15 +866,22 @@ export class RoomServer {
 
   private resolveRelaySenderId(msg: RoomMessage): string | undefined {
     const payload = msg.payload as Record<string, unknown> | undefined;
-    if (msg.type === "room:join" && typeof payload?.playerId === "string") return payload.playerId;
+    if (msg.type === "room:join" && typeof payload?.playerId === "string")
+      return payload.playerId;
     if (typeof payload?.senderId === "string") return payload.senderId;
     if (typeof payload?.playerId === "string") return payload.playerId;
     return undefined;
   }
 
-  private createRelaySocket(playerId: string | undefined, sendToRelay: (data: string | Buffer, targetPlayerId?: string) => void): RelaySocket {
-    const existing = playerId ? this.playerConnections.get(playerId) : undefined;
-    if (existing && this.relayConnections.has(existing as RelaySocket)) return existing as RelaySocket;
+  private createRelaySocket(
+    playerId: string | undefined,
+    sendToRelay: (data: string | Buffer, targetPlayerId?: string) => void,
+  ): RelaySocket {
+    const existing = playerId
+      ? this.playerConnections.get(playerId)
+      : undefined;
+    if (existing && this.relayConnections.has(existing as RelaySocket))
+      return existing as RelaySocket;
     const relaySocket: RelaySocket = {
       readyState: WebSocket.OPEN,
       send: (data) => sendToRelay(data, playerId),

@@ -7,5 +7,6 @@
   "relayPublicHost": "",
   "relayToken": "",
   "configEncryptionSeed": "replace-with-a-private-random-seed",
+  "gameManifestEncryptionSeed": "replace-with-at-least-32-random-bytes-as-base64",
   "oauthReturnUrl": ""
 }

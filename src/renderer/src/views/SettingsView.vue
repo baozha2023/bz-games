@@ -207,7 +207,7 @@
                 <n-tag :type="issue.level === 'error' ? 'error' : 'warning'" size="small">
                   {{ issue.level === 'error' ? t('settings.healthError') : t('settings.healthWarning') }}
                 </n-tag>
-                <n-text>{{ issue.message }}</n-text>
+                <n-text>{{ formatHealthIssue(issue) }}</n-text>
                 <n-text v-if="issue.target" depth="3">{{ issue.target }}</n-text>
               </n-space>
             </n-list-item>
@@ -385,7 +385,7 @@ import { getFrameImageFileName } from '../../../shared/avatar-frames'
 import { formatBytes } from '../utils/format'
 import { HelpCircleOutline, LogoGithub } from '@vicons/ionicons5'
 
-const { t } = useI18n()
+const { t, te } = useI18n()
 const router = useRouter()
 const settingsStore = useSettingsStore()
 const gameStore = useGameStore()
@@ -503,6 +503,15 @@ const dataHealthSummaryText = computed(() => {
     paths: summary?.storagePathCount || 0
   }
 })
+
+const formatHealthIssue = (issue: {
+  code: string
+  message: string
+  params?: Record<string, string | number>
+}) => {
+  const key = `settings.dataHealthIssue.${issue.code}`
+  return te(key) ? t(key, issue.params || {}) : issue.message
+}
 
 const cloudTimeText = computed(() => {
   if (!cloudStatus.value.lastUploadedAt) return t('settings.cloudNeverUploaded')

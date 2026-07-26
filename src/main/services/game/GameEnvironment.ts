@@ -1,32 +1,17 @@
 import path from "path";
 import fs from "fs";
-import { roomClient } from "../room/RoomClient";
+import { app } from "electron";
 import { logger } from "../../utils/logger";
 import type { GameManifest } from "../../../shared/game-manifest";
 import type { AppSettings } from "../../../shared/types";
+import {
+  buildGameProcessEnvironment,
+  buildWebGameConfig,
+  type GameLaunchContext,
+} from "../../../shared/game-launch";
+import { findMatchingRoom } from "../room/RoomContext";
 
 export class GameEnvironment {
-  private static readonly STRIP_ENV_PREFIXES = [
-    "ELECTRON_",
-    "NODE_",
-    "NPM_",
-    "VSCODE_",
-  ];
-
-  private static stripProcessEnv(): NodeJS.ProcessEnv {
-    const filtered: NodeJS.ProcessEnv = {};
-    for (const key of Object.keys(process.env)) {
-      const upper = key.toUpperCase();
-      const shouldStrip = this.STRIP_ENV_PREFIXES.some(
-        (prefix) => upper.startsWith(prefix),
-      );
-      if (!shouldStrip) {
-        filtered[key] = process.env[key];
-      }
-    }
-    return filtered;
-  }
-
   static prepare(
     id: string,
     manifest: GameManifest,
@@ -34,51 +19,34 @@ export class GameEnvironment {
     token: string,
     settings: AppSettings,
   ): NodeJS.ProcessEnv {
-    const isHost =
-      roomClient.room && roomClient.room.hostId === settings.playerId;
-
-    return Object.assign(
-      this.stripProcessEnv(),
-      manifest.env || {},
-      {
-        BZ_PLATFORM: "1",
-        BZ_PLATFORM_VERSION: "1.0.0",
-        BZ_API_PORT: port.toString(),
-        BZ_API_TOKEN: token,
-        BZ_PLAYER_ID: settings.playerId,
-        BZ_PLAYER_NAME: settings.playerName,
-        BZ_PLAYER_AVATAR: settings.avatar || "",
-        BZ_GAME_ID: id,
-        BZ_ROOM_ID: roomClient.room ? roomClient.room.id : "",
-        BZ_IS_HOST: isHost ? "1" : "0",
-      },
+    return buildGameProcessEnvironment(
+      process.env,
+      manifest.env,
+      this.createLaunchContext(id, manifest, port, token, settings),
     );
   }
 
   static writeConfig(
     versionPath: string,
+    id: string,
+    manifest: GameManifest,
     port: number,
     token: string,
     settings: AppSettings,
   ): void {
     try {
-      const room = roomClient.room;
-      const isHost = !!room && room.hostId === settings.playerId;
-      const isMultiple = !!room;
       const configPath = path.join(versionPath, "bz-config.js");
-      const configContent = `window.BZ_CONFIG = { 
-        apiPort: '${port}', 
-        token: '${token}',
-        playerId: '${settings.playerId}',
-        playerName: ${JSON.stringify(settings.playerName)},
-        playerAvatar: ${JSON.stringify(settings.avatar || "")},
-        roomId: ${JSON.stringify(room ? room.id : "")},
-        isHost: ${JSON.stringify(isHost)},
-        isMultiple: ${JSON.stringify(isMultiple)}
-      };`;
-      fs.writeFileSync(configPath, configContent);
+      const config = buildWebGameConfig(
+        this.createLaunchContext(id, manifest, port, token, settings),
+      );
+      const configContent = `window.BZ_CONFIG = ${JSON.stringify(config)};`;
+      fs.writeFileSync(configPath, configContent, {
+        encoding: "utf8",
+        mode: 0o600,
+      });
     } catch (e) {
-      logger.warn(`[GameEnvironment] Failed to write config file`, e);
+      logger.error(`[GameEnvironment] Failed to write config file`, e);
+      throw e;
     }
   }
 
@@ -92,5 +60,28 @@ export class GameEnvironment {
     } catch (e) {
       logger.warn(`[GameEnvironment] Failed to remove config file`, e);
     }
+  }
+
+  private static createLaunchContext(
+    id: string,
+    manifest: GameManifest,
+    port: number,
+    token: string,
+    settings: AppSettings,
+  ): GameLaunchContext {
+    const room = findMatchingRoom(id, manifest.version);
+    return {
+      platformVersion: app.getVersion(),
+      apiPort: port,
+      apiToken: token,
+      playerId: settings.playerId,
+      playerName: settings.playerName,
+      playerAvatar: settings.avatar || "",
+      gameId: id,
+      gameVersion: manifest.version,
+      roomId: room?.id || "",
+      isHost: !!room && room.hostId === settings.playerId,
+      isMultiple: !!room,
+    };
   }
 }

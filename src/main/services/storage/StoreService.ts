@@ -4,6 +4,7 @@ import ElectronStore from "electron-store";
 import fs from "fs/promises";
 import fsSync from "fs";
 import path from "path";
+import semver from "semver";
 import type {
   AppStore,
   AppSettings,
@@ -23,6 +24,13 @@ import {
   PLAYTIME_REWARD_AMOUNT,
   PLAYTIME_REWARD_INTERVAL_MS,
 } from "../../../shared/AppConstants";
+import {
+  compareGameVersionsDescending,
+} from "../../../shared/game-manifest";
+import {
+  GameManifestFileError,
+  readGameManifestFileWithMetadata,
+} from "../game/GameManifestFileService";
 
 const defaultSettings: AppSettings = {
   playerName: "玩家",
@@ -88,10 +96,7 @@ function encryptConfigPayload(data: AppStore): string {
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
   const plaintext = JSON.stringify(data);
-  const encrypted = Buffer.concat([
-    cipher.update(plaintext, "utf8"),
-    cipher.final(),
-  ]);
+  const encrypted = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
   const tag = cipher.getAuthTag();
 
   return JSON.stringify({
@@ -115,10 +120,7 @@ function tryDecryptConfigPayload(raw: any): AppStore | null {
     const payload = Buffer.from(raw.payload, "base64");
     const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
     decipher.setAuthTag(tag);
-    const decrypted = Buffer.concat([
-      decipher.update(payload),
-      decipher.final(),
-    ]).toString("utf8");
+    const decrypted = Buffer.concat([decipher.update(payload), decipher.final()]).toString("utf8");
     const parsed = JSON.parse(decrypted);
     return typeof parsed === "object" && parsed ? (parsed as AppStore) : null;
   } catch {
@@ -208,16 +210,11 @@ class StoreService {
       const dirPath = path.join(snapshotRoot, dirName);
 
       if (needConfig) {
-        const configBackups = [
-          path.join(dirPath, configBackupName),
-          path.join(dirPath, "config.json.backup"),
-        ];
+        const configBackups = [path.join(dirPath, configBackupName), path.join(dirPath, "config.json.backup")];
         for (const backupPath of configBackups) {
           if (await pathExists(backupPath)) {
             await fs.copyFile(backupPath, configPath);
-            logger.info(
-              `[StoreService] Restored config.json from snapshot: ${dirPath}`,
-            );
+            logger.info(`[StoreService] Restored config.json from snapshot: ${dirPath}`);
             break;
           }
         }
@@ -227,9 +224,7 @@ class StoreService {
         const gamesBackupPath = path.join(dirPath, gamesBackupName);
         if (await pathExists(gamesBackupPath)) {
           await fs.cp(gamesBackupPath, defaultGamesPath, { recursive: true });
-          logger.info(
-            `[StoreService] Restored games dir from snapshot: ${dirPath}`,
-          );
+          logger.info(`[StoreService] Restored games dir from snapshot: ${dirPath}`);
         }
       }
 
@@ -237,9 +232,7 @@ class StoreService {
         const dbBackupPath = path.join(dirPath, dbBackupName);
         if (await pathExists(dbBackupPath)) {
           await fs.cp(dbBackupPath, dbPath, { recursive: true });
-          logger.info(
-            `[StoreService] Restored db dir from snapshot: ${dirPath}`,
-          );
+          logger.info(`[StoreService] Restored db dir from snapshot: ${dirPath}`);
         }
       }
 
@@ -348,10 +341,7 @@ class StoreService {
     return this.getStore().get("games", []) || [];
   }
 
-  private findGameById(
-    games: GameRecord[],
-    id: string,
-  ): { game: GameRecord; index: number } | null {
+  private findGameById(games: GameRecord[], id: string): { game: GameRecord; index: number } | null {
     const index = games.findIndex((g) => g.id === id);
     if (index === -1) return null;
     return { game: games[index], index };
@@ -365,12 +355,18 @@ class StoreService {
     return this.getStore().get("userData") || defaultUserData;
   }
 
-  performBuyFrame(frameId: string, coinCost: number): {
+  performBuyFrame(frameId: string): {
     success: boolean;
     code?: string;
   } {
     const store = this.getStore();
     const userData = store.get("userData") || defaultUserData;
+    const frame = AVATAR_FRAMES.find((candidate) => candidate.id === frameId);
+
+    if (!frame || frame.unlockMethod !== "bzcoin") {
+      return { success: false, code: "invalid_frame" };
+    }
+    const coinCost = frame.unlockValue;
 
     if (!userData.ownedFrames) userData.ownedFrames = [];
 
@@ -390,7 +386,10 @@ class StoreService {
     return { success: true };
   }
 
-  performSaveNicknameStyle(style: NicknameStyle, coinCost: number): {
+  performSaveNicknameStyle(
+    style: NicknameStyle,
+    coinCost: number,
+  ): {
     success: boolean;
     code?: string;
   } {
@@ -466,7 +465,7 @@ class StoreService {
     if (!userData.ownedFrames) userData.ownedFrames = [];
     for (const f of AVATAR_FRAMES) {
       if (userData.ownedFrames.includes(f.id)) continue;
-      if (f.unlockMethod === 'playtime' && (userData.cumulativePlayTime || 0) >= f.unlockValue) {
+      if (f.unlockMethod === "playtime" && (userData.cumulativePlayTime || 0) >= f.unlockValue) {
         userData.ownedFrames.push(f.id);
         logger.info(`[StoreService] Auto-unlocked frame: ${f.id} (playtime ${userData.cumulativePlayTime}ms)`);
       }
@@ -538,11 +537,11 @@ class StoreService {
     if (!userData.ownedFrames) userData.ownedFrames = [];
     for (const f of AVATAR_FRAMES) {
       if (userData.ownedFrames.includes(f.id)) continue;
-      if (f.unlockMethod === 'consecutive_checkin' && (userData.checkIn?.consecutiveDays || 0) >= f.unlockValue) {
+      if (f.unlockMethod === "consecutive_checkin" && (userData.checkIn?.consecutiveDays || 0) >= f.unlockValue) {
         userData.ownedFrames.push(f.id);
         logger.info(`[StoreService] Auto-unlocked frame: ${f.id} (consecutive ${userData.checkIn?.consecutiveDays}d)`);
       }
-      if (f.unlockMethod === 'total_checkin' && (userData.checkIn?.totalDays || 0) >= f.unlockValue) {
+      if (f.unlockMethod === "total_checkin" && (userData.checkIn?.totalDays || 0) >= f.unlockValue) {
         userData.ownedFrames.push(f.id);
         logger.info(`[StoreService] Auto-unlocked frame: ${f.id} (total ${userData.checkIn?.totalDays}d)`);
       }
@@ -567,11 +566,7 @@ class StoreService {
     this.getStore().set("games", games);
   }
 
-  unlockAchievement(
-    gameId: string,
-    version: string,
-    achievementId: string,
-  ): boolean {
+  unlockAchievement(gameId: string, version: string, achievementId: string): boolean {
     const store = this.getStore();
     const games = this.getGamesList();
     const entry = this.findGameById(games, gameId);
@@ -631,19 +626,13 @@ class StoreService {
     return { remaining, removing };
   }
 
-  private async removeVersionDirectories(
-    id: string,
-    versions: GameVersion[],
-  ): Promise<void> {
+  private async removeVersionDirectories(id: string, versions: GameVersion[]): Promise<void> {
     for (const v of versions) {
       try {
         await this.removePath(v.path, { recursive: true, force: true });
         logger.info(`[StoreService] Removed game version directory: ${v.path}`);
       } catch (e) {
-        logger.error(
-          `[StoreService] Failed to remove game version directory for ${id} ${v.version}`,
-          e,
-        );
+        logger.error(`[StoreService] Failed to remove game version directory for ${id} ${v.version}`, e);
       }
     }
   }
@@ -728,10 +717,7 @@ class StoreService {
     game.latestVersion = game.versions
       .slice()
       .sort((a, b) =>
-        b.version.localeCompare(a.version, undefined, {
-          numeric: true,
-          sensitivity: "base",
-        }),
+        compareGameVersionsDescending(a.version, b.version),
       )[0].version;
   }
 
@@ -743,14 +729,10 @@ class StoreService {
 
     const game = entry.game;
 
-    const requestedVersions =
-      versions === undefined ? game.versions.map((v) => v.version) : versions;
+    const requestedVersions = versions === undefined ? game.versions.map((v) => v.version) : versions;
     if (requestedVersions.length === 0) return;
 
-    const { remaining, removing } = this.partitionVersions(
-      game.versions,
-      new Set(requestedVersions),
-    );
+    const { remaining, removing } = this.partitionVersions(game.versions, new Set(requestedVersions));
     await this.removeVersionDirectories(id, removing);
 
     if (remaining.length === 0) {
@@ -789,10 +771,7 @@ class StoreService {
 
     const previousDefaultPath = merged.gameStoragePath || "";
     const previousHistory = JSON.stringify(merged.gameStorageHistory || []);
-    merged.gameStorageHistory = this.toStorageHistory(
-      merged.gameStorageHistory,
-      merged.gameStoragePath || "",
-    );
+    merged.gameStorageHistory = this.toStorageHistory(merged.gameStorageHistory, merged.gameStoragePath || "");
     if (!merged.gameStoragePath?.trim()) {
       merged.gameStoragePath = merged.gameStorageHistory[0] || defaultGamesPath;
     }
@@ -988,16 +967,16 @@ class StoreService {
     }
 
     try {
-      await this.copyPath(sourceRoot, targetRoot, { recursive: true, force: true });
+      await this.copyPath(sourceRoot, targetRoot, {
+        recursive: true,
+        force: true,
+      });
       await this.removePath(sourceRoot, { recursive: true, force: true });
     } catch (error) {
       try {
         await this.clearDirectoryContents(targetRoot);
       } catch (cleanupError) {
-        logger.warn(
-          `[StoreService] Failed to clean partial migrated storage: ${targetRoot}`,
-          cleanupError,
-        );
+        logger.warn(`[StoreService] Failed to clean partial migrated storage: ${targetRoot}`, cleanupError);
       }
       if (this.isFileBusyError(error)) {
         throw new Error("storage_migration_file_busy");
@@ -1030,10 +1009,7 @@ class StoreService {
     return code === "EBUSY" || code === "EPERM";
   }
 
-  private toStorageHistory(
-    currentHistory: string[] | undefined,
-    nextPath: string,
-  ): string[] {
+  private toStorageHistory(currentHistory: string[] | undefined, nextPath: string): string[] {
     const history = new Set<string>();
     if (nextPath.trim()) {
       history.add(nextPath.trim());
@@ -1053,9 +1029,10 @@ class StoreService {
     const incomingHistory = settings.gameStorageHistory || current.gameStorageHistory || [];
     const incomingDefault = settings.gameStoragePath?.trim() || current.gameStoragePath || "";
     const nextHistory = this.toStorageHistory(incomingHistory, incomingDefault);
-    const finalStoragePath = incomingDefault && nextHistory.some((item) => path.resolve(item) === path.resolve(incomingDefault))
-      ? incomingDefault
-      : nextHistory[0] || "";
+    const finalStoragePath =
+      incomingDefault && nextHistory.some((item) => path.resolve(item) === path.resolve(incomingDefault))
+        ? incomingDefault
+        : nextHistory[0] || "";
 
     logger.info(`[StoreService] Updating settings`);
     store.set("settings", {
@@ -1078,10 +1055,7 @@ class StoreService {
     );
 
     return {
-      shouldPrompt:
-        !this.isFirstOpen() &&
-        !settings.ignoreDefaultGamesMigrationPrompt &&
-        hasDefaultGamesStoragePath,
+      shouldPrompt: !this.isFirstOpen() && !settings.ignoreDefaultGamesMigrationPrompt && hasDefaultGamesStoragePath,
       defaultGamesPath,
     };
   }
@@ -1112,7 +1086,10 @@ class StoreService {
     });
   }
 
-  async migrateGameStorageLibrary(sourceRoot: string, targetRoot: string): Promise<{
+  async migrateGameStorageLibrary(
+    sourceRoot: string,
+    targetRoot: string,
+  ): Promise<{
     migratedGames: number;
     migratedVersions: number;
     gameStoragePath: string;
@@ -1120,9 +1097,7 @@ class StoreService {
     const normalizedSource = this.normalizeStoragePath(sourceRoot);
     const normalizedTarget = this.normalizeStoragePath(targetRoot);
     const configuredPaths = this.getConfiguredGameStoragePaths();
-    const isRegisteredPath = configuredPaths.some(
-      (item) => path.resolve(item) === normalizedSource,
-    );
+    const isRegisteredPath = configuredPaths.some((item) => path.resolve(item) === normalizedSource);
     if (!isRegisteredPath) {
       throw new Error("storage_path_not_registered");
     }
@@ -1175,9 +1150,10 @@ class StoreService {
 
     const currentSettings = this.getSettings();
     const currentPath = currentSettings.gameStoragePath?.trim() || "";
-    const nextStoragePath = options.forceDefault || (currentPath && path.resolve(currentPath) === normalizedSource)
-      ? normalizedTarget
-      : currentPath;
+    const nextStoragePath =
+      options.forceDefault || (currentPath && path.resolve(currentPath) === normalizedSource)
+        ? normalizedTarget
+        : currentPath;
     const filteredHistory = (currentSettings.gameStorageHistory || [])
       .map((item) => item.trim())
       .filter((item) => item && path.resolve(item) !== normalizedSource);
@@ -1218,9 +1194,7 @@ class StoreService {
     const store = this.getStore();
     const currentSettings = this.getSettings();
     const configuredPaths = this.getConfiguredGameStoragePaths(currentSettings);
-    const isRegisteredPath = configuredPaths.some(
-      (item) => path.resolve(item) === normalizedTarget,
-    );
+    const isRegisteredPath = configuredPaths.some((item) => path.resolve(item) === normalizedTarget);
     if (!isRegisteredPath) {
       throw new Error("storage_path_not_registered");
     }
@@ -1246,9 +1220,7 @@ class StoreService {
 
       removedVersions += versionsInPath.length;
       await this.removeVersionDirectories(game.id, versionsInPath);
-      const remaining = game.versions.filter(
-        (version) => !versionsInPath.some((v) => v.version === version.version),
-      );
+      const remaining = game.versions.filter((version) => !versionsInPath.some((v) => v.version === version.version));
 
       if (remaining.length === 0) {
         removedGames += 1;
@@ -1269,9 +1241,7 @@ class StoreService {
 
     const currentPath = currentSettings.gameStoragePath?.trim() || "";
     const nextStoragePath =
-      currentPath && path.resolve(currentPath) === normalizedTarget
-        ? filteredHistory[0] || ""
-        : currentPath;
+      currentPath && path.resolve(currentPath) === normalizedTarget ? filteredHistory[0] || "" : currentPath;
     const nextHistory = this.toStorageHistory(filteredHistory, nextStoragePath);
 
     store.set("games", nextGames);
@@ -1299,7 +1269,7 @@ class StoreService {
       issues.push({
         level: "error",
         code: "config_missing",
-        message: "config.json 不存在",
+        message: "config.json does not exist",
         target: configPath,
       });
     } else {
@@ -1312,7 +1282,7 @@ class StoreService {
           issues.push({
             level: "error",
             code: "config_invalid_json",
-            message: "config.json 不是有效的 JSON",
+            message: "config.json is not valid JSON",
             target: configPath,
           });
           parsed = null;
@@ -1326,7 +1296,7 @@ class StoreService {
               issues.push({
                 level: "error",
                 code: "config_decrypt_failed",
-                message: "config.json 解密失败",
+                message: "config.json decryption failed",
                 target: configPath,
               });
             }
@@ -1336,14 +1306,14 @@ class StoreService {
               issues.push({
                 level: "error",
                 code: "config_invalid_structure",
-                message: "config.json 结构无效",
+                message: "config.json has an invalid structure",
                 target: configPath,
               });
             } else {
               issues.push({
                 level: "warning",
                 code: "config_plaintext_legacy",
-                message: "config.json 仍为旧版明文格式，建议重新保存设置完成迁移",
+                message: "config.json still uses the legacy plaintext format",
                 target: configPath,
               });
             }
@@ -1353,7 +1323,8 @@ class StoreService {
         issues.push({
           level: "error",
           code: "config_read_failed",
-          message: `读取 config.json 失败: ${(error as Error).message}`,
+          message: `Failed to read config.json: ${(error as Error).message}`,
+          params: { reason: (error as Error).message },
           target: configPath,
         });
       }
@@ -1363,7 +1334,7 @@ class StoreService {
       issues.push({
         level: "error",
         code: "player_id_missing",
-        message: "玩家 ID 缺失",
+        message: "Player ID is missing",
       });
     }
 
@@ -1373,7 +1344,8 @@ class StoreService {
         issues.push({
           level: "error",
           code: "duplicate_game_id",
-          message: `存在重复的游戏 ID: ${game.id}`,
+          message: `Duplicate game ID: ${game.id}`,
+          params: { gameId: game.id },
           target: game.id,
         });
       }
@@ -1385,7 +1357,8 @@ class StoreService {
           issues.push({
             level: "warning",
             code: "duplicate_game_version",
-            message: `游戏 ${game.id} 存在重复版本记录: ${version.version}`,
+            message: `Duplicate game version: ${game.id}@${version.version}`,
+            params: { gameId: game.id, version: version.version },
             target: `${game.id}@${version.version}`,
           });
         }
@@ -1396,7 +1369,33 @@ class StoreService {
           issues.push({
             level: "error",
             code: "version_path_missing",
-            message: `游戏版本目录不存在: ${game.id}@${version.version}`,
+            message: `Game version directory does not exist: ${game.id}@${version.version}`,
+            params: { gameId: game.id, version: version.version },
+            target: version.path,
+          });
+          continue;
+        }
+        try {
+          if (!(await fs.stat(version.path)).isDirectory()) {
+            issues.push({
+              level: "error",
+              code: "version_path_not_directory",
+              message: `Game version path is not a directory: ${game.id}@${version.version}`,
+              params: { gameId: game.id, version: version.version },
+              target: version.path,
+            });
+            continue;
+          }
+        } catch (error) {
+          issues.push({
+            level: "error",
+            code: "version_path_read_failed",
+            message: `Failed to inspect game version directory: ${(error as Error).message}`,
+            params: {
+              gameId: game.id,
+              version: version.version,
+              reason: (error as Error).message,
+            },
             target: version.path,
           });
           continue;
@@ -1405,7 +1404,124 @@ class StoreService {
           issues.push({
             level: "error",
             code: "manifest_missing",
-            message: `版本目录缺少 game.json: ${game.id}@${version.version}`,
+            message: `game.json is missing: ${game.id}@${version.version}`,
+            params: { gameId: game.id, version: version.version },
+            target: manifestPath,
+          });
+          continue;
+        }
+
+        try {
+          const { manifest, encrypted } =
+            readGameManifestFileWithMetadata(manifestPath);
+          if (!encrypted) {
+            issues.push({
+              level: "warning",
+              code: "manifest_plaintext",
+              message: `game.json is not encrypted: ${game.id}@${version.version}`,
+              params: { gameId: game.id, version: version.version },
+              target: manifestPath,
+            });
+          }
+          if (
+            manifest.id !== game.id ||
+            manifest.version !== version.version
+          ) {
+            issues.push({
+              level: "error",
+              code: "manifest_identity_mismatch",
+              message: `Manifest identity does not match its game record: ${game.id}@${version.version}`,
+              params: {
+                gameId: game.id,
+                version: version.version,
+                manifestId: manifest.id,
+                manifestVersion: manifest.version,
+              },
+              target: manifestPath,
+            });
+          }
+
+          const compatible = Array.isArray(manifest.platformVersion)
+            ? semver.gte(app.getVersion(), manifest.platformVersion[0]) &&
+              semver.lte(app.getVersion(), manifest.platformVersion[1])
+            : semver.satisfies(app.getVersion(), manifest.platformVersion);
+          if (!compatible) {
+            issues.push({
+              level: "warning",
+              code: "manifest_platform_incompatible",
+              message: `Game requires platform ${String(manifest.platformVersion)}`,
+              params: {
+                gameId: game.id,
+                version: version.version,
+                required: String(manifest.platformVersion),
+                current: app.getVersion(),
+              },
+              target: manifestPath,
+            });
+          }
+
+          const referencedFiles: Array<{
+            kind: string;
+            relativePath: string | undefined;
+          }> = [
+            {
+              kind: "entry",
+              relativePath:
+                manifest.entry === "url"
+                  ? undefined
+                  : manifest.entry === "serve"
+                    ? "index.html"
+                    : manifest.entry,
+            },
+            { kind: "icon", relativePath: manifest.icon },
+            { kind: "cover", relativePath: manifest.cover },
+            { kind: "video", relativePath: manifest.video },
+            ...(manifest.achievements || []).map((achievement) => ({
+              kind: "achievementIcon",
+              relativePath: achievement.icon,
+            })),
+          ];
+          for (const referenced of referencedFiles) {
+            if (!referenced.relativePath) continue;
+            const referencedPath = path.join(
+              version.path,
+              referenced.relativePath,
+            );
+            let isFile = false;
+            try {
+              isFile = (await fs.stat(referencedPath)).isFile();
+            } catch {
+              isFile = false;
+            }
+            if (!isFile) {
+              issues.push({
+                level: "error",
+                code: "manifest_file_missing",
+                message: `Manifest ${referenced.kind} file is missing: ${referenced.relativePath}`,
+                params: {
+                  gameId: game.id,
+                  version: version.version,
+                  kind: referenced.kind,
+                  file: referenced.relativePath,
+                },
+                target: referencedPath,
+              });
+            }
+          }
+        } catch (error) {
+          const code =
+            error instanceof GameManifestFileError
+              ? error.code
+              : "manifest_invalid";
+          issues.push({
+            level: "error",
+            code,
+            message: `Failed to validate game.json: ${(error as Error).message}`,
+            params: {
+              gameId: game.id,
+              version: version.version,
+              reason: (error as Error).message,
+            },
             target: manifestPath,
           });
         }
@@ -1415,7 +1531,8 @@ class StoreService {
         issues.push({
           level: "error",
           code: "latest_version_invalid",
-          message: `游戏 ${game.id} 的 latestVersion 指向不存在的版本`,
+          message: `latestVersion does not reference an installed version: ${game.id}`,
+          params: { gameId: game.id, version: game.latestVersion },
           target: `${game.id}@${game.latestVersion}`,
         });
       }
@@ -1426,14 +1543,14 @@ class StoreService {
         issues.push({
           level: "warning",
           code: "storage_root_missing",
-          message: "游戏存储路径不存在",
+          message: "Game storage path does not exist",
           target: storageRoot,
         });
       }
     }
 
     const report: DataHealthReport = {
-      ok: !issues.some((issue) => issue.level === "error"),
+      ok: issues.length === 0,
       checkedAt: Date.now(),
       summary: {
         errors: issues.filter((issue) => issue.level === "error").length,

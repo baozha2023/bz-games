@@ -421,7 +421,15 @@ onMounted(async () => {
   syncConnectionModeFromRoom()
 
   if (window.electronAPI?.game?.onLaunchFailed) {
-    cleanupLaunch = window.electronAPI.game.onLaunchFailed((_id, reason) => {
+    cleanupLaunch = window.electronAPI.game.onLaunchFailed((failure) => {
+      const errorKey = `room.launchError.${failure.code}`
+      const translated = t(errorKey, {
+        ...(failure.params || {}),
+        detail: failure.detail || failure.code
+      })
+      const reason = translated === errorKey
+        ? t('room.launchError.unknown', { detail: failure.detail || failure.code })
+        : translated
       message.error(t('room.launchFailed', { reason }));
     });
   }

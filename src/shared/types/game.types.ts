@@ -5,6 +5,13 @@ export enum GameType {
   NetworkGame = "networkgame",
 }
 
+export interface GameLaunchFailurePayload {
+  id: string;
+  code: string;
+  params?: Record<string, unknown>;
+  detail?: string;
+}
+
 export type GameApiAction =
   | "auth"
   | "player.getInfo"

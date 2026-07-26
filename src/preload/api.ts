@@ -15,13 +15,17 @@ import type {
   RoomEvent,
   UpdateState,
   NicknameStyle,
+  GameLaunchFailurePayload,
+  RoomConnectResult,
+  RoomCreateResult,
 } from "../shared/types";
 
 installErrorForwarding("main-window");
 
 export const electronAPI = {
   game: {
-    load: (sourcePath?: string) => ipcRenderer.invoke(IPC.GAME_LOAD, sourcePath),
+    load: (sourcePath?: string) =>
+      ipcRenderer.invoke(IPC.GAME_LOAD, sourcePath),
     prepareImport: (sourcePath: string) =>
       ipcRenderer.invoke(IPC.GAME_PREPARE_IMPORT, sourcePath),
     loadWithManifest: (
@@ -42,11 +46,12 @@ export const electronAPI = {
         maxPlayers?: number;
       },
     ) => ipcRenderer.invoke(IPC.GAME_LOAD_WITH_MANIFEST, sourcePath, draft),
-    checkIdExists: (id: string) => ipcRenderer.invoke(IPC.GAME_CHECK_ID_EXISTS, id),
+    checkIdExists: (id: string) =>
+      ipcRenderer.invoke(IPC.GAME_CHECK_ID_EXISTS, id),
     getPathForFile: (file: File) => webUtils.getPathForFile(file),
     remove: (id: string, versions?: string[]) =>
       ipcRenderer.invoke(IPC.GAME_REMOVE, id, versions),
-    launch: (id: string, version?: string) =>
+    launch: (id: string, version?: string): Promise<boolean> =>
       ipcRenderer.invoke(IPC.GAME_LAUNCH, id, version),
     getAll: () => ipcRenderer.invoke(IPC.GAME_GET_ALL),
     getAllRecords: () => ipcRenderer.invoke(IPC.GAME_GET_RECORDS),
@@ -61,6 +66,13 @@ export const electronAPI = {
       ipcRenderer.invoke(IPC.GAME_GET_VIDEO, id, version),
     getIcon: (id: string, version?: string) =>
       ipcRenderer.invoke(IPC.GAME_GET_ICON, id, version),
+    getAchievementIcon: (id: string, version: string, achievementId: string) =>
+      ipcRenderer.invoke(
+        IPC.GAME_GET_ACHIEVEMENT_ICON,
+        id,
+        version,
+        achievementId,
+      ),
     toggleFavorite: (id: string) =>
       ipcRenderer.invoke(IPC.GAME_TOGGLE_FAVORITE, id),
     reorder: (gameIds: string[]) =>
@@ -75,9 +87,13 @@ export const electronAPI = {
         ipcRenderer.removeListener(IPC.GAME_PROCESS_ENDED, endHandler);
       };
     },
-    onLaunchFailed: (callback: (id: string, reason: string) => void) => {
-      const handler = (_: any, payload: { id: string; reason: string }) =>
-        callback(payload.id, payload.reason);
+    onLaunchFailed: (
+      callback: (payload: GameLaunchFailurePayload) => void,
+    ) => {
+      const handler = (
+        _: any,
+        payload: GameLaunchFailurePayload,
+      ) => callback(payload);
       ipcRenderer.on(IPC.GAME_LAUNCH_FAILED, handler);
       return () => ipcRenderer.removeListener(IPC.GAME_LAUNCH_FAILED, handler);
     },
@@ -98,31 +114,36 @@ export const electronAPI = {
     },
   },
   room: {
-    create: (gameId: string, version?: string) =>
+    create: (gameId: string, version?: string): Promise<RoomCreateResult> =>
       ipcRenderer.invoke(IPC.ROOM_CREATE, gameId, version),
-    join: (gameId: string, address: string, version?: string, password?: string) =>
+    join: (
+      gameId: string,
+      address: string,
+      version?: string,
+      password?: string,
+    ): Promise<RoomConnectResult> =>
       ipcRenderer.invoke(IPC.ROOM_JOIN, gameId, address, version, password),
     leave: () => ipcRenderer.invoke(IPC.ROOM_LEAVE),
     ready: () => ipcRenderer.invoke(IPC.ROOM_READY),
     unready: () => ipcRenderer.invoke(IPC.ROOM_UNREADY),
-    start: () => ipcRenderer.invoke(IPC.ROOM_START),
+    start: (): Promise<boolean> => ipcRenderer.invoke(IPC.ROOM_START),
     setAddress: (address: string) =>
       ipcRenderer.invoke(IPC.ROOM_SET_ADDRESS, address),
     setPassword: (password: string) =>
       ipcRenderer.invoke(IPC.ROOM_SET_PASSWORD, password),
     getState: () => ipcRenderer.invoke(IPC.ROOM_GET_STATE),
-    sendChat: (content: string, type?: "text" | "audio" | "image", images?: string[]) =>
-      ipcRenderer.invoke(IPC.ROOM_SEND_CHAT, content, type, images),
+    sendChat: (
+      content: string,
+      type?: "text" | "audio" | "image",
+      images?: string[],
+    ) => ipcRenderer.invoke(IPC.ROOM_SEND_CHAT, content, type, images),
     kickPlayer: (playerId: string) =>
       ipcRenderer.invoke(IPC.ROOM_KICK_PLAYER, playerId),
-    reconnect: () =>
-      ipcRenderer.invoke(IPC.ROOM_RECONNECT),
+    reconnect: (): Promise<boolean> => ipcRenderer.invoke(IPC.ROOM_RECONNECT),
     popOutChat: (chatHistory: unknown) =>
       ipcRenderer.invoke(IPC.ROOM_POP_OUT_CHAT, chatHistory),
-    popInChat: () =>
-      ipcRenderer.invoke(IPC.ROOM_POP_IN_CHAT),
-    getChatHistory: () =>
-      ipcRenderer.invoke(IPC.ROOM_GET_CHAT_HISTORY),
+    popInChat: () => ipcRenderer.invoke(IPC.ROOM_POP_IN_CHAT),
+    getChatHistory: () => ipcRenderer.invoke(IPC.ROOM_GET_CHAT_HISTORY),
     discoverLan: (): Promise<DiscoveredRoom[]> =>
       ipcRenderer.invoke(IPC.ROOM_DISCOVER_LAN),
     discoverVirtualLan: (): Promise<DiscoveredRoom[]> =>
@@ -133,18 +154,19 @@ export const electronAPI = {
       ipcRenderer.invoke(IPC.ROOM_MEASURE_RELAY_LATENCY),
     validateDiscovered: (room: DiscoveredRoom) =>
       ipcRenderer.invoke(IPC.ROOM_VALIDATE_DISCOVERED, room),
-    probePassword: (address: string): Promise<{ success: boolean; hasPassword: boolean; error?: string }> =>
+    probePassword: (
+      address: string,
+    ): Promise<{ success: boolean; hasPassword: boolean; error?: string }> =>
       ipcRenderer.invoke(IPC.ROOM_PROBE_PASSWORD, address),
     setDirectHostMode: (mode: "lan") =>
       ipcRenderer.invoke(IPC.ROOM_SET_DIRECT_HOST_MODE, mode),
-    enableRelayHost: () =>
-      ipcRenderer.invoke(IPC.ROOM_ENABLE_RELAY_HOST),
-    disableRelayHost: () =>
-      ipcRenderer.invoke(IPC.ROOM_DISABLE_RELAY_HOST),
+    enableRelayHost: () => ipcRenderer.invoke(IPC.ROOM_ENABLE_RELAY_HOST),
+    disableRelayHost: () => ipcRenderer.invoke(IPC.ROOM_DISABLE_RELAY_HOST),
     onChatWindowClosed: (callback: () => void) => {
       const handler = () => callback();
       ipcRenderer.on(IPC.ROOM_CHAT_WINDOW_CLOSED, handler);
-      return () => ipcRenderer.removeListener(IPC.ROOM_CHAT_WINDOW_CLOSED, handler);
+      return () =>
+        ipcRenderer.removeListener(IPC.ROOM_CHAT_WINDOW_CLOSED, handler);
     },
     onEvent: (callback: (event: RoomEvent) => void) => {
       const handler = (_: any, event: RoomEvent) => callback(event);
@@ -155,12 +177,24 @@ export const electronAPI = {
   market: {
     getSources: (forceRefresh?: boolean): Promise<MarketDirectory> =>
       ipcRenderer.invoke(IPC.MARKET_GET_SOURCES, forceRefresh),
-    getIndex: (sourceIdx: number, forceRefresh?: boolean): Promise<MarketIndex> =>
+    getIndex: (
+      sourceIdx: number,
+      forceRefresh?: boolean,
+    ): Promise<MarketIndex> =>
       ipcRenderer.invoke(IPC.MARKET_GET_INDEX, sourceIdx, forceRefresh),
     getCachedImage: (url: string): Promise<string> =>
       ipcRenderer.invoke(IPC.MARKET_GET_CACHED_IMAGE, url),
-    downloadAndInstall: (gameId: string, version: string, sourceIdx: number): Promise<MarketTaskState> =>
-      ipcRenderer.invoke(IPC.MARKET_DOWNLOAD_AND_INSTALL, gameId, version, sourceIdx),
+    downloadAndInstall: (
+      gameId: string,
+      version: string,
+      sourceIdx: number,
+    ): Promise<MarketTaskState> =>
+      ipcRenderer.invoke(
+        IPC.MARKET_DOWNLOAD_AND_INSTALL,
+        gameId,
+        version,
+        sourceIdx,
+      ),
     getTaskState: (taskId: string): Promise<MarketTaskState | null> =>
       ipcRenderer.invoke(IPC.MARKET_GET_TASK_STATE, taskId),
     cancelTask: (taskId: string): Promise<boolean> =>
@@ -171,7 +205,9 @@ export const electronAPI = {
       ipcRenderer.invoke(IPC.MARKET_RESUME_TASK, taskId),
     getPendingTasks: (): Promise<DownloadTaskSnapshot[]> =>
       ipcRenderer.invoke(IPC.MARKET_GET_PENDING_TASKS),
-    resolveAssetInfo: (downloadUrl: string): Promise<{ sha256?: string; size?: number }> =>
+    resolveAssetInfo: (
+      downloadUrl: string,
+    ): Promise<{ sha256?: string; size?: number }> =>
       ipcRenderer.invoke(IPC.MARKET_RESOLVE_ASSET_INFO, downloadUrl),
     onEvent: (callback: (payload: MarketTaskEvent) => void) => {
       const handler = (_: any, payload: MarketTaskEvent) => callback(payload);
@@ -181,14 +217,17 @@ export const electronAPI = {
     getAllTaskStates: (): Promise<MarketTaskState[]> =>
       ipcRenderer.invoke(IPC.MARKET_GET_ALL_TASK_STATES),
     onFloatBallEvent: (callback: (progress: FloatBallProgress) => void) => {
-      const handler = (_: any, progress: FloatBallProgress) => callback(progress);
+      const handler = (_: any, progress: FloatBallProgress) =>
+        callback(progress);
       ipcRenderer.on(IPC.MARKET_FLOAT_BALL_EVENT, handler);
-      return () => ipcRenderer.removeListener(IPC.MARKET_FLOAT_BALL_EVENT, handler);
+      return () =>
+        ipcRenderer.removeListener(IPC.MARKET_FLOAT_BALL_EVENT, handler);
     },
     onDragState: (callback: (dragging: boolean) => void) => {
       const handler = (_: any, dragging: boolean) => callback(dragging);
       ipcRenderer.on(IPC.FLOAT_BALL_DRAG_STATE, handler);
-      return () => ipcRenderer.removeListener(IPC.FLOAT_BALL_DRAG_STATE, handler);
+      return () =>
+        ipcRenderer.removeListener(IPC.FLOAT_BALL_DRAG_STATE, handler);
     },
   },
   settings: {
@@ -204,7 +243,9 @@ export const electronAPI = {
       ipcRenderer.invoke(IPC.SYSTEM_SAVE_SETTINGS, settings),
     savePartialSettings: (partial: Partial<AppSettings>) =>
       ipcRenderer.invoke(IPC.SYSTEM_SAVE_PARTIAL_SETTINGS, partial),
-    saveNicknameStyle: (style: NicknameStyle): Promise<{ success: boolean; code?: string }> =>
+    saveNicknameStyle: (
+      style: NicknameStyle,
+    ): Promise<{ success: boolean; code?: string }> =>
       ipcRenderer.invoke(IPC.SYSTEM_SAVE_NICKNAME_STYLE, style),
     ignoreUpdateVersion: (version: string) =>
       ipcRenderer.invoke(IPC.SYSTEM_SET_IGNORED_UPDATE_VERSION, version),
@@ -223,14 +264,17 @@ export const electronAPI = {
       ipcRenderer.invoke(IPC.SYSTEM_ADD_GAME_STORAGE_PATH, targetPath),
     setDefaultGameStoragePath: (targetPath: string) =>
       ipcRenderer.invoke(IPC.SYSTEM_SET_DEFAULT_GAME_STORAGE_PATH, targetPath),
-    migrateDefaultGamesLibrary: (payload: { targetPath?: string; ignore?: boolean }) =>
-      ipcRenderer.invoke(IPC.SYSTEM_MIGRATE_DEFAULT_GAMES_LIBRARY, payload),
-    migrateGameStorageLibrary: (payload: { sourcePath: string; targetPath: string }) =>
-      ipcRenderer.invoke(IPC.SYSTEM_MIGRATE_GAME_STORAGE_LIBRARY, payload),
+    migrateDefaultGamesLibrary: (payload: {
+      targetPath?: string;
+      ignore?: boolean;
+    }) => ipcRenderer.invoke(IPC.SYSTEM_MIGRATE_DEFAULT_GAMES_LIBRARY, payload),
+    migrateGameStorageLibrary: (payload: {
+      sourcePath: string;
+      targetPath: string;
+    }) => ipcRenderer.invoke(IPC.SYSTEM_MIGRATE_GAME_STORAGE_LIBRARY, payload),
     openPath: (targetPath: string) =>
       ipcRenderer.invoke(IPC.SYSTEM_OPEN_PATH, targetPath),
-    openUrl: (url: string) =>
-      ipcRenderer.invoke(IPC.SYSTEM_OPEN_URL, url),
+    openUrl: (url: string) => ipcRenderer.invoke(IPC.SYSTEM_OPEN_URL, url),
     removeGameStoragePath: (targetPath: string) =>
       ipcRenderer.invoke(IPC.SYSTEM_REMOVE_GAME_STORAGE_PATH, targetPath),
     dataHealthCheck: (): Promise<DataHealthReport> =>
@@ -239,29 +283,46 @@ export const electronAPI = {
     checkUpdate: () => ipcRenderer.invoke(IPC.SYSTEM_CHECK_UPDATE),
     downloadUpdate: () => ipcRenderer.invoke(IPC.SYSTEM_DOWNLOAD_UPDATE),
     installUpdate: () => ipcRenderer.invoke(IPC.SYSTEM_INSTALL_UPDATE),
-    uninstall: (payload?: { deleteGames?: boolean }): Promise<{ success: boolean; error?: string }> =>
+    uninstall: (payload?: {
+      deleteGames?: boolean;
+    }): Promise<{ success: boolean; error?: string }> =>
       ipcRenderer.invoke(IPC.SYSTEM_UNINSTALL, payload),
     clearCache: (): Promise<{ totalSize: number; clearedSize: number }> =>
       ipcRenderer.invoke(IPC.SYSTEM_CLEAR_CACHE),
-    onUpdateEvent: (
-      callback: (payload: UpdateState) => void,
-    ) => {
+    savePng: (
+      dataUrl: string,
+      defaultName: string,
+    ): Promise<{
+      success: boolean;
+      canceled?: boolean;
+      filePath?: string;
+      error?: string;
+    }> => ipcRenderer.invoke(IPC.SYSTEM_SAVE_PNG, dataUrl, defaultName),
+    onUpdateEvent: (callback: (payload: UpdateState) => void) => {
       const handler = (_: any, payload: UpdateState) => callback(payload);
       ipcRenderer.on(IPC.SYSTEM_UPDATE_EVENT, handler);
       return () => ipcRenderer.removeListener(IPC.SYSTEM_UPDATE_EVENT, handler);
     },
     onCloudSyncEvent: (
-      callback: (payload: { stage: string; percentage: number; fileKey?: string }) => void,
+      callback: (payload: {
+        stage: string;
+        percentage: number;
+        fileKey?: string;
+      }) => void,
     ) => {
-      const handler = (_: any, payload: { stage: string; percentage: number; fileKey?: string }) => callback(payload);
+      const handler = (
+        _: any,
+        payload: { stage: string; percentage: number; fileKey?: string },
+      ) => callback(payload);
       ipcRenderer.on(IPC.SYSTEM_CLOUD_SYNC_EVENT, handler);
-      return () => ipcRenderer.removeListener(IPC.SYSTEM_CLOUD_SYNC_EVENT, handler);
+      return () =>
+        ipcRenderer.removeListener(IPC.SYSTEM_CLOUD_SYNC_EVENT, handler);
     },
   },
   user: {
     getData: () => ipcRenderer.invoke(IPC.SYSTEM_GET_USER_DATA),
-    buyFrame: (frameId: string, coinCost: number) =>
-      ipcRenderer.invoke(IPC.SYSTEM_BUY_FRAME, frameId, coinCost),
+    buyFrame: (frameId: string) =>
+      ipcRenderer.invoke(IPC.SYSTEM_BUY_FRAME, frameId),
     equipFrame: (frameId: string) =>
       ipcRenderer.invoke(IPC.SYSTEM_EQUIP_FRAME, frameId),
     unequipFrame: (frameId: string) =>
@@ -281,6 +342,6 @@ export const electronAPI = {
 if (process.contextIsolated) {
   contextBridge.exposeInMainWorld("electronAPI", electronAPI);
 } else {
-  // @ts-ignore
+  // @ts-ignore -- contextIsolation=false fallback exposes the typed preload API directly.
   window.electronAPI = electronAPI;
 }

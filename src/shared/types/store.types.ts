@@ -155,6 +155,7 @@ export interface DataHealthIssue {
   level: "warning" | "error";
   code: string;
   message: string;
+  params?: Record<string, string | number>;
   target?: string;
 }
 

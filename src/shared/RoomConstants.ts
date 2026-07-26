@@ -20,9 +20,12 @@ export class RoomConstants {
   // 客户端断线后的最大自动重连次数。
   static readonly ROOM_MAX_RECONNECT_ATTEMPTS = 5;
 
-  static readonly RELAY_LATENCY_REFRESH_INTERVAL_MS = 10_000;
+  static readonly RELAY_LATENCY_REFRESH_INTERVAL_MS = 15_000;
 
   static readonly RELAY_LATENCY_TIMEOUT_MS = 5_000;
+
+  // 房间发现页面手动刷新按钮冷却时间。
+  static readonly ROOM_REFRESH_COOLDOWN_MS = 5_000;
 
   // 客户端自动重连的基础退避时间，每次重连按 attempts * base 计算。
   static readonly ROOM_RECONNECT_BASE_DELAY_MS = 2_000;
