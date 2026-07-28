@@ -236,6 +236,9 @@
 
       <div style="display: flex; justify-content: space-between; align-items: center;">
         <n-space>
+          <n-button type="primary" secondary @click="showFeedbackModal = true">
+            {{ t('feedback.button') }}
+          </n-button>
           <n-button type="error" secondary @click="showUninstallModal = true">
             {{ t('settings.uninstallClient') }}
           </n-button>
@@ -250,10 +253,10 @@
       </div>
     </n-form>
 
-    <n-modal v-model:show="showUninstallModal" preset="dialog" :title="t('settings.uninstallClient')" positive-text="" negative-text="">
+    <n-modal v-model:show="showUninstallModal" preset="dialog" :title="t('settings.uninstallClient')" positive-text="" negative-text="" :closable="!isUninstalling" :mask-closable="!isUninstalling">
       <n-space vertical :size="16" style="width: 100%;">
         <n-text>{{ t('settings.uninstallClientDescription') }}</n-text>
-        <n-checkbox v-model:checked="uninstallDeleteGames">
+        <n-checkbox v-model:checked="uninstallDeleteGames" :disabled="isUninstalling">
           {{ t('settings.uninstallDeleteGames') }}
         </n-checkbox>
         <n-list v-if="uninstallDeleteGames && allStoragePaths.length > 0" bordered>
@@ -264,8 +267,8 @@
       </n-space>
       <template #action>
         <n-space>
-          <n-button @click="showUninstallModal = false">{{ t('common.cancel') }}</n-button>
-          <n-button type="error" @click="confirmUninstall">{{ t('settings.uninstallClient') }}</n-button>
+          <n-button :disabled="isUninstalling" @click="showUninstallModal = false">{{ t('common.cancel') }}</n-button>
+          <n-button type="error" :loading="isUninstalling" @click="confirmUninstall">{{ t('settings.uninstallClient') }}</n-button>
         </n-space>
       </template>
     </n-modal>
@@ -369,6 +372,12 @@
       </template>
     </n-modal>
 
+    <FeedbackModal
+      v-model:show="showFeedbackModal"
+      :authenticated="cloudStatus.authenticated"
+      @auth-expired="refreshCloudStatus"
+    />
+
   </div>
 </template>
 
@@ -380,6 +389,7 @@ import { useI18n } from 'vue-i18n'
 import { useSettingsStore } from '../stores/useSettingsStore'
 import { useGameStore } from '../stores/useGameStore'
 import AvatarWithFrame from '../components/AvatarWithFrame.vue'
+import FeedbackModal from '../components/settings/FeedbackModal.vue'
 import type { AppSettings } from '../../../shared/types'
 import { getFrameImageFileName } from '../../../shared/avatar-frames'
 import { formatBytes } from '../utils/format'
@@ -396,6 +406,8 @@ const formRef = ref(null)
 const formValue = ref<AppSettings | null>(null)
 const originalSettings = ref<string>('')
 const showUninstallModal = ref(false)
+const isUninstalling = ref(false)
+const showFeedbackModal = ref(false)
 const showAvatarPreview = ref(false)
 const showCropModal = ref(false)
 const cropImage = ref<HTMLImageElement | null>(null)
@@ -987,12 +999,28 @@ const handleOpenWebsite = () => {
 }
 
 const confirmUninstall = async () => {
-  showUninstallModal.value = false
-  const result = await window.electronAPI.settings.uninstall({
-    deleteGames: uninstallDeleteGames.value,
-  })
-  if (!result.success && result.error === "uninstaller_not_found") {
-    message.warning(t('settings.uninstallNotAvailable'))
+  if (isUninstalling.value) return
+  isUninstalling.value = true
+  try {
+    const result = await window.electronAPI.settings.uninstall({
+      deleteGames: uninstallDeleteGames.value,
+    })
+    if (result.success) return
+    if (result.error === "uninstaller_not_found") {
+      message.warning(t('settings.uninstallNotAvailable'))
+    } else if (result.error === "uninstall_market_tasks_active") {
+      message.warning(t('settings.uninstallMarketTasksActive'))
+    } else if (result.error === "uninstall_game_library_delete_failed") {
+      message.error(t('settings.uninstallGameLibraryDeleteFailed', {
+        paths: (result.paths || []).join('\n'),
+      }))
+    } else if (result.error === "unsafe_game_storage_path") {
+      message.error(t('settings.uninstallUnsafeStoragePath'))
+    } else {
+      message.error(t('settings.uninstallFailed'))
+    }
+  } finally {
+    isUninstalling.value = false
   }
 }
 

@@ -3,7 +3,15 @@ import http from "node:http";
 import { requireHttpRelayToken } from "./utils/relay-auth.js";
 import { sendJson } from "./utils/ws.js";
 
-export function createHttpServer({ config, state, roomService, authService, cloudDataService }) {
+export function createHttpServer({
+  config,
+  state,
+  roomService,
+  authService,
+  cloudDataService,
+  feedbackService,
+  adminStaticService,
+}) {
   return http.createServer(async (req, res) => {
     const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
     try {
@@ -12,6 +20,12 @@ export function createHttpServer({ config, state, roomService, authService, clou
         return;
       }
       if (await authService.handleRequest(req, res, url)) {
+        return;
+      }
+      if (await feedbackService.handleRequest(req, res, url)) {
+        return;
+      }
+      if (adminStaticService.handleRequest(req, res, url)) {
         return;
       }
       if (!requireHttpRelayToken(config, req, res, url)) {

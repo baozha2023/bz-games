@@ -7,6 +7,47 @@ export default {
     rooms: "房间",
     backToRoom: "返回房间",
   },
+  feedback: {
+    button: "建言献策",
+    title: "建言献策",
+    loggedInHint: "已登录，每 6 小时可以发送一次。",
+    anonymousHint: "未登录时，每 48 小时可以发送一次。",
+    placeholder: "请输入你的建议、问题或期待的功能……",
+    selectImages: "选择图片",
+    clearImages: "清空图片",
+    removeImage: "移除图片",
+    imageLimits: "最多 4 张，支持 PNG、JPEG、WebP，单张不超过 5 MiB",
+    submit: "发送",
+    history: "历史记录",
+    historyTitle: "反馈历史记录",
+    historyEmpty: "暂无反馈记录",
+    historySubmittedAt: "提交于 {time}",
+    successTitle: "感谢你的建议",
+    successDescription: "已成功提交，反馈编号：{id}",
+    cooldownUntil: "请在 {time} 后再次发送。",
+    errors: {
+      too_many_images: "最多只能选择 4 张图片",
+      image_too_large: "图片超过 5 MiB",
+      unsupported_image_type: "仅支持 PNG、JPEG 和 WebP 图片",
+      image_type_mismatch: "图片实际格式与声明格式不一致",
+      invalid_image: "图片文件无效",
+      feedback_image_failed: "读取图片失败",
+      feedback_images_expired: "图片选择已过期，请重新选择",
+      feedback_empty: "请填写文字或选择图片",
+      feedback_text_too_long: "文字不能超过 5,000 个字符",
+      feedback_not_configured: "中继服务未配置",
+      feedback_timeout: "发送超时，请稍后重试",
+      feedback_network_failed: "网络连接失败，请稍后重试",
+      feedback_invalid_response: "服务返回异常，请稍后重试",
+      unauthorized: "GitHub 登录已失效，请重新登录或以匿名方式提交",
+      feedback_storage_not_configured: "反馈存储服务未配置",
+      image_storage_not_configured: "图片存储服务未配置",
+      payload_too_large: "提交内容总大小超出限制",
+      multipart_required: "提交格式不正确",
+      feedback_storage_failed: "服务端保存失败，请稍后重试",
+      unknown: "提交失败，请稍后重试",
+    },
+  },
   common: {
     confirm: "确认",
     cancel: "取消",
@@ -72,7 +113,8 @@ export default {
     importDraftIdAvailable: "ID 可用",
     importDraftIdFormatHint: "建议使用反向域名格式，如 com.dev.game",
     importDraftRequired: "请填写所有必填项",
-    importDraftEntryHint: "已自动探测入口，可按需修改（支持 .html / serve / url / exe）",
+    importDraftEntryHint:
+      "已自动探测入口，可按需修改（支持 .html / serve / url / exe）",
     importDraftWebUrlHint: "当 entry 为 url 时，必须填写 web_url",
     importDraftFields: {
       id: "游戏ID",
@@ -154,7 +196,8 @@ export default {
     platformIncompatible: "平台版本不兼容",
     installSuccess: "{name} {version} 安装完成",
     marketIdMismatchTitle: "市场ID不匹配",
-    marketIdMismatchDesc: "当前市场ID与平台登记不一致，可能存在风险，已禁止下载游戏。",
+    marketIdMismatchDesc:
+      "当前市场ID与平台登记不一致，可能存在风险，已禁止下载游戏。",
     taskStatus: {
       idle: "等待中",
       downloading: "下载中",
@@ -262,7 +305,8 @@ export default {
     connectionModeLan: "局域网",
     connectionModeRelay: "服务器",
     connectionModeChangeTitle: "切换联机模式",
-    connectionModeChangeContent: "更改模式会断开当前房间其他玩家的连接，确定要继续吗？",
+    connectionModeChangeContent:
+      "更改模式会断开当前房间其他玩家的连接，确定要继续吗？",
     connectionModeRelayPending: "已选择服务器模式，等待接入中继创建流程",
     connectionModeRelayReady: "服务器房间已开启：{address}",
     connectionModeRelayFailed: "服务器房间开启失败：{reason}",
@@ -278,28 +322,42 @@ export default {
     lanConnectionHint: "可以通过 frp、EasyTier 等工具进行联机。",
     lanGuideDetail: "详情",
     lanGuideTitle: "局域网联机工具配置说明",
-    lanGuideOverview: "当前房间仍然由 BZ-Games 在本机 38080 端口提供服务。natfrp 和 EasyTier 只是帮助其他玩家从公网或虚拟局域网访问到你的房间。",
+    lanGuideOverview:
+      "当前房间仍然由 BZ-Games 在本机 38080 端口提供服务。natfrp 和 EasyTier 只是帮助其他玩家从公网或虚拟局域网访问到你的房间。",
     lanGuideOpenSite: "打开官网",
     lanGuideSiteLabel: "官网：",
     lanGuideRecommendedConfig: "推荐配置步骤",
     lanGuideNatfrpTitle: "natfrp",
-    lanGuideNatfrpSummary: "适合没有公网 IP、需要通过公网地址让朋友直接连接你的房间。",
-    lanGuideNatfrpStep1: "打开 https://www.natfrp.com/ 注册并下载启动器或客户端，登录后创建一个 TCP 隧道。",
-    lanGuideNatfrpStep2: "本地地址填写 127.0.0.1，本地端口填写 38080；这表示把外部访问流量转发到 BZ-Games 本机房间服务。",
-    lanGuideNatfrpStep3: "在 natfrp 面板中选择可用节点与远程端口，启动隧道后记下分配给你的公网地址与端口。",
-    lanGuideNatfrpStep4: "保持 BZ-Games 房间处于“局域网”模式，并确保 natfrp 隧道在客机加入前已经成功连接。",
-    lanGuideNatfrpStep5: "让其他玩家在平台中直接输入 natfrp 提供的公网地址:端口加入；如果你同时开着物理/虚拟局域网，也可以继续使用对应方式发现房间。",
+    lanGuideNatfrpSummary:
+      "适合没有公网 IP、需要通过公网地址让朋友直接连接你的房间。",
+    lanGuideNatfrpStep1:
+      "打开 https://www.natfrp.com/ 注册并下载启动器或客户端，登录后创建一个 TCP 隧道。",
+    lanGuideNatfrpStep2:
+      "本地地址填写 127.0.0.1，本地端口填写 38080；这表示把外部访问流量转发到 BZ-Games 本机房间服务。",
+    lanGuideNatfrpStep3:
+      "在 natfrp 面板中选择可用节点与远程端口，启动隧道后记下分配给你的公网地址与端口。",
+    lanGuideNatfrpStep4:
+      "保持 BZ-Games 房间处于“局域网”模式，并确保 natfrp 隧道在客机加入前已经成功连接。",
+    lanGuideNatfrpStep5:
+      "让其他玩家在平台中直接输入 natfrp 提供的公网地址:端口加入；如果你同时开着物理/虚拟局域网，也可以继续使用对应方式发现房间。",
     lanGuideEasyTierTitle: "EasyTier",
-    lanGuideEasyTierSummary: "适合把不同网络环境的玩家拉进同一个虚拟局域网，再像局域网一样直接发现或连接房间。",
+    lanGuideEasyTierSummary:
+      "适合把不同网络环境的玩家拉进同一个虚拟局域网，再像局域网一样直接发现或连接房间。",
     lanGuideEasyTierNodeLabel: "初始节点：",
-    lanGuideEasyTierStep1: "打开 https://easytier.cn/ 下载并安装 EasyTier，房主和所有客机都需要安装。",
-    lanGuideEasyTierStep2: "创建或加入同一个虚拟网络，网络名称与网络密钥需要保持一致；如需使用初始节点，请填写你信任的可用节点地址。",
-    lanGuideEasyTierStep3: "连接成功后，确认每台设备都拿到了 EasyTier 分配的虚拟 IP，并且彼此可以通过虚拟 IP 通信。",
-    lanGuideEasyTierStep4: "房主在 BZ-Games 中保持“局域网”模式开房，客机可在“虚拟局域网”页直接发现房间，或者使用房主的 EasyTier 虚拟 IP:38080 手动加入。",
-    lanGuideEasyTierStep5: "如果发现不到房间，优先检查双方是否在同一虚拟网络、初始节点是否填写正确、以及系统防火墙是否放行 BZ-Games 的 38080 端口。",
+    lanGuideEasyTierStep1:
+      "打开 https://easytier.cn/ 下载并安装 EasyTier，房主和所有客机都需要安装。",
+    lanGuideEasyTierStep2:
+      "创建或加入同一个虚拟网络，网络名称与网络密钥需要保持一致；如需使用初始节点，请填写你信任的可用节点地址。",
+    lanGuideEasyTierStep3:
+      "连接成功后，确认每台设备都拿到了 EasyTier 分配的虚拟 IP，并且彼此可以通过虚拟 IP 通信。",
+    lanGuideEasyTierStep4:
+      "房主在 BZ-Games 中保持“局域网”模式开房，客机可在“虚拟局域网”页直接发现房间，或者使用房主的 EasyTier 虚拟 IP:38080 手动加入。",
+    lanGuideEasyTierStep5:
+      "如果发现不到房间，优先检查双方是否在同一虚拟网络、初始节点是否填写正确、以及系统防火墙是否放行 BZ-Games 的 38080 端口。",
     connectionStatus: {
       connecting: "正在连接房间...",
-      reconnecting: "房间连接中断，正在重连（{current}/5），预计 {seconds} 秒后重试",
+      reconnecting:
+        "房间连接中断，正在重连（{current}/5），预计 {seconds} 秒后重试",
       failed: "房间连接失败：{reason}",
       disconnected: "已与房间断开连接",
     },
@@ -326,8 +384,10 @@ export default {
     refresh: "刷新",
     lanTab: "局域网",
     relayTab: "服务器",
-    lanDesc: "自动扫描物理局域网和虚拟局域网内正在等待的 BZ-Games 房间，加入前会校验游戏 ID 与版本。",
-    relayDesc: "服务器房间来自官方中继服务端，房主开启服务器模式后会显示短地址，客机可直接加入。",
+    lanDesc:
+      "自动扫描物理局域网和虚拟局域网内正在等待的 BZ-Games 房间，加入前会校验游戏 ID 与版本。",
+    relayDesc:
+      "服务器房间来自官方中继服务端，房主开启服务器模式后会显示短地址，客机可直接加入。",
     emptyLan: "暂无可加入的局域网房间",
     emptyRelay: "暂无可加入的服务器房间",
     refreshFailed: "刷新房间失败",
@@ -421,7 +481,8 @@ export default {
     cloudUpload: "云端上传",
     cloudDownload: "云端下载",
     cloudSyncHelpTitle: "云端同步说明",
-    cloudSyncHelp: "云端上传：将当前游戏库配置、用户数据和游玩记录上传到云端，并覆盖云端旧数据。GitHub Token 与登录会话不会上传。\n云端下载：下载云端数据并应用到本地；config.json 只更新云端存在的字段，云端没有的本地字段会保留。",
+    cloudSyncHelp:
+      "云端上传：将当前游戏库配置、用户数据和游玩记录上传到云端，并覆盖云端旧数据。GitHub Token 与登录会话不会上传。\n云端下载：下载云端数据并应用到本地；config.json 只更新云端存在的字段，云端没有的本地字段会保留。",
     cloudNeverUploaded: "云端时间：从未上传",
     cloudLastUploadedAt: "云端时间：{time}",
     cloudUploadSuccess: "云端上传完成",
@@ -441,7 +502,8 @@ export default {
       version_conflict: "云端版本冲突，请刷新后重试",
       file_too_large: "文件超过云同步大小限制",
       cloud_hash_mismatch: "云端文件校验失败，请重试",
-      cloud_sync_rate_limited: "云同步过于频繁，同一账号上传和下载各自每24小时只能执行一次",
+      cloud_sync_rate_limited:
+        "云同步过于频繁，同一账号上传和下载各自每24小时只能执行一次",
       unknown: "云同步失败",
     },
     closeBehavior: "关闭主窗口",
@@ -457,10 +519,12 @@ export default {
     sensitiveWordFilterOn: "开启",
     sensitiveWordFilterOff: "关闭",
     sensitiveWordFilterHelpTitle: "敏感词过滤说明",
-    sensitiveWordFilterHelp: "敏感词过滤仅作用于房间聊天消息（主界面房间聊天和独立聊天窗口）。\n中继服务器房间：服务器会自动过滤敏感词，与本地开关无关。\n局域网 / 虚拟局域网房间：开启后，匹配到敏感词库的词汇将被替换为 *。",
+    sensitiveWordFilterHelp:
+      "敏感词过滤仅作用于房间聊天消息（主界面房间聊天和独立聊天窗口）。\n中继服务器房间：服务器会自动过滤敏感词，与本地开关无关。\n局域网 / 虚拟局域网房间：开启后，匹配到敏感词库的词汇将被替换为 *。",
     githubToken: "GitHub Token",
     githubTokenHelpTitle: "GitHub Token 说明",
-    githubTokenHelp: "GitHub Token 用于提升 GitHub API 请求频率上限，确保市场访问和游戏下载正常。\n未设置时：每小时 60 次请求\n设置后：每小时 5000 次请求\n生成位置：GitHub Settings → Developer settings → Personal access tokens → Tokens (classic)\n不需要勾选任何权限，留空即可正常使用。",
+    githubTokenHelp:
+      "GitHub Token 用于提升 GitHub API 请求频率上限，确保市场访问和游戏下载正常。\n未设置时：每小时 60 次请求\n设置后：每小时 5000 次请求\n生成位置：GitHub Settings → Developer settings → Personal access tokens → Tokens (classic)\n不需要勾选任何权限，留空即可正常使用。",
     githubTokenPlaceholder: "输入 GitHub Personal Access Token（选填）",
     browsePath: "选择路径",
     storagePathList: "游戏库列表",
@@ -469,14 +533,17 @@ export default {
     setDefaultStoragePath: "设为默认",
     addStoragePath: "添加新的游戏库地址",
     defaultGamesMigrationTitle: "建议迁移默认游戏库",
-    defaultGamesMigrationContent: "为了您更好的体验，建议将 exe 同级目录下的默认游戏库迁移到其他位置。迁移会移动该游戏库中的全部文件，全部成功后删除原目录。当前默认游戏库：{path}",
+    defaultGamesMigrationContent:
+      "为了您更好的体验，建议将 exe 同级目录下的默认游戏库迁移到其他位置。迁移会移动该游戏库中的全部文件，全部成功后删除原目录。当前默认游戏库：{path}",
     migrateNow: "立即迁移",
     doNotRemind: "不再提醒",
-    defaultGamesMigrationSuccess: "游戏库迁移完成，已迁移 {gameCount} 个游戏、{versionCount} 个版本",
+    defaultGamesMigrationSuccess:
+      "游戏库迁移完成，已迁移 {gameCount} 个游戏、{versionCount} 个版本",
     defaultGamesMigrationFailed: "游戏库迁移失败",
     openPathFailed: "打开路径失败",
     storagePathNotEmptyTitle: "目录非空",
-    storagePathNotEmptyContent: "所选目录必须为空目录。请选择一个空目录，或使用新建文件夹功能创建新目录，以避免未来卸载时误删其他文件。",
+    storagePathNotEmptyContent:
+      "所选目录必须为空目录。请选择一个空目录，或使用新建文件夹功能创建新目录，以避免未来卸载时误删其他文件。",
     removeStoragePathTitle: "删除游戏库",
     removeStoragePathConfirm:
       "将从该游戏库中删除平台可识别的已导入游戏数据：{path}。不会删除用户自行放入的非游戏文件。此操作不可撤销，是否继续？",
@@ -484,7 +551,8 @@ export default {
       "已删除路径，移除 {gameCount} 个游戏、{versionCount} 个版本",
     removeStoragePathFailed: "删除路径失败",
     storageErrors: {
-      cannot_remove_last_storage_path: "至少需要保留一个游戏库路径，请先添加新的游戏库后再删除当前路径",
+      cannot_remove_last_storage_path:
+        "至少需要保留一个游戏库路径，请先添加新的游戏库后再删除当前路径",
       storage_path_not_registered: "该路径不在游戏库列表中，请刷新后重试",
       invalid_storage_path: "游戏库路径无效，请选择有效目录",
       storage_path_not_directory: "所选路径不是文件夹，请选择有效目录",
@@ -492,7 +560,8 @@ export default {
       target_is_source_path: "目标路径不能与源路径相同",
       target_inside_source_path: "目标路径不能位于源游戏库内部",
       source_inside_target_path: "源游戏库不能位于目标路径内部",
-      target_is_default_games_path: "目标路径不能仍然是 exe 同级默认 games 目录",
+      target_is_default_games_path:
+        "目标路径不能仍然是 exe 同级默认 games 目录",
       game_storage_path_not_configured: "未配置可用游戏库路径",
       source_storage_path_not_found: "源游戏库不存在，请刷新后重试",
       source_storage_path_not_directory: "源游戏库不是有效文件夹，请刷新后重试",
@@ -566,15 +635,24 @@ export default {
     uninstallClientDescription: "此操作不可撤销，将完全移除 BZ-Games 客户端。",
     uninstallDeleteGames: "同时删除所有游戏库目录",
     uninstallNotAvailable: "卸载程序不可用，仅在安装版中支持此功能。",
+    uninstallMarketTasksActive: "请先完成或取消正在进行的游戏下载和安装。",
+    uninstallGameLibraryDeleteFailed:
+      "部分游戏库仍被其他程序占用，未执行客户端卸载。请关闭占用程序后重试：\n{paths}",
+    uninstallUnsafeStoragePath:
+      "游戏库路径存在安全风险，已停止卸载。请先检查游戏库设置。",
+    uninstallFailed: "无法启动卸载程序，请稍后重试。",
     clearCache: "清除缓存",
     migrateStorage: "迁移游戏库",
-    migrateStorageDescription: "先选择要迁移的现有游戏库，再选择一个新的空目录。迁移时会复制原游戏库中的全部文件，全部迁移成功后删除原游戏库；如果迁移失败，会自动删除已迁移到目标目录的部分数据。",
+    migrateStorageDescription:
+      "先选择要迁移的现有游戏库，再选择一个新的空目录。迁移时会复制原游戏库中的全部文件，全部迁移成功后删除原游戏库；如果迁移失败，会自动删除已迁移到目标目录的部分数据。",
     selectSourceStoragePath: "请选择要迁移的游戏库",
     selectTargetStoragePath: "请选择新的游戏库位置",
     migrateStorageWarning: "将迁移原游戏库中的全部文件：{path}",
-    migrateStorageSuccess: "游戏库迁移完成，已迁移 {gameCount} 个游戏、{versionCount} 个版本",
+    migrateStorageSuccess:
+      "游戏库迁移完成，已迁移 {gameCount} 个游戏、{versionCount} 个版本",
     migrateStorageFailed: "游戏库迁移失败",
-    clearCacheConfirm: "将清除应用产生的所有缓存数据（下载缓存、更新包、临时文件等），不会影响已安装的游戏和用户设置。",
+    clearCacheConfirm:
+      "将清除应用产生的所有缓存数据（下载缓存、更新包、临时文件等），不会影响已安装的游戏和用户设置。",
     clearCacheProcessing: "正在清除缓存...",
     clearCacheSuccess: "缓存清除完成，释放了 {size} 空间。",
   },
@@ -661,7 +739,9 @@ export default {
     saveNicknameStyleCost: "保存（{coins} BZ币）",
     nicknameStyleSaved: "昵称样式已保存，消耗 {coins} BZ币",
     nicknameStyleInsufficientCoins: "BZ币不足，保存昵称样式需要 {coins} BZ币",
-    nicknameColorContrastWarning: "当前文字颜色与主题背景对比不足：亮色主题下不能使用偏白颜色，暗色主题下不能使用偏黑颜色。",
-    gradientHelp: "渐变起点和渐变终点是特效颜色过渡的两端：例如霓虹、火焰、极光等效果会从起点色流动到终点色，再循环回去；无特效时主要使用文字颜色。每次保存昵称样式都会消耗 30 BZ币。",
+    nicknameColorContrastWarning:
+      "当前文字颜色与主题背景对比不足：亮色主题下不能使用偏白颜色，暗色主题下不能使用偏黑颜色。",
+    gradientHelp:
+      "渐变起点和渐变终点是特效颜色过渡的两端：例如霓虹、火焰、极光等效果会从起点色流动到终点色，再循环回去；无特效时主要使用文字颜色。每次保存昵称样式都会消耗 30 BZ币。",
   },
 };

@@ -2,15 +2,19 @@
   <div
     class="library-root"
     :class="{ 'library-root-steam': isLibraryReady && layoutMode === 'steam' }"
-    style="padding: 24px;"
+    style="padding: 24px"
     @dragenter.prevent="handleExternalDragEnter"
     @dragover.prevent="handleExternalDragOver"
     @dragleave.prevent="handleExternalDragLeave"
     @drop.prevent="handleExternalDrop"
   >
     <template v-if="isLibraryReady">
-      <n-space justify="space-between" align="center" style="margin-bottom: 24px;">
-        <h1 style="margin: 0;">{{ t('library.title') }}</h1>
+      <n-space
+        justify="space-between"
+        align="center"
+        style="margin-bottom: 24px"
+      >
+        <h1 style="margin: 0">{{ t("library.title") }}</h1>
         <n-space>
           <n-tooltip trigger="hover">
             <template #trigger>
@@ -26,27 +30,35 @@
             </template>
             {{ nextLayoutLabel }}
           </n-tooltip>
-          <n-button v-if="isReorderMode" type="success" @click.stop="isReorderMode = false">
-            {{ t('common.save') }}
+          <n-button
+            v-if="isReorderMode"
+            type="success"
+            @click.stop="isReorderMode = false"
+          >
+            {{ t("common.save") }}
           </n-button>
-          <n-button type="primary" @click="handleAddGame">{{ t('library.addGameButton') }}</n-button>
+          <n-button type="primary" @click="handleAddGame">{{
+            t("library.addGameButton")
+          }}</n-button>
         </n-space>
       </n-space>
 
       <n-empty
         v-if="!gameStore.isLoading && gameStore.games.length === 0"
         :description="t('library.emptyState')"
-        style="margin-top: 100px;"
+        style="margin-top: 100px"
       >
         <template #extra>
-          <n-button @click="handleAddGame">{{ t('library.addGameShort') }}</n-button>
+          <n-button @click="handleAddGame">{{
+            t("library.addGameShort")
+          }}</n-button>
         </template>
       </n-empty>
 
       <template v-else-if="layoutMode === 'steam'">
         <div class="steam-layout">
           <aside class="steam-sidebar">
-            <div class="steam-sidebar-title">{{ t('library.allGames') }}</div>
+            <div class="steam-sidebar-title">{{ t("library.allGames") }}</div>
             <div class="steam-sidebar-list">
               <template v-if="gameStore.isLoading">
                 <n-space vertical :size="10">
@@ -55,7 +67,11 @@
               </template>
               <n-empty
                 v-else-if="displayedGames.length === 0"
-                :description="searchQuery ? t('library.noSearchResults') : t('library.emptyState')"
+                :description="
+                  searchQuery
+                    ? t('library.noSearchResults')
+                    : t('library.emptyState')
+                "
                 size="small"
               />
               <button
@@ -70,7 +86,7 @@
                 @contextmenu.prevent="handleContextMenu($event, game.id)"
               >
                 <div class="steam-list-thumb">
-                  <GameIcon :game-id="game.id" :game-name="game.name" />
+                  <GameIcon :game-id="game.id" />
                 </div>
                 <div class="steam-list-text">
                   <div class="steam-list-name">{{ game.name }}</div>
@@ -80,8 +96,18 @@
                   </div>
                 </div>
                 <div class="steam-list-flags">
-                  <n-icon v-if="isFavorite(game.id)" class="steam-flag-heart" :size="16" color="#d03050" :component="Heart" />
-                  <span v-if="gameStore.runningGameIds.has(game.id)" class="steam-flag steam-flag-running">RUN</span>
+                  <n-icon
+                    v-if="isFavorite(game.id)"
+                    class="steam-flag-heart"
+                    :size="16"
+                    color="#d03050"
+                    :component="Heart"
+                  />
+                  <span
+                    v-if="gameStore.runningGameIds.has(game.id)"
+                    class="steam-flag steam-flag-running"
+                    >RUN</span
+                  >
                 </div>
               </button>
             </div>
@@ -94,7 +120,9 @@
               </div>
               <n-space align="center" :size="12" wrap>
                 <div class="steam-sort-wrap">
-                  <span class="steam-sort-label">{{ t('library.sortBy') }}</span>
+                  <span class="steam-sort-label">{{
+                    t("library.sortBy")
+                  }}</span>
                   <n-select
                     v-model:value="sortMode"
                     :options="sortOptions"
@@ -124,23 +152,36 @@
               @deleted="handleSteamDetailDeleted"
             />
             <div v-else-if="gameStore.isLoading" class="steam-cover-grid">
-              <n-card v-for="index in 8" :key="index" size="small" embedded class="steam-cover-skeleton">
+              <n-card
+                v-for="index in 8"
+                :key="index"
+                size="small"
+                embedded
+                class="steam-cover-skeleton"
+              >
                 <n-skeleton height="180px" />
-                <n-skeleton text style="margin-top: 12px;" />
+                <n-skeleton text style="margin-top: 12px" />
                 <n-skeleton text :width="120" />
               </n-card>
             </div>
             <n-empty
               v-else-if="displayedGames.length === 0"
-              :description="searchQuery ? t('library.noSearchResults') : t('library.emptyState')"
-              style="margin-top: 80px;"
+              :description="
+                searchQuery
+                  ? t('library.noSearchResults')
+                  : t('library.emptyState')
+              "
+              style="margin-top: 80px"
             />
             <div v-else class="steam-cover-grid">
               <div
                 v-for="(game, index) in visibleDisplayedGames"
                 :key="game.id"
                 class="steam-card-shell"
-                :class="{ active: selectedSteamGameId === game.id, shake: isReorderMode }"
+                :class="{
+                  active: selectedSteamGameId === game.id,
+                  shake: isReorderMode,
+                }"
                 :data-steam-cover-id="game.id"
                 :draggable="isReorderMode"
                 @dragstart="handleDragStart($event, index)"
@@ -164,7 +205,11 @@
           v-if="!gameStore.isLoading"
           :x-gap="layoutMode === 'icon' ? 12 : 24"
           :y-gap="layoutMode === 'icon' ? 12 : 24"
-          :cols="layoutMode === 'icon' ? '4 s:6 m:8 l:10 xl:12' : '2 s:3 m:4 l:5 xl:6'"
+          :cols="
+            layoutMode === 'icon'
+              ? '4 s:6 m:8 l:10 xl:12'
+              : '2 s:3 m:4 l:5 xl:6'
+          "
           responsive="screen"
         >
           <n-grid-item
@@ -179,8 +224,19 @@
             @mouseleave="clearLongPress"
             @contextmenu.prevent="handleContextMenu($event, game.id)"
           >
-            <div class="game-card-wrapper" :class="{ 'shake': isReorderMode, 'icon-mode': layoutMode === 'icon' }" :data-game-id="game.id">
-              <GameCard :game="game" :compact="layoutMode === 'icon'" @click="goToDetail" />
+            <div
+              class="game-card-wrapper"
+              :class="{
+                shake: isReorderMode,
+                'icon-mode': layoutMode === 'icon',
+              }"
+              :data-game-id="game.id"
+            >
+              <GameCard
+                :game="game"
+                :compact="layoutMode === 'icon'"
+                @click="goToDetail"
+              />
               <div v-if="isReorderMode" class="reorder-overlay"></div>
             </div>
           </n-grid-item>
@@ -189,13 +245,17 @@
           v-else
           :x-gap="layoutMode === 'icon' ? 12 : 24"
           :y-gap="layoutMode === 'icon' ? 12 : 24"
-          :cols="layoutMode === 'icon' ? '4 s:6 m:8 l:10 xl:12' : '2 s:3 m:4 l:5 xl:6'"
+          :cols="
+            layoutMode === 'icon'
+              ? '4 s:6 m:8 l:10 xl:12'
+              : '2 s:3 m:4 l:5 xl:6'
+          "
           responsive="screen"
         >
           <n-grid-item v-for="index in 8" :key="index">
             <n-card size="small" embedded>
               <n-skeleton height="180px" />
-              <n-skeleton text style="margin-top: 12px;" />
+              <n-skeleton text style="margin-top: 12px" />
               <n-skeleton text :width="120" />
             </n-card>
           </n-grid-item>
@@ -206,11 +266,16 @@
     <n-space v-else vertical size="large">
       <n-skeleton text :width="120" />
       <n-skeleton text :repeat="2" />
-      <n-grid :cols="'2 s:3 m:4 l:5 xl:6'" :x-gap="24" :y-gap="24" responsive="screen">
+      <n-grid
+        :cols="'2 s:3 m:4 l:5 xl:6'"
+        :x-gap="24"
+        :y-gap="24"
+        responsive="screen"
+      >
         <n-grid-item v-for="index in 6" :key="index">
           <n-card size="small" embedded>
             <n-skeleton height="180px" />
-            <n-skeleton text style="margin-top: 12px;" />
+            <n-skeleton text style="margin-top: 12px" />
             <n-skeleton text :width="120" />
           </n-card>
         </n-grid-item>
@@ -223,7 +288,7 @@
       @dragover.stop.prevent="handleExternalDragOver"
       @drop.stop.prevent="handleExternalDrop"
     >
-      <div class="drop-panel">{{ t('library.dropHint') }}</div>
+      <div class="drop-panel">{{ t("library.dropHint") }}</div>
     </div>
 
     <n-dropdown
@@ -240,13 +305,21 @@
       v-model:show="showImportDraftModal"
       preset="card"
       :title="t('library.importDraftTitle')"
-      style="width: 760px;"
+      style="width: 760px"
     >
       <n-space vertical size="large">
-        <n-form :model="draftForm" label-placement="top" class="import-draft-form">
+        <n-form
+          :model="draftForm"
+          label-placement="top"
+          class="import-draft-form"
+        >
           <n-grid :cols="2" :x-gap="16" :y-gap="4">
-            <n-form-item-gi :label="t('library.importDraftFields.id')" path="id" required>
-              <n-space vertical size="small" style="width: 100%;">
+            <n-form-item-gi
+              :label="t('library.importDraftFields.id')"
+              path="id"
+              required
+            >
+              <n-space vertical size="small" style="width: 100%">
                 <n-input
                   v-model:value="draftForm.id"
                   :placeholder="t('library.importDraftPlaceholders.id')"
@@ -255,44 +328,73 @@
                   <n-tag
                     v-if="idCheckState !== 'idle'"
                     size="small"
-                    :type="idCheckState === 'exists' ? 'error' : idCheckState === 'available' ? 'success' : 'warning'"
+                    :type="
+                      idCheckState === 'exists'
+                        ? 'error'
+                        : idCheckState === 'available'
+                          ? 'success'
+                          : 'warning'
+                    "
                     :bordered="false"
                   >
                     {{
-                      idCheckState === 'checking'
-                        ? t('library.importDraftIdCheckLoading')
-                        : idCheckState === 'exists'
-                          ? t('library.importDraftIdExists')
-                          : t('library.importDraftIdAvailable')
+                      idCheckState === "checking"
+                        ? t("library.importDraftIdCheckLoading")
+                        : idCheckState === "exists"
+                          ? t("library.importDraftIdExists")
+                          : t("library.importDraftIdAvailable")
                     }}
                   </n-tag>
-                  <n-text depth="3">{{ t('library.importDraftIdFormatHint') }}</n-text>
+                  <n-text depth="3">{{
+                    t("library.importDraftIdFormatHint")
+                  }}</n-text>
                 </n-space>
               </n-space>
             </n-form-item-gi>
-            <n-form-item-gi :label="t('library.importDraftFields.name')" path="name" required>
+            <n-form-item-gi
+              :label="t('library.importDraftFields.name')"
+              path="name"
+              required
+            >
               <n-input
                 v-model:value="draftForm.name"
                 :placeholder="t('library.importDraftPlaceholders.name')"
               />
             </n-form-item-gi>
-            <n-form-item-gi :label="t('library.importDraftFields.version')" path="version" required>
+            <n-form-item-gi
+              :label="t('library.importDraftFields.version')"
+              path="version"
+              required
+            >
               <n-input
                 v-model:value="draftForm.version"
                 :placeholder="t('library.importDraftPlaceholders.version')"
               />
             </n-form-item-gi>
-            <n-form-item-gi :label="t('library.importDraftFields.author')" path="author" required>
+            <n-form-item-gi
+              :label="t('library.importDraftFields.author')"
+              path="author"
+              required
+            >
               <n-input
                 v-model:value="draftForm.author"
                 :placeholder="t('library.importDraftPlaceholders.author')"
               />
             </n-form-item-gi>
-            <n-form-item-gi :label="t('library.importDraftFields.platformVersion')" required>
+            <n-form-item-gi
+              :label="t('library.importDraftFields.platformVersion')"
+              required
+            >
               <n-input :value="draftForm.platformVersion" disabled />
             </n-form-item-gi>
-            <n-form-item-gi :label="t('library.importDraftFields.type')" required>
-              <n-select v-model:value="draftForm.type" :options="draftTypeOptions" />
+            <n-form-item-gi
+              :label="t('library.importDraftFields.type')"
+              required
+            >
+              <n-select
+                v-model:value="draftForm.type"
+                :options="draftTypeOptions"
+              />
             </n-form-item-gi>
             <n-form-item-gi
               :span="2"
@@ -300,12 +402,14 @@
               path="entry"
               required
             >
-              <n-space vertical size="small" style="width: 100%;">
+              <n-space vertical size="small" style="width: 100%">
                 <n-input
                   v-model:value="draftForm.entry"
                   :placeholder="t('library.importDraftPlaceholders.entry')"
                 />
-                <n-text depth="3">{{ t('library.importDraftEntryHint') }}</n-text>
+                <n-text depth="3">{{
+                  t("library.importDraftEntryHint")
+                }}</n-text>
               </n-space>
             </n-form-item-gi>
             <n-form-item-gi
@@ -315,15 +419,20 @@
               path="web_url"
               required
             >
-              <n-space vertical size="small" style="width: 100%;">
+              <n-space vertical size="small" style="width: 100%">
                 <n-input
                   v-model:value="draftForm.web_url"
                   :placeholder="t('library.importDraftPlaceholders.web_url')"
                 />
-                <n-text depth="3">{{ t('library.importDraftWebUrlHint') }}</n-text>
+                <n-text depth="3">{{
+                  t("library.importDraftWebUrlHint")
+                }}</n-text>
               </n-space>
             </n-form-item-gi>
-            <n-form-item-gi :span="2" :label="t('library.importDraftFields.description')">
+            <n-form-item-gi
+              :span="2"
+              :label="t('library.importDraftFields.description')"
+            >
               <n-input
                 v-model:value="draftForm.description"
                 type="textarea"
@@ -348,23 +457,39 @@
               :label="t('library.importDraftFields.minPlayers')"
               required
             >
-              <n-input-number v-model:value="draftForm.minPlayers" :min="2" :max="64" style="width: 100%;" />
+              <n-input-number
+                v-model:value="draftForm.minPlayers"
+                :min="2"
+                :max="64"
+                style="width: 100%"
+              />
             </n-form-item-gi>
             <n-form-item-gi
               v-if="needsMultiplayerConfig"
               :label="t('library.importDraftFields.maxPlayers')"
               required
             >
-              <n-input-number v-model:value="draftForm.maxPlayers" :min="2" :max="64" style="width: 100%;" />
+              <n-input-number
+                v-model:value="draftForm.maxPlayers"
+                :min="2"
+                :max="64"
+                style="width: 100%"
+              />
             </n-form-item-gi>
           </n-grid>
         </n-form>
       </n-space>
       <template #footer>
         <n-space justify="end">
-          <n-button @click="showImportDraftModal = false">{{ t('common.cancel') }}</n-button>
-          <n-button type="primary" :loading="isDraftSubmitting" @click="handleConfirmDraftImport">
-            {{ t('library.importDraftSubmit') }}
+          <n-button @click="showImportDraftModal = false">{{
+            t("common.cancel")
+          }}</n-button>
+          <n-button
+            type="primary"
+            :loading="isDraftSubmitting"
+            @click="handleConfirmDraftImport"
+          >
+            {{ t("library.importDraftSubmit") }}
           </n-button>
         </n-space>
       </template>
@@ -381,663 +506,732 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, computed, watch, h, nextTick, onUnmounted } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
-import { useMessage, NIcon, NTooltip, NDropdown } from 'naive-ui'
-import { useI18n } from 'vue-i18n'
-import { GridOutline, AppsOutline, Heart, HeartOutline, ArrowUpOutline, TrashOutline, LibraryOutline, SearchOutline, FolderOpenOutline } from '@vicons/ionicons5'
-import { useGameStore } from '../stores/useGameStore'
-import { useSettingsStore } from '../stores/useSettingsStore'
-import GameCard from '../components/game/GameCard.vue'
-import GameIcon from '../components/game/GameIcon.vue'
-import GameDeleteModal from '../components/game/GameDeleteModal.vue'
-import GameDetailView from './GameDetailView.vue'
-import { playShatterEffect } from '../utils/deleteEffect'
-import { GameType, type LibraryLayout } from '../../../shared/types'
+import { onMounted, ref, computed, watch, h, nextTick, onUnmounted } from "vue";
+import { useRouter, useRoute } from "vue-router";
+import { useMessage, NIcon, NTooltip, NDropdown } from "naive-ui";
+import { useI18n } from "vue-i18n";
+import {
+  GridOutline,
+  AppsOutline,
+  Heart,
+  HeartOutline,
+  ArrowUpOutline,
+  TrashOutline,
+  LibraryOutline,
+  SearchOutline,
+  FolderOpenOutline,
+} from "@vicons/ionicons5";
+import { useGameStore } from "../stores/useGameStore";
+import { useSettingsStore } from "../stores/useSettingsStore";
+import GameCard from "../components/game/GameCard.vue";
+import GameIcon from "../components/game/GameIcon.vue";
+import GameDeleteModal from "../components/game/GameDeleteModal.vue";
+import GameDetailView from "./GameDetailView.vue";
+import { playShatterEffect } from "../utils/deleteEffect";
+import { GameType, type LibraryLayout } from "../../../shared/types";
 
-const { t } = useI18n()
-const gameStore = useGameStore()
-const settingsStore = useSettingsStore()
-const router = useRouter()
-const route = useRoute()
-const message = useMessage()
+const { t } = useI18n();
+const gameStore = useGameStore();
+const settingsStore = useSettingsStore();
+const router = useRouter();
+const route = useRoute();
+const message = useMessage();
 
-type LibrarySortMode = 'custom' | 'name' | 'recent-played' | 'recent-added'
+type LibrarySortMode = "custom" | "name" | "recent-played" | "recent-added";
 
-const layoutSequence: LibraryLayout[] = ['card', 'icon', 'steam']
+const layoutSequence: LibraryLayout[] = ["card", "icon", "steam"];
 
-const layoutMode = ref<LibraryLayout>('card')
-const isLibraryReady = ref(false)
-const isReorderMode = ref(false)
-const draggedIndex = ref<number | null>(null)
-const isDragActive = ref(false)
-let externalDragDepth = 0
-let longPressTimer: NodeJS.Timeout | null = null
-let idCheckTimer: number | null = null
-const showImportDraftModal = ref(false)
-const isDraftSubmitting = ref(false)
-const pendingImportSourcePath = ref('')
-const idCheckState = ref<'idle' | 'checking' | 'exists' | 'available'>('idle')
+const layoutMode = ref<LibraryLayout>("card");
+const isLibraryReady = ref(false);
+const isReorderMode = ref(false);
+const draggedIndex = ref<number | null>(null);
+const isDragActive = ref(false);
+let externalDragDepth = 0;
+let longPressTimer: NodeJS.Timeout | null = null;
+let idCheckTimer: number | null = null;
+const showImportDraftModal = ref(false);
+const isDraftSubmitting = ref(false);
+const pendingImportSourcePath = ref("");
+const idCheckState = ref<"idle" | "checking" | "exists" | "available">("idle");
 
-const contextMenuX = ref(0)
-const contextMenuY = ref(0)
-const contextMenuVisible = ref(false)
-const rightClickedGameId = ref<string | null>(null)
+const contextMenuX = ref(0);
+const contextMenuY = ref(0);
+const contextMenuVisible = ref(false);
+const rightClickedGameId = ref<string | null>(null);
 
-const showDeleteModal = ref(false)
-const deleteVersions = ref<string[]>([])
-const isDeleting = ref(false)
-const deleteGameId = ref<string | null>(null)
-const searchQuery = ref('')
-const sortMode = ref<LibrarySortMode>('custom')
-const selectedSteamGameId = ref('')
-const visibleCount = ref(0)
-const isStaggerEnabled = ref(false)
-let staggerTimer: ReturnType<typeof setTimeout> | null = null
+const showDeleteModal = ref(false);
+const deleteVersions = ref<string[]>([]);
+const isDeleting = ref(false);
+const deleteGameId = ref<string | null>(null);
+const searchQuery = ref("");
+const sortMode = ref<LibrarySortMode>("custom");
+const selectedSteamGameId = ref("");
+const visibleCount = ref(0);
+const isStaggerEnabled = ref(false);
+let staggerTimer: ReturnType<typeof setTimeout> | null = null;
 
 const draftForm = ref({
-  id: '',
-  name: '',
-  version: '1.0.0',
-  description: '',
-  author: '',
-  platformVersion: '',
-  entry: '',
-  web_url: '',
-  icon: '',
-  cover: '',
+  id: "",
+  name: "",
+  version: "1.0.0",
+  description: "",
+  author: "",
+  platformVersion: "",
+  entry: "",
+  web_url: "",
+  icon: "",
+  cover: "",
   type: GameType.Singleplayer as GameType,
   minPlayers: 2,
-  maxPlayers: 4
-})
+  maxPlayers: 4,
+});
 
 const draftTypeOptions = computed(() => [
-  { label: t('gameDetail.typeSingleplayer'), value: GameType.Singleplayer },
-  { label: t('gameDetail.typeMultiplayer'), value: GameType.Multiplayer },
-  { label: t('gameDetail.typeSingleMultiple'), value: GameType.SingleMultiple },
-  { label: t('gameDetail.typeNetworkGame'), value: GameType.NetworkGame }
-])
+  { label: t("gameDetail.typeSingleplayer"), value: GameType.Singleplayer },
+  { label: t("gameDetail.typeMultiplayer"), value: GameType.Multiplayer },
+  { label: t("gameDetail.typeSingleMultiple"), value: GameType.SingleMultiple },
+  { label: t("gameDetail.typeNetworkGame"), value: GameType.NetworkGame },
+]);
 
 const sortOptions = computed(() => [
-  { label: t('library.sortCustom'), value: 'custom' },
-  { label: t('library.sortName'), value: 'name' },
-  { label: t('library.sortRecentPlayed'), value: 'recent-played' },
-  { label: t('library.sortRecentAdded'), value: 'recent-added' }
-])
+  { label: t("library.sortCustom"), value: "custom" },
+  { label: t("library.sortName"), value: "name" },
+  { label: t("library.sortRecentPlayed"), value: "recent-played" },
+  { label: t("library.sortRecentAdded"), value: "recent-added" },
+]);
 
 const nextLayoutMode = computed<LibraryLayout>(() => {
-  const currentIndex = layoutSequence.indexOf(layoutMode.value)
-  return layoutSequence[(currentIndex + 1) % layoutSequence.length]
-})
+  const currentIndex = layoutSequence.indexOf(layoutMode.value);
+  return layoutSequence[(currentIndex + 1) % layoutSequence.length];
+});
 
 const nextLayoutLabel = computed(() => {
-  if (nextLayoutMode.value === 'icon') return t('library.iconLayout')
-  if (nextLayoutMode.value === 'steam') return t('library.steamLayout')
-  return t('library.cardLayout')
-})
+  if (nextLayoutMode.value === "icon") return t("library.iconLayout");
+  if (nextLayoutMode.value === "steam") return t("library.steamLayout");
+  return t("library.cardLayout");
+});
 
 function stopStaggerRendering() {
   if (staggerTimer !== null) {
-    clearTimeout(staggerTimer)
-    staggerTimer = null
+    clearTimeout(staggerTimer);
+    staggerTimer = null;
   }
 }
 
 function scheduleStaggerRendering(delay = 20) {
-  const total = displayedGames.value.length
+  const total = displayedGames.value.length;
   if (visibleCount.value >= total) {
-    visibleCount.value = total
-    return
+    visibleCount.value = total;
+    return;
   }
 
   const step = () => {
     if (visibleCount.value < total) {
-      visibleCount.value += 1
-      staggerTimer = setTimeout(step, 20)
+      visibleCount.value += 1;
+      staggerTimer = setTimeout(step, 20);
     }
-  }
+  };
 
-  staggerTimer = setTimeout(step, delay)
+  staggerTimer = setTimeout(step, delay);
 }
 
 function startStaggerRendering() {
-  stopStaggerRendering()
-  visibleCount.value = 0
-  if (displayedGames.value.length === 0) return
+  stopStaggerRendering();
+  visibleCount.value = 0;
+  if (displayedGames.value.length === 0) return;
 
   nextTick(() => {
-    scheduleStaggerRendering(16)
-  })
+    scheduleStaggerRendering(16);
+  });
 }
 
 function continueStaggerRendering() {
-  stopStaggerRendering()
-  scheduleStaggerRendering(20)
+  stopStaggerRendering();
+  scheduleStaggerRendering(20);
 }
 
 function hasSameGameIds(a: Array<{ id: string }>, b: Array<{ id: string }>) {
-  if (a.length !== b.length) return false
-  const ids = new Set(a.map((game) => game.id))
-  return b.every((game) => ids.has(game.id))
+  if (a.length !== b.length) return false;
+  const ids = new Set(a.map((game) => game.id));
+  return b.every((game) => ids.has(game.id));
 }
 
-function isSupersetById(superset: Array<{ id: string }>, subset: Array<{ id: string }>) {
-  const ids = new Set(superset.map((game) => game.id))
-  return subset.every((game) => ids.has(game.id))
+function isSupersetById(
+  superset: Array<{ id: string }>,
+  subset: Array<{ id: string }>,
+) {
+  const ids = new Set(superset.map((game) => game.id));
+  return subset.every((game) => ids.has(game.id));
 }
 
-function isSubsetById(subset: Array<{ id: string }>, superset: Array<{ id: string }>) {
-  const ids = new Set(superset.map((game) => game.id))
-  return subset.every((game) => ids.has(game.id))
+function isSubsetById(
+  subset: Array<{ id: string }>,
+  superset: Array<{ id: string }>,
+) {
+  const ids = new Set(superset.map((game) => game.id));
+  return subset.every((game) => ids.has(game.id));
 }
 
 const filteredGames = computed(() => {
-  const keyword = searchQuery.value.trim().toLowerCase()
-  if (!keyword) return gameStore.games
+  const keyword = searchQuery.value.trim().toLowerCase();
+  if (!keyword) return gameStore.games;
   return gameStore.games.filter((game) =>
-    [game.name, game.id, game.author].some((field) => field.toLowerCase().includes(keyword))
-  )
-})
+    [game.name, game.id, game.author].some((field) =>
+      field.toLowerCase().includes(keyword),
+    ),
+  );
+});
 
 const displayedGames = computed(() => {
-  const games = [...filteredGames.value]
-  const getRecordTime = (gameId: string, field: 'lastPlayedAt' | 'addedAt') =>
-    gameStore.getGameRecord(gameId)?.[field] || 0
+  const games = [...filteredGames.value];
+  const getRecordTime = (gameId: string, field: "lastPlayedAt" | "addedAt") =>
+    gameStore.getGameRecord(gameId)?.[field] || 0;
 
   switch (sortMode.value) {
-    case 'name':
-      return games.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
-    case 'recent-played':
-      return games.sort((a, b) => getRecordTime(b.id, 'lastPlayedAt') - getRecordTime(a.id, 'lastPlayedAt'))
-    case 'recent-added':
-      return games.sort((a, b) => getRecordTime(b.id, 'addedAt') - getRecordTime(a.id, 'addedAt'))
+    case "name":
+      return games.sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
+      );
+    case "recent-played":
+      return games.sort(
+        (a, b) =>
+          getRecordTime(b.id, "lastPlayedAt") -
+          getRecordTime(a.id, "lastPlayedAt"),
+      );
+    case "recent-added":
+      return games.sort(
+        (a, b) =>
+          getRecordTime(b.id, "addedAt") - getRecordTime(a.id, "addedAt"),
+      );
     default:
-      return games
+      return games;
   }
-})
+});
 
-const visibleDisplayedGames = computed(() => displayedGames.value.slice(0, visibleCount.value))
+const visibleDisplayedGames = computed(() =>
+  displayedGames.value.slice(0, visibleCount.value),
+);
 
 const gameCountLabel = computed(() =>
-  t('library.gameCount', {
+  t("library.gameCount", {
     count: displayedGames.value.length,
-    total: gameStore.games.length
-  })
-)
+    total: gameStore.games.length,
+  }),
+);
 
-const canReorderGames = computed(() => sortMode.value === 'custom' && !searchQuery.value.trim())
+const canReorderGames = computed(
+  () => sortMode.value === "custom" && !searchQuery.value.trim(),
+);
 
-const isUrlEntry = computed(() => draftForm.value.entry.trim().toLowerCase() === 'url')
+const isUrlEntry = computed(
+  () => draftForm.value.entry.trim().toLowerCase() === "url",
+);
 const needsMultiplayerConfig = computed(
-  () => draftForm.value.type === GameType.Multiplayer || draftForm.value.type === GameType.SingleMultiple
-)
+  () =>
+    draftForm.value.type === GameType.Multiplayer ||
+    draftForm.value.type === GameType.SingleMultiple,
+);
 
 const isRightClickedFavorite = computed(() => {
-  if (!rightClickedGameId.value) return false
-  const record = gameStore.getGameRecord(rightClickedGameId.value)
-  return record?.isFavorite || false
-})
+  if (!rightClickedGameId.value) return false;
+  const record = gameStore.getGameRecord(rightClickedGameId.value);
+  return record?.isFavorite || false;
+});
 
 const contextMenuOptions = computed(() => {
-  const favLabel = isRightClickedFavorite.value ? 'library.unfavorite' : 'library.favorite'
-  const favIcon = isRightClickedFavorite.value ? HeartOutline : Heart
+  const favLabel = isRightClickedFavorite.value
+    ? "library.unfavorite"
+    : "library.favorite";
+  const favIcon = isRightClickedFavorite.value ? HeartOutline : Heart;
   return [
     {
       label: t(favLabel),
-      key: 'favorite',
+      key: "favorite",
       icon: () => h(NIcon, null, { default: () => h(favIcon) }),
     },
     {
-      label: t('library.moveToFront'),
-      key: 'moveToFront',
+      label: t("library.moveToFront"),
+      key: "moveToFront",
       icon: () => h(NIcon, null, { default: () => h(ArrowUpOutline) }),
     },
     {
-      label: t('library.openGameDirectory'),
-      key: 'openInstallPath',
+      label: t("library.openGameDirectory"),
+      key: "openInstallPath",
       icon: () => h(NIcon, null, { default: () => h(FolderOpenOutline) }),
     },
     {
-      label: t('library.deleteGameTitle'),
-      key: 'delete',
+      label: t("library.deleteGameTitle"),
+      key: "delete",
       icon: () => h(NIcon, null, { default: () => h(TrashOutline) }),
     },
-  ]
-})
+  ];
+});
 
 const handleContextMenu = (e: MouseEvent, gameId: string) => {
-  if (isReorderMode.value) return
-  contextMenuX.value = e.clientX + 60
-  contextMenuY.value = e.clientY + 4
-  rightClickedGameId.value = gameId
-  contextMenuVisible.value = true
-}
+  if (isReorderMode.value) return;
+  contextMenuX.value = e.clientX + 60;
+  contextMenuY.value = e.clientY + 4;
+  rightClickedGameId.value = gameId;
+  contextMenuVisible.value = true;
+};
 
 const handleContextMenuSelect = (key: string) => {
-  contextMenuVisible.value = false
-  const gameId = rightClickedGameId.value
-  if (!gameId) return
-  if (key === 'favorite') {
-    handleToggleFavorite(gameId)
-  } else if (key === 'moveToFront') {
-    handleMoveToFront(gameId)
-  } else if (key === 'openInstallPath') {
-    handleOpenInstallPath(gameId)
-  } else if (key === 'delete') {
-    handleDelete(gameId)
+  contextMenuVisible.value = false;
+  const gameId = rightClickedGameId.value;
+  if (!gameId) return;
+  if (key === "favorite") {
+    handleToggleFavorite(gameId);
+  } else if (key === "moveToFront") {
+    handleMoveToFront(gameId);
+  } else if (key === "openInstallPath") {
+    handleOpenInstallPath(gameId);
+  } else if (key === "delete") {
+    handleDelete(gameId);
   }
-}
+};
 
 const handleToggleFavorite = async (gameId: string) => {
   try {
-    await gameStore.toggleFavorite(gameId)
+    await gameStore.toggleFavorite(gameId);
   } catch {
-    message.error(t('common.error'))
+    message.error(t("common.error"));
   }
-}
+};
 
 const handleMoveToFront = async (gameId: string) => {
-  const newOrder = [gameId, ...gameStore.games.filter(g => g.id !== gameId).map(g => g.id)]
-  await gameStore.reorderGames(newOrder)
-}
+  const newOrder = [
+    gameId,
+    ...gameStore.games.filter((g) => g.id !== gameId).map((g) => g.id),
+  ];
+  await gameStore.reorderGames(newOrder);
+};
 
 const handleOpenInstallPath = async (gameId: string) => {
   try {
-    const installPath = await window.electronAPI.game.getInstallPath(gameId)
+    const installPath = await window.electronAPI.game.getInstallPath(gameId);
     if (!installPath) {
-      message.error(t('library.openGameDirectoryError'))
-      return
+      message.error(t("library.openGameDirectoryError"));
+      return;
     }
-    const opened = await window.electronAPI.settings.openPath(installPath)
+    const opened = await window.electronAPI.settings.openPath(installPath);
     if (!opened) {
-      message.error(t('library.openGameDirectoryError'))
+      message.error(t("library.openGameDirectoryError"));
     }
   } catch {
-    message.error(t('library.openGameDirectoryError'))
+    message.error(t("library.openGameDirectoryError"));
   }
-}
+};
 
 const handleDelete = async (gameId: string) => {
   try {
-    const v = await window.electronAPI.game.getVersions(gameId)
-    deleteGameId.value = gameId
-    deleteVersions.value = v || []
-    showDeleteModal.value = true
+    const v = await window.electronAPI.game.getVersions(gameId);
+    deleteGameId.value = gameId;
+    deleteVersions.value = v || [];
+    showDeleteModal.value = true;
   } catch {
-    message.error(t('common.error'))
+    message.error(t("common.error"));
   }
-}
+};
 
 const confirmDelete = async (versionsToDelete: string[]) => {
-  if (isDeleting.value || !deleteGameId.value) return
-  isDeleting.value = true
-  showDeleteModal.value = false
-  const gameId = deleteGameId.value
+  if (isDeleting.value || !deleteGameId.value) return;
+  isDeleting.value = true;
+  showDeleteModal.value = false;
+  const gameId = deleteGameId.value;
   try {
-    const cardEl = document.querySelector(`[data-game-id="${gameId}"]`) as HTMLElement | null
+    const cardEl = document.querySelector(
+      `[data-game-id="${gameId}"]`,
+    ) as HTMLElement | null;
     if (cardEl) {
-      playShatterEffect(cardEl)
+      playShatterEffect(cardEl);
     }
-    await gameStore.removeGame(gameId, [...versionsToDelete])
-    message.success(t('gameDetail.deleteSuccess'))
+    await gameStore.removeGame(gameId, [...versionsToDelete]);
+    message.success(t("gameDetail.deleteSuccess"));
   } catch {
-    message.error(t('common.error'))
+    message.error(t("common.error"));
   } finally {
-    isDeleting.value = false
+    isDeleting.value = false;
   }
-}
+};
 
 onMounted(async () => {
-  await settingsStore.loadSettings()
-  layoutMode.value = settingsStore.settings?.libraryLayout || 'card'
-  isLibraryReady.value = true
-  await gameStore.loadGames()
+  await settingsStore.loadSettings();
+  layoutMode.value = settingsStore.settings?.libraryLayout || "card";
+  isLibraryReady.value = true;
+  await gameStore.loadGames();
 
-  const deletedGameId = route.query.deletedGameId as string | undefined
+  const deletedGameId = route.query.deletedGameId as string | undefined;
   if (deletedGameId) {
-    visibleCount.value = displayedGames.value.length
-    await nextTick()
-    await new Promise((r) => requestAnimationFrame(r))
-    const deletedVersions = ((route.query.deletedVersions as string) || '').split(',').filter(Boolean)
-    const cardEl = document.querySelector(`[data-game-id="${deletedGameId}"]`) as HTMLElement | null
+    visibleCount.value = displayedGames.value.length;
+    await nextTick();
+    await new Promise((r) => requestAnimationFrame(r));
+    const deletedVersions = ((route.query.deletedVersions as string) || "")
+      .split(",")
+      .filter(Boolean);
+    const cardEl = document.querySelector(
+      `[data-game-id="${deletedGameId}"]`,
+    ) as HTMLElement | null;
     if (cardEl) {
-      playShatterEffect(cardEl)
+      playShatterEffect(cardEl);
     }
-    await gameStore.removeGame(deletedGameId, deletedVersions)
-    message.success(t('gameDetail.deleteSuccess'))
-    router.replace({ name: 'Library' })
-    return
+    await gameStore.removeGame(deletedGameId, deletedVersions);
+    message.success(t("gameDetail.deleteSuccess"));
+    router.replace({ name: "Library" });
+    return;
   }
-  isStaggerEnabled.value = true
-  startStaggerRendering()
-  const steamGameId = route.query.steamGameId as string | undefined
+  isStaggerEnabled.value = true;
+  startStaggerRendering();
+  const steamGameId = route.query.steamGameId as string | undefined;
   if (steamGameId && gameStore.games.some((game) => game.id === steamGameId)) {
-    layoutMode.value = 'steam'
-    selectedSteamGameId.value = steamGameId
-    router.replace({ name: 'Library' })
+    layoutMode.value = "steam";
+    selectedSteamGameId.value = steamGameId;
+    router.replace({ name: "Library" });
   }
-})
+});
 
 onUnmounted(() => {
-  stopStaggerRendering()
-})
+  stopStaggerRendering();
+});
 
 watch(layoutMode, async (nextLayout) => {
   if (isStaggerEnabled.value && isLibraryReady.value && !gameStore.isLoading) {
-    startStaggerRendering()
+    startStaggerRendering();
   }
-  if (!isLibraryReady.value) return
+  if (!isLibraryReady.value) return;
   try {
-    await settingsStore.savePartialSettings({ libraryLayout: nextLayout })
+    await settingsStore.savePartialSettings({ libraryLayout: nextLayout });
   } catch (error) {
-    console.error('[LibraryView] Failed to persist library layout:', error)
+    console.error("[LibraryView] Failed to persist library layout:", error);
   }
-})
+});
 
 watch(displayedGames, (nextGames, prevGames) => {
-  if (!isStaggerEnabled.value || !isLibraryReady.value || gameStore.isLoading) return
-  if (hasSameGameIds(nextGames, prevGames)) return
+  if (!isStaggerEnabled.value || !isLibraryReady.value || gameStore.isLoading)
+    return;
+  if (hasSameGameIds(nextGames, prevGames)) return;
   if (isSupersetById(nextGames, prevGames)) {
-    continueStaggerRendering()
-    return
+    continueStaggerRendering();
+    return;
   }
   if (isSubsetById(nextGames, prevGames)) {
-    visibleCount.value = Math.min(visibleCount.value, nextGames.length)
-    return
+    visibleCount.value = Math.min(visibleCount.value, nextGames.length);
+    return;
   }
-  startStaggerRendering()
-})
+  startStaggerRendering();
+});
 
 watch(
   displayedGames,
   (games) => {
     if (!selectedSteamGameId.value) {
-      return
+      return;
     }
-    if (!games.length || !games.some((game) => game.id === selectedSteamGameId.value)) {
-      selectedSteamGameId.value = ''
+    if (
+      !games.length ||
+      !games.some((game) => game.id === selectedSteamGameId.value)
+    ) {
+      selectedSteamGameId.value = "";
     }
   },
-  { immediate: true }
-)
+  { immediate: true },
+);
 
-const showAddGameResult = (result: Awaited<ReturnType<typeof gameStore.addGame>>) => {
+const showAddGameResult = (
+  result: Awaited<ReturnType<typeof gameStore.addGame>>,
+) => {
   if (result.success) {
     if (result.manifest?.name && result.manifest?.version) {
       message.success(
-        t('library.addSuccessWithVersion', {
+        t("library.addSuccessWithVersion", {
           name: result.manifest.name,
-          version: result.manifest.version
-        })
-      )
+          version: result.manifest.version,
+        }),
+      );
     } else {
-      message.success(t('library.addSuccess'))
+      message.success(t("library.addSuccess"));
     }
   } else {
-    if (result.error === 'canceled') return;
+    if (result.error === "canceled") return;
 
     const errorKey = `library.importError.${result.error}`;
     const translated = t(errorKey, result.params || {});
-    
+
     if (translated === errorKey) {
-        message.error(result.error || t('library.addError'));
+      message.error(result.error || t("library.addError"));
     } else {
-        message.error(translated);
+      message.error(translated);
     }
   }
-}
+};
 
 const handleAddGame = async () => {
-  const result = await gameStore.addGame()
-  if (result.error === 'noManifest' && result.params?.sourcePath) {
-    message.info(t('library.importError.noManifest'))
-    await openImportDraftModal(result.params.sourcePath as string)
-    return
+  const result = await gameStore.addGame();
+  if (result.error === "noManifest" && result.params?.sourcePath) {
+    message.info(t("library.importError.noManifest"));
+    await openImportDraftModal(result.params.sourcePath as string);
+    return;
   }
-  showAddGameResult(result)
-}
+  showAddGameResult(result);
+};
 
 const goToDetail = (id: string) => {
   if (isReorderMode.value) return;
-  router.push({ name: 'GameDetail', params: { id } })
-}
+  router.push({ name: "GameDetail", params: { id } });
+};
 
 const cycleLayoutMode = () => {
-  layoutMode.value = nextLayoutMode.value
-  searchQuery.value = ''
-}
+  layoutMode.value = nextLayoutMode.value;
+  searchQuery.value = "";
+};
 
 const isFavorite = (gameId: string) => {
-  return gameStore.getGameRecord(gameId)?.isFavorite || false
-}
+  return gameStore.getGameRecord(gameId)?.isFavorite || false;
+};
 
 const handleSteamListClick = (gameId: string) => {
-  selectedSteamGameId.value = gameId
-}
+  selectedSteamGameId.value = gameId;
+};
 
 const handleSteamCardClick = (gameId: string) => {
-  if (isReorderMode.value) return
-  selectedSteamGameId.value = gameId
-}
+  if (isReorderMode.value) return;
+  selectedSteamGameId.value = gameId;
+};
 
 const handleSteamDetailDeleted = (gameId: string) => {
-  selectedSteamGameId.value = ''
-  const cardEl = document.querySelector(`[data-steam-cover-id="${gameId}"]`) as HTMLElement | null
+  selectedSteamGameId.value = "";
+  const cardEl = document.querySelector(
+    `[data-steam-cover-id="${gameId}"]`,
+  ) as HTMLElement | null;
   if (cardEl) {
-    playShatterEffect(cardEl)
+    playShatterEffect(cardEl);
   }
-}
+};
 
 const handleMouseDown = () => {
   if (isReorderMode.value || !canReorderGames.value) return;
-  clearLongPress()
+  clearLongPress();
   longPressTimer = setTimeout(() => {
     isReorderMode.value = true;
   }, 800);
-}
+};
 
 const clearLongPress = () => {
   if (longPressTimer) {
     clearTimeout(longPressTimer);
     longPressTimer = null;
   }
-}
+};
 
 const handleDragStart = (e: DragEvent, index: number) => {
-  clearLongPress()
+  clearLongPress();
   if (!isReorderMode.value || !canReorderGames.value) {
     e.preventDefault();
     return;
   }
   draggedIndex.value = index;
   if (e.dataTransfer) {
-    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.effectAllowed = "move";
   }
-}
+};
 
 const handleDragOver = (_: DragEvent, index: number) => {
-  if (!isReorderMode.value || !canReorderGames.value) return
+  if (!isReorderMode.value || !canReorderGames.value) return;
   if (draggedIndex.value === null || draggedIndex.value === index) return;
-}
+};
 
 const handleDrop = async (_: DragEvent, index: number) => {
-  if (!isReorderMode.value || !canReorderGames.value) return
+  if (!isReorderMode.value || !canReorderGames.value) return;
   if (draggedIndex.value === null || draggedIndex.value === index) return;
-  
+
   const games = [...gameStore.games];
   const item = games.splice(draggedIndex.value, 1)[0];
   games.splice(index, 0, item);
-  
-  const newOrderIds = games.map(g => g.id);
+
+  const newOrderIds = games.map((g) => g.id);
   await gameStore.reorderGames(newOrderIds);
-  
+
   draggedIndex.value = null;
-}
+};
 
 const handleExternalDragOver = (e: DragEvent) => {
-  if (isReorderMode.value) return
+  if (isReorderMode.value) return;
   if (e.dataTransfer) {
-    e.dataTransfer.dropEffect = 'copy'
+    e.dataTransfer.dropEffect = "copy";
   }
-}
+};
 
 const handleExternalDragEnter = (e: DragEvent) => {
-  if (isReorderMode.value) return
-  const hasFile = Array.from(e.dataTransfer?.items || []).some((item) => item.kind === 'file')
-  if (!hasFile) return
-  externalDragDepth += 1
-  isDragActive.value = true
-}
+  if (isReorderMode.value) return;
+  const hasFile = Array.from(e.dataTransfer?.items || []).some(
+    (item) => item.kind === "file",
+  );
+  if (!hasFile) return;
+  externalDragDepth += 1;
+  isDragActive.value = true;
+};
 
 const handleExternalDragLeave = (e: DragEvent) => {
-  if (isReorderMode.value) return
-  const hasFile = Array.from(e.dataTransfer?.items || []).some((item) => item.kind === 'file')
-  if (!hasFile) return
-  externalDragDepth = Math.max(0, externalDragDepth - 1)
+  if (isReorderMode.value) return;
+  const hasFile = Array.from(e.dataTransfer?.items || []).some(
+    (item) => item.kind === "file",
+  );
+  if (!hasFile) return;
+  externalDragDepth = Math.max(0, externalDragDepth - 1);
   if (externalDragDepth === 0) {
-    isDragActive.value = false
+    isDragActive.value = false;
   }
-}
+};
 
 const getDroppedFilePath = (file: File | null): string => {
-  if (!file) return ''
-  const bridgedPath = window.electronAPI.game.getPathForFile(file)
-  if (bridgedPath) return bridgedPath
-  return (file as unknown as { path?: string }).path || ''
-}
+  if (!file) return "";
+  const bridgedPath = window.electronAPI.game.getPathForFile(file);
+  if (bridgedPath) return bridgedPath;
+  return (file as unknown as { path?: string }).path || "";
+};
 
 const handleExternalDrop = async (e: DragEvent) => {
-  externalDragDepth = 0
-  isDragActive.value = false
-  if (isReorderMode.value) return
-  const files = Array.from(e.dataTransfer?.files || [])
-  const droppedPath = files
-    .map(file => getDroppedFilePath(file))
-    .find(path => Boolean(path?.trim())) || ''
+  externalDragDepth = 0;
+  isDragActive.value = false;
+  if (isReorderMode.value) return;
+  const files = Array.from(e.dataTransfer?.files || []);
+  const droppedPath =
+    files
+      .map((file) => getDroppedFilePath(file))
+      .find((path) => Boolean(path?.trim())) || "";
 
   if (!droppedPath) {
-    message.error(t('library.importError.notDirectory'))
-    return
+    message.error(t("library.importError.notDirectory"));
+    return;
   }
 
-  const result = await gameStore.addGame(droppedPath)
-  if (result.error === 'noManifest' && result.params?.sourcePath) {
-    message.info(t('library.importError.noManifest'))
-    await openImportDraftModal(result.params.sourcePath as string)
-    return
+  const result = await gameStore.addGame(droppedPath);
+  if (result.error === "noManifest" && result.params?.sourcePath) {
+    message.info(t("library.importError.noManifest"));
+    await openImportDraftModal(result.params.sourcePath as string);
+    return;
   }
-  showAddGameResult(result)
-}
+  showAddGameResult(result);
+};
 
 const openImportDraftModal = async (sourcePath: string) => {
-  const prep = await window.electronAPI.game.prepareImport(sourcePath)
+  const prep = await window.electronAPI.game.prepareImport(sourcePath);
   if (!prep) {
-    message.error(t('library.importError.notDirectory'))
-    return
+    message.error(t("library.importError.notDirectory"));
+    return;
   }
-  pendingImportSourcePath.value = prep.sourcePath
+  pendingImportSourcePath.value = prep.sourcePath;
   draftForm.value = {
     id: prep.suggestedId,
     name: prep.suggestedName,
-    version: '1.0.0',
-    description: '',
-    author: '',
+    version: "1.0.0",
+    description: "",
+    author: "",
     platformVersion: prep.currentPlatformVersion,
     entry: prep.suggestedEntry,
-    web_url: '',
-    icon: '',
-    cover: '',
+    web_url: "",
+    icon: "",
+    cover: "",
     type: GameType.Singleplayer,
     minPlayers: 2,
-    maxPlayers: 4
-  }
-  showImportDraftModal.value = true
-}
+    maxPlayers: 4,
+  };
+  showImportDraftModal.value = true;
+};
 
 watch(
   () => draftForm.value.id,
   (next) => {
     if (idCheckTimer) {
-      window.clearTimeout(idCheckTimer)
+      window.clearTimeout(idCheckTimer);
     }
-    const normalized = next.trim()
+    const normalized = next.trim();
     if (!normalized) {
-      idCheckState.value = 'idle'
-      return
+      idCheckState.value = "idle";
+      return;
     }
-    idCheckState.value = 'checking'
+    idCheckState.value = "checking";
     idCheckTimer = window.setTimeout(async () => {
-      const exists = await window.electronAPI.game.checkIdExists(normalized)
-      idCheckState.value = exists ? 'exists' : 'available'
-      idCheckTimer = null
-    }, 250)
-  }
-)
+      const exists = await window.electronAPI.game.checkIdExists(normalized);
+      idCheckState.value = exists ? "exists" : "available";
+      idCheckTimer = null;
+    }, 250);
+  },
+);
 
 const handleConfirmDraftImport = async () => {
-  const id = draftForm.value.id.trim()
-  const name = draftForm.value.name.trim()
-  const version = draftForm.value.version.trim()
-  const author = draftForm.value.author.trim()
-  const entry = draftForm.value.entry.trim()
-  const webUrl = draftForm.value.web_url.trim()
+  const id = draftForm.value.id.trim();
+  const name = draftForm.value.name.trim();
+  const version = draftForm.value.version.trim();
+  const author = draftForm.value.author.trim();
+  const entry = draftForm.value.entry.trim();
+  const webUrl = draftForm.value.web_url.trim();
   if (!id || !name || !version || !author || !entry) {
-    message.error(t('library.importDraftRequired'))
-    return
+    message.error(t("library.importDraftRequired"));
+    return;
   }
-  if (entry.toLowerCase() === 'url') {
+  if (entry.toLowerCase() === "url") {
     try {
-      const parsed = new URL(webUrl)
-      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-        throw new Error('invalid protocol')
+      const parsed = new URL(webUrl);
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+        throw new Error("invalid protocol");
       }
     } catch {
-      message.error(t('library.importError.webUrlInvalid'))
-      return
+      message.error(t("library.importError.webUrlInvalid"));
+      return;
     }
   }
   if (!/^[a-z0-9]+(\.[a-z0-9\-]+)+$/.test(id)) {
-    message.error(t('library.importDraftIdFormatHint'))
-    return
+    message.error(t("library.importDraftIdFormatHint"));
+    return;
   }
   if (!/^\d+\.\d+\.\d+$/.test(version)) {
-    message.error(t('library.importError.versionInvalid'))
-    return
+    message.error(t("library.importError.versionInvalid"));
+    return;
   }
-  if (idCheckState.value === 'exists') {
-    message.error(t('library.importError.idExists'))
-    return
+  if (idCheckState.value === "exists") {
+    message.error(t("library.importError.idExists"));
+    return;
   }
-  if (needsMultiplayerConfig.value && draftForm.value.minPlayers > draftForm.value.maxPlayers) {
-    message.error(t('library.importError.playersInvalid'))
-    return
+  if (
+    needsMultiplayerConfig.value &&
+    draftForm.value.minPlayers > draftForm.value.maxPlayers
+  ) {
+    message.error(t("library.importError.playersInvalid"));
+    return;
   }
 
-  isDraftSubmitting.value = true
+  isDraftSubmitting.value = true;
   try {
-    const result = await gameStore.addGameWithManifest(pendingImportSourcePath.value, {
-      id,
-      name,
-      version,
-      description: draftForm.value.description.trim(),
-      author,
-      entry,
-      web_url: entry.toLowerCase() === 'url' ? webUrl : undefined,
-      platformVersion: draftForm.value.platformVersion,
-      icon: draftForm.value.icon.trim(),
-      cover: draftForm.value.cover.trim(),
-      type: draftForm.value.type,
-      minPlayers: needsMultiplayerConfig.value ? draftForm.value.minPlayers : undefined,
-      maxPlayers: needsMultiplayerConfig.value ? draftForm.value.maxPlayers : undefined
-    })
+    const result = await gameStore.addGameWithManifest(
+      pendingImportSourcePath.value,
+      {
+        id,
+        name,
+        version,
+        description: draftForm.value.description.trim(),
+        author,
+        entry,
+        web_url: entry.toLowerCase() === "url" ? webUrl : undefined,
+        platformVersion: draftForm.value.platformVersion,
+        icon: draftForm.value.icon.trim(),
+        cover: draftForm.value.cover.trim(),
+        type: draftForm.value.type,
+        minPlayers: needsMultiplayerConfig.value
+          ? draftForm.value.minPlayers
+          : undefined,
+        maxPlayers: needsMultiplayerConfig.value
+          ? draftForm.value.maxPlayers
+          : undefined,
+      },
+    );
     if (result.success) {
-      showImportDraftModal.value = false
+      showImportDraftModal.value = false;
     }
-    showAddGameResult(result)
+    showAddGameResult(result);
   } finally {
-    isDraftSubmitting.value = false
+    isDraftSubmitting.value = false;
   }
-}
+};
 </script>
 
 <style scoped>
@@ -1109,7 +1303,9 @@ const handleConfirmDraftImport = async () => {
   color: inherit;
   cursor: pointer;
   text-align: left;
-  transition: background-color 0.2s ease, transform 0.2s ease;
+  transition:
+    background-color 0.2s ease,
+    transform 0.2s ease;
 }
 
 .steam-list-item:hover,
@@ -1255,7 +1451,9 @@ const handleConfirmDraftImport = async () => {
   position: relative;
   min-width: 0;
   border-radius: 12px;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .steam-card-shell:hover,
@@ -1270,7 +1468,9 @@ const handleConfirmDraftImport = async () => {
 }
 
 .steam-card-shell.active :deep(.n-card) {
-  box-shadow: 0 0 0 2px var(--bz-green), 0 14px 28px rgba(0, 0, 0, 0.18);
+  box-shadow:
+    0 0 0 2px var(--bz-green),
+    0 14px 28px rgba(0, 0, 0, 0.18);
 }
 
 .steam-cover-skeleton {
@@ -1315,11 +1515,21 @@ const handleConfirmDraftImport = async () => {
 }
 
 @keyframes shake {
-  0% { transform: rotate(0deg); }
-  25% { transform: rotate(1deg); }
-  50% { transform: rotate(0deg); }
-  75% { transform: rotate(-1deg); }
-  100% { transform: rotate(0deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(1deg);
+  }
+  50% {
+    transform: rotate(0deg);
+  }
+  75% {
+    transform: rotate(-1deg);
+  }
+  100% {
+    transform: rotate(0deg);
+  }
 }
 
 .shake {
@@ -1327,7 +1537,9 @@ const handleConfirmDraftImport = async () => {
 }
 
 .game-card-wrapper.icon-mode {
-  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .game-card-wrapper.icon-mode:hover {

@@ -45,10 +45,10 @@
 ```sql
 id: 1
 github_id: "123456789"
-login: "baozha2023"
+login: "example-user"
 name: "Baozha"
 avatar_url: "https://avatars.githubusercontent.com/u/123456789?v=4"
-profile_url: "https://github.com/baozha2023"
+profile_url: "https://github.com/example-user"
 email: "demo@example.com"
 created_at: 2026-06-11 21:08:30.125
 updated_at: 2026-06-11 21:08:30.125
@@ -348,3 +348,23 @@ Bucket 名默认是 `userFiles`，所以 GridFS 会自动使用两张集合：
 - 本地覆盖同步
 - 版本冲突检测
 - 文件哈希校验
+## 建言献策
+
+### MySQL `feedback`
+
+保存反馈正文、处理状态、管理备注、提交者类型、可选 GitHub 用户、
+客户端版本、平台、图片数量和创建/更新时间。匿名 IP、`playerId`
+和客户端 ID均不持久化。
+
+### MySQL `feedback_images`
+
+保存反馈图片的 GridFS `storage_id`、文件名、实际 MIME、大小和创建时间。
+通过 `feedback_id` 与反馈关联。
+
+两张表都由 `createMySqlService().ensureSchema()` 使用完整的
+`CREATE TABLE IF NOT EXISTS` 自动初始化，不提供独立迁移脚本。
+
+### MongoDB GridFS
+
+图片复用 `MONGODB_BUCKET_NAME` 指定的现有 Bucket，metadata 标记为
+`kind=feedback-image`。GridFS集合由 MongoDB驱动自动维护。

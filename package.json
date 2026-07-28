@@ -1,6 +1,6 @@
 {
   "name": "bz-launcher",
-  "version": "3.1.0",
+  "version": "3.1.1",
   "description": "BZ-Games game platform",
   "main": "./out/main/index.js",
   "author": "BZ-Games",
@@ -15,6 +15,7 @@
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
     "typecheck:web": "vue-tsc --noEmit -p tsconfig.web.json",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "check:config": "node scripts/check-config-examples.mjs",
     "start": "electron-vite preview",
     "dev": "electron-vite dev",
     "build": "npm run typecheck && electron-vite build",
@@ -25,17 +26,13 @@
     "build:linux": "electron-builder --linux"
   },
   "dependencies": {
-    "7zip-bin": "^5.2.0",
-    "@electron-toolkit/preload": "^3.0.1",
     "@electron-toolkit/utils": "^3.0.0",
-    "@types/semver": "^7.7.1",
     "@vicons/ionicons5": "^0.13.0",
+    "7zip-bin": "^5.2.0",
     "better-sqlite3": "^12.10.0",
     "electron-store": "^11.0.2",
     "electron-updater": "^6.8.9",
-    "extract-zip": "^2.0.1",
     "html2canvas": "^1.4.1",
-    "ms": "^2.1.3",
     "naive-ui": "^2.44.1",
     "pinia": "^2.2.4",
     "semver": "^7.7.4",
@@ -47,11 +44,10 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@electron-toolkit/eslint-config-prettier": "^2.0.0",
     "@electron-toolkit/eslint-config-ts": "^2.0.0",
     "@electron-toolkit/tsconfig": "^1.0.1",
-    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20.14.8",
+    "@types/semver": "^7.7.1",
     "@types/serve-static": "^1.15.10",
     "@types/ws": "^8.5.12",
     "@vitejs/plugin-vue": "^5.1.4",

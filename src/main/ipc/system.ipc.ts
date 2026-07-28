@@ -12,6 +12,8 @@ import {
   mainWindow,
 } from "../window";
 import { cloudSyncService } from "../services/system/CloudSyncService";
+import { feedbackService } from "../services/system/FeedbackService";
+import { uninstallService } from "../services/system/UninstallService";
 import { AVATAR_FRAMES } from "../../shared/avatar-frames";
 import { openExternalHttpUrl } from "../utils/externalUrl";
 
@@ -133,6 +135,25 @@ export function registerSystemIpc() {
       mainWindow?.webContents.send(IPC.SYSTEM_CLOUD_SYNC_EVENT, progress);
     });
   });
+
+  ipcMain.handle(IPC.SYSTEM_FEEDBACK_SELECT_IMAGES, () =>
+    feedbackService.selectImages(),
+  );
+
+  ipcMain.handle(
+    IPC.SYSTEM_FEEDBACK_RELEASE_IMAGES,
+    (_, selectionId: unknown, imageId?: unknown) => {
+      feedbackService.releaseImages(selectionId, imageId);
+    },
+  );
+
+  ipcMain.handle(IPC.SYSTEM_FEEDBACK_SUBMIT, (_, payload: unknown) =>
+    feedbackService.submit(payload),
+  );
+
+  ipcMain.handle(IPC.SYSTEM_FEEDBACK_GET_HISTORY, () =>
+    feedbackService.getHistory(),
+  );
 
   ipcMain.handle(IPC.SYSTEM_SAVE_SETTINGS, async (_, settings: AppSettings) => {
     logger.info("[SystemIPC] Saving settings:", settings);
@@ -416,30 +437,7 @@ export function registerSystemIpc() {
   ipcMain.handle(
     IPC.SYSTEM_UNINSTALL,
     async (_, payload?: { deleteGames?: boolean }) => {
-      const exeDir = path.dirname(app.getPath("exe"));
-      const uninstaller = path.join(exeDir, "Uninstall BZ-Games.exe");
-      if (!fs.existsSync(uninstaller)) {
-        return { success: false, error: "uninstaller_not_found" };
-      }
-      if (payload?.deleteGames) {
-        const roots = storeService.getGameStorageRoots();
-        for (const root of roots) {
-          try {
-            fs.rmSync(root, { recursive: true, force: true });
-            logger.info(
-              `[SystemIPC] Removed storage root before uninstall: ${root}`,
-            );
-          } catch (error) {
-            logger.warn(
-              `[SystemIPC] Failed to remove storage root: ${root}`,
-              error,
-            );
-          }
-        }
-      }
-      shell.openPath(uninstaller);
-      app.quit();
-      return { success: true };
+      return uninstallService.uninstall(payload?.deleteGames === true);
     },
   );
 

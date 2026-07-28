@@ -7,6 +7,55 @@ export default {
     rooms: "Räume",
     backToRoom: "Zurück zum Raum",
   },
+  feedback: {
+    button: "Feedback",
+    title: "Feedback und Vorschläge",
+    loggedInHint: "Angemeldet kannst du einmal alle 6 Stunden Feedback senden.",
+    anonymousHint:
+      "Ohne Anmeldung kannst du einmal alle 48 Stunden Feedback senden.",
+    placeholder:
+      "Teile einen Vorschlag, ein Problem oder eine gewünschte Funktion mit…",
+    selectImages: "Bilder auswählen",
+    clearImages: "Bilder leeren",
+    removeImage: "Bild entfernen",
+    imageLimits: "Bis zu 4 PNG-, JPEG- oder WebP-Bilder mit je 5 MiB",
+    submit: "Senden",
+    history: "Verlauf",
+    historyTitle: "Feedbackverlauf",
+    historyEmpty: "Noch kein Feedback gesendet",
+    historySubmittedAt: "Gesendet am {time}",
+    successTitle: "Danke für dein Feedback",
+    successDescription: "Erfolgreich gesendet. Feedback-ID: {id}",
+    cooldownUntil: "Du kannst nach {time} erneut Feedback senden.",
+    errors: {
+      too_many_images: "Es können höchstens 4 Bilder ausgewählt werden",
+      image_too_large: "Ein Bild ist größer als 5 MiB",
+      unsupported_image_type:
+        "Nur PNG-, JPEG- und WebP-Bilder werden unterstützt",
+      image_type_mismatch:
+        "Der Bildinhalt stimmt nicht mit dem angegebenen Typ überein",
+      invalid_image: "Die Bilddatei ist ungültig",
+      feedback_image_failed: "Das Bild konnte nicht gelesen werden",
+      feedback_images_expired:
+        "Die Bildauswahl ist abgelaufen; bitte erneut auswählen",
+      feedback_empty: "Text eingeben oder mindestens ein Bild auswählen",
+      feedback_text_too_long: "Der Text darf höchstens 5.000 Zeichen enthalten",
+      feedback_not_configured: "Der Relay-Dienst ist nicht konfiguriert",
+      feedback_timeout: "Zeitüberschreitung beim Senden",
+      feedback_network_failed: "Netzwerkverbindung fehlgeschlagen",
+      feedback_invalid_response:
+        "Der Dienst hat eine ungültige Antwort gesendet",
+      unauthorized:
+        "Die GitHub-Sitzung ist abgelaufen; erneut anmelden oder anonym senden",
+      feedback_storage_not_configured:
+        "Der Feedback-Speicher ist nicht konfiguriert",
+      image_storage_not_configured: "Der Bildspeicher ist nicht konfiguriert",
+      payload_too_large: "Die Einsendung ist zu groß",
+      multipart_required: "Das Übertragungsformat ist ungültig",
+      feedback_storage_failed: "Der Server konnte das Feedback nicht speichern",
+      unknown: "Senden fehlgeschlagen; bitte später erneut versuchen",
+    },
+  },
   common: {
     confirm: "Bestätigen",
     cancel: "Abbrechen",
@@ -61,7 +110,8 @@ export default {
       platformVersionMismatch:
         "Plattformversion nicht kompatibel (Erforderlich: {required}, Aktuell: {current})",
       entryNotFound: "Einstiegsdatei nicht gefunden: {entry}",
-      versionExists: "Diese Version existiert bereits. Bitte vor dem Import löschen",
+      versionExists:
+        "Diese Version existiert bereits. Bitte vor dem Import löschen",
       idExists: "Spiel-ID existiert bereits",
       versionInvalid: "Ungültiges Versionsformat, bitte x.y.z verwenden",
       playersInvalid: "Ungültige Spielerzahl, bitte Min/Max prüfen",
@@ -77,7 +127,8 @@ export default {
     importDraftIdCheckLoading: "Prüfe...",
     importDraftIdExists: "ID existiert bereits",
     importDraftIdAvailable: "ID ist verfügbar",
-    importDraftIdFormatHint: "Verwende das Reverse-Domain-Format, z.B. com.dev.game",
+    importDraftIdFormatHint:
+      "Verwende das Reverse-Domain-Format, z.B. com.dev.game",
     importDraftRequired: "Bitte alle Pflichtfelder ausfüllen",
     importDraftEntryHint:
       "Einstieg wird automatisch erkannt und kann manuell bearbeitet werden (.html / serve / url / exe)",
@@ -149,12 +200,14 @@ export default {
     taskAlreadyDone: "Aufgabe bereits abgeschlossen",
     loadFailed: "Markt konnte nicht geladen werden",
     downloadFailed: "Download oder Installation fehlgeschlagen",
-    networkError: "Netzwerkverbindung fehlgeschlagen, bitte Netzwerk prüfen und erneut versuchen",
+    networkError:
+      "Netzwerkverbindung fehlgeschlagen, bitte Netzwerk prüfen und erneut versuchen",
     downloadError: "Download fehlgeschlagen",
     verifyError: "Überprüfung fehlgeschlagen",
     extractError: "Entpacken fehlgeschlagen",
     installError: "Installation fehlgeschlagen",
-    manifestMissing: "Spielpaket enthält keine game.json, Installation nicht möglich",
+    manifestMissing:
+      "Spielpaket enthält keine game.json, Installation nicht möglich",
     versionInvalid: "Versionsdaten ungültig",
     missingSha256: "SHA256 fehlt",
     missingSize: "Größe fehlt",
@@ -162,7 +215,8 @@ export default {
     platformIncompatible: "Plattformversion inkompatibel",
     installSuccess: "{name} {version} installiert",
     marketIdMismatchTitle: "Markt-ID stimmt nicht überein",
-    marketIdMismatchDesc: "Die Markt-ID stimmt nicht mit der Plattformregistrierung überein. Downloads wurden aus Sicherheitsgründen deaktiviert.",
+    marketIdMismatchDesc:
+      "Die Markt-ID stimmt nicht mit der Plattformregistrierung überein. Downloads wurden aus Sicherheitsgründen deaktiviert.",
     taskStatus: {
       idle: "Bereit",
       downloading: "Lädt herunter",
@@ -177,7 +231,8 @@ export default {
     },
     pauseTask: "Pausieren",
     resumeTask: "Fortsetzen",
-    cannotPauseExtracting: "Pausieren während des Entpackens/Installierens nicht möglich",
+    cannotPauseExtracting:
+      "Pausieren während des Entpackens/Installierens nicht möglich",
     taskPaused: "Download pausiert",
     versionNotFound: "Download-Version ist nicht mehr verfügbar",
   },
@@ -203,7 +258,8 @@ export default {
       "Unterstützt Kurzcode, LAN-IP, EasyTier virtuelle IP und natfrp-Adresse",
     joinPasswordPlaceholder: "Passwort (leer lassen wenn keins)",
     launchSuccess: "Spiel gestartet!",
-    launchFailed: "Spiel konnte nicht gestartet werden. Prüfe das Fehlerprotokoll",
+    launchFailed:
+      "Spiel konnte nicht gestartet werden. Prüfe das Fehlerprotokoll",
     deleteSuccess: "Spiel gelöscht",
     addressEmpty: "Adresse darf nicht leer sein",
     joinFail: "Beitritt fehlgeschlagen",
@@ -233,12 +289,17 @@ export default {
     alreadyInRoom: "Du bist bereits in einem Raum, bitte verlasse ihn zuerst",
     createFailed: "Raumerstellung fehlgeschlagen",
     createError: {
-      room_game_manifest_invalid: "game.json fehlt, ist ungültig oder kann nicht entschlüsselt werden",
+      room_game_manifest_invalid:
+        "game.json fehlt, ist ungültig oder kann nicht entschlüsselt werden",
       room_game_type_not_multiplayer: "Dieser Spieltyp unterstützt keine Räume",
-      room_multiplayer_config_missing: "In game.json fehlt die Mehrspielerkonfiguration",
-      platformVersionMismatch: "Die aktuelle Plattformversion erfüllt die Spielanforderung nicht",
-      roomPortInUse: "Der Raum-Port wird bereits verwendet. Schließe den anderen Raum und versuche es erneut",
-      localRoomConnectFailed: "Verbindung zum neu erstellten lokalen Raum fehlgeschlagen",
+      room_multiplayer_config_missing:
+        "In game.json fehlt die Mehrspielerkonfiguration",
+      platformVersionMismatch:
+        "Die aktuelle Plattformversion erfüllt die Spielanforderung nicht",
+      roomPortInUse:
+        "Der Raum-Port wird bereits verwendet. Schließe den anderen Raum und versuche es erneut",
+      localRoomConnectFailed:
+        "Verbindung zum neu erstellten lokalen Raum fehlgeschlagen",
       createFailed: "Raumerstellung fehlgeschlagen",
     },
     waitingForPlayers: "Warte auf Spieler (aktuell {current}/{min})...",
@@ -268,17 +329,21 @@ export default {
         "Inkompatible Plattformversion (benötigt {required}, aktuell {current})",
       entryNotFound: "Startdatei nicht gefunden: {entry}",
       webUrlMissing: "Dem URL-Spiel fehlt web_url",
-      processLaunchFailed: "Spielprozess konnte nicht gestartet werden: {detail}",
+      processLaunchFailed:
+        "Spielprozess konnte nicht gestartet werden: {detail}",
       unknown: "Unbekannter Startfehler: {detail}",
     },
     startFailed: "Start fehlgeschlagen",
     connectionModeLan: "LAN",
     connectionModeRelay: "Server",
     connectionModeChangeTitle: "Verbindungsmodus wechseln",
-    connectionModeChangeContent: "Ein Moduswechsel trennt andere Spieler im Raum. Fortfahren?",
-    connectionModeRelayPending: "Servermodus gewählt, warte auf Relay-Einrichtung",
+    connectionModeChangeContent:
+      "Ein Moduswechsel trennt andere Spieler im Raum. Fortfahren?",
+    connectionModeRelayPending:
+      "Servermodus gewählt, warte auf Relay-Einrichtung",
     connectionModeRelayReady: "Serverraum aktiv: {address}",
-    connectionModeRelayFailed: "Serverraum konnte nicht geöffnet werden: {reason}",
+    connectionModeRelayFailed:
+      "Serverraum konnte nicht geöffnet werden: {reason}",
     connectionModeLanSelected: "Auf LAN-Modus gewechselt",
     passwordButton: "Passwort",
     passwordModalTitle: "Raumpasswort festlegen",
@@ -291,28 +356,42 @@ export default {
     lanConnectionHint: "Verbindung über frp, EasyTier usw. möglich.",
     lanGuideDetail: "Details",
     lanGuideTitle: "LAN-Verbindungstools konfigurieren",
-    lanGuideOverview: "Der Raum wird weiterhin von BZ-Games auf Port 38080 bereitgestellt. natfrp und EasyTier helfen anderen Spielern nur, über das öffentliche Netz oder ein virtuelles LAN auf deinen Raum zuzugreifen.",
+    lanGuideOverview:
+      "Der Raum wird weiterhin von BZ-Games auf Port 38080 bereitgestellt. natfrp und EasyTier helfen anderen Spielern nur, über das öffentliche Netz oder ein virtuelles LAN auf deinen Raum zuzugreifen.",
     lanGuideOpenSite: "Website öffnen",
     lanGuideSiteLabel: "Website:",
     lanGuideRecommendedConfig: "Empfohlene Einrichtung",
     lanGuideNatfrpTitle: "natfrp",
-    lanGuideNatfrpSummary: "Geeignet ohne öffentliche IP, um Freunden den Zugriff über eine öffentliche Adresse zu ermöglichen.",
-    lanGuideNatfrpStep1: "Öffne https://www.natfrp.com/ , registriere dich, lade den Launcher/Client herunter, melde dich an und erstelle einen TCP-Tunnel.",
-    lanGuideNatfrpStep2: "Lokale Adresse: 127.0.0.1, lokaler Port: 38080; das leitet externen Traffic an den lokalen BZ-Games-Raumdienst weiter.",
-    lanGuideNatfrpStep3: "Wähle im natfrp-Panel einen Knoten und einen Remote-Port, starte den Tunnel und notiere die zugewiesene öffentliche Adresse und den Port.",
-    lanGuideNatfrpStep4: "Behalte den BZ-Games-Raum im LAN-Modus und stelle sicher, dass der natfrp-Tunnel verbunden ist, bevor Gäste beitreten.",
-    lanGuideNatfrpStep5: "Andere Spieler geben die natfrp-Adresse:Port direkt ein. Physisches/virtuelles LAN kann parallel weiter verwendet werden.",
+    lanGuideNatfrpSummary:
+      "Geeignet ohne öffentliche IP, um Freunden den Zugriff über eine öffentliche Adresse zu ermöglichen.",
+    lanGuideNatfrpStep1:
+      "Öffne https://www.natfrp.com/ , registriere dich, lade den Launcher/Client herunter, melde dich an und erstelle einen TCP-Tunnel.",
+    lanGuideNatfrpStep2:
+      "Lokale Adresse: 127.0.0.1, lokaler Port: 38080; das leitet externen Traffic an den lokalen BZ-Games-Raumdienst weiter.",
+    lanGuideNatfrpStep3:
+      "Wähle im natfrp-Panel einen Knoten und einen Remote-Port, starte den Tunnel und notiere die zugewiesene öffentliche Adresse und den Port.",
+    lanGuideNatfrpStep4:
+      "Behalte den BZ-Games-Raum im LAN-Modus und stelle sicher, dass der natfrp-Tunnel verbunden ist, bevor Gäste beitreten.",
+    lanGuideNatfrpStep5:
+      "Andere Spieler geben die natfrp-Adresse:Port direkt ein. Physisches/virtuelles LAN kann parallel weiter verwendet werden.",
     lanGuideEasyTierTitle: "EasyTier",
-    lanGuideEasyTierSummary: "Geeignet, um Spieler aus verschiedenen Netzwerken in ein gemeinsames virtuelles LAN zu bringen.",
+    lanGuideEasyTierSummary:
+      "Geeignet, um Spieler aus verschiedenen Netzwerken in ein gemeinsames virtuelles LAN zu bringen.",
     lanGuideEasyTierNodeLabel: "Initialknoten:",
-    lanGuideEasyTierStep1: "Öffne https://easytier.cn/ , lade EasyTier herunter und installiere es. Host und alle Gäste benötigen es.",
-    lanGuideEasyTierStep2: "Erstelle oder betrete dasselbe virtuelle Netzwerk. Netzwerkname und Schlüssel müssen übereinstimmen. Wenn du einen Initialknoten verwendest, trage eine vertrauenswürdige verfügbare Knotenadresse ein.",
-    lanGuideEasyTierStep3: "Nach erfolgreicher Verbindung sollte jedes Gerät eine virtuelle EasyTier-IP haben und sich gegenseitig erreichen können.",
-    lanGuideEasyTierStep4: "Der Host behält den LAN-Modus in BZ-Games. Gäste können Räume auf der „Virtuelles LAN“-Seite finden oder die EasyTier-IP:38080 des Hosts manuell eingeben.",
-    lanGuideEasyTierStep5: "Falls keine Räume gefunden werden: Prüfe, ob beide im selben virtuellen Netzwerk sind, der Initialknoten korrekt ist und die Firewall Port 38080 zulässt.",
+    lanGuideEasyTierStep1:
+      "Öffne https://easytier.cn/ , lade EasyTier herunter und installiere es. Host und alle Gäste benötigen es.",
+    lanGuideEasyTierStep2:
+      "Erstelle oder betrete dasselbe virtuelle Netzwerk. Netzwerkname und Schlüssel müssen übereinstimmen. Wenn du einen Initialknoten verwendest, trage eine vertrauenswürdige verfügbare Knotenadresse ein.",
+    lanGuideEasyTierStep3:
+      "Nach erfolgreicher Verbindung sollte jedes Gerät eine virtuelle EasyTier-IP haben und sich gegenseitig erreichen können.",
+    lanGuideEasyTierStep4:
+      "Der Host behält den LAN-Modus in BZ-Games. Gäste können Räume auf der „Virtuelles LAN“-Seite finden oder die EasyTier-IP:38080 des Hosts manuell eingeben.",
+    lanGuideEasyTierStep5:
+      "Falls keine Räume gefunden werden: Prüfe, ob beide im selben virtuellen Netzwerk sind, der Initialknoten korrekt ist und die Firewall Port 38080 zulässt.",
     connectionStatus: {
       connecting: "Verbinde mit Raum...",
-      reconnecting: "Raumverbindung unterbrochen, verbinde neu ({current}/5), nächster Versuch in {seconds}s",
+      reconnecting:
+        "Raumverbindung unterbrochen, verbinde neu ({current}/5), nächster Versuch in {seconds}s",
       failed: "Raumverbindung fehlgeschlagen: {reason}",
       disconnected: "Vom Raum getrennt",
     },
@@ -324,10 +403,13 @@ export default {
       ownRoom: "Das ist dein eigener Raum, gehe direkt zurück",
       passwordRequired: "Dieser Raum benötigt ein Passwort",
       passwordIncorrect: "Falsches Raumpasswort",
-      manifestInvalid: "Die lokale game.json fehlt, ist ungültig oder kann nicht entschlüsselt werden",
+      manifestInvalid:
+        "Die lokale game.json fehlt, ist ungültig oder kann nicht entschlüsselt werden",
       gameTypeNotMultiplayer: "Dieser Spieltyp unterstützt keine Räume",
-      multiplayerConfigMissing: "In game.json fehlt die Mehrspielerkonfiguration",
-      platformVersionMismatch: "Die aktuelle Plattformversion erfüllt die Spielanforderung nicht",
+      multiplayerConfigMissing:
+        "In game.json fehlt die Mehrspielerkonfiguration",
+      platformVersionMismatch:
+        "Die aktuelle Plattformversion erfüllt die Spielanforderung nicht",
       probeFailed: "Passwortabfrage fehlgeschlagen",
       unknown: "Unbekannter Fehler",
     },
@@ -339,8 +421,10 @@ export default {
     refresh: "Aktualisieren",
     lanTab: "LAN",
     relayTab: "Server",
-    lanDesc: "Scannt automatisch wartende BZ-Games-Räume in physischen und virtuellen LANs. Spiel-ID und Version werden vor dem Beitritt geprüft.",
-    relayDesc: "Serverräume vom offiziellen Relay-Dienst. Der Host erhält nach Aktivierung eine Kurzadresse, Gäste können direkt beitreten.",
+    lanDesc:
+      "Scannt automatisch wartende BZ-Games-Räume in physischen und virtuellen LANs. Spiel-ID und Version werden vor dem Beitritt geprüft.",
+    relayDesc:
+      "Serverräume vom offiziellen Relay-Dienst. Der Host erhält nach Aktivierung eine Kurzadresse, Gäste können direkt beitreten.",
     emptyLan: "Keine LAN-Räume verfügbar",
     emptyRelay: "Keine Serverräume verfügbar",
     refreshFailed: "Aktualisierung fehlgeschlagen",
@@ -414,13 +498,16 @@ export default {
     save: "Einstellungen speichern",
     enterName: "Bitte Namen eingeben",
     nameTooLong: "Spitzname darf maximal 16 Zeichen lang sein",
-    nameInvalidChars: "Spitzname darf keine Zeichen wie < > \" ' ` & \\ / enthalten",
-    enterPortReserved: "Port 38081 ist für LAN-Erkennung reserviert, bitte anderen Port verwenden",
+    nameInvalidChars:
+      "Spitzname darf keine Zeichen wie < > \" ' ` & \\ / enthalten",
+    enterPortReserved:
+      "Port 38081 ist für LAN-Erkennung reserviert, bitte anderen Port verwenden",
     enterPort: "Bitte gültigen Port eingeben",
     saveSuccess: "Einstellungen gespeichert",
     saveFail: "Speichern fehlgeschlagen",
     unsavedChangesTitle: "Ungespeicherte Änderungen",
-    unsavedChangesContent: "Du hast ungespeicherte Änderungen. Speichern und verlassen?",
+    unsavedChangesContent:
+      "Du hast ungespeicherte Änderungen. Speichern und verlassen?",
     unsavedChangesSave: "Speichern & verlassen",
     unsavedChangesDiscard: "Verwerfen",
     unsavedChangesCancel: "Abbrechen",
@@ -430,15 +517,18 @@ export default {
     uploadAvatar: "Avatar hochladen",
     cloudSync: "Cloud-Daten",
     githubLogin: "Mit GitHub anmelden",
-    githubLoginOpened: "GitHub-Autorisierungsseite geöffnet. Die Sitzung wird nach der Anmeldung automatisch gespeichert.",
+    githubLoginOpened:
+      "GitHub-Autorisierungsseite geöffnet. Die Sitzung wird nach der Anmeldung automatisch gespeichert.",
     cloudUpload: "Cloud-Upload",
     cloudDownload: "Cloud-Download",
     cloudSyncHelpTitle: "Cloud-Sync-Details",
-    cloudSyncHelp: "Cloud-Upload: Lädt die aktuelle Spielbibliothek-Konfiguration, Benutzerdaten und Spielaufzeichnungen in die Cloud hoch und überschreibt vorhandene Cloud-Daten. GitHub Token und Anmeldesitzungsfelder werden nicht hochgeladen.\nCloud-Download: Lädt Cloud-Daten herunter und wendet sie lokal an. Bei config.json werden nur Felder aktualisiert, die in der Cloud-Datei vorhanden sind; lokale Felder, die dort fehlen, bleiben erhalten.",
+    cloudSyncHelp:
+      "Cloud-Upload: Lädt die aktuelle Spielbibliothek-Konfiguration, Benutzerdaten und Spielaufzeichnungen in die Cloud hoch und überschreibt vorhandene Cloud-Daten. GitHub Token und Anmeldesitzungsfelder werden nicht hochgeladen.\nCloud-Download: Lädt Cloud-Daten herunter und wendet sie lokal an. Bei config.json werden nur Felder aktualisiert, die in der Cloud-Datei vorhanden sind; lokale Felder, die dort fehlen, bleiben erhalten.",
     cloudNeverUploaded: "Cloud-Zeit: Nie hochgeladen",
     cloudLastUploadedAt: "Cloud-Zeit: {time}",
     cloudUploadSuccess: "Cloud-Upload abgeschlossen",
-    cloudDownloadSuccess: "Cloud-Download abgeschlossen, lokale Daten überschrieben",
+    cloudDownloadSuccess:
+      "Cloud-Download abgeschlossen, lokale Daten überschrieben",
     cloudProgress: {
       checking: "Prüfe Cloud-Status...",
       uploading: "Lade hoch und überschreibe Cloud-Daten...",
@@ -449,12 +539,16 @@ export default {
     cloudErrors: {
       cloud_not_configured: "Cloud-Synchronisation nicht konfiguriert",
       unauthorized: "Bitte zuerst mit GitHub anmelden",
-      cloud_data_incomplete: "Cloud-Daten unvollständig, bitte zuerst einen vollständigen Upload durchführen",
+      cloud_data_incomplete:
+        "Cloud-Daten unvollständig, bitte zuerst einen vollständigen Upload durchführen",
       file_not_found: "Cloud-Datei nicht gefunden",
-      version_conflict: "Cloud-Versionskonflikt, bitte aktualisieren und erneut versuchen",
+      version_conflict:
+        "Cloud-Versionskonflikt, bitte aktualisieren und erneut versuchen",
       file_too_large: "Datei überschreitet das Cloud-Sync-Limit",
-      cloud_hash_mismatch: "Cloud-Dateiprüfung fehlgeschlagen, bitte erneut versuchen",
-      cloud_sync_rate_limited: "Cloud-Sync zu häufig. Upload und Download sind jeweils auf einmal pro 24 Stunden pro Konto begrenzt",
+      cloud_hash_mismatch:
+        "Cloud-Dateiprüfung fehlgeschlagen, bitte erneut versuchen",
+      cloud_sync_rate_limited:
+        "Cloud-Sync zu häufig. Upload und Download sind jeweils auf einmal pro 24 Stunden pro Konto begrenzt",
       unknown: "Cloud-Synchronisation fehlgeschlagen",
     },
     closeBehavior: "Hauptfenster schließen",
@@ -470,10 +564,12 @@ export default {
     sensitiveWordFilterOn: "Ein",
     sensitiveWordFilterOff: "Aus",
     sensitiveWordFilterHelpTitle: "Wortfilter-Info",
-    sensitiveWordFilterHelp: "Der Wortfilter gilt nur für Raum-Chat-Nachrichten (Hauptraum-Chat und eigenständiges Chat-Fenster).\nRelay-Server-Räume: Der Server filtert automatisch — der lokale Schalter hat keine Wirkung.\nLAN / virtuelle LAN-Räume: Wenn aktiviert, werden Wörter aus dem sensiblen Vokabular durch * ersetzt.",
+    sensitiveWordFilterHelp:
+      "Der Wortfilter gilt nur für Raum-Chat-Nachrichten (Hauptraum-Chat und eigenständiges Chat-Fenster).\nRelay-Server-Räume: Der Server filtert automatisch — der lokale Schalter hat keine Wirkung.\nLAN / virtuelle LAN-Räume: Wenn aktiviert, werden Wörter aus dem sensiblen Vokabular durch * ersetzt.",
     githubToken: "GitHub Token",
     githubTokenHelpTitle: "GitHub Token Info",
-    githubTokenHelp: "Ein GitHub Token erhöht das GitHub API-Ratenlimit und ermöglicht normalen Marktzugriff und Spiel-Downloads.\nOhne Token: 60 Anfragen/Stunde\nMit Token: 5000 Anfragen/Stunde\nErstellen unter: GitHub Settings → Developer settings → Personal access tokens → Tokens (classic)\nKeine Berechtigungen erforderlich.",
+    githubTokenHelp:
+      "Ein GitHub Token erhöht das GitHub API-Ratenlimit und ermöglicht normalen Marktzugriff und Spiel-Downloads.\nOhne Token: 60 Anfragen/Stunde\nMit Token: 5000 Anfragen/Stunde\nErstellen unter: GitHub Settings → Developer settings → Personal access tokens → Tokens (classic)\nKeine Berechtigungen erforderlich.",
     githubTokenPlaceholder: "GitHub Personal Access Token eingeben (optional)",
     browsePath: "Pfad wählen",
     storagePathList: "Bibliothekspfade",
@@ -482,14 +578,17 @@ export default {
     setDefaultStoragePath: "Als Standard",
     addStoragePath: "Neuen Bibliothekspfad hinzufügen",
     defaultGamesMigrationTitle: "Migration der Standardbibliothek empfohlen",
-    defaultGamesMigrationContent: "Für ein besseres Erlebnis wird empfohlen, die Standardbibliothek aus dem EXE-Verzeichnis zu verschieben. Alle Dateien werden migriert, das Originalverzeichnis wird nach Erfolg gelöscht. Aktuelle Bibliothek: {path}",
+    defaultGamesMigrationContent:
+      "Für ein besseres Erlebnis wird empfohlen, die Standardbibliothek aus dem EXE-Verzeichnis zu verschieben. Alle Dateien werden migriert, das Originalverzeichnis wird nach Erfolg gelöscht. Aktuelle Bibliothek: {path}",
     migrateNow: "Jetzt migrieren",
     doNotRemind: "Nicht mehr erinnern",
-    defaultGamesMigrationSuccess: "Migration abgeschlossen, {gameCount} Spiele, {versionCount} Versionen",
+    defaultGamesMigrationSuccess:
+      "Migration abgeschlossen, {gameCount} Spiele, {versionCount} Versionen",
     defaultGamesMigrationFailed: "Migration fehlgeschlagen",
     openPathFailed: "Pfad konnte nicht geöffnet werden",
     storagePathNotEmptyTitle: "Ordner nicht leer",
-    storagePathNotEmptyContent: "Der gewählte Ordner muss leer sein. Wähle einen leeren Ordner oder erstelle einen neuen, um versehentliches Löschen bei der Deinstallation zu vermeiden.",
+    storagePathNotEmptyContent:
+      "Der gewählte Ordner muss leer sein. Wähle einen leeren Ordner oder erstelle einen neuen, um versehentliches Löschen bei der Deinstallation zu vermeiden.",
     removeStoragePathTitle: "Bibliothek löschen",
     removeStoragePathConfirm:
       "Dies löscht die importierten Spieldaten aus diesem Pfad: {path}. Vom Benutzer abgelegte Nicht-Spiel-Dateien bleiben erhalten. Dieser Vorgang kann nicht rückgängig gemacht werden. Fortfahren?",
@@ -497,19 +596,29 @@ export default {
       "Pfad gelöscht, {gameCount} Spiele, {versionCount} Versionen entfernt",
     removeStoragePathFailed: "Pfad konnte nicht gelöscht werden",
     storageErrors: {
-      cannot_remove_last_storage_path: "Mindestens ein Bibliothekspfad muss erhalten bleiben. Bitte zuerst einen neuen Pfad hinzufügen",
-      storage_path_not_registered: "Pfad nicht in der Bibliotheksliste, bitte aktualisieren",
-      invalid_storage_path: "Ungültiger Bibliothekspfad, bitte gültiges Verzeichnis wählen",
+      cannot_remove_last_storage_path:
+        "Mindestens ein Bibliothekspfad muss erhalten bleiben. Bitte zuerst einen neuen Pfad hinzufügen",
+      storage_path_not_registered:
+        "Pfad nicht in der Bibliotheksliste, bitte aktualisieren",
+      invalid_storage_path:
+        "Ungültiger Bibliothekspfad, bitte gültiges Verzeichnis wählen",
       storage_path_not_directory: "Gewählter Pfad ist kein Ordner",
-      directory_not_empty: "Gewähltes Verzeichnis ist nicht leer, bitte leeres Verzeichnis wählen oder neues erstellen",
+      directory_not_empty:
+        "Gewähltes Verzeichnis ist nicht leer, bitte leeres Verzeichnis wählen oder neues erstellen",
       target_is_source_path: "Zielpfad darf nicht mit Quellpfad identisch sein",
-      target_inside_source_path: "Zielpfad darf nicht innerhalb der Quellbibliothek liegen",
-      source_inside_target_path: "Quellbibliothek darf nicht innerhalb des Zielpfads liegen",
-      target_is_default_games_path: "Zielpfad darf nicht das Standard-Games-Verzeichnis neben der EXE sein",
+      target_inside_source_path:
+        "Zielpfad darf nicht innerhalb der Quellbibliothek liegen",
+      source_inside_target_path:
+        "Quellbibliothek darf nicht innerhalb des Zielpfads liegen",
+      target_is_default_games_path:
+        "Zielpfad darf nicht das Standard-Games-Verzeichnis neben der EXE sein",
       game_storage_path_not_configured: "Kein Bibliothekspfad konfiguriert",
-      source_storage_path_not_found: "Quellbibliothek existiert nicht, bitte aktualisieren",
-      source_storage_path_not_directory: "Quellbibliothek ist kein gültiger Ordner, bitte aktualisieren",
-      storage_migration_file_busy: "Datei wird verwendet, Migration abgebrochen und zurückgesetzt",
+      source_storage_path_not_found:
+        "Quellbibliothek existiert nicht, bitte aktualisieren",
+      source_storage_path_not_directory:
+        "Quellbibliothek ist kein gültiger Ordner, bitte aktualisieren",
+      storage_migration_file_busy:
+        "Datei wird verwendet, Migration abgebrochen und zurückgesetzt",
       unknown: "Unbekannter Bibliotheksfehler",
     },
     dataHealth: "Datenprüfung",
@@ -525,26 +634,37 @@ export default {
       config_invalid_json: "config.json enthält kein gültiges JSON",
       config_decrypt_failed: "config.json konnte nicht entschlüsselt werden",
       config_invalid_structure: "config.json hat eine ungültige Struktur",
-      config_plaintext_legacy: "config.json verwendet noch das alte Klartextformat",
+      config_plaintext_legacy:
+        "config.json verwendet noch das alte Klartextformat",
       config_read_failed: "config.json konnte nicht gelesen werden: {reason}",
       player_id_missing: "Die Spieler-ID fehlt",
       duplicate_game_id: "Doppelte Spiel-ID: {gameId}",
       duplicate_game_version: "Doppelte Spielversion: {gameId}@{version}",
       version_path_missing: "Spielversionsordner fehlt: {gameId}@{version}",
-      version_path_not_directory: "Der Spielversionspfad ist kein Ordner: {gameId}@{version}",
-      version_path_read_failed: "Spielversionsordner konnte nicht geprüft werden: {reason}",
+      version_path_not_directory:
+        "Der Spielversionspfad ist kein Ordner: {gameId}@{version}",
+      version_path_read_failed:
+        "Spielversionsordner konnte nicht geprüft werden: {reason}",
       manifest_missing: "game.json fehlt: {gameId}@{version}",
-      manifest_plaintext: "game.json ist nicht verschlüsselt: {gameId}@{version}",
-      manifest_identity_mismatch: "ID oder Version in game.json stimmt nicht mit dem Spieleintrag überein",
+      manifest_plaintext:
+        "game.json ist nicht verschlüsselt: {gameId}@{version}",
+      manifest_identity_mismatch:
+        "ID oder Version in game.json stimmt nicht mit dem Spieleintrag überein",
       manifest_platform_incompatible:
         "Das Spiel benötigt Plattform {required}; aktuell ist {current}",
-      manifest_file_missing: "Die in game.json angegebene {kind}-Datei fehlt: {file}",
-      manifestEncryptionKeyMissing: "Der Schlüssel zur Manifestverschlüsselung ist nicht konfiguriert",
-      manifestEncryptedFormatInvalid: "Das verschlüsselte game.json-Format ist ungültig oder wird nicht unterstützt",
+      manifest_file_missing:
+        "Die in game.json angegebene {kind}-Datei fehlt: {file}",
+      manifestEncryptionKeyMissing:
+        "Der Schlüssel zur Manifestverschlüsselung ist nicht konfiguriert",
+      manifestEncryptedFormatInvalid:
+        "Das verschlüsselte game.json-Format ist ungültig oder wird nicht unterstützt",
       manifestKeyMismatch: "game.json verwendet einen anderen Build-Schlüssel",
-      manifestDecryptFailed: "Entschlüsselung oder Integritätsprüfung von game.json ist fehlgeschlagen",
-      manifest_invalid: "game.json entspricht nicht dem aktuellen Manifestschema: {reason}",
-      latest_version_invalid: "Der neueste Versionseintrag für {gameId} ist ungültig: {version}",
+      manifestDecryptFailed:
+        "Entschlüsselung oder Integritätsprüfung von game.json ist fehlgeschlagen",
+      manifest_invalid:
+        "game.json entspricht nicht dem aktuellen Manifestschema: {reason}",
+      latest_version_invalid:
+        "Der neueste Versionseintrag für {gameId} ist ungültig: {version}",
       storage_root_missing: "Ein Speicherpfad der Spielebibliothek fehlt",
     },
     update: "Client-Update",
@@ -552,42 +672,64 @@ export default {
     updateTitle: "Update-Status",
     currentVersion: "Aktuelle Version: {version}",
     installNow: "Jetzt installieren & neu starten",
-    updateIdle: "Klicke „Nach Update suchen\", um die neueste Version zu erhalten",
+    updateIdle:
+      'Klicke „Nach Update suchen", um die neueste Version zu erhalten',
     updateChecking: "Suche nach Updates...",
     updateAvailable: "Neue Version gefunden: {version}, lade herunter...",
     updateLatest: "Bereits die neueste Version",
     updateDownloading: "Download: {progress}%",
-    updateDownloaded: "Update heruntergeladen, klicke „Jetzt installieren & neu starten\"",
-    updateUnsupported: "Automatisches Update im Entwicklungsmodus nicht unterstützt",
+    updateDownloaded:
+      'Update heruntergeladen, klicke „Jetzt installieren & neu starten"',
+    updateUnsupported:
+      "Automatisches Update im Entwicklungsmodus nicht unterstützt",
     updateFailed: "Update fehlgeschlagen",
     updateError: "Update fehlgeschlagen: {message}",
     updateErrors: {
-      network_error: "Netzwerkverbindung fehlgeschlagen, Netzwerk oder Update-Quelle prüfen",
-      feed_invalid: "Update-Metadaten ungültig, latest.yml oder Release-Konfiguration prüfen",
-      download_failed: "Update-Download fehlgeschlagen, später erneut versuchen",
-      verify_failed: "Update-Prüfung fehlgeschlagen, erneut herunterladen oder Release-Dateien prüfen",
+      network_error:
+        "Netzwerkverbindung fehlgeschlagen, Netzwerk oder Update-Quelle prüfen",
+      feed_invalid:
+        "Update-Metadaten ungültig, latest.yml oder Release-Konfiguration prüfen",
+      download_failed:
+        "Update-Download fehlgeschlagen, später erneut versuchen",
+      verify_failed:
+        "Update-Prüfung fehlgeschlagen, erneut herunterladen oder Release-Dateien prüfen",
       permission_denied: "Keine Berechtigung zum Schreiben der Update-Dateien",
-      unsupported_dev_mode: "Automatisches Update im Entwicklungsmodus nicht unterstützt",
+      unsupported_dev_mode:
+        "Automatisches Update im Entwicklungsmodus nicht unterstützt",
       unknown: "Unbekannter Update-Fehler",
     },
     updatePromptTitle: "Neue Version verfügbar",
-    updatePromptMessage: "Neue Version {version} gefunden. Jetzt aktualisieren?",
+    updatePromptMessage:
+      "Neue Version {version} gefunden. Jetzt aktualisieren?",
     updateNow: "Jetzt aktualisieren",
     updateLater: "Später",
     officialWebsite: "Offizielle Website",
     uninstallClient: "Client deinstallieren",
-    uninstallClientDescription: "Dieser Vorgang kann nicht rückgängig gemacht werden und entfernt den BZ-Games-Client vollständig.",
+    uninstallClientDescription:
+      "Dieser Vorgang kann nicht rückgängig gemacht werden und entfernt den BZ-Games-Client vollständig.",
     uninstallDeleteGames: "Auch alle Bibliotheksordner löschen",
-    uninstallNotAvailable: "Deinstallationsprogramm nicht verfügbar, nur in der Installationsversion unterstützt.",
+    uninstallNotAvailable:
+      "Deinstallationsprogramm nicht verfügbar, nur in der Installationsversion unterstützt.",
+    uninstallMarketTasksActive:
+      "Schließe laufende Spiele-Downloads und Installationen zuerst ab oder brich sie ab.",
+    uninstallGameLibraryDeleteFailed:
+      "Einige Spielebibliotheken werden noch von anderen Programmen verwendet. Der Client wurde nicht deinstalliert. Schließe die betreffenden Programme und versuche es erneut:\n{paths}",
+    uninstallUnsafeStoragePath:
+      "Die Deinstallation wurde wegen eines unsicheren Bibliothekspfads gestoppt. Prüfe zuerst die Bibliothekseinstellungen.",
+    uninstallFailed:
+      "Das Deinstallationsprogramm konnte nicht gestartet werden. Bitte versuche es erneut.",
     clearCache: "Cache leeren",
     migrateStorage: "Bibliothek migrieren",
-    migrateStorageDescription: "Wähle zuerst die zu migrierende Bibliothek, dann ein neues leeres Verzeichnis. Alle Dateien werden kopiert, das Original wird nach Erfolg gelöscht. Bei Fehlschlag werden bereits kopierte Daten im Ziel bereinigt.",
+    migrateStorageDescription:
+      "Wähle zuerst die zu migrierende Bibliothek, dann ein neues leeres Verzeichnis. Alle Dateien werden kopiert, das Original wird nach Erfolg gelöscht. Bei Fehlschlag werden bereits kopierte Daten im Ziel bereinigt.",
     selectSourceStoragePath: "Zu migrierende Bibliothek wählen",
     selectTargetStoragePath: "Neuen Bibliothekspfad wählen",
     migrateStorageWarning: "Migriert alle Dateien aus: {path}",
-    migrateStorageSuccess: "Migration abgeschlossen, {gameCount} Spiele, {versionCount} Versionen",
+    migrateStorageSuccess:
+      "Migration abgeschlossen, {gameCount} Spiele, {versionCount} Versionen",
     migrateStorageFailed: "Migration fehlgeschlagen",
-    clearCacheConfirm: "Löscht alle zwischengespeicherten Daten (Downloads, Updates, temporäre Dateien). Installierte Spiele und Benutzereinstellungen bleiben erhalten.",
+    clearCacheConfirm:
+      "Löscht alle zwischengespeicherten Daten (Downloads, Updates, temporäre Dateien). Installierte Spiele und Benutzereinstellungen bleiben erhalten.",
     clearCacheProcessing: "Cache wird geleert...",
     clearCacheSuccess: "Cache geleert, {size} freigegeben.",
   },
@@ -673,8 +815,11 @@ export default {
     resetNicknameStyle: "Zurücksetzen",
     saveNicknameStyleCost: "Speichern ({coins} BZ-Münzen)",
     nicknameStyleSaved: "Namensstil gespeichert, {coins} BZ-Münzen verbraucht",
-    nicknameStyleInsufficientCoins: "Nicht genug BZ-Münzen. Speichern kostet {coins} BZ-Münzen",
-    nicknameColorContrastWarning: "Die aktuelle Textfarbe hat zu wenig Kontrast zum Hintergrund: Helles Design verträgt keine weißen Farben, dunkles Design keine schwarzen Farben.",
-    gradientHelp: "Start und Ende des Farbverlaufs bilden die beiden Enden des Effektfarbübergangs: Effekte wie Neon, Flamme oder Aurora fließen von der Start- zur Endfarbe und zurück. Ohne Effekt wird hauptsächlich die Textfarbe verwendet. Jedes Speichern kostet 30 BZ-Münzen.",
+    nicknameStyleInsufficientCoins:
+      "Nicht genug BZ-Münzen. Speichern kostet {coins} BZ-Münzen",
+    nicknameColorContrastWarning:
+      "Die aktuelle Textfarbe hat zu wenig Kontrast zum Hintergrund: Helles Design verträgt keine weißen Farben, dunkles Design keine schwarzen Farben.",
+    gradientHelp:
+      "Start und Ende des Farbverlaufs bilden die beiden Enden des Effektfarbübergangs: Effekte wie Neon, Flamme oder Aurora fließen von der Start- zur Endfarbe und zurück. Ohne Effekt wird hauptsächlich die Textfarbe verwendet. Jedes Speichern kostet 30 BZ-Münzen.",
   },
 };

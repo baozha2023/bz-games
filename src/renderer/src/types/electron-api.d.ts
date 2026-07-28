@@ -19,6 +19,7 @@ import type {
   GameLaunchFailurePayload,
   RoomConnectResult,
   RoomCreateResult,
+  FeedbackHistoryItem,
 } from "../../../shared/types";
 import type { GameManifest } from "../../../shared/game-manifest";
 
@@ -118,10 +119,7 @@ declare global {
         ) => () => void;
       };
       room: {
-        create: (
-          gameId: string,
-          version?: string,
-        ) => Promise<RoomCreateResult>;
+        create: (gameId: string, version?: string) => Promise<RoomCreateResult>;
         join: (
           gameId: string,
           address: string,
@@ -225,6 +223,36 @@ declare global {
           lastUploadedAt?: string;
           error?: string;
         }>;
+        selectFeedbackImages: () => Promise<{
+          success: boolean;
+          canceled?: boolean;
+          selectionId?: string;
+          images?: Array<{
+            id: string;
+            fileName: string;
+            previewUrl: string;
+          }>;
+          error?: string;
+        }>;
+        releaseFeedbackImages: (
+          selectionId: string,
+          imageId?: string,
+        ) => Promise<void>;
+        submitFeedback: (payload: {
+          content: string;
+          selectionId?: string;
+        }) => Promise<
+          | {
+              success: true;
+              id: string;
+            }
+          | {
+              success: false;
+              error: string;
+              resetAt?: string;
+            }
+        >;
+        getFeedbackHistory: () => Promise<FeedbackHistoryItem[]>;
         save: (settings: AppSettings) => Promise<boolean>;
         savePartialSettings: (partial: Partial<AppSettings>) => Promise<void>;
         saveNicknameStyle: (
@@ -284,7 +312,11 @@ declare global {
         installUpdate: () => Promise<boolean>;
         uninstall: (payload?: {
           deleteGames?: boolean;
-        }) => Promise<{ success: boolean; error?: string }>;
+        }) => Promise<{
+          success: boolean;
+          error?: string;
+          paths?: string[];
+        }>;
         clearCache: () => Promise<{ totalSize: number; clearedSize: number }>;
         savePng: (
           dataUrl: string,

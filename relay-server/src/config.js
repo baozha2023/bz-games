@@ -4,7 +4,31 @@ export const config = {
   HEARTBEAT_INTERVAL_MS: Number(process.env.HEARTBEAT_INTERVAL_MS || 30000),
   MAX_TEXT_BYTES: Number(process.env.MAX_TEXT_BYTES || 1024 * 1024),
   MAX_BINARY_BYTES: Number(process.env.MAX_BINARY_BYTES || 12 * 1024 * 1024),
-  MAX_CLOUD_FILE_BYTES: Number(process.env.MAX_CLOUD_FILE_BYTES || 64 * 1024 * 1024),
+  MAX_CLOUD_FILE_BYTES: Number(
+    process.env.MAX_CLOUD_FILE_BYTES || 64 * 1024 * 1024,
+  ),
+  MAX_FEEDBACK_REQUEST_BYTES: Number(
+    process.env.MAX_FEEDBACK_REQUEST_BYTES || 24 * 1024 * 1024,
+  ),
+  MAX_FEEDBACK_TEXT_LENGTH: Number(
+    process.env.MAX_FEEDBACK_TEXT_LENGTH || 5000,
+  ),
+  MAX_FEEDBACK_IMAGES: Number(process.env.MAX_FEEDBACK_IMAGES || 4),
+  MAX_FEEDBACK_IMAGE_BYTES: Number(
+    process.env.MAX_FEEDBACK_IMAGE_BYTES || 5 * 1024 * 1024,
+  ),
+  FEEDBACK_ANONYMOUS_COOLDOWN_MS: Number(
+    process.env.FEEDBACK_ANONYMOUS_COOLDOWN_MS || 48 * 60 * 60 * 1000,
+  ),
+  FEEDBACK_AUTHENTICATED_COOLDOWN_MS: Number(
+    process.env.FEEDBACK_AUTHENTICATED_COOLDOWN_MS || 6 * 60 * 60 * 1000,
+  ),
+  ADMIN_GITHUB_IDS: (process.env.ADMIN_GITHUB_IDS || "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean),
+  ADMIN_PUBLIC_URL: (process.env.ADMIN_PUBLIC_URL || "").trim(),
+  ADMIN_STATIC_DIR: (process.env.ADMIN_STATIC_DIR || "").trim(),
   RELAY_TOKEN: (process.env.RELAY_TOKEN || "").trim(),
   MAX_ROOMS: Number(process.env.MAX_ROOMS || 80),
   MAX_CLIENTS: Number(process.env.MAX_CLIENTS || 400),
@@ -21,8 +45,14 @@ export const config = {
   GITHUB_CLIENT_ID: (process.env.GITHUB_CLIENT_ID || "").trim(),
   GITHUB_CLIENT_SECRET: (process.env.GITHUB_CLIENT_SECRET || "").trim(),
   GITHUB_CALLBACK_URL: (process.env.GITHUB_CALLBACK_URL || "").trim(),
-  GITHUB_OAUTH_SCOPE: (process.env.GITHUB_OAUTH_SCOPE || "read:user user:email").trim(),
-  SESSION_COOKIE_NAME: (process.env.SESSION_COOKIE_NAME || "bz_games_session").trim(),
-  OAUTH_SESSION_TTL_MS: Number(process.env.OAUTH_SESSION_TTL_MS || 30 * 24 * 60 * 60 * 1000),
+  GITHUB_OAUTH_SCOPE: (
+    process.env.GITHUB_OAUTH_SCOPE || "read:user user:email"
+  ).trim(),
+  SESSION_COOKIE_NAME: (
+    process.env.SESSION_COOKIE_NAME || "bz_games_session"
+  ).trim(),
+  OAUTH_SESSION_TTL_MS: Number(
+    process.env.OAUTH_SESSION_TTL_MS || 30 * 24 * 60 * 60 * 1000,
+  ),
   OAUTH_STATE_TTL_MS: Number(process.env.OAUTH_STATE_TTL_MS || 10 * 60 * 1000),
 };

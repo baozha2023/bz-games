@@ -1,31 +1,38 @@
 <template>
-  <img v-if="iconUrl" :src="iconUrl" style="width: 100%; height: 100%; object-fit: contain;" />
-  <div v-else style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background-color: var(--bz-bg-placeholder); color: var(--bz-text-on-placeholder); font-size: 12px; font-weight: bold;">
-    {{ gameName?.charAt(0) || '?' }}
-  </div>
+  <img
+    v-if="iconUrl"
+    :src="iconUrl"
+    style="width: 100%; height: 100%; object-fit: contain"
+  />
+  <img
+    v-else
+    :src="defaultIconUrl"
+    style="width: 100%; height: 100%; object-fit: contain"
+  />
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
-import { useImageCache, gameAssetKey } from '../../composables/useImageCache'
+import { ref, onMounted, watch } from "vue";
+import { useImageCache, gameAssetKey } from "../../composables/useImageCache";
+import defaultIconUrl from "../../../../../resources/default_icon.png";
 
-const props = defineProps<{ 
-  gameId: string
-  gameName?: string
-  version?: string 
-}>()
-const iconUrl = ref<string | null>(null)
+const props = defineProps<{
+  gameId: string;
+  version?: string;
+}>();
+const iconUrl = ref<string | null>(null);
 
-const { load: loadCached } = useImageCache()
+const { load: loadCached } = useImageCache();
 
 const loadIcon = async () => {
   if (!props.gameId) return;
-  iconUrl.value = await loadCached(gameAssetKey(props.gameId, props.version, 'icon'), () =>
-    window.electronAPI.game.getIcon(props.gameId, props.version),
+  iconUrl.value = await loadCached(
+    gameAssetKey(props.gameId, props.version, "icon"),
+    () => window.electronAPI.game.getIcon(props.gameId, props.version),
     0,
-  )
-}
+  );
+};
 
-onMounted(loadIcon)
-watch(() => [props.gameId, props.version], loadIcon)
+onMounted(loadIcon);
+watch(() => [props.gameId, props.version], loadIcon);
 </script>

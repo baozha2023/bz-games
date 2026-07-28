@@ -7,6 +7,52 @@ export default {
     rooms: "Rooms",
     backToRoom: "Back to Room",
   },
+  feedback: {
+    button: "Feedback",
+    title: "Feedback & Suggestions",
+    loggedInHint: "When signed in, you can send feedback once every 6 hours.",
+    anonymousHint:
+      "When signed out, you can send feedback once every 48 hours.",
+    placeholder:
+      "Share a suggestion, report a problem, or describe a feature you would like…",
+    selectImages: "Select Images",
+    clearImages: "Clear Images",
+    removeImage: "Remove image",
+    imageLimits: "Up to 4 PNG, JPEG, or WebP images; 5 MiB each",
+    submit: "Send",
+    history: "History",
+    historyTitle: "Feedback History",
+    historyEmpty: "No feedback submitted yet",
+    historySubmittedAt: "Submitted at {time}",
+    successTitle: "Thanks for your feedback",
+    successDescription: "Submitted successfully. Feedback ID: {id}",
+    cooldownUntil: "You can send feedback again after {time}.",
+    errors: {
+      too_many_images: "You can select up to 4 images",
+      image_too_large: "An image exceeds 5 MiB",
+      unsupported_image_type: "Only PNG, JPEG, and WebP images are supported",
+      image_type_mismatch: "The image content does not match its declared type",
+      invalid_image: "The image file is invalid",
+      feedback_image_failed: "Could not read the image",
+      feedback_images_expired:
+        "The image selection expired; please select it again",
+      feedback_empty: "Enter text or select at least one image",
+      feedback_text_too_long: "Text cannot exceed 5,000 characters",
+      feedback_not_configured: "The relay service is not configured",
+      feedback_timeout: "The request timed out; please try again",
+      feedback_network_failed: "Network connection failed; please try again",
+      feedback_invalid_response:
+        "The service returned an invalid response; please try again",
+      unauthorized:
+        "Your GitHub session expired; sign in again or submit anonymously",
+      feedback_storage_not_configured: "Feedback storage is not configured",
+      image_storage_not_configured: "Image storage is not configured",
+      payload_too_large: "The submission is too large",
+      multipart_required: "The submission format is invalid",
+      feedback_storage_failed: "The server could not save the feedback",
+      unknown: "Submission failed; please try again",
+    },
+  },
   common: {
     confirm: "Confirm",
     cancel: "Cancel",
@@ -50,11 +96,11 @@ export default {
         "ZIP files are not supported, please unzip and import folder",
       noManifest: "Game not recognized (game.json missing)",
       manifestInvalid: "Invalid game.json format: {message}",
-      manifestEncryptionKeyMissing: "Game manifest encryption key is not configured",
+      manifestEncryptionKeyMissing:
+        "Game manifest encryption key is not configured",
       manifestEncryptedFormatInvalid:
         "Encrypted game.json format is invalid or unsupported",
-      manifestKeyMismatch:
-        "game.json was encrypted with a different build key",
+      manifestKeyMismatch: "game.json was encrypted with a different build key",
       manifestDecryptFailed:
         "game.json decryption or integrity verification failed",
       platformVersionMismatch:
@@ -148,12 +194,14 @@ export default {
     taskAlreadyDone: "Task already finished",
     loadFailed: "Failed to load market",
     downloadFailed: "Download or install failed",
-    networkError: "Network connection failed, please check your network and try again",
+    networkError:
+      "Network connection failed, please check your network and try again",
     downloadError: "Download failed",
     verifyError: "Verification failed",
     extractError: "Extraction failed",
     installError: "Installation failed",
-    manifestMissing: "Game package is missing game.json manifest, cannot install",
+    manifestMissing:
+      "Game package is missing game.json manifest, cannot install",
     versionInvalid: "Version data invalid",
     missingSha256: "Missing SHA256",
     missingSize: "Missing size",
@@ -161,7 +209,8 @@ export default {
     platformIncompatible: "Platform version incompatible",
     installSuccess: "{name} {version} installed",
     marketIdMismatchTitle: "Market ID Mismatch",
-    marketIdMismatchDesc: "The market ID does not match the platform registration. Game downloads have been disabled for safety.",
+    marketIdMismatchDesc:
+      "The market ID does not match the platform registration. Game downloads have been disabled for safety.",
     taskStatus: {
       idle: "Idle",
       downloading: "Downloading",
@@ -232,12 +281,17 @@ export default {
     alreadyInRoom: "You are already in a room, please leave first",
     createFailed: "Failed to create room",
     createError: {
-      room_game_manifest_invalid: "game.json is missing, invalid, or cannot be decrypted",
+      room_game_manifest_invalid:
+        "game.json is missing, invalid, or cannot be decrypted",
       room_game_type_not_multiplayer: "This game type does not support rooms",
-      room_multiplayer_config_missing: "game.json is missing its multiplayer configuration",
-      platformVersionMismatch: "The current platform version does not meet the game requirement",
-      roomPortInUse: "The room port is already in use; close the other room and try again",
-      localRoomConnectFailed: "Could not connect to the newly created local room",
+      room_multiplayer_config_missing:
+        "game.json is missing its multiplayer configuration",
+      platformVersionMismatch:
+        "The current platform version does not meet the game requirement",
+      roomPortInUse:
+        "The room port is already in use; close the other room and try again",
+      localRoomConnectFailed:
+        "Could not connect to the newly created local room",
       createFailed: "Failed to create room",
     },
     waitingForPlayers: "Waiting for players ({current}/{min})...",
@@ -256,10 +310,13 @@ export default {
     gameEnded: "Game ended",
     launchFailed: "Launch failed: {reason}",
     launchError: {
-      roomRequired: "This game must be launched from its matching room and version",
+      roomRequired:
+        "This game must be launched from its matching room and version",
       versionNotFound: "Game version {version} was not found",
-      manifestInvalid: "The game manifest is missing, invalid, or cannot be decrypted",
-      manifestIdentityMismatch: "The game manifest does not match the game record",
+      manifestInvalid:
+        "The game manifest is missing, invalid, or cannot be decrypted",
+      manifestIdentityMismatch:
+        "The game manifest does not match the game record",
       platformVersionMismatch:
         "Incompatible platform version (requires {required}, current {current})",
       entryNotFound: "Entry file not found: {entry}",
@@ -271,41 +328,59 @@ export default {
     connectionModeLan: "LAN",
     connectionModeRelay: "Official Server",
     connectionModeChangeTitle: "Switch Network Mode",
-    connectionModeChangeContent: "Changing mode will disconnect other players in this room. Continue?",
-    connectionModeRelayPending: "Official server mode selected; relay room creation is ready to be connected",
+    connectionModeChangeContent:
+      "Changing mode will disconnect other players in this room. Continue?",
+    connectionModeRelayPending:
+      "Official server mode selected; relay room creation is ready to be connected",
     connectionModeRelayReady: "Official server room enabled: {address}",
-    connectionModeRelayFailed: "Failed to enable official server room: {reason}",
+    connectionModeRelayFailed:
+      "Failed to enable official server room: {reason}",
     connectionModeLanSelected: "Switched to LAN mode",
     passwordButton: "Password",
     passwordModalTitle: "Set Room Password",
-    passwordInputPlaceholder: "Enter a room password, or leave blank to clear it",
+    passwordInputPlaceholder:
+      "Enter a room password, or leave blank to clear it",
     passwordSaveSuccess: "Room password updated",
     passwordClearSuccess: "Room password cleared",
     joinPasswordModalTitle: "Enter Room Password",
     joinPasswordInputPlaceholder: "Enter the room password",
     relayPublicAddress: "Official server address: ",
-    lanConnectionHint: "You can also play through tools such as frp and EasyTier.",
+    lanConnectionHint:
+      "You can also play through tools such as frp and EasyTier.",
     lanGuideDetail: "Details",
     lanGuideTitle: "LAN Tool Setup Guide",
-    lanGuideOverview: "The room is still hosted by BZ-Games on local port 38080. natfrp and EasyTier only help other players reach your room through public network or a virtual LAN.",
+    lanGuideOverview:
+      "The room is still hosted by BZ-Games on local port 38080. natfrp and EasyTier only help other players reach your room through public network or a virtual LAN.",
     lanGuideOpenSite: "Open Site",
     lanGuideSiteLabel: "Site:",
     lanGuideRecommendedConfig: "Recommended setup steps",
     lanGuideNatfrpTitle: "natfrp",
-    lanGuideNatfrpSummary: "Best when you do not have a public IP and want friends to join through a public address.",
-    lanGuideNatfrpStep1: "Open https://www.natfrp.com/, register, download the launcher or client, and create a TCP tunnel after login.",
-    lanGuideNatfrpStep2: "Set local address to 127.0.0.1 and local port to 38080 so external traffic is forwarded to the local BZ-Games room service.",
-    lanGuideNatfrpStep3: "Choose an available node and remote port in the natfrp panel, then start the tunnel and note the assigned public address and port.",
-    lanGuideNatfrpStep4: "Keep the BZ-Games room in LAN mode and make sure the natfrp tunnel is connected before guests try to join.",
-    lanGuideNatfrpStep5: "Other players can join with the public address:port provided by natfrp. If you also use physical or virtual LAN, those methods still work too.",
+    lanGuideNatfrpSummary:
+      "Best when you do not have a public IP and want friends to join through a public address.",
+    lanGuideNatfrpStep1:
+      "Open https://www.natfrp.com/, register, download the launcher or client, and create a TCP tunnel after login.",
+    lanGuideNatfrpStep2:
+      "Set local address to 127.0.0.1 and local port to 38080 so external traffic is forwarded to the local BZ-Games room service.",
+    lanGuideNatfrpStep3:
+      "Choose an available node and remote port in the natfrp panel, then start the tunnel and note the assigned public address and port.",
+    lanGuideNatfrpStep4:
+      "Keep the BZ-Games room in LAN mode and make sure the natfrp tunnel is connected before guests try to join.",
+    lanGuideNatfrpStep5:
+      "Other players can join with the public address:port provided by natfrp. If you also use physical or virtual LAN, those methods still work too.",
     lanGuideEasyTierTitle: "EasyTier",
-    lanGuideEasyTierSummary: "Best for putting players from different networks into the same virtual LAN and then joining the room like a normal LAN game.",
+    lanGuideEasyTierSummary:
+      "Best for putting players from different networks into the same virtual LAN and then joining the room like a normal LAN game.",
     lanGuideEasyTierNodeLabel: "Bootstrap node:",
-    lanGuideEasyTierStep1: "Open https://easytier.cn/, download and install EasyTier. The host and every guest need it installed.",
-    lanGuideEasyTierStep2: "Create or join the same virtual network. The network name and secret must match. If you use a bootstrap node, enter a trusted available node address.",
-    lanGuideEasyTierStep3: "After the connection succeeds, confirm every device has an EasyTier virtual IP and they can communicate with each other through those virtual IPs.",
-    lanGuideEasyTierStep4: "The host keeps the room in LAN mode. Guests can discover the room in the Virtual LAN tab or join manually with the host EasyTier virtual IP:38080.",
-    lanGuideEasyTierStep5: "If the room is not found, first check whether everyone is in the same virtual network, whether the bootstrap node is correct, and whether the firewall allows BZ-Games on port 38080.",
+    lanGuideEasyTierStep1:
+      "Open https://easytier.cn/, download and install EasyTier. The host and every guest need it installed.",
+    lanGuideEasyTierStep2:
+      "Create or join the same virtual network. The network name and secret must match. If you use a bootstrap node, enter a trusted available node address.",
+    lanGuideEasyTierStep3:
+      "After the connection succeeds, confirm every device has an EasyTier virtual IP and they can communicate with each other through those virtual IPs.",
+    lanGuideEasyTierStep4:
+      "The host keeps the room in LAN mode. Guests can discover the room in the Virtual LAN tab or join manually with the host EasyTier virtual IP:38080.",
+    lanGuideEasyTierStep5:
+      "If the room is not found, first check whether everyone is in the same virtual network, whether the bootstrap node is correct, and whether the firewall allows BZ-Games on port 38080.",
     connectionStatus: {
       connecting: "Connecting to room...",
       reconnecting:
@@ -321,10 +396,13 @@ export default {
       ownRoom: "This is your own room. Open the current room instead.",
       passwordRequired: "This room requires a password",
       passwordIncorrect: "Incorrect room password",
-      manifestInvalid: "The local game.json is missing, invalid, or cannot be decrypted",
+      manifestInvalid:
+        "The local game.json is missing, invalid, or cannot be decrypted",
       gameTypeNotMultiplayer: "This game type does not support rooms",
-      multiplayerConfigMissing: "game.json is missing its multiplayer configuration",
-      platformVersionMismatch: "The current platform version does not meet the game requirement",
+      multiplayerConfigMissing:
+        "game.json is missing its multiplayer configuration",
+      platformVersionMismatch:
+        "The current platform version does not meet the game requirement",
       probeFailed: "Failed to detect the room password status",
       unknown: "Unknown error",
     },
@@ -336,8 +414,10 @@ export default {
     refresh: "Refresh",
     lanTab: "LAN",
     relayTab: "Server",
-    lanDesc: "Automatically scans waiting BZ-Games rooms on both physical and virtual LANs, and checks game ID/version before joining.",
-    relayDesc: "Server rooms come from the official relay service. Hosts get a short address after enabling official server mode, and guests can join directly.",
+    lanDesc:
+      "Automatically scans waiting BZ-Games rooms on both physical and virtual LANs, and checks game ID/version before joining.",
+    relayDesc:
+      "Server rooms come from the official relay service. Hosts get a short address after enabling official server mode, and guests can join directly.",
     emptyLan: "No LAN rooms available",
     emptyRelay: "No server rooms available",
     refreshFailed: "Failed to refresh rooms",
@@ -412,7 +492,8 @@ export default {
     enterName: "Please enter nickname",
     nameTooLong: "Nickname must be at most 16 characters",
     nameInvalidChars: "Nickname cannot contain < > \" ' ` & \\ /",
-    enterPortReserved: "Port 38081 is reserved for LAN discovery, please use a different port",
+    enterPortReserved:
+      "Port 38081 is reserved for LAN discovery, please use a different port",
     enterPort: "Please enter valid port",
     saveSuccess: "Settings saved",
     saveFail: "Failed to save settings",
@@ -427,15 +508,18 @@ export default {
     uploadAvatar: "Upload Avatar",
     cloudSync: "Cloud Data",
     githubLogin: "Continue with GitHub",
-    githubLoginOpened: "GitHub authorization page opened. The session will be saved after login.",
+    githubLoginOpened:
+      "GitHub authorization page opened. The session will be saved after login.",
     cloudUpload: "Cloud Upload",
     cloudDownload: "Cloud Download",
     cloudSyncHelpTitle: "Cloud Sync Details",
-    cloudSyncHelp: "Cloud Upload: Uploads the current game library config, user data, and play records to the cloud, overwriting existing cloud data. GitHub Token and login session fields are not uploaded.\nCloud Download: Downloads cloud data and applies it locally. For config.json, only fields present in the cloud file are updated; local fields missing from the cloud file are kept.",
+    cloudSyncHelp:
+      "Cloud Upload: Uploads the current game library config, user data, and play records to the cloud, overwriting existing cloud data. GitHub Token and login session fields are not uploaded.\nCloud Download: Downloads cloud data and applies it locally. For config.json, only fields present in the cloud file are updated; local fields missing from the cloud file are kept.",
     cloudNeverUploaded: "Cloud time: never uploaded",
     cloudLastUploadedAt: "Cloud time: {time}",
     cloudUploadSuccess: "Cloud upload completed",
-    cloudDownloadSuccess: "Cloud download completed. Local data has been overwritten.",
+    cloudDownloadSuccess:
+      "Cloud download completed. Local data has been overwritten.",
     cloudProgress: {
       checking: "Checking cloud status...",
       uploading: "Uploading and overwriting cloud data...",
@@ -446,12 +530,14 @@ export default {
     cloudErrors: {
       cloud_not_configured: "Cloud sync is not configured",
       unauthorized: "Please complete GitHub authorization first",
-      cloud_data_incomplete: "Cloud data is incomplete. Upload a full copy first.",
+      cloud_data_incomplete:
+        "Cloud data is incomplete. Upload a full copy first.",
       file_not_found: "Cloud file not found",
       version_conflict: "Cloud version conflict. Refresh and try again.",
       file_too_large: "File exceeds cloud sync size limit",
       cloud_hash_mismatch: "Cloud file verification failed. Please try again.",
-      cloud_sync_rate_limited: "Cloud sync is too frequent. Upload and download are each limited to once per 24 hours per account.",
+      cloud_sync_rate_limited:
+        "Cloud sync is too frequent. Upload and download are each limited to once per 24 hours per account.",
       unknown: "Cloud sync failed",
     },
     closeBehavior: "Main Window Close",
@@ -467,10 +553,12 @@ export default {
     sensitiveWordFilterOn: "On",
     sensitiveWordFilterOff: "Off",
     sensitiveWordFilterHelpTitle: "Sensitive Word Filter",
-    sensitiveWordFilterHelp: "The sensitive word filter only applies to room chat messages (main room chat and standalone chat window).\nRelay server rooms: the server automatically filters sensitive words — the local toggle has no effect.\nLAN / virtual LAN rooms: when enabled, words matching the sensitive vocabulary are replaced with *.",
+    sensitiveWordFilterHelp:
+      "The sensitive word filter only applies to room chat messages (main room chat and standalone chat window).\nRelay server rooms: the server automatically filters sensitive words — the local toggle has no effect.\nLAN / virtual LAN rooms: when enabled, words matching the sensitive vocabulary are replaced with *.",
     githubToken: "GitHub Token",
     githubTokenHelpTitle: "GitHub Token Info",
-    githubTokenHelp: "A GitHub Token raises the GitHub API rate limit, ensuring normal market access and game downloads.\nWithout token: 60 requests/hour\nWith token: 5000 requests/hour\nCreate at: GitHub Settings → Developer settings → Personal access tokens → Tokens (classic)\nNo scopes need to be selected—leave them empty.",
+    githubTokenHelp:
+      "A GitHub Token raises the GitHub API rate limit, ensuring normal market access and game downloads.\nWithout token: 60 requests/hour\nWith token: 5000 requests/hour\nCreate at: GitHub Settings → Developer settings → Personal access tokens → Tokens (classic)\nNo scopes need to be selected—leave them empty.",
     githubTokenPlaceholder: "Enter GitHub Personal Access Token (optional)",
     browsePath: "Browse",
     storagePathList: "Game Library List",
@@ -479,14 +567,17 @@ export default {
     setDefaultStoragePath: "Set Default",
     addStoragePath: "Add Game Library Path",
     defaultGamesMigrationTitle: "Move Default Game Library",
-    defaultGamesMigrationContent: "For a better experience, we recommend moving the default game library next to the executable to another location. Migration moves all files in this library and deletes the original directory after everything succeeds. Current library: {path}",
+    defaultGamesMigrationContent:
+      "For a better experience, we recommend moving the default game library next to the executable to another location. Migration moves all files in this library and deletes the original directory after everything succeeds. Current library: {path}",
     migrateNow: "Move Now",
     doNotRemind: "Don't Remind",
-    defaultGamesMigrationSuccess: "Game library moved. {gameCount} games and {versionCount} versions migrated",
+    defaultGamesMigrationSuccess:
+      "Game library moved. {gameCount} games and {versionCount} versions migrated",
     defaultGamesMigrationFailed: "Failed to move game library",
     openPathFailed: "Failed to open path",
     storagePathNotEmptyTitle: "Directory Not Empty",
-    storagePathNotEmptyContent: "The selected directory must be empty. Please choose an empty directory or create a new one to avoid accidentally deleting other files during uninstallation.",
+    storagePathNotEmptyContent:
+      "The selected directory must be empty. Please choose an empty directory or create a new one to avoid accidentally deleting other files during uninstallation.",
     removeStoragePathTitle: "Remove Storage Path",
     removeStoragePathConfirm:
       "This will delete platform-recognized imported game data from this library: {path}. User-owned non-game files will not be deleted. This action cannot be undone. Continue?",
@@ -494,19 +585,32 @@ export default {
       "Path removed. Deleted {gameCount} games and {versionCount} versions",
     removeStoragePathFailed: "Failed to remove storage path",
     storageErrors: {
-      cannot_remove_last_storage_path: "At least one game library path must remain. Add another library before removing this one.",
-      storage_path_not_registered: "This path is not in the saved game library list. Refresh and try again.",
-      invalid_storage_path: "The game library path is invalid. Choose a valid directory.",
-      storage_path_not_directory: "The selected path is not a folder. Choose a valid directory.",
-      directory_not_empty: "The selected directory is not empty. Choose an empty directory or create a new one.",
-      target_is_source_path: "The target path cannot be the same as the source path.",
-      target_inside_source_path: "The target path cannot be inside the source library.",
-      source_inside_target_path: "The source library cannot be inside the target path.",
-      target_is_default_games_path: "The target path cannot still be the default games directory next to the executable.",
-      game_storage_path_not_configured: "No available game library path is configured.",
-      source_storage_path_not_found: "The source game library does not exist. Refresh and try again.",
-      source_storage_path_not_directory: "The source game library is not a valid folder. Refresh and try again.",
-      storage_migration_file_busy: "A file is currently open, so the library cannot be moved. Changes have been rolled back.",
+      cannot_remove_last_storage_path:
+        "At least one game library path must remain. Add another library before removing this one.",
+      storage_path_not_registered:
+        "This path is not in the saved game library list. Refresh and try again.",
+      invalid_storage_path:
+        "The game library path is invalid. Choose a valid directory.",
+      storage_path_not_directory:
+        "The selected path is not a folder. Choose a valid directory.",
+      directory_not_empty:
+        "The selected directory is not empty. Choose an empty directory or create a new one.",
+      target_is_source_path:
+        "The target path cannot be the same as the source path.",
+      target_inside_source_path:
+        "The target path cannot be inside the source library.",
+      source_inside_target_path:
+        "The source library cannot be inside the target path.",
+      target_is_default_games_path:
+        "The target path cannot still be the default games directory next to the executable.",
+      game_storage_path_not_configured:
+        "No available game library path is configured.",
+      source_storage_path_not_found:
+        "The source game library does not exist. Refresh and try again.",
+      source_storage_path_not_directory:
+        "The source game library is not a valid folder. Refresh and try again.",
+      storage_migration_file_busy:
+        "A file is currently open, so the library cannot be moved. Changes have been rolled back.",
       unknown: "Unknown game library error",
     },
     dataHealth: "Data Health",
@@ -522,26 +626,37 @@ export default {
       config_invalid_json: "config.json is not valid JSON",
       config_decrypt_failed: "config.json decryption failed",
       config_invalid_structure: "config.json has an invalid structure",
-      config_plaintext_legacy: "config.json still uses the legacy plaintext format",
+      config_plaintext_legacy:
+        "config.json still uses the legacy plaintext format",
       config_read_failed: "Failed to read config.json: {reason}",
       player_id_missing: "Player ID is missing",
       duplicate_game_id: "Duplicate game ID: {gameId}",
       duplicate_game_version: "Duplicate game version: {gameId}@{version}",
-      version_path_missing: "Game version directory is missing: {gameId}@{version}",
-      version_path_not_directory: "Game version path is not a directory: {gameId}@{version}",
-      version_path_read_failed: "Failed to inspect the game version directory: {reason}",
+      version_path_missing:
+        "Game version directory is missing: {gameId}@{version}",
+      version_path_not_directory:
+        "Game version path is not a directory: {gameId}@{version}",
+      version_path_read_failed:
+        "Failed to inspect the game version directory: {reason}",
       manifest_missing: "game.json is missing: {gameId}@{version}",
       manifest_plaintext: "game.json is not encrypted: {gameId}@{version}",
-      manifest_identity_mismatch: "The game.json ID or version does not match the game record",
+      manifest_identity_mismatch:
+        "The game.json ID or version does not match the game record",
       manifest_platform_incompatible:
         "The game requires platform {required}; current version is {current}",
-      manifest_file_missing: "The {kind} file declared by game.json is missing: {file}",
-      manifestEncryptionKeyMissing: "The game manifest encryption key is not configured",
-      manifestEncryptedFormatInvalid: "The encrypted game.json format is invalid or unsupported",
+      manifest_file_missing:
+        "The {kind} file declared by game.json is missing: {file}",
+      manifestEncryptionKeyMissing:
+        "The game manifest encryption key is not configured",
+      manifestEncryptedFormatInvalid:
+        "The encrypted game.json format is invalid or unsupported",
       manifestKeyMismatch: "game.json uses a different build key",
-      manifestDecryptFailed: "game.json decryption or integrity verification failed",
-      manifest_invalid: "game.json does not satisfy the latest manifest schema: {reason}",
-      latest_version_invalid: "The latest version record is invalid for {gameId}: {version}",
+      manifestDecryptFailed:
+        "game.json decryption or integrity verification failed",
+      manifest_invalid:
+        "game.json does not satisfy the latest manifest schema: {reason}",
+      latest_version_invalid:
+        "The latest version record is invalid for {gameId}: {version}",
       storage_root_missing: "A game library storage path does not exist",
     },
     update: "Client Update",
@@ -549,19 +664,21 @@ export default {
     updateTitle: "Update Status",
     currentVersion: "Current version: {version}",
     installNow: "Install and Restart",
-    updateIdle: "Click \"Check for Updates\" to get the latest version",
+    updateIdle: 'Click "Check for Updates" to get the latest version',
     updateChecking: "Checking for updates...",
     updateAvailable: "New version found: {version}, downloading...",
     updateLatest: "You are on the latest version",
     updateDownloading: "Downloading: {progress}%",
     updateDownloaded:
-      "Update package downloaded. Click \"Install and Restart\" to apply it",
+      'Update package downloaded. Click "Install and Restart" to apply it',
     updateUnsupported: "Auto update is unavailable in dev mode",
     updateFailed: "Update failed",
     updateError: "Update failed: {message}",
     updateErrors: {
-      network_error: "Network request failed. Check your connection or update feed",
-      feed_invalid: "Update metadata is invalid. Check latest.yml or publish config",
+      network_error:
+        "Network request failed. Check your connection or update feed",
+      feed_invalid:
+        "Update metadata is invalid. Check latest.yml or publish config",
       download_failed: "Failed to download update package",
       verify_failed: "Update package verification failed",
       permission_denied: "Permission denied while writing update files",
@@ -574,18 +691,31 @@ export default {
     updateLater: "Later",
     officialWebsite: "Official Website",
     uninstallClient: "Uninstall Client",
-    uninstallClientDescription: "This cannot be undone. BZ-Games will be completely removed.",
+    uninstallClientDescription:
+      "This cannot be undone. BZ-Games will be completely removed.",
     uninstallDeleteGames: "Also delete all game library directories",
-    uninstallNotAvailable: "Uninstaller is not available, only supported in installed version.",
+    uninstallNotAvailable:
+      "Uninstaller is not available, only supported in installed version.",
+    uninstallMarketTasksActive:
+      "Finish or cancel active game downloads and installations first.",
+    uninstallGameLibraryDeleteFailed:
+      "Some game libraries are still in use. The client was not uninstalled. Close the programs using these paths and try again:\n{paths}",
+    uninstallUnsafeStoragePath:
+      "Uninstallation was stopped because a game library path is unsafe. Check your library settings first.",
+    uninstallFailed: "Could not start the uninstaller. Please try again.",
     clearCache: "Clear Cache",
     migrateStorage: "Move Library",
-    migrateStorageDescription: "Select an existing game library, then choose a new empty directory. Migration copies all files from the original library and deletes the original library only after everything succeeds. If migration fails, partially migrated data in the target directory is removed automatically.",
+    migrateStorageDescription:
+      "Select an existing game library, then choose a new empty directory. Migration copies all files from the original library and deletes the original library only after everything succeeds. If migration fails, partially migrated data in the target directory is removed automatically.",
     selectSourceStoragePath: "Select the game library to move",
     selectTargetStoragePath: "Select the new game library location",
-    migrateStorageWarning: "This will move all files from the original library: {path}",
-    migrateStorageSuccess: "Game library moved. {gameCount} games and {versionCount} versions migrated",
+    migrateStorageWarning:
+      "This will move all files from the original library: {path}",
+    migrateStorageSuccess:
+      "Game library moved. {gameCount} games and {versionCount} versions migrated",
     migrateStorageFailed: "Failed to move game library",
-    clearCacheConfirm: "This will clear all cache data (download cache, update packages, temp files, etc.). Your installed games and settings will not be affected.",
+    clearCacheConfirm:
+      "This will clear all cache data (download cache, update packages, temp files, etc.). Your installed games and settings will not be affected.",
     clearCacheProcessing: "Clearing cache...",
     clearCacheSuccess: "Cache cleared, freed {size} of space.",
   },
@@ -671,8 +801,11 @@ export default {
     resetNicknameStyle: "Reset",
     saveNicknameStyleCost: "Save ({coins} BZ Coins)",
     nicknameStyleSaved: "Nickname style saved, spent {coins} BZ Coins",
-    nicknameStyleInsufficientCoins: "Not enough BZ Coins. Saving a nickname style costs {coins} BZ Coins",
-    nicknameColorContrastWarning: "The current text color does not contrast enough with the theme background. Light themes cannot use near-white colors, and dark themes cannot use near-black colors.",
-    gradientHelp: "Gradient start and end are the two ends of the color transition used by effects: neon, flame, aurora and similar effects flow from the start color to the end color, then loop back. Without an effect, the text color is used primarily. Each save costs 30 BZ Coins.",
+    nicknameStyleInsufficientCoins:
+      "Not enough BZ Coins. Saving a nickname style costs {coins} BZ Coins",
+    nicknameColorContrastWarning:
+      "The current text color does not contrast enough with the theme background. Light themes cannot use near-white colors, and dark themes cannot use near-black colors.",
+    gradientHelp:
+      "Gradient start and end are the two ends of the color transition used by effects: neon, flame, aurora and similar effects flow from the start color to the end color, then loop back. Without an effect, the text color is used primarily. Each save costs 30 BZ Coins.",
   },
 };

@@ -246,55 +246,18 @@ ufw allow 38090/tcp
 
 ## systemd 常驻
 
-创建服务文件：
+仓库中的 `bz-games-relay.service.example` 是服务端配置字段的唯一完整示例。
+先复制示例，再仅在服务器上填写真实值：
 
 ```bash
-nano /etc/systemd/system/bz-games-relay.service
+install -m 0600 relay-server/bz-games-relay.service.example \
+  /etc/systemd/system/bz-games-relay.service
+editor /etc/systemd/system/bz-games-relay.service
 ```
 
-写入：
-
-```ini
-[Unit]
-Description=BZ-Games Relay Server
-After=network.target
-
-[Service]
-WorkingDirectory=/opt/bz-games-relay
-ExecStart=/usr/bin/node src/index.js
-Environment=PORT=38090
-Environment=RELAY_TOKEN=your-relay-token
-Environment=ROOM_TTL_MS=60000
-Environment=HEARTBEAT_INTERVAL_MS=30000
-Environment=MAX_TEXT_BYTES=1048576
-Environment=MAX_BINARY_BYTES=12582912
-Environment=MAX_CLOUD_FILE_BYTES=67108864
-Environment=MAX_ROOMS=80
-Environment=MAX_CLIENTS=400
-Environment=MAX_CLIENTS_PER_ROOM=8
-Environment=MAX_EVENT_LOOP_DELAY_MS=250
-Environment=MYSQL_HOST=127.0.0.1
-Environment=MYSQL_PORT=3306
-Environment=MYSQL_USER=bz_games
-Environment=MYSQL_PASSWORD=your-mysql-password
-Environment=MYSQL_DATABASE=bz_games
-Environment=MONGODB_URI=mongodb://bz_games:your-mongodb-password@127.0.0.1:27017/bz_games
-Environment=MONGODB_DB_NAME=bz_games
-Environment=MONGODB_BUCKET_NAME=userFiles
-Environment=GITHUB_CLIENT_ID=your-client-id
-Environment=GITHUB_CLIENT_SECRET=your-client-secret
-Environment=GITHUB_CALLBACK_URL=http://relay.example.com:38090/auth/github/callback
-Environment="GITHUB_OAUTH_SCOPE=read:user user:email"
-Environment=SESSION_COOKIE_NAME=bz_games_session
-Environment=OAUTH_SESSION_TTL_MS=2592000000
-Environment=OAUTH_STATE_TTL_MS=600000
-Restart=always
-RestartSec=3
-User=root
-
-[Install]
-WantedBy=multi-user.target
-```
+替换其中所有 `YOUR_...` 和示例域名。新增或删除服务端配置字段后，运行
+`npm run check:config`；该检查会确保 `src/config.js` 与 systemd 示例字段完全一致。
+服务文件包含生产密钥，必须保持 `root:root` 所有权和 `0600` 权限。
 
 启动：
 
@@ -552,3 +515,15 @@ ufw status
 - 聊天消息正常收发。
 - 房主开始游戏、踢出玩家、解散房间正常同步。
 - Game API v1 JSON 消息和 v2 binary frame 正常通过中继转发。
+## 建言献策和管理后台
+
+反馈与管理配置已完整列入 `relay-server/bz-games-relay.service.example`，无需在其他文档
+维护第二份字段清单。部署时将对应值写入同一个
+`/etc/systemd/system/bz-games-relay.service` 的 `[Service]` 段。
+
+MySQL已配置时，服务启动会执行统一 Schema 初始化并自动创建反馈表。
+管理前端生产构建产物放入 `ADMIN_STATIC_DIR`，随后访问 `/admin/`。
+匿名反馈按 Socket IP冷却 48 小时，登录反馈按 GitHub ID冷却 6 小时。两类冷却都只存在于当前 Node进程，重启后清空；对应配置以 `bz-games-relay.service.example` 为准。
+
+示例中的值均不是生产配置。真实管理员 ID、域名、数据库连接串、OAuth Secret和
+中继令牌只能写入服务器的 `/etc/systemd/system/bz-games-relay.service`，不得提交到仓库。

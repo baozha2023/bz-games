@@ -9,8 +9,8 @@ export function sendJson(res, status, body) {
   res.writeHead(status, {
     "content-type": "application/json; charset=utf-8",
     "access-control-allow-origin": "*",
-    "access-control-allow-methods": "GET,POST,PUT,OPTIONS",
-    "access-control-allow-headers": "content-type,authorization,if-match,x-cloud-operation-id",
+    "access-control-allow-methods": "GET,POST,PUT,PATCH,OPTIONS",
+    "access-control-allow-headers": "content-type,authorization,if-match,x-cloud-operation-id,x-relay-token,x-bz-relay-token",
     "access-control-expose-headers": "etag,x-file-sha256,x-cloud-operation-id,x-ratelimit-reset,retry-after",
   });
   if (status === 204) {

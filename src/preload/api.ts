@@ -87,13 +87,9 @@ export const electronAPI = {
         ipcRenderer.removeListener(IPC.GAME_PROCESS_ENDED, endHandler);
       };
     },
-    onLaunchFailed: (
-      callback: (payload: GameLaunchFailurePayload) => void,
-    ) => {
-      const handler = (
-        _: any,
-        payload: GameLaunchFailurePayload,
-      ) => callback(payload);
+    onLaunchFailed: (callback: (payload: GameLaunchFailurePayload) => void) => {
+      const handler = (_: any, payload: GameLaunchFailurePayload) =>
+        callback(payload);
       ipcRenderer.on(IPC.GAME_LAUNCH_FAILED, handler);
       return () => ipcRenderer.removeListener(IPC.GAME_LAUNCH_FAILED, handler);
     },
@@ -239,6 +235,18 @@ export const electronAPI = {
     loginWithGitHub: () => ipcRenderer.invoke(IPC.SYSTEM_CLOUD_LOGIN_GITHUB),
     uploadCloudData: () => ipcRenderer.invoke(IPC.SYSTEM_CLOUD_UPLOAD),
     downloadCloudData: () => ipcRenderer.invoke(IPC.SYSTEM_CLOUD_DOWNLOAD),
+    selectFeedbackImages: () =>
+      ipcRenderer.invoke(IPC.SYSTEM_FEEDBACK_SELECT_IMAGES),
+    releaseFeedbackImages: (selectionId: string, imageId?: string) =>
+      ipcRenderer.invoke(
+        IPC.SYSTEM_FEEDBACK_RELEASE_IMAGES,
+        selectionId,
+        imageId,
+      ),
+    submitFeedback: (payload: { content: string; selectionId?: string }) =>
+      ipcRenderer.invoke(IPC.SYSTEM_FEEDBACK_SUBMIT, payload),
+    getFeedbackHistory: () =>
+      ipcRenderer.invoke(IPC.SYSTEM_FEEDBACK_GET_HISTORY),
     save: (settings: AppSettings) =>
       ipcRenderer.invoke(IPC.SYSTEM_SAVE_SETTINGS, settings),
     savePartialSettings: (partial: Partial<AppSettings>) =>
@@ -285,7 +293,7 @@ export const electronAPI = {
     installUpdate: () => ipcRenderer.invoke(IPC.SYSTEM_INSTALL_UPDATE),
     uninstall: (payload?: {
       deleteGames?: boolean;
-    }): Promise<{ success: boolean; error?: string }> =>
+    }): Promise<{ success: boolean; error?: string; paths?: string[] }> =>
       ipcRenderer.invoke(IPC.SYSTEM_UNINSTALL, payload),
     clearCache: (): Promise<{ totalSize: number; clearedSize: number }> =>
       ipcRenderer.invoke(IPC.SYSTEM_CLEAR_CACHE),

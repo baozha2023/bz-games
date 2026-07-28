@@ -7,6 +7,47 @@ export default {
     rooms: "房間",
     backToRoom: "返回房間",
   },
+  feedback: {
+    button: "建言獻策",
+    title: "建言獻策",
+    loggedInHint: "已登入，每 6 小時可以傳送一次。",
+    anonymousHint: "未登入時，每 48 小時可以傳送一次。",
+    placeholder: "請輸入你的建議、問題或期待的功能……",
+    selectImages: "選擇圖片",
+    clearImages: "清空圖片",
+    removeImage: "移除圖片",
+    imageLimits: "最多 4 張，支援 PNG、JPEG、WebP，單張不超過 5 MiB",
+    submit: "傳送",
+    history: "歷史記錄",
+    historyTitle: "意見回饋歷史記錄",
+    historyEmpty: "暫無意見回饋記錄",
+    historySubmittedAt: "提交於 {time}",
+    successTitle: "感謝你的建議",
+    successDescription: "已成功提交，回饋編號：{id}",
+    cooldownUntil: "請在 {time} 後再次傳送。",
+    errors: {
+      too_many_images: "最多只能選擇 4 張圖片",
+      image_too_large: "圖片超過 5 MiB",
+      unsupported_image_type: "僅支援 PNG、JPEG 和 WebP 圖片",
+      image_type_mismatch: "圖片實際格式與宣告格式不一致",
+      invalid_image: "圖片檔案無效",
+      feedback_image_failed: "讀取圖片失敗",
+      feedback_images_expired: "圖片選擇已過期，請重新選擇",
+      feedback_empty: "請填寫文字或選擇圖片",
+      feedback_text_too_long: "文字不能超過 5,000 個字元",
+      feedback_not_configured: "中繼服務未設定",
+      feedback_timeout: "傳送逾時，請稍後重試",
+      feedback_network_failed: "網路連線失敗，請稍後重試",
+      feedback_invalid_response: "服務回應異常，請稍後重試",
+      unauthorized: "GitHub 登入已失效，請重新登入或以匿名方式提交",
+      feedback_storage_not_configured: "回饋儲存服務未設定",
+      image_storage_not_configured: "圖片儲存服務未設定",
+      payload_too_large: "提交內容總大小超出限制",
+      multipart_required: "提交格式不正確",
+      feedback_storage_failed: "伺服器儲存失敗，請稍後重試",
+      unknown: "提交失敗，請稍後重試",
+    },
+  },
   common: {
     confirm: "確認",
     cancel: "取消",
@@ -72,7 +113,8 @@ export default {
     importDraftIdAvailable: "ID 可使用",
     importDraftIdFormatHint: "建議使用反向域名格式，如 com.dev.game",
     importDraftRequired: "請填寫所有必填項目",
-    importDraftEntryHint: "已自動偵測入口，可按需修改（支援 .html / serve / url / exe）",
+    importDraftEntryHint:
+      "已自動偵測入口，可按需修改（支援 .html / serve / url / exe）",
     importDraftWebUrlHint: "當 entry 為 url 時，必須填寫 web_url",
     importDraftFields: {
       id: "遊戲ID",
@@ -154,7 +196,8 @@ export default {
     platformIncompatible: "平臺版本不相容",
     installSuccess: "{name} {version} 安裝完成",
     marketIdMismatchTitle: "市集ID不匹配",
-    marketIdMismatchDesc: "目前市集ID與平臺登記不一致，可能存在風險，已禁止下載遊戲。",
+    marketIdMismatchDesc:
+      "目前市集ID與平臺登記不一致，可能存在風險，已禁止下載遊戲。",
     taskStatus: {
       idle: "等待中",
       downloading: "下載中",
@@ -190,7 +233,8 @@ export default {
     launchGame: "啟動遊戲",
     createRoom: "建立房間",
     joinRoom: "加入房間",
-    joinAddressPlaceholder: "支援短位址、區域網路IP、EasyTier虛擬IP、natfrp位址",
+    joinAddressPlaceholder:
+      "支援短位址、區域網路IP、EasyTier虛擬IP、natfrp位址",
     joinPasswordPlaceholder: "密碼（無密碼可留空）",
     launchSuccess: "遊戲啟動成功！",
     launchFailed: "遊戲啟動失敗，請查看錯誤記錄",
@@ -262,7 +306,8 @@ export default {
     connectionModeLan: "區域網路",
     connectionModeRelay: "伺服器",
     connectionModeChangeTitle: "切換聯機模式",
-    connectionModeChangeContent: "更改模式會中斷目前房間其他玩家的連線，確定要繼續嗎？",
+    connectionModeChangeContent:
+      "更改模式會中斷目前房間其他玩家的連線，確定要繼續嗎？",
     connectionModeRelayPending: "已選擇伺服器模式，等待接入中繼建立流程",
     connectionModeRelayReady: "伺服器房間已開啟：{address}",
     connectionModeRelayFailed: "伺服器房間開啟失敗：{reason}",
@@ -278,28 +323,42 @@ export default {
     lanConnectionHint: "可以透過 frp、EasyTier 等工具進行聯機。",
     lanGuideDetail: "詳情",
     lanGuideTitle: "區域網路聯機工具設定說明",
-    lanGuideOverview: "目前房間仍然由 BZ-Games 在本機 38080 埠提供服務。natfrp 和 EasyTier 只是幫助其他玩家從公網或虛擬區域網路存取到你的房間。",
+    lanGuideOverview:
+      "目前房間仍然由 BZ-Games 在本機 38080 埠提供服務。natfrp 和 EasyTier 只是幫助其他玩家從公網或虛擬區域網路存取到你的房間。",
     lanGuideOpenSite: "開啟官網",
     lanGuideSiteLabel: "官網：",
     lanGuideRecommendedConfig: "推薦設定步驟",
     lanGuideNatfrpTitle: "natfrp",
-    lanGuideNatfrpSummary: "適合沒有公網 IP、需要透過公網位址讓朋友直接連線你的房間。",
-    lanGuideNatfrpStep1: "開啟 https://www.natfrp.com/ 註冊並下載啟動器或用戶端，登入後建立一個 TCP 隧道。",
-    lanGuideNatfrpStep2: "本地位址填寫 127.0.0.1，本地埠號填寫 38080；這表示把外部存取流量轉發到 BZ-Games 本機房間服務。",
-    lanGuideNatfrpStep3: "在 natfrp 面板中選擇可用節點與遠端埠號，啟動隧道後記下分配給你的公網位址與埠號。",
-    lanGuideNatfrpStep4: "保持 BZ-Games 房間處於「區域網路」模式，並確保 natfrp 隧道在客機加入前已經成功連線。",
-    lanGuideNatfrpStep5: "讓其他玩家在平臺中直接輸入 natfrp 提供的公網位址:埠號加入；如果你同時開著物理/虛擬區域網路，也可以繼續使用對應方式發現房間。",
+    lanGuideNatfrpSummary:
+      "適合沒有公網 IP、需要透過公網位址讓朋友直接連線你的房間。",
+    lanGuideNatfrpStep1:
+      "開啟 https://www.natfrp.com/ 註冊並下載啟動器或用戶端，登入後建立一個 TCP 隧道。",
+    lanGuideNatfrpStep2:
+      "本地位址填寫 127.0.0.1，本地埠號填寫 38080；這表示把外部存取流量轉發到 BZ-Games 本機房間服務。",
+    lanGuideNatfrpStep3:
+      "在 natfrp 面板中選擇可用節點與遠端埠號，啟動隧道後記下分配給你的公網位址與埠號。",
+    lanGuideNatfrpStep4:
+      "保持 BZ-Games 房間處於「區域網路」模式，並確保 natfrp 隧道在客機加入前已經成功連線。",
+    lanGuideNatfrpStep5:
+      "讓其他玩家在平臺中直接輸入 natfrp 提供的公網位址:埠號加入；如果你同時開著物理/虛擬區域網路，也可以繼續使用對應方式發現房間。",
     lanGuideEasyTierTitle: "EasyTier",
-    lanGuideEasyTierSummary: "適合把不同網路環境的玩家拉進同一個虛擬區域網路，再像區域網路一樣直接發現或連線房間。",
+    lanGuideEasyTierSummary:
+      "適合把不同網路環境的玩家拉進同一個虛擬區域網路，再像區域網路一樣直接發現或連線房間。",
     lanGuideEasyTierNodeLabel: "初始節點：",
-    lanGuideEasyTierStep1: "開啟 https://easytier.cn/ 下載並安裝 EasyTier，房主和所有客機都需要安裝。",
-    lanGuideEasyTierStep2: "建立或加入同一個虛擬網路，網路名稱與網路金鑰需要保持一致；如需使用初始節點，請填寫你信任的可用節點位址。",
-    lanGuideEasyTierStep3: "連線成功後，確認每臺裝置都拿到了 EasyTier 分配的虛擬 IP，並且彼此可以透過虛擬 IP 通訊。",
-    lanGuideEasyTierStep4: "房主在 BZ-Games 中保持「區域網路」模式開房，客機可在「虛擬區域網路」頁直接發現房間，或者使用房主的 EasyTier 虛擬 IP:38080 手動加入。",
-    lanGuideEasyTierStep5: "如果發現不到房間，優先檢查雙方是否在同一虛擬網路、初始節點是否填寫正確、以及系統防火牆是否放行 BZ-Games 的 38080 埠號。",
+    lanGuideEasyTierStep1:
+      "開啟 https://easytier.cn/ 下載並安裝 EasyTier，房主和所有客機都需要安裝。",
+    lanGuideEasyTierStep2:
+      "建立或加入同一個虛擬網路，網路名稱與網路金鑰需要保持一致；如需使用初始節點，請填寫你信任的可用節點位址。",
+    lanGuideEasyTierStep3:
+      "連線成功後，確認每臺裝置都拿到了 EasyTier 分配的虛擬 IP，並且彼此可以透過虛擬 IP 通訊。",
+    lanGuideEasyTierStep4:
+      "房主在 BZ-Games 中保持「區域網路」模式開房，客機可在「虛擬區域網路」頁直接發現房間，或者使用房主的 EasyTier 虛擬 IP:38080 手動加入。",
+    lanGuideEasyTierStep5:
+      "如果發現不到房間，優先檢查雙方是否在同一虛擬網路、初始節點是否填寫正確、以及系統防火牆是否放行 BZ-Games 的 38080 埠號。",
     connectionStatus: {
       connecting: "正在連線房間...",
-      reconnecting: "房間連線中斷，正在重新連線（{current}/5），預計 {seconds} 秒後重試",
+      reconnecting:
+        "房間連線中斷，正在重新連線（{current}/5），預計 {seconds} 秒後重試",
       failed: "房間連線失敗：{reason}",
       disconnected: "已與房間中斷連線",
     },
@@ -326,8 +385,10 @@ export default {
     refresh: "重新整理",
     lanTab: "區域網路",
     relayTab: "伺服器",
-    lanDesc: "自動掃描物理區域網路和虛擬區域網路內正在等待的 BZ-Games 房間，加入前會校驗遊戲 ID 與版本。",
-    relayDesc: "伺服器房間來自官方中繼服務端，房主開啟伺服器模式後會顯示短位址，客機可直接加入。",
+    lanDesc:
+      "自動掃描物理區域網路和虛擬區域網路內正在等待的 BZ-Games 房間，加入前會校驗遊戲 ID 與版本。",
+    relayDesc:
+      "伺服器房間來自官方中繼服務端，房主開啟伺服器模式後會顯示短位址，客機可直接加入。",
     emptyLan: "暫無可加入的區域網路房間",
     emptyRelay: "暫無可加入的伺服器房間",
     refreshFailed: "重新整理房間失敗",
@@ -421,7 +482,8 @@ export default {
     cloudUpload: "雲端上傳",
     cloudDownload: "雲端下載",
     cloudSyncHelpTitle: "雲端同步說明",
-    cloudSyncHelp: "雲端上傳：將目前遊戲庫設定、使用者資料和遊玩記錄上傳到雲端，並覆蓋雲端舊資料。GitHub Token 與登入會話不會上傳。\n雲端下載：下載雲端資料並套用到本機；config.json 只更新雲端存在的欄位，雲端沒有的本機欄位會保留。",
+    cloudSyncHelp:
+      "雲端上傳：將目前遊戲庫設定、使用者資料和遊玩記錄上傳到雲端，並覆蓋雲端舊資料。GitHub Token 與登入會話不會上傳。\n雲端下載：下載雲端資料並套用到本機；config.json 只更新雲端存在的欄位，雲端沒有的本機欄位會保留。",
     cloudNeverUploaded: "雲端時間：從未上傳",
     cloudLastUploadedAt: "雲端時間：{time}",
     cloudUploadSuccess: "雲端上傳完成",
@@ -441,7 +503,8 @@ export default {
       version_conflict: "雲端版本衝突，請重新整理後重試",
       file_too_large: "檔案超過雲端同步大小限制",
       cloud_hash_mismatch: "雲端檔案校驗失敗，請重試",
-      cloud_sync_rate_limited: "雲端同步過於頻繁，同一帳號上傳和下載各自每24小時只能執行一次",
+      cloud_sync_rate_limited:
+        "雲端同步過於頻繁，同一帳號上傳和下載各自每24小時只能執行一次",
       unknown: "雲端同步失敗",
     },
     closeBehavior: "關閉主視窗",
@@ -457,10 +520,12 @@ export default {
     sensitiveWordFilterOn: "開啟",
     sensitiveWordFilterOff: "關閉",
     sensitiveWordFilterHelpTitle: "敏感詞過濾說明",
-    sensitiveWordFilterHelp: "敏感詞過濾僅作用於房間聊天訊息（主介面房間聊天和獨立聊天視窗）。\n中繼伺服器房間：伺服器會自動過濾敏感詞，與本地開關無關。\n區域網路 / 虛擬區域網路房間：開啟後，匹配到敏感詞庫的詞彙將被替換為 *。",
+    sensitiveWordFilterHelp:
+      "敏感詞過濾僅作用於房間聊天訊息（主介面房間聊天和獨立聊天視窗）。\n中繼伺服器房間：伺服器會自動過濾敏感詞，與本地開關無關。\n區域網路 / 虛擬區域網路房間：開啟後，匹配到敏感詞庫的詞彙將被替換為 *。",
     githubToken: "GitHub Token",
     githubTokenHelpTitle: "GitHub Token 說明",
-    githubTokenHelp: "GitHub Token 用於提升 GitHub API 請求頻率上限，確保市場存取和遊戲下載正常。\n未設定時：每小時 60 次請求\n設定後：每小時 5000 次請求\n產生位置：GitHub Settings → Developer settings → Personal access tokens → Tokens (classic)\n不需要勾選任何權限，留空即可正常使用。",
+    githubTokenHelp:
+      "GitHub Token 用於提升 GitHub API 請求頻率上限，確保市場存取和遊戲下載正常。\n未設定時：每小時 60 次請求\n設定後：每小時 5000 次請求\n產生位置：GitHub Settings → Developer settings → Personal access tokens → Tokens (classic)\n不需要勾選任何權限，留空即可正常使用。",
     githubTokenPlaceholder: "輸入 GitHub Personal Access Token（選填）",
     browsePath: "選擇路徑",
     storagePathList: "遊戲庫列表",
@@ -469,14 +534,17 @@ export default {
     setDefaultStoragePath: "設為預設",
     addStoragePath: "新增新的遊戲庫位址",
     defaultGamesMigrationTitle: "建議遷移預設遊戲庫",
-    defaultGamesMigrationContent: "為了您更好的體驗，建議將 exe 同級目錄下的預設遊戲庫遷移到其他位置。遷移會移動該遊戲庫中的全部檔案，全部成功後刪除原目錄。目前預設遊戲庫：{path}",
+    defaultGamesMigrationContent:
+      "為了您更好的體驗，建議將 exe 同級目錄下的預設遊戲庫遷移到其他位置。遷移會移動該遊戲庫中的全部檔案，全部成功後刪除原目錄。目前預設遊戲庫：{path}",
     migrateNow: "立即遷移",
     doNotRemind: "不再提醒",
-    defaultGamesMigrationSuccess: "遊戲庫遷移完成，已遷移 {gameCount} 個遊戲、{versionCount} 個版本",
+    defaultGamesMigrationSuccess:
+      "遊戲庫遷移完成，已遷移 {gameCount} 個遊戲、{versionCount} 個版本",
     defaultGamesMigrationFailed: "遊戲庫遷移失敗",
     openPathFailed: "開啟路徑失敗",
     storagePathNotEmptyTitle: "目錄非空",
-    storagePathNotEmptyContent: "所選目錄必須為空目錄。請選擇一個空目錄，或使用建立新資料夾功能建立新目錄，以避免未來解除安裝時誤刪其他檔案。",
+    storagePathNotEmptyContent:
+      "所選目錄必須為空目錄。請選擇一個空目錄，或使用建立新資料夾功能建立新目錄，以避免未來解除安裝時誤刪其他檔案。",
     removeStoragePathTitle: "刪除遊戲庫",
     removeStoragePathConfirm:
       "將從該遊戲庫中刪除平臺可識別的已匯入遊戲資料：{path}。不會刪除使用者自行放入的非遊戲檔案。此操作不可撤銷，是否繼續？",
@@ -484,7 +552,8 @@ export default {
       "已刪除路徑，移除 {gameCount} 個遊戲、{versionCount} 個版本",
     removeStoragePathFailed: "刪除路徑失敗",
     storageErrors: {
-      cannot_remove_last_storage_path: "至少需要保留一個遊戲庫路徑，請先新增新的遊戲庫後再刪除目前路徑",
+      cannot_remove_last_storage_path:
+        "至少需要保留一個遊戲庫路徑，請先新增新的遊戲庫後再刪除目前路徑",
       storage_path_not_registered: "該路徑不在遊戲庫列表中，請重新整理後重試",
       invalid_storage_path: "遊戲庫路徑無效，請選擇有效目錄",
       storage_path_not_directory: "所選路徑不是資料夾，請選擇有效目錄",
@@ -492,10 +561,12 @@ export default {
       target_is_source_path: "目標路徑不能與源路徑相同",
       target_inside_source_path: "目標路徑不能位於源遊戲庫內部",
       source_inside_target_path: "源遊戲庫不能位於目標路徑內部",
-      target_is_default_games_path: "目標路徑不能仍然是 exe 同級預設 games 目錄",
+      target_is_default_games_path:
+        "目標路徑不能仍然是 exe 同級預設 games 目錄",
       game_storage_path_not_configured: "未設定可用遊戲庫路徑",
       source_storage_path_not_found: "源遊戲庫不存在，請重新整理後重試",
-      source_storage_path_not_directory: "源遊戲庫不是有效資料夾，請重新整理後重試",
+      source_storage_path_not_directory:
+        "源遊戲庫不是有效資料夾，請重新整理後重試",
       storage_migration_file_busy: "目前有檔案正在開啟，無法遷移，已退回",
       unknown: "未知遊戲庫錯誤",
     },
@@ -566,15 +637,24 @@ export default {
     uninstallClientDescription: "此操作不可撤銷，將完全移除 BZ-Games 用戶端。",
     uninstallDeleteGames: "同時刪除所有遊戲庫目錄",
     uninstallNotAvailable: "解除安裝程式不可用，僅在安裝版中支援此功能。",
+    uninstallMarketTasksActive: "請先完成或取消正在進行的遊戲下載和安裝。",
+    uninstallGameLibraryDeleteFailed:
+      "部分遊戲庫仍被其他程式佔用，未執行用戶端解除安裝。請關閉佔用程式後重試：\n{paths}",
+    uninstallUnsafeStoragePath:
+      "遊戲庫路徑存在安全風險，已停止解除安裝。請先檢查遊戲庫設定。",
+    uninstallFailed: "無法啟動解除安裝程式，請稍後重試。",
     clearCache: "清除快取",
     migrateStorage: "遷移遊戲庫",
-    migrateStorageDescription: "先選擇要遷移的現有遊戲庫，再選擇一個新的空目錄。遷移時會複製原遊戲庫中的全部檔案，全部遷移成功後刪除原遊戲庫；如果遷移失敗，會自動刪除已遷移到目標目錄的部分資料。",
+    migrateStorageDescription:
+      "先選擇要遷移的現有遊戲庫，再選擇一個新的空目錄。遷移時會複製原遊戲庫中的全部檔案，全部遷移成功後刪除原遊戲庫；如果遷移失敗，會自動刪除已遷移到目標目錄的部分資料。",
     selectSourceStoragePath: "請選擇要遷移的遊戲庫",
     selectTargetStoragePath: "請選擇新的遊戲庫位置",
     migrateStorageWarning: "將遷移原遊戲庫中的全部檔案：{path}",
-    migrateStorageSuccess: "遊戲庫遷移完成，已遷移 {gameCount} 個遊戲、{versionCount} 個版本",
+    migrateStorageSuccess:
+      "遊戲庫遷移完成，已遷移 {gameCount} 個遊戲、{versionCount} 個版本",
     migrateStorageFailed: "遊戲庫遷移失敗",
-    clearCacheConfirm: "將清除應用產生的所有快取資料（下載快取、更新包、暫存檔案等），不會影響已安裝的遊戲和使用者設定。",
+    clearCacheConfirm:
+      "將清除應用產生的所有快取資料（下載快取、更新包、暫存檔案等），不會影響已安裝的遊戲和使用者設定。",
     clearCacheProcessing: "正在清除快取...",
     clearCacheSuccess: "快取清除完成，釋放了 {size} 空間。",
   },
@@ -661,7 +741,9 @@ export default {
     saveNicknameStyleCost: "儲存（{coins} BZ幣）",
     nicknameStyleSaved: "暱稱樣式已儲存，消耗 {coins} BZ幣",
     nicknameStyleInsufficientCoins: "BZ幣不足，儲存暱稱樣式需要 {coins} BZ幣",
-    nicknameColorContrastWarning: "目前文字顏色與主題背景對比不足：亮色主題下不能使用偏白顏色，暗色主題下不能使用偏黑顏色。",
-    gradientHelp: "漸層起點和漸層終點是特效顏色過渡的兩端：例如霓虹、火焰、極光等效果會從起點色流動到終點色，再循環回去；無特效時主要使用文字顏色。每次儲存暱稱樣式都會消耗 30 BZ幣。",
+    nicknameColorContrastWarning:
+      "目前文字顏色與主題背景對比不足：亮色主題下不能使用偏白顏色，暗色主題下不能使用偏黑顏色。",
+    gradientHelp:
+      "漸層起點和漸層終點是特效顏色過渡的兩端：例如霓虹、火焰、極光等效果會從起點色流動到終點色，再循環回去；無特效時主要使用文字顏色。每次儲存暱稱樣式都會消耗 30 BZ幣。",
   },
 };

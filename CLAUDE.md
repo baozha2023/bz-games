@@ -16,7 +16,7 @@
 
 | 原则             | 说明                                                |
 |----------------|---------------------------------------------------|
-| **本地优先**       | 用户配置、游戏记录、经济数据与统计数据存储于本地，平台账号体系不依赖远程后端                        |
+| **本地优先**       | 用户配置、游戏记录、经济数据与统计数据存储于本地；登录、云同步与反馈属于可选在线能力，不影响核心功能 |
 | **便携式存储**      | 配置默认存储在应用根目录，游戏可存放在默认目录或用户维护的多路径目录中               |
 | **开放式游戏管理**    | 用户可将符合平台规范的游戏载入平台，平台会自动复制并管理游戏文件                  |
 | **统一联机基础设施**   | 平台提供房间管理、玩家状态、聊天、游戏消息中继、断线重连与公网入口能力               |
@@ -38,6 +38,10 @@
 - 个性化系统（头像框解锁、装备、预览，支持多场景展示）
 - 系统设置（玩家信息、主题、端口、语言、更新、游戏库列表、GitHub Token）
 - 官方登录与云同步服务（GitHub OAuth 登录；本地 `config.json` 与 `play_sessions.db` / `achievement_unlocks.db` / `stats_reports.db` 上传云端 / 下载同步回本地，含进度条与哈希校验）
+- 建言献策（可选文字与图片；未登录每 48 小时一次，GitHub 登录后每 6 小时一次）
+- 反馈管理后台（GitHub 管理员白名单、反馈筛选/详情/图片/状态与管理备注；Vue 3 + Vite 独立构建，中继服务 `/admin/` 同源提供）
+- 客户端卸载系统（游戏进程批量收口、游戏库可选择删除、路径安全校验、符号链接防护）
+- 默认封面/图标静态回退（`GameCover.vue` / `GameIcon.vue` 在无自定义资源时使用内置静态图片）
 
 ***
 
@@ -58,8 +62,10 @@
 | 进程间通信        | Electron IPC（contextBridge） | <br />                         |
 | 本地数据存储       | electron-store              | v10+ (ESM)，需在构建中配置 include     |
 | SQLite 数据存储      | better-sqlite3              | 游玩会话记录、日历热力图数据查询            |
-| 账号与云同步元数据 | MySQL                       | 官方登录服务用户资料、OAuth state、会话、云文件元数据 |
-| 云文件对象存储     | MongoDB GridFS              | 官方云同步服务保存 `config.json` / `play_sessions.db` / `achievement_unlocks.db` / `stats_reports.db` |
+| 在线服务元数据 | MySQL                       | 用户、OAuth、会话、云文件元数据以及反馈正文/状态/图片索引 |
+| 云文件对象存储     | MongoDB GridFS              | 保存云同步文件与反馈图片 |
+| Multipart 解析 | busboy | 中继服务流式接收反馈图片并限制字段、文件数量及大小 |
+| 管理前端 | Vue 3 + TypeScript + Vite + Pinia + Naive UI | 构建为 `/admin/` 同源静态站点 |
 | 客户端更新        | electron-updater            | GitHub Releases 作为更新源          |
 | WebSocket 服务 | ws                          | Game API、Room Server、Room Client 均基于 WebSocket，v2 高频通信支持原始二进制帧 |
 | 版本比较         | semver                      | 用于平台版本与游戏版本兼容性检查               |
@@ -78,13 +84,21 @@ bz-games/
 ├── DEVELOPER_GUIDE.md                    # 面向游戏接入方的开发接入指南
 ├── docs/
 │   └── GAME_API_V1_V2_REFERENCE.md        # Game API v1/v2 接口说明文档
-├── relay-server/                          # 官方服务端（Node.js HTTP + WebSocket，提供中继 / GitHub 登录 / 云同步能力）
+├── bz-games-admin/                        # 公开源码的反馈管理前端（生产构建由中继服务同源提供）
+│   ├── .env.example                       # 当前零字段环境配置声明
+│   ├── src/                               # 路由、管理员会话、反馈列表与详情界面
+│   └── vite.config.ts                     # `/admin/` 构建与本机中继开发代理
+├── relay-server/                          # 官方服务端（中继 / OAuth / 云同步 / 反馈 / 管理 API）
 │   ├── API.md                             # 中继服务器接口规范
 │   ├── DATA_MODEL.md                      # MySQL/MongoDB 数据模型说明
 │   ├── DEPLOY.md                          # 中继服务器部署手册
+│   ├── bz-games-relay.service.example     # 与 src/config.js 一一对应的 systemd 配置示例
 │   ├── package.json                       # 中继服务器独立依赖
 │   ├── scripts/
-│   │   └── relay-e2e-test.js             # 中继服务器端到端测试（房间、密码、延迟、敏感词过滤、二进制帧）
+│   │   ├── relay-e2e-test.js              # 房间中继端到端测试
+│   │   ├── feedback-service.test.js       # 反馈限流、上传与管理接口测试
+│   │   ├── auth-service.test.js           # OAuth 回跳白名单测试
+│   │   └── admin-static-service.test.js   # 管理静态站点与路径安全测试
 │   └── src/
 │       ├── index.js                       # 中继服务器入口（HTTP + WebSocket 统一启动）
 │       ├── state.js                       # 共享运行时状态（rooms / clients Map）
@@ -93,21 +107,25 @@ bz-games/
 │       ├── ws-server.js                   # WebSocket 服务创建与鉴权
 │       ├── services/
 │       │   ├── auth-service.js            # GitHub OAuth 认证与会话管理
+│       │   ├── admin-static-service.js     # `/admin/` 静态资源、SPA fallback 与安全响应头
 │       │   ├── cloud-data-service.js      # 云端文件同步（config.json / play_sessions.db / achievement_unlocks.db / stats_reports.db）
+│       │   ├── feedback-service.js        # 反馈上传、匿名限流、GridFS 图片与管理 API
 │       │   ├── message-router.js          # WebSocket 消息路由分发（含中继侧敏感词过滤与图片拦截）
 │       │   ├── mongo-service.js           # MongoDB GridFS 连接管理
 │       │   ├── mysql-service.js           # MySQL 连接池与建表
 │       │   ├── room-service.js            # 房间创建、加入、密码、清理
 │       │   └── sensitive-word-service.js  # 中继侧敏感词过滤服务（词库加载 + Unicode 安全字符级掩码）
 │       ├── vocabulary/                    # 敏感词词库目录（15 个分类 .txt 文件）
-│       └── utils/
+│       ├── utils/
 │           ├── http.js                    # HTTP 工具（Cookie / Bearer / redirect / JSON 响应）
 │           ├── protocol.js                # 通信协议常量（relay:* 指令集）
+│           ├── relay-auth.js              # HTTP/WS 统一 relayToken 鉴权工具（timingSafeEqual）
 │           └── ws.js                      # WebSocket 消息序列化与广播发送
 ├── build/
 │   └── installer.nsh                     # NSIS 自定义安装/卸载钩子（多语言支持）
 ├── package.json                          # 依赖、脚本与打包发布配置
 ├── private-build.config.example.json      # 私有构建配置模板（CDN/OSS/中继/加密种子等环境变量）
+├── scripts/check-config-examples.mjs      # 三端配置示例字段及敏感路径忽略规则检查
 ├── pnpm-lock.yaml                        # pnpm 依赖锁定文件
 ├── tsconfig.json                         # TypeScript 根配置
 ├── tsconfig.node.json                    # 主进程/预加载/共享代码 TS 配置
@@ -166,7 +184,9 @@ bz-games/
 │   │   │   │   └── MarketService.ts       # 游戏市场索引拉取、下载、校验、解压与安装
 │   │   │   └── system/
 │   │       ├── CloudSyncService.ts    # 云端数据同步（GitHub OAuth 登录 / 配置与数据库上传下载 / 哈希校验 / 进度事件 / 上传黑名单过滤敏感字段 / 下载选择性合并 config）
+│   │       ├── FeedbackService.ts     # 图片选择/验证、反馈 multipart 上传与登录令牌封装
 │   │       ├── NotificationService.ts # 系统通知窗口服务
+│   │       ├── UninstallService.ts    # 游戏进程收口、游戏库清理与系统卸载器启动确认
 │   │       └── UpdateService.ts       # 客户端更新检查/下载/安装服务
 │   │   └── utils/
 │   │       ├── appPath.ts                 # 应用根路径工具
@@ -223,9 +243,11 @@ bz-games/
 │   │       │   │   ├── AchievementIcon.vue # Manifest 自定义成就图标加载与默认奖杯回退
 │   │       │   │   ├── GameAchievementsModal.vue # 游戏成就弹窗组件
 │   │       │   │   ├── GameCard.vue        # 游戏卡片组件
-│   │       │   │   ├── GameCover.vue       # 游戏封面组件
+│   │       │   │   ├── GameCover.vue       # 游戏封面组件（缺失时使用构建期静态默认封面）
 │   │       │   │   ├── GameDeleteModal.vue # 游戏删除弹窗组件
-│   │       │   │   └── GameIcon.vue        # 游戏图标组件
+│   │       │   │   └── GameIcon.vue        # 游戏图标组件（缺失时使用构建期静态默认图标）
+│   │       │   ├── settings/
+│   │       │   │   └── FeedbackModal.vue   # 建言献策文字/图片选择、限流与提交结果弹窗
 │   │       │   └── room/
 │   │       │       ├── PlayerCard.vue      # 房间玩家卡片组件
 │   │       │       ├── PlayerList.vue      # 房间玩家列表组件
@@ -267,7 +289,10 @@ bz-games/
 │
 ├── resources/
 │   ├── icon.png                            # 应用图标资源
-│   └── avatar-frames/                      # 头像框图片资源（8款 PNG，平台运行时读取）
+│   ├── avatar-frames/                      # 头像框图片资源（8款 PNG，平台运行时读取）
+│   ├── default_cover.png                   # 默认游戏封面回退图片（16:9，GameCover.vue 在无自定义封面时使用）
+│   ├── default_icon.png                    # 默认游戏图标回退图片（1:1，GameIcon.vue 在无自定义图标时使用）
+│   └── vocabulary/                         # 客户端侧敏感词库（15 个分类 .txt 文件）
 ```
 
 ***
@@ -285,7 +310,7 @@ bz-games/
 | **Room Client**                     | 非房主玩家的平台连接 Room Server 的 WebSocket 客户端                                         |
 | **Game API Server**                 | 平台在本机运行的本地 WebSocket 服务（`127.0.0.1`），供游戏进程调用平台能力；控制面走 JSON，v2 高频实时数据可走二进制帧 |
 | **v2 二进制帧**                       | 高频实时通信帧格式：4字节 big-endian header 长度 + UTF-8 JSON header + 原始 binary body，仅用于 `message.send` / `message.broadcast` / `message.publish` |
-| **官方中继服务器 (Relay Server)**      | 公网 Node.js HTTP + WebSocket 服务，负责房间登记、房间码、容量保护和透明转发，不拼接或识别短地址，不解析游戏业务语义。                            |
+| **官方中继服务器 (Relay Server)**      | 公网 Node.js HTTP + WebSocket 服务；房间链路保持透明转发，同时提供 OAuth、云同步、反馈和管理员 API。 |
 | **官方短地址**                         | 平台按 `DEFAULT_RELAY_PUBLIC_HOST + roomCode` 拼接的 `<relay-public-host>:随机数字` 地址，展示、复制、服务器列表和手动输入统一使用该格式。                         |
 | **官方房间码**                         | 中继服务器生成并识别的数字房间码；平台从短地址中解析后通过 `relay:join.payload.roomCode` 发送给中继服务器。                         |
 | **房间发现 (Room Discovery)**          | 平台房间页面的局域网/服务器 Tab。局域网 Tab 合并了物理局域网和虚拟局域网（通过 `Promise.all` 并发扫描），按网卡分类过滤；服务器通过官方中继 `/rooms` 获取房间列表。                      |
@@ -309,6 +334,7 @@ bz-games/
                           │  • WebSocket 透明转发    │
                           │  • GitHub OAuth 认证     │
                           │  • 云端文件同步          │
+                          │  • 建言献策 / 管理后台   │
                           │  • MySQL + MongoDB       │
                           └────┬──────────┬─────────┘
                                │  ws://   │ https://
@@ -837,7 +863,7 @@ interface AppSettings {
     - 应用退出 (`before-quit`) 必须调用各服务的 `close()` 正常关闭 WAL 连接，否则 WAL 文件不会自动合并。
 - **CloudSyncService 设计**：
     - **同步文件范围**：v3.0.3 扩展为 4 个文件 — `config.json`（必需）、`play_sessions.db`（必需）、`achievement_unlocks.db`（可选）、`stats_reports.db`（可选）。必需文件缺失时拒绝下载（`cloud_data_incomplete`）；可选文件云端存在时自动同步，不存在时优雅跳过。
-    - **上传黑名单**：`StoreService.CLOUD_SETTINGS_UPLOAD_BLACKLIST` 定义上传时排除的敏感字段（`githubToken`、`cloudSessionToken`、`cloudSessionExpiresAt`、`cloudUserLogin`、`cloudUserName`、`cloudUserProfileUrl`），`createCloudConfigFile()` 在写入临时上传文件前从 settings 副本中删除这些字段。
+    - **同步黑名单**：`StoreService.CLOUD_SETTINGS_SYNC_BLACKLIST` 定义上传与下载合并时均需排除的敏感字段（`githubToken`、`cloudSessionToken`、`cloudSessionExpiresAt`、`cloudUserLogin`、`cloudUserName`、`cloudUserProfileUrl`、`cloudLastUploadedAt`），`createCloudConfigFile()` 在上传前删除这些字段，`applyCloudConfigFile()` 在下载合并时也删除云端的对应字段，防止云端覆写本地私有凭证。
     - **上传流程**：`upload()` 创建临时目录，调用 `createCloudConfigFile()` 生成脱敏后的 config 副本，遍历 `CLOUD_DATABASE_FILES` 通过 `exportDatabaseDump()` 生成各 DB 的 SQL dump，按序 `PUT /api/cloud/files/:fileKey`。`try...finally` 确保临时目录在任何退出路径下都被清理。
     - **下载选择性合并**：`download()` 下载完成后调用 `applyCloudConfigFile()` 而非之前的 `replaceConfigFile()` + `init(true)`。`applyCloudConfigFile()` 对 `games`、`userData`、`recentPlayed` 执行全量替换，对 `settings` 执行浅合并（`{ ...currentSettings, ...cloudSettings }`），云端没有的本地字段保留不丢失。各 DB 文件通过 `importDatabaseDump()` 导入对应 SQLite 数据库。不再需要重启 store 实例。
     - **会话一致性**：上传时 `PUT` 请求可携带 `X-Cloud-Operation-Id` 请求头实现原子操作；下载时同样传递该请求头确保读到同一原子快照。
@@ -991,6 +1017,27 @@ interface AppSettings {
     - **UI 面板**：`PersonalizationView.vue` 新增双栏布局（`.nickname-style-panel`）：左侧预览卡片展示 `NicknameText` 实际效果（含单人/Room 两场景），右侧表单配置颜色/渐变/字体/字重/特效。保存前通过 `isNicknameColorAllowedForTheme` 检验对比度，不通过弹出警告。支持重置为默认样式（`resetNicknameStyle()`）。
     - **联机传递**：`RoomJoinPayload` 新增 `playerNicknameStyle` 字段，`PlayerInRoom` 新增 `nicknameStyle` 字段，`DiscoveredRoom` 新增 `hostStyle` 字段，`ChatPayload` 新增 `senderStyle` 字段。`RoomServer`/`RoomClient` 创建玩家对象时写入，`PlayerCard.vue` 和 `RoomChat.vue` 使用 `NicknameText` 渲染。房间发现页（`RoomDiscoveryView.vue`）房间名称使用 `NicknameText` 展示房主昵称样式。
     - **`effectiveTheme` 响应式**：`useSettingsStore` 新增 `effectiveTheme` computed（跟随 `settings.theme` 和 `prefersDark` 系统偏好），新增 `setPrefersDark()` 方法供 `App.vue` 的 `matchMedia` 监听器调用。`PersonalizationView` 中 watch `effectiveTheme` 自动适配预览颜色。
+
+- **反馈系统设计（FeedbackService）**：
+    - **图片选择与验证**：主进程 `FeedbackService.selectImages()` 通过 `dialog.showOpenDialog` 限制 PNG/JPEG/WebP，上限 4 张、单张 ≤5 MiB。读取文件后通过魔法字节检测实际 MIME，再经 `nativeImage.createFromBuffer` 验证图形有效性。通过后将 Buffer 与 base64 预览 URL 存入进程内存 Map（`selectionId` 为键），供后续 multipart 上传引用。选中图片 30 分钟后自动清理。
+    - **释放语义**：`releaseImages(selectionId, imageId?)` 支持单张移除或整组释放；单张移除后若 selection 为空则自动删除 Map 条目。
+    - **提交管线**：`submit()` 先在主进程侧校验 content ≤ 5000 字、selectionId 有效性、文字或图片至少存在一种。通过 `FormData` 构造 multipart，注入 `appVersion` 与 `platform`，通过 `RequestInterceptor.buildHeaders()` 自动注入 relayToken 和可选的 GitHub Bearer Token。POST `/api/v1/feedback` 超时 45 秒。服务端返回 401 时自动清除本地云同步会话。
+    - **反馈历史**：`getFeedbackHistory()` / `addFeedbackHistory(id)` 通过 `StoreService` 读写 `AppSettings.feedbackHistory[]`，记录反馈编号和提交时间戳，去重并保留最近条目。历史随 `config.json` 正常云同步。
+    - **IPC 边界**：渲染进程仅通过 `FeedbackModal.vue` → `electronAPI.settings.selectFeedbackImages / releaseFeedbackImages / submitFeedback / getFeedbackHistory` 与主进程交互，不直接接触文件路径或服务端 relayToken / GitHub 会话。
+    - **服务端并联**：中继侧 `feedback-service.js` 执行 busboy 流式 multipart 解析、魔法字节图片校验、PNG 容器/JPEG SOF/WebP 尺寸验证、匿名 IP 冷却（48h）与 GitHub 登录冷却（6h）、MySQL 事务写入 `feedback` + `feedback_images` 表、GridFS 图片存储。管理 API（`/api/admin/v1/feedback/*`）每次校验 `ADMIN_GITHUB_IDS` 白名单。
+    - **管理前端**：`bz-games-admin/` 为独立 Vue 3 + Vite + Pinia 项目，构建为 `/admin/` 同源静态站点。中继侧 `admin-static-service.js` 提供 SPA fallback、路径穿越防护、CSP/`nosniff`/`DENY` iframe 等安全响应头。路由守卫在 `beforeEach` 中校验 `/api/admin/v1/me` 管理员身份。
+- **卸载系统设计（UninstallService）**：
+    - **状态互斥**：`running` 布尔标志防止重复卸载调用。
+    - **游戏进程收口**：`shutdownForUninstall()` 设置 `shuttingDownForUninstall = true` 拒新启，等待 `launchingGames` 清空（5s 超时），然后通过 `taskkill /PID /T /F` 批量终止所有已托管游戏进程树，最后调用 `GameManager.stop()` 清理窗口和服务注册。
+    - **GameManager 联动**：`launch()` 增加 `shuttingDownForUninstall` 前置检查，卸载期间直接拒绝新启动请求。
+    - **路径安全校验**：`normalizeUninstallStorageRoots()` 对每个游戏库路径执行 `path.resolve` 并校验：① 不是盘符根；② 不包含安装目录；③ 不与系统保护路径（home/appData/userData/temp）相同或为符号链接。任一项不满足时拒绝卸载，返回 `unsafe_game_storage_path` 错误。
+    - **兜底防御**：`removeStorageRoots()` 删除前额外检查目标路径是否为符号链接；`fs.rmSync` 使用 `maxRetries: 5` + `retryDelay: 250` 重试防御，删除后再次 `existsSync` 核验。
+    - **前置拦截**：活跃市场下载任务时返回 `uninstall_market_tasks_active` 错误，不进入卸载流程。
+    - **自删除语义**：卸载器启动成功后 `setTimeout(() => app.quit(), 500)` 延迟退出 Electron 进程。禁止使用依赖父进程退出后继续运行的临时 PowerShell/批处理辅助链路。
+- **默认封面/图标回退**：
+    - `GameCover.vue` 在无自定义 cover 且无 video 时，使用构建期 `import defaultCoverUrl from "resources/default_cover.png"` 提供的静态回退图片（16:9）。
+    - `GameIcon.vue` 在无自定义 icon 时，使用构建期 `import defaultIconUrl from "resources/default_icon.png"` 提供的静态回退图片（1:1），不再渲染文本首字符。
+    - 两组件移除了文本占位逻辑（"暂无封面"/"?"），改为静态图片回退，`GameIcon` 的 `gameName` prop 已移除。
 
 ### 5.6 CSS 变量主题系统
 
@@ -1162,8 +1209,7 @@ interface AppSettings {
 - `system:migrateGameStorageLibrary`：迁移任意已配置游戏库中的全部文件并同步游戏库列表；失败时返回结构化错误并清理目标目录中的部分迁移数据。
 - `system:openPath`：在系统文件管理器中打开路径。
 - `system:removeGameStoragePath`：删除游戏库列表项及其内部已导入游戏数据。仅删除标准 `gameId/version/game.json` 可确认的游戏版本目录，不删除存储根目录下的用户自有文件或子目录。
-- `system:uninstall`：卸载客户端。先检查 `uninstall.exe` 存在性，可选删除所有游戏库目录（`deleteGames: boolean`
-  ），随后打开系统卸载程序并退出应用。返回 `{ success: boolean; error?: string }`。
+- `system:uninstall`：卸载客户端。先检查 `Uninstall BZ-Games.exe`、阻止活跃市场任务，并停止平台启动的游戏进程及本地游戏服务；若勾选删除游戏库，再以重试机制删除并核验全部游戏库，任一路径失败时终止卸载并返回失败路径。通过 Electron `shell.openPath()` 启动系统卸载程序，必须等待 Windows Shell 返回成功后再延迟退出客户端；禁止使用依赖父进程退出后继续运行的临时 PowerShell/批处理辅助链路。返回 `{ success: boolean; error?: string; paths?: string[] }`。
 - `system:clearCache`：清除应用 C 盘缓存目录（`Roaming\bz-launcher` 和 `Local\bz-launcher-updater`），逐项删除并静默跳过锁定文件。返回 `{ totalSize: number; clearedSize: number }`。
 - `system:getUserData`：读取用户经济与签到数据。
 - `system:checkIn`：执行每日签到并返回奖励结果。
@@ -1276,7 +1322,7 @@ interface AppSettings {
 - **玩家昵称校验**：昵称输入框限制 16 个字符（`maxlength="16" show-count`），表单校验规则包含三个维度：① 非空（`required`）；② 最长 16 字符（`max: 16`）；③ 禁止 `< > " ' \` & \\ /` 等特殊字符（正则 `/^[^<>\"'\`&\\\\/]+$/`）。`canSave` computed 通过 `nicknameValid` 门控：空名或包含非法字符时保存按钮 disabled。所有 6 种语言均提供 `nameTooLong` / `nameInvalidChars` 错误提示。
 - **设置页卸载入口**：设置页底部（与保存按钮同行，`justify-content: space-between`）提供"卸载客户端"按钮（
   `type="error" secondary`），右侧提供"清除缓存"按钮。点击卸载弹出 NaiveUI 自定义确认弹窗，包含不可撤销的警告文案、是否同时删除所有游戏库目录的勾选项、以及删除路径列表预览。确认后调用
-  `system:uninstall` IPC 执行卸载。若处于开发模式或卸载程序不可用，弹出友好提示。
+  `system:uninstall` IPC 执行卸载。卸载准备期间锁定弹窗并显示加载状态；市场任务活跃、游戏库被占用、路径不安全、辅助进程或卸载器不可用时不得静默继续，必须保留客户端并展示对应错误。
 - **设置页清除缓存入口**：设置页底部"卸载客户端"按钮右侧提供"清除缓存"按钮（`secondary`），旁边提供"迁移游戏库"按钮（`type="warning" secondary` 黄色样式）。点击"清除缓存"后弹出 `n-modal preset="card"` 弹窗（400px），展示确认文案。点击"清除缓存"后启动模拟进度条（200ms 间隔随机递增 5-20%，最高到 90%），同时通过 `system:clearCache` IPC 调用主进程执行实际清理。主进程清理 `AppData\Roaming\bz-launcher` 和 `AppData\Local\bz-launcher-updater` 两个缓存目录，逐项删除并静默跳过锁定文件（`force: true, maxRetries: 3`），返回已清理的空间大小。IPC 完成后进度条跳至 100%，展示释放空间结果。取消/确认按钮统一在弹窗右下角（`#action` slot + `justify="end"`）。
 - **设置页未保存变更拦截**：进入页面时记录 `originalSettings` JSON 快照，`hasUnsavedChanges` 计算属性实时比对当前表单与快照。`onBeforeRouteLeave` 路由守卫检测到未保存变更时弹出 NaiveUI `dialog.warning`，提供"保存并离开 / 不保存 / 取消"三个选项。页面顶部返回按钮（`n-page-header @back`）同样先检查变更再跳转。保存成功后同步更新快照，不再触发拦截。
 - **设置页头像裁切**：上传头像后弹出裁切弹窗（`n-modal preset="card"` 520px），Canvas 绘制原图 + 正方形裁切框（70% 容器边长，带九宫格参考线）。支持鼠标拖拽平移和滚轮/滑块缩放（自适应最小缩放至覆盖裁切框）。确认后从裁切框区域提取正方形内容，缩放至 256×256 JPEG 并自动保存。存储为正方形，圆形效果由 CSS `border-radius: 50%` 实现。
@@ -1286,6 +1332,7 @@ interface AppSettings {
 - **设置页主题跟随系统**：主题选择器提供"跟随系统"选项（`themeAuto`）。当选择 `auto` 时，平台自动跟随操作系统亮/暗模式切换。
 - **设置页官网链接**：设置页需展示官方网址，使用 NaiveUI `n-a` 组件渲染为可点击链接，`
   @click.prevent` 拦截默认跳转后通过 `system:openUrl` IPC 调用 `shell.openExternal` 打开系统默认浏览器。
+- **设置页建言献策**：底部入口打开独立 `FeedbackModal`。文字最多 5,000 字，可选最多 4 张 PNG/JPEG/WebP（单张 5 MiB）；渲染进程只持有主进程生成的预览和选择 ID，不接触文件路径、发行版中继令牌或 GitHub 会话令牌。未登录提示为每 48 小时一次，登录后提示为每 6 小时一次；成功后不展示下一次时间；触发限制时只展示服务端 `resetAt` 对应的一条提示。操作区提供“历史记录”入口，在 `settings.feedbackHistory` 中保存全部成功提交的反馈编号和时间，为后续按编号查询预留界面；该历史跟随 `config.json` 正常双向云同步。
 - **GitHub Token 设置**：设置页提供 `githubToken` 字段（`n-input type="password"`，`@copy.prevent` + `@cut.prevent` 防剪贴板泄漏）。填写有效的 GitHub Personal Access Token 后，平台所有 GitHub API 请求自动携带 `Authorization: Bearer <token>`，将 API 限流从 60 次/小时提升至 5000 次/小时（用于 Release Asset 解析）。
 - **云端同步说明**：设置页 GitHub 登录区域在上传/下载按钮旁提供 `?` 帮助按钮，hover 展示 `cloudSyncHelp` tooltip，说明上传会排除 GitHub Token 与登录会话字段、下载 config.json 仅更新云端存在的字段。
 - **设置页数据自检**：设置页需提供“数据自检”按钮。清单检查必须复用 `GameManifestFileService`，在不迁移或覆盖原文件的前提下识别明文/密文、验证密文信封/密钥/认证标签和最新 `GameManifestSchema`，并核对游戏 ID/版本、平台兼容范围、入口及图标/封面/视频/成就图标文件。明文为警告，解密、格式、密钥或 Schema 问题为错误；主进程返回稳定错误码和参数，渲染层使用六语 i18n 展示，不直接显示主进程硬编码文案。
@@ -1309,7 +1356,6 @@ interface AppSettings {
 - **原生模块编译**：`better-sqlite3` 为 C++ 原生模块，`postinstall` 脚本中的 `electron-builder install-app-deps` 会在每次 `npm install` 后自动针对当前 Electron 版本重编译 `.node` 文件。
 - **asarUnpack 必需**：原生 `.node` 文件从 `app.asar` 外部加载，`package.json` 的 `build.asarUnpack` 配置为 `["node_modules/better-sqlite3/**"]`。
 - **extraResources 用于原生可执行文件**：`7zip-bin` 提供的 `7za.exe` 通过 `child_process.spawn()` 调用。使用 `build.extraResources` 将其拷贝到 `process.resourcesPath`，代码中通过 `process.resourcesPath` 手动拼接路径。配置示例：`{ "from": "node_modules/7zip-bin/win/x64", "to": "7za", "filter": ["7za.exe"] }`。
-- **pnpm 依赖提升（hoisting）**：`electron-updater` 的传递依赖 `debug` 需要 `ms` 模块；`ms` 声明为项目直接依赖，由 pnpm 提升到顶层 `node_modules`。项目中 `ms` 作为兼容性占位依赖，代码不直接引用。
 - **electron-rebuild 手动补充**：开发阶段出现 `NODE_MODULE_VERSION` 不匹配错误时，执行 `npx electron-rebuild -f -w better-sqlite3` 补齐重编译。
 - **GitHub Release Asset 自动校验**：
   - `sha256` 和 `size` 为可选字段（`sha256` 全可选，`size` 仅 GitHub 直链时可省略）。
@@ -1331,6 +1377,17 @@ interface AppSettings {
     - 在下载更新与安装更新前，`UpdateService` 必须创建数据快照目录（`.update-snapshots/<timestamp-stage>`）。
     - 快照至少包含 `config.json` 备份文件、SQLite `db/` 目录副本与所有游戏保存根目录副本（支持多路径）。
     - 快照写入失败时记录日志并保留现有 `config.json` 与所有游戏目录。
+
+### 6.6 建言献策、管理后台与配置安全
+
+- **客户端边界**：`FeedbackService` 在主进程完成图片读取、实际格式校验、multipart 构造、发行版中继令牌和可选 GitHub Bearer Token 注入；IPC 输入必须视为不可信并进行运行时校验。
+- **反馈限制**：服务端仅使用 `req.socket.remoteAddress` 规范化后的 IP作为匿名身份；不得读取 `X-Forwarded-For`，不得保存 IP、`playerId` 或客户端 ID。匿名用户按 IP在进程内 Map限制 48 小时，登录用户按 GitHub ID在独立的进程内 Map限制 6 小时；待处理占位必须持续到成功提交或失败释放，防止并发穿透，两类状态均在服务重启后清空。
+- **上传安全**：服务端使用 busboy 流式解析，总请求、字段、文件数量及单文件大小都必须设限；图片必须同时校验声明 MIME、文件签名、容器结构和合理尺寸。MySQL 失败时尽力删除本次 GridFS 文件，临时目录始终清理。
+- **管理权限**：管理 API 每次请求都校验 GitHub 会话及 `ADMIN_GITHUB_IDS`。管理 OAuth 只允许与 `ADMIN_PUBLIC_URL` 完全相等的回跳，使用 HttpOnly、SameSite=Lax Cookie；管理员会话不得写入 URL fragment。管理静态文件必须阻止路径穿越和符号链接越界，并发送 CSP、`nosniff`、拒绝 iframe 等安全响应头。
+- **数据初始化**：`feedback` 与 `feedback_images` 只能在 `mysql-service.js` 的 `ensureSchema()` 中用幂等 `CREATE TABLE IF NOT EXISTS` 定义；不得增加过程性迁移 SQL。图片复用现有 GridFS Bucket。
+- **三端接口**：提交成功仅返回 `{ ok, id }`；匿名限制返回 `429 + error + retryAfterSeconds + resetAt`。管理列表、详情、图片和更新字段以 `relay-server/API.md` 为准，服务端测试与管理端 TypeScript 类型必须同步。
+- **配置唯一来源**：客户端真实关键配置只允许出现在被 Git 忽略的 `private-build.config.json`；服务端真实关键配置只允许存在于服务器 `/etc/systemd/system/bz-games-relay.service`，权限必须为 `root:root 0600`；管理端生产环境使用同源 `/api` 与 `/auth`，当前无环境字段。
+- **示例同步**：`private-build.config.example.json`、`relay-server/bz-games-relay.service.example` 和 `bz-games-admin/.env.example` 分别对应三端。新增或删除配置字段后必须运行 `npm run check:config`（对应 `scripts/check-config-examples.mjs`，自动校验三端配置字段一致性、`.gitignore` 敏感路径覆盖及 SERVICE 示例完整性），禁止在源码或文档写入真实公网地址、管理员 ID、令牌、数据库连接串或 OAuth Secret。
 
 ***
 

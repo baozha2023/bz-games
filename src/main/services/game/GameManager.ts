@@ -1,4 +1,4 @@
-import { ChildProcess, spawn } from "child_process";
+import { ChildProcess, execFile, spawn } from "child_process";
 import { BrowserWindow } from "electron";
 import path from "path";
 import fs from "fs";
@@ -34,6 +34,7 @@ class GameManager {
   private gameApiServers: Map<string, GameApiServer> = new Map();
   private launchingGames: Set<string> = new Set();
   private finishingGames: Set<string> = new Set();
+  private shuttingDownForUninstall = false;
   private startTimes: Map<
     string,
     { start: number; version: string; sessionId: string }
@@ -55,7 +56,11 @@ class GameManager {
   }
 
   async launch(id: string, version?: string): Promise<boolean> {
-    if (this.isGameRunning(id) || this.launchingGames.has(id)) {
+    if (
+      this.shuttingDownForUninstall ||
+      this.isGameRunning(id) ||
+      this.launchingGames.has(id)
+    ) {
       return false;
     }
 
@@ -145,6 +150,48 @@ class GameManager {
 
   isRunning(id: string): boolean {
     return this.isGameRunning(id);
+  }
+
+  async shutdownForUninstall(): Promise<void> {
+    this.shuttingDownForUninstall = true;
+    const launchDeadline = Date.now() + 5000;
+    while (this.launchingGames.size > 0 && Date.now() < launchDeadline) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    if (this.launchingGames.size > 0) {
+      throw new Error("game_shutdown_timeout");
+    }
+
+    const gameIds = new Set([
+      ...this.activeProcesses.keys(),
+      ...this.activeWindows.keys(),
+      ...this.activeServers.keys(),
+      ...this.gameApiServers.keys(),
+      ...this.startTimes.keys(),
+    ]);
+    const processIds = Array.from(this.activeProcesses.values())
+      .map((child) => child.pid)
+      .filter((pid): pid is number => typeof pid === "number" && pid > 0);
+
+    if (process.platform === "win32") {
+      await Promise.all(
+        processIds.map(
+          (pid) =>
+            new Promise<void>((resolve) => {
+              execFile(
+                "taskkill.exe",
+                ["/PID", String(pid), "/T", "/F"],
+                { windowsHide: true },
+                () => resolve(),
+              );
+            }),
+        ),
+      );
+    }
+
+    for (const gameId of gameIds) {
+      this.stop(gameId);
+    }
   }
 
   relayToGame(gameId: string, msg: RoomMessage) {

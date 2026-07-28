@@ -6,9 +6,11 @@ import { createAuthService } from "./services/auth-service.js";
 import { createCloudDataService } from "./services/cloud-data-service.js";
 import { createRoomService } from "./services/room-service.js";
 import { createMessageRouter } from "./services/message-router.js";
+import { createAdminStaticService } from "./services/admin-static-service.js";
 import { createMongoService } from "./services/mongo-service.js";
 import { createMySqlService } from "./services/mysql-service.js";
 import { createSensitiveWordService } from "./services/sensitive-word-service.js";
+import { createFeedbackService } from "./services/feedback-service.js";
 import { createRelayState } from "./state.js";
 import { send } from "./utils/ws.js";
 import { registerWebSocketHandlers } from "./ws-server.js";
@@ -18,13 +20,32 @@ const mongoService = createMongoService({ config });
 const mySqlService = createMySqlService({ config });
 const authService = createAuthService({ config, mySqlService });
 const cloudDataService = createCloudDataService({ config, authService, mongoService, mySqlService });
+const feedbackService = createFeedbackService({
+  config,
+  mySqlService,
+  mongoService,
+  authService,
+});
+const adminStaticService = createAdminStaticService({ config });
 const roomService = createRoomService({ config, state, send });
 const sensitiveWordService = createSensitiveWordService();
 const messageRouter = createMessageRouter({ config, roomService, send, sensitiveWordService });
-const server = createHttpServer({ config, state, roomService, authService, cloudDataService });
+const server = createHttpServer({
+  config,
+  state,
+  roomService,
+  authService,
+  cloudDataService,
+  feedbackService,
+  adminStaticService,
+});
 const wss = new WebSocketServer({ server, maxPayload: config.MAX_BINARY_BYTES });
 
 registerWebSocketHandlers({ wss, config, roomService, messageRouter });
+
+if (mySqlService.isEnabled()) {
+  await mySqlService.ensureReady();
+}
 
 server.listen(config.PORT, () => {
   console.log(`BZ-Games relay server listening on ${config.PORT}`);

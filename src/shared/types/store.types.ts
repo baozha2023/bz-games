@@ -1,4 +1,8 @@
-export type AvatarFrameUnlockMethod = "playtime" | "consecutive_checkin" | "total_checkin" | "bzcoin";
+export type AvatarFrameUnlockMethod =
+  | "playtime"
+  | "consecutive_checkin"
+  | "total_checkin"
+  | "bzcoin";
 
 export interface AvatarFrameDef {
   id: string;
@@ -87,6 +91,11 @@ export const DEFAULT_NICKNAME_STYLE: NicknameStyle = {
   weight: "normal",
 };
 
+export interface FeedbackHistoryItem {
+  id: string;
+  submittedAt: number;
+}
+
 export interface AppSettings {
   playerName: string;
   playerId: string;
@@ -97,6 +106,7 @@ export interface AppSettings {
   cloudUserName?: string;
   cloudUserProfileUrl?: string;
   cloudLastUploadedAt?: string;
+  feedbackHistory?: FeedbackHistoryItem[];
   nicknameStyle?: NicknameStyle;
   libraryLayout?: LibraryLayout;
   lastJoinRoomAddress?: string;

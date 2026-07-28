@@ -1,0 +1,72 @@
+html,
+body,
+#app {
+  width: 100%;
+  min-width: 960px;
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family:
+    Inter, "PingFang SC", "Microsoft YaHei", system-ui, -apple-system,
+    sans-serif;
+  background: #f4f6f8;
+}
+
+.app-shell {
+  min-height: 100%;
+}
+
+.brand {
+  padding: 4px 10px 0;
+  color: #18a058;
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.brand-subtitle {
+  padding: 2px 10px 24px;
+  color: #8a9099;
+  font-size: 13px;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 72px;
+  padding: 0 24px;
+  background: #fff;
+}
+
+.header-note {
+  margin-top: 3px;
+  color: #8a9099;
+  font-size: 12px;
+}
+
+.login-page {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(24, 160, 88, 0.18), transparent 35%),
+    #f4f6f8;
+}
+
+.login-card {
+  width: 420px;
+}
+
+.feedback-content {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.detail-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 18px;
+}

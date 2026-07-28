@@ -31,13 +31,25 @@ function serializeUser(user) {
   };
 }
 
-function resolveReturnTo(rawValue) {
+export function resolveReturnTo(rawValue, adminPublicUrl = "") {
   if (typeof rawValue !== "string" || !rawValue.trim()) return "";
   const value = rawValue.trim();
+  if (adminPublicUrl && value === adminPublicUrl) return value;
+
+  let parsed;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return "";
+  }
+  if (parsed.username || parsed.password) return "";
+  if (parsed.protocol === "bzgames:" && value.startsWith("bzgames://")) {
+    return value;
+  }
   if (
-    value.startsWith("bzgames://") ||
-    value.startsWith("http://127.0.0.1:") ||
-    value.startsWith("http://localhost:")
+    parsed.protocol === "http:" &&
+    Boolean(parsed.port) &&
+    (parsed.hostname === "127.0.0.1" || parsed.hostname === "localhost")
   ) {
     return value;
   }
@@ -219,7 +231,10 @@ export function createAuthService({ config, mySqlService }) {
       sendJson(res, 503, { error: "auth_not_configured" });
       return true;
     }
-    const returnTo = resolveReturnTo(url.searchParams.get("returnTo"));
+    const returnTo = resolveReturnTo(
+      url.searchParams.get("returnTo"),
+      config.ADMIN_PUBLIC_URL,
+    );
     const stateToken = await createState(returnTo);
     const authorizeUrl = new URL(GITHUB_AUTHORIZE_URL);
     authorizeUrl.searchParams.set("client_id", config.GITHUB_CLIENT_ID);
@@ -271,6 +286,16 @@ export function createAuthService({ config, mySqlService }) {
     }
 
     const user = await upsertGitHubUser(tokenPayload.access_token);
+    const isAdminReturn =
+      Boolean(config.ADMIN_PUBLIC_URL) &&
+      state.return_to === config.ADMIN_PUBLIC_URL;
+    if (
+      isAdminReturn &&
+      !config.ADMIN_GITHUB_IDS.includes(String(user.github_id))
+    ) {
+      sendJson(res, 403, { error: "forbidden" });
+      return true;
+    }
     const { token, expiresAt } = await createSession(user.id);
     const secureCookie = config.GITHUB_CALLBACK_URL.startsWith("https://");
     setCookie(res, config.SESSION_COOKIE_NAME, token, {
@@ -279,6 +304,10 @@ export function createAuthService({ config, mySqlService }) {
     });
 
     if (state.return_to) {
+      if (isAdminReturn) {
+        redirect(res, state.return_to);
+        return true;
+      }
       const redirectUrl = new URL(state.return_to);
       redirectUrl.hash = new URLSearchParams({
         session_token: token,

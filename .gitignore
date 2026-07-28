@@ -5,13 +5,65 @@ node_modules/
 out/
 dist/
 
-# IDE 配置
+# IDE / 编辑器配置
 .idea/
 .vscode/
+.vs/
+.fleet/
+.zed/
+.cursor/
+.windsurf/
+.history/
+.metadata/
+.settings/
+nbproject/private/
+*.iml
+*.ipr
+*.iws
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.code-workspace
+.project
+.classpath
+.factorypath
 
 # 生成的配置与数据
 config.json
 private-build.config.json
+relay-server/bz-games-relay.service
+.env
+.env.*
+!.env.example
+*.local
+*.local.*
+
+# 本地凭据、证书与密钥
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+credentials.json
+credentials.*.json
+secrets.json
+secrets.*.json
+
+# 操作系统与临时文件
+.DS_Store
+._*
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+*.swp
+*.swo
+*.tmp
+*.temp
+*.bak
+*.orig
+*.log
 
 # 游戏存储目录（用户数据）
 games/
@@ -47,6 +99,7 @@ db/*.db-wal
 bird_fly/
 黑白棋/
 跳棋/
+星轨守望/
 
 bz-games-third-party-market/
 bz-games-github-release-market/
@@ -60,15 +113,3 @@ resources/elevate.exe
 
 # 测试文件
 test-connect.js
-
-
-
-
-
-
-
-
-
-
-
-

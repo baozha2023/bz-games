@@ -81,6 +81,10 @@ export const IPC = {
   SYSTEM_CLOUD_UPLOAD: "system:cloud:upload",
   SYSTEM_CLOUD_DOWNLOAD: "system:cloud:download",
   SYSTEM_CLOUD_SYNC_EVENT: "system:cloud:sync:event",
+  SYSTEM_FEEDBACK_SELECT_IMAGES: "system:feedback:selectImages",
+  SYSTEM_FEEDBACK_RELEASE_IMAGES: "system:feedback:releaseImages",
+  SYSTEM_FEEDBACK_SUBMIT: "system:feedback:submit",
+  SYSTEM_FEEDBACK_GET_HISTORY: "system:feedback:getHistory",
   SYSTEM_SAVE_SETTINGS: "system:saveSettings",
   SYSTEM_SAVE_PARTIAL_SETTINGS: "system:savePartialSettings",
   SYSTEM_SET_IGNORED_UPDATE_VERSION: "system:setIgnoredUpdateVersion",
@@ -115,7 +119,6 @@ export const IPC = {
   SYSTEM_CLEAR_CACHE: "system:clearCache",
   SYSTEM_LOG_ERROR: "system:log:error",
   SYSTEM_SAVE_PNG: "system:savePng",
-
   // ── 游戏数据存储 (Preload → Main) ──
   GAME_STORAGE_INIT: "game:storage:init",
   GAME_STORAGE_SAVE: "game:storage:save",

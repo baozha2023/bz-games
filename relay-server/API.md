@@ -30,13 +30,13 @@ ws://127.0.0.1:38090
 
 ## 核心字段
 
-| 字段 | 归属 | 示例 | 用途 |
-| --- | --- | --- | --- |
-| `roomId` | 平台生成，中继服务器内部管理 | `relay-8f6a...` | 房主注册房间时提交，用作中继服务器内部房间 Map key |
-| `roomCode` | 中继服务器生成和识别 | `123456` | 房主注册成功后返回；客机加入时提交 |
-| `playerId` | 平台玩家标识 | `player-xxx` | 标识房主或客机连接 |
-| `hostId` | 房主玩家标识 | `player-host` | 客机收到 `relay:join:ack` 后用于上行路由 |
-| `__relayTo` | 平台中继路由字段 | `player-host` | 指定中继转发目标 |
+| 字段        | 归属                         | 示例            | 用途                                               |
+| ----------- | ---------------------------- | --------------- | -------------------------------------------------- |
+| `roomId`    | 平台生成，中继服务器内部管理 | `relay-8f6a...` | 房主注册房间时提交，用作中继服务器内部房间 Map key |
+| `roomCode`  | 中继服务器生成和识别         | `123456`        | 房主注册成功后返回；客机加入时提交                 |
+| `playerId`  | 平台玩家标识                 | `player-xxx`    | 标识房主或客机连接                                 |
+| `hostId`    | 房主玩家标识                 | `player-host`   | 客机收到 `relay:join:ack` 后用于上行路由           |
+| `__relayTo` | 平台中继路由字段             | `player-host`   | 指定中继转发目标                                   |
 
 ## HTTP 接口
 
@@ -74,14 +74,14 @@ X-Relay-Token: <relayToken>
 
 字段说明：
 
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| `ok` | boolean | 服务进程可响应 HTTP 请求 |
-| `acceptingRooms` | boolean | 当前是否允许创建新房间 |
-| `roomCount` | number | 当前中继房间数 |
-| `clientCount` | number | 当前已登记 WebSocket 客户端数 |
-| `eventLoopDelayMs` | number | 当前事件循环延迟估算值 |
-| `limits` | object | 当前容量限制 |
+| 字段               | 类型    | 说明                          |
+| ------------------ | ------- | ----------------------------- |
+| `ok`               | boolean | 服务进程可响应 HTTP 请求      |
+| `acceptingRooms`   | boolean | 当前是否允许创建新房间        |
+| `roomCount`        | number  | 当前中继房间数                |
+| `clientCount`      | number  | 当前已登记 WebSocket 客户端数 |
+| `eventLoopDelayMs` | number  | 当前事件循环延迟估算值        |
+| `limits`           | object  | 当前容量限制                  |
 
 ### GET /rooms
 
@@ -119,23 +119,23 @@ X-Relay-Token: <relayToken>
 
 房间字段：
 
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| `id` | string | 对外列表 ID，等于 `roomCode` |
-| `source` | string | 固定为 `relay` |
-| `roomCode` | string | 中继服务器生成的房间码 |
-| `name` | string | 房间名称 |
-| `gameId` | string | 游戏 ID |
-| `gameName` | string | 游戏名称 |
-| `gameVersion` | string | 游戏版本 |
-| `hostId` | string | 房主玩家 ID |
-| `hostName` | string | 房主昵称 |
-| `playerCount` | number | 当前中继房间玩家数 |
-| `maxPlayers` | number | 房间最大玩家数 |
-| `state` | string | 房间状态 |
-| `updatedAt` | number | 房间元信息更新时间戳 |
+| 字段          | 类型   | 说明                         |
+| ------------- | ------ | ---------------------------- |
+| `id`          | string | 对外列表 ID，等于 `roomCode` |
+| `source`      | string | 固定为 `relay`               |
+| `roomCode`    | string | 中继服务器生成的房间码       |
+| `name`        | string | 房间名称                     |
+| `gameId`      | string | 游戏 ID                      |
+| `gameName`    | string | 游戏名称                     |
+| `gameVersion` | string | 游戏版本                     |
+| `hostId`      | string | 房主玩家 ID                  |
+| `hostName`    | string | 房主昵称                     |
+| `playerCount` | number | 当前中继房间玩家数           |
+| `maxPlayers`  | number | 房间最大玩家数               |
+| `state`       | string | 房间状态                     |
+| `updatedAt`   | number | 房间元信息更新时间戳         |
 
-### OPTIONS /*
+### OPTIONS /\*
 
 返回 `204`，用于跨域预检。
 
@@ -165,9 +165,9 @@ Host: 127.0.0.1:38090
 
 查询参数：
 
-| 参数 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| `returnTo` | string | 否 | 登录成功后跳回客户端的 URL，仅允许 `bzgames://`、`http://127.0.0.1:` 或 `http://localhost:` 前缀 |
+| 参数       | 类型   | 必填 | 说明                                                                                             |
+| ---------- | ------ | ---- | ------------------------------------------------------------------------------------------------ |
+| `returnTo` | string | 否   | 登录成功后跳回客户端的 URL，仅允许 `bzgames://`、`http://127.0.0.1:` 或 `http://localhost:` 前缀 |
 
 响应：`302` 跳转到 `https://github.com/login/oauth/authorize`，携带 `client_id`、`redirect_uri`、`scope`、`state`。
 
@@ -188,11 +188,11 @@ GET /auth/github/callback?code=<authorization_code>&state=<state_token> HTTP/1.1
 
 响应（失败）：
 
-| 状态码 | error | 说明 |
-| --- | --- | --- |
-| `400` | `invalid_oauth_callback` | 缺少 `code` 或 `state` |
-| `400` | `invalid_oauth_state` | state 无效或已过期 |
-| `502` | `github_token_exchange_failed` | 用 code 换取 access token 失败 |
+| 状态码 | error                          | 说明                           |
+| ------ | ------------------------------ | ------------------------------ |
+| `400`  | `invalid_oauth_callback`       | 缺少 `code` 或 `state`         |
+| `400`  | `invalid_oauth_state`          | state 无效或已过期             |
+| `502`  | `github_token_exchange_failed` | 用 code 换取 access token 失败 |
 
 ### GET /api/auth/me
 
@@ -227,10 +227,10 @@ Authorization: Bearer <session_token>
 
 响应（失败）：
 
-| 状态码 | error | 说明 |
-| --- | --- | --- |
-| `401` | `unauthorized` | 未登录或 session 已过期 |
-| `503` | `auth_not_configured` | MySQL 未配置 |
+| 状态码 | error                 | 说明                    |
+| ------ | --------------------- | ----------------------- |
+| `401`  | `unauthorized`        | 未登录或 session 已过期 |
+| `503`  | `auth_not_configured` | MySQL 未配置            |
 
 ### POST /api/auth/logout
 
@@ -259,9 +259,9 @@ Authorization: Bearer <session_token>
 
 云同步服务需要 MySQL 和 MongoDB 均已配置才启用。当前支持两个文件的云端存取：
 
-| 文件 | Content-Type | 说明 |
-| --- | --- | --- |
-| `config.json` | `application/json` | 用户配置文件 |
+| 文件               | Content-Type                     | 说明                                                                                        |
+| ------------------ | -------------------------------- | ------------------------------------------------------------------------------------------- |
+| `config.json`      | `application/json`               | 用户配置文件                                                                                |
 | `play_sessions.db` | `application/sql; charset=utf-8` | 游戏记录数据库的 SQL 逻辑备份；file_key 保持 `play_sessions.db`，内容不是 SQLite 二进制文件 |
 
 所有云同步端点均需要有效的登录 session（通过 `Authorization: Bearer` 或 Cookie 传递）。
@@ -351,29 +351,29 @@ Authorization: Bearer <session_token>
 
 响应头：
 
-| Header | 说明 |
-| --- | --- |
-| `content-type` | 文件类型 |
-| `content-length` | 文件大小（字节） |
-| `content-disposition` | `attachment; filename="config.json"` |
-| `etag` | 版本号 |
-| `x-file-sha256` | 文件 SHA-256 哈希 |
+| Header                 | 说明                                                             |
+| ---------------------- | ---------------------------------------------------------------- |
+| `content-type`         | 文件类型                                                         |
+| `content-length`       | 文件大小（字节）                                                 |
+| `content-disposition`  | `attachment; filename="config.json"`                             |
+| `etag`                 | 版本号                                                           |
+| `x-file-sha256`        | 文件 SHA-256 哈希                                                |
 | `x-cloud-operation-id` | 本次云同步操作 ID；同一次完整上传/下载的后续文件请求需要原样带回 |
-| `retry-after` | 被限流时距离可重试的秒数 |
-| `x-ratelimit-reset` | 被限流时的重置时间 |
-| `cache-control` | `no-store` |
+| `retry-after`          | 被限流时距离可重试的秒数                                         |
+| `x-ratelimit-reset`    | 被限流时的重置时间                                               |
+| `cache-control`        | `no-store`                                                       |
 
 文件不存在时返回 `404`；触发账号限流时返回 `429`。
 
 响应（失败）：
 
-| 状态码 | error | 说明 |
-| --- | --- | --- |
-| `401` | `unauthorized` | 未登录 |
-| `404` | `file_not_found` | 文件不存在 |
-| `429` | `cloud_sync_rate_limited` | 同一账号一小时内已执行过同类型上传或下载，或同一操作 ID 重复处理同一文件 |
-| `500` | `cloud_download_failed` | 下载过程中服务端异常 |
-| `503` | `cloud_not_configured` | MySQL 或 MongoDB 未配置 |
+| 状态码 | error                     | 说明                                                                     |
+| ------ | ------------------------- | ------------------------------------------------------------------------ |
+| `401`  | `unauthorized`            | 未登录                                                                   |
+| `404`  | `file_not_found`          | 文件不存在                                                               |
+| `429`  | `cloud_sync_rate_limited` | 同一账号一小时内已执行过同类型上传或下载，或同一操作 ID 重复处理同一文件 |
+| `500`  | `cloud_download_failed`   | 下载过程中服务端异常                                                     |
+| `503`  | `cloud_not_configured`    | MySQL 或 MongoDB 未配置                                                  |
 
 ### PUT /api/cloud/files/:name
 
@@ -393,12 +393,12 @@ If-Match: "3"
 
 请求头：
 
-| Header | 必填 | 说明 |
-| --- | --- | --- |
-| `content-type` | 是 | 文件 MIME 类型 |
-| `content-length` | 是 | 文件字节数，超过 `MAX_CLOUD_FILE_BYTES` 时返回 `413` |
-| `if-match` | 否 | 预期版本号（如 `"3"`），用于防止覆盖冲突 |
-| `x-cloud-operation-id` | 否 | 本次云同步操作 ID；同一次完整上传/下载的后续文件请求需要原样带回 |
+| Header                 | 必填 | 说明                                                             |
+| ---------------------- | ---- | ---------------------------------------------------------------- |
+| `content-type`         | 是   | 文件 MIME 类型                                                   |
+| `content-length`       | 是   | 文件字节数，超过 `MAX_CLOUD_FILE_BYTES` 时返回 `413`             |
+| `if-match`             | 否   | 预期版本号（如 `"3"`），用于防止覆盖冲突                         |
+| `x-cloud-operation-id` | 否   | 本次云同步操作 ID；同一次完整上传/下载的后续文件请求需要原样带回 |
 
 响应（成功）：
 
@@ -418,14 +418,14 @@ If-Match: "3"
 
 响应（失败）：
 
-| 状态码 | error | 说明 |
-| --- | --- | --- |
-| `401` | `unauthorized` | 未登录 |
-| `409` | `version_conflict` | `If-Match` 版本号与当前版本不匹配 |
-| `429` | `cloud_sync_rate_limited` | 同一账号一小时内已执行过同类型上传或下载，或同一操作 ID 重复处理同一文件 |
-| `413` | `file_too_large` | 文件超过大小限制 |
-| `500` | `cloud_upload_failed` | 上传过程中服务端异常 |
-| `503` | `cloud_not_configured` | MySQL 或 MongoDB 未配置 |
+| 状态码 | error                     | 说明                                                                     |
+| ------ | ------------------------- | ------------------------------------------------------------------------ |
+| `401`  | `unauthorized`            | 未登录                                                                   |
+| `409`  | `version_conflict`        | `If-Match` 版本号与当前版本不匹配                                        |
+| `429`  | `cloud_sync_rate_limited` | 同一账号一小时内已执行过同类型上传或下载，或同一操作 ID 重复处理同一文件 |
+| `413`  | `file_too_large`          | 文件超过大小限制                                                         |
+| `500`  | `cloud_upload_failed`     | 上传过程中服务端异常                                                     |
+| `503`  | `cloud_not_configured`    | MySQL 或 MongoDB 未配置                                                  |
 
 ### 其它 HTTP 路径
 
@@ -487,24 +487,24 @@ ws://127.0.0.1:38090
 
 必填字段：
 
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| `roomId` | string | 平台生成的中继内部房间 ID |
-| `playerId` | string | 房主玩家 ID |
-| `gameId` | string | 游戏 ID |
-| `gameVersion` | string | 游戏版本 |
+| 字段          | 类型   | 说明                      |
+| ------------- | ------ | ------------------------- |
+| `roomId`      | string | 平台生成的中继内部房间 ID |
+| `playerId`    | string | 房主玩家 ID               |
+| `gameId`      | string | 游戏 ID                   |
+| `gameVersion` | string | 游戏版本                  |
 
 可选字段：
 
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| `token` | string | 启用 `RELAY_TOKEN` 时必填 |
-| `gameName` | string | 游戏名称 |
-| `hostName` | string | 房主昵称 |
+| 字段           | 类型   | 说明                                     |
+| -------------- | ------ | ---------------------------------------- |
+| `token`        | string | 启用 `RELAY_TOKEN` 时必填                |
+| `gameName`     | string | 游戏名称                                 |
+| `hostName`     | string | 房主昵称                                 |
 | `roomPassword` | string | 房间密码，设置后 `hasPassword` 为 `true` |
-| `playerCount` | number | 初始玩家数，默认 `1` |
-| `maxPlayers` | number | 最大玩家数，默认 `4` |
-| `state` | string | 房间状态，默认 `waiting` |
+| `playerCount`  | number | 初始玩家数，默认 `1`                     |
+| `maxPlayers`   | number | 最大玩家数，默认 `4`                     |
+| `state`        | string | 房间状态，默认 `waiting`                 |
 
 成功响应：
 
@@ -537,16 +537,16 @@ ws://127.0.0.1:38090
 
 必填字段：
 
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
+| 字段       | 类型   | 说明                   |
+| ---------- | ------ | ---------------------- |
 | `roomCode` | string | 中继服务器生成的房间码 |
-| `playerId` | string | 客机玩家 ID |
+| `playerId` | string | 客机玩家 ID            |
 
 可选字段：
 
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| `token` | string | 启用 `RELAY_TOKEN` 时必填 |
+| 字段       | 类型   | 说明                           |
+| ---------- | ------ | ------------------------------ |
+| `token`    | string | 启用 `RELAY_TOKEN` 时必填      |
 | `password` | string | 房间密码，有密码的房间必须提供 |
 
 成功响应：
@@ -616,8 +616,8 @@ ws://127.0.0.1:38090
 
 必填字段：
 
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
+| 字段       | 类型   | 说明                   |
+| ---------- | ------ | ---------------------- |
 | `roomCode` | string | 中继服务器生成的房间码 |
 
 响应：
@@ -680,15 +680,15 @@ ws://127.0.0.1:38090
 
 更新字段：
 
-| 字段 | 说明 |
-| --- | --- |
-| `gameId` | 更新游戏 ID |
-| `gameName` | 更新游戏名称 |
-| `gameVersion` | 更新游戏版本 |
-| `hostId` | 更新房主玩家 ID |
-| `maxPlayers` | 更新最大玩家数 |
-| `state` | 更新房间状态 |
-| `players` | 更新玩家数量，并从房主玩家记录更新 `hostName` 和 `name` |
+| 字段          | 说明                                                    |
+| ------------- | ------------------------------------------------------- |
+| `gameId`      | 更新游戏 ID                                             |
+| `gameName`    | 更新游戏名称                                            |
+| `gameVersion` | 更新游戏版本                                            |
+| `hostId`      | 更新房主玩家 ID                                         |
+| `maxPlayers`  | 更新最大玩家数                                          |
+| `state`       | 更新房间状态                                            |
+| `players`     | 更新玩家数量，并从房主玩家记录更新 `hostName` 和 `name` |
 
 ## 透明转发规则
 
@@ -708,13 +708,13 @@ __relayTo -> relayTo -> to -> targetPlayerId -> payload.__relayTo
 
 ### 路由规则
 
-| 发送方 | 目标字段 | 转发结果 |
-| --- | --- | --- |
-| 客机 | 必须等于房主 `hostId` | 转发给房主 |
-| 客机 | 缺失或不是房主 `hostId` | 不转发 |
-| 房主 | 指定当前房间成员 | 转发给指定成员 |
-| 房主 | 不指定目标 | 广播给除房主外的当前房间成员 |
-| 房主 | 指定非当前房间成员 | 不转发 |
+| 发送方 | 目标字段                | 转发结果                     |
+| ------ | ----------------------- | ---------------------------- |
+| 客机   | 必须等于房主 `hostId`   | 转发给房主                   |
+| 客机   | 缺失或不是房主 `hostId` | 不转发                       |
+| 房主   | 指定当前房间成员        | 转发给指定成员               |
+| 房主   | 不指定目标              | 广播给除房主外的当前房间成员 |
+| 房主   | 指定非当前房间成员      | 不转发                       |
 
 ## 房间关闭与连接清理
 
@@ -743,79 +743,79 @@ __relayTo -> relayTo -> to -> targetPlayerId -> payload.__relayTo
 
 错误码：
 
-| code | 场景 |
-| --- | --- |
-| `unauthorized` | 配置了 `RELAY_TOKEN`，请求 token 不匹配 |
-| `invalid_host_payload` | `relay:host` 缺少必填字段或类型不正确 |
+| code                   | 场景                                                                                  |
+| ---------------------- | ------------------------------------------------------------------------------------- |
+| `unauthorized`         | 配置了 `RELAY_TOKEN`，请求 token 不匹配                                               |
+| `invalid_host_payload` | `relay:host` 缺少必填字段或类型不正确                                                 |
 | `invalid_join_payload` | `relay:join` 或 `relay:room:password:probe` 缺少 `roomCode` / `playerId` 或类型不正确 |
-| `room_not_found` | `roomCode` 不存在或房主连接不存在 |
-| `own_room` | 玩家尝试加入自己的房间 |
-| `game_started` | 房间状态不是 `waiting` |
-| `password_required` | 有密码的房间未提供 `password` |
-| `password_incorrect` | 提供的密码不匹配 |
-| `capacity_full` | 服务容量、房间容量或事件循环延迟达到限制 |
+| `room_not_found`       | `roomCode` 不存在或房主连接不存在                                                     |
+| `own_room`             | 玩家尝试加入自己的房间                                                                |
+| `game_started`         | 房间状态不是 `waiting`                                                                |
+| `password_required`    | 有密码的房间未提供 `password`                                                         |
+| `password_incorrect`   | 提供的密码不匹配                                                                      |
+| `capacity_full`        | 服务容量、房间容量或事件循环延迟达到限制                                              |
 
 `capacity_full` 可携带 `reason`：
 
-| reason | 场景 |
-| --- | --- |
-| `max_rooms` | 达到最大房间数 |
-| `max_clients` | 达到最大客户端数 |
-| `room_full` | 房间达到中继连接容量 |
+| reason        | 场景                 |
+| ------------- | -------------------- |
+| `max_rooms`   | 达到最大房间数       |
+| `max_clients` | 达到最大客户端数     |
+| `room_full`   | 房间达到中继连接容量 |
 | `server_busy` | 事件循环延迟达到阈值 |
 
 ## 环境变量
 
 ### 中继服务
 
-| 变量 | 默认值 | 说明 |
-| --- | --- | --- |
-| `PORT` | `38090` | HTTP/WebSocket 监听端口 |
-| `ROOM_TTL_MS` | `60000` | 房间活跃超时时间（毫秒） |
-| `HEARTBEAT_INTERVAL_MS` | `30000` | WebSocket ping 与清理间隔（毫秒） |
-| `MAX_TEXT_BYTES` | `1048576` | 单条文本消息最大字节数 |
-| `MAX_BINARY_BYTES` | `12582912` | 单条二进制消息最大字节数 |
-| `RELAY_TOKEN` | 空字符串 | 房主注册和客机加入鉴权 token；空字符串表示不校验 |
-| `MAX_ROOMS` | `80` | 最大同时房间数 |
-| `MAX_CLIENTS` | `400` | 最大已登记客户端数 |
-| `MAX_CLIENTS_PER_ROOM` | `8` | 单房间最大中继客户端数上限 |
-| `MAX_EVENT_LOOP_DELAY_MS` | `250` | 事件循环延迟限制（毫秒） |
+| 变量                      | 默认值     | 说明                                             |
+| ------------------------- | ---------- | ------------------------------------------------ |
+| `PORT`                    | `38090`    | HTTP/WebSocket 监听端口                          |
+| `ROOM_TTL_MS`             | `60000`    | 房间活跃超时时间（毫秒）                         |
+| `HEARTBEAT_INTERVAL_MS`   | `30000`    | WebSocket ping 与清理间隔（毫秒）                |
+| `MAX_TEXT_BYTES`          | `1048576`  | 单条文本消息最大字节数                           |
+| `MAX_BINARY_BYTES`        | `12582912` | 单条二进制消息最大字节数                         |
+| `RELAY_TOKEN`             | 空字符串   | 房主注册和客机加入鉴权 token；空字符串表示不校验 |
+| `MAX_ROOMS`               | `80`       | 最大同时房间数                                   |
+| `MAX_CLIENTS`             | `400`      | 最大已登记客户端数                               |
+| `MAX_CLIENTS_PER_ROOM`    | `8`        | 单房间最大中继客户端数上限                       |
+| `MAX_EVENT_LOOP_DELAY_MS` | `250`      | 事件循环延迟限制（毫秒）                         |
 
 ### 云同步
 
-| 变量 | 默认值 | 说明 |
-| --- | --- | --- |
+| 变量                   | 默认值     | 说明                                  |
+| ---------------------- | ---------- | ------------------------------------- |
 | `MAX_CLOUD_FILE_BYTES` | `67108864` | 云文件上传大小上限（字节，默认 64MB） |
 
 ### MySQL
 
-| 变量 | 默认值 | 说明 |
-| --- | --- | --- |
-| `MYSQL_HOST` | `127.0.0.1` | MySQL 主机地址 |
-| `MYSQL_PORT` | `3306` | MySQL 端口 |
-| `MYSQL_USER` | 空字符串 | MySQL 用户名 |
-| `MYSQL_PASSWORD` | 空字符串 | MySQL 密码 |
-| `MYSQL_DATABASE` | `bz_games` | MySQL 数据库名 |
+| 变量             | 默认值      | 说明           |
+| ---------------- | ----------- | -------------- |
+| `MYSQL_HOST`     | `127.0.0.1` | MySQL 主机地址 |
+| `MYSQL_PORT`     | `3306`      | MySQL 端口     |
+| `MYSQL_USER`     | 空字符串    | MySQL 用户名   |
+| `MYSQL_PASSWORD` | 空字符串    | MySQL 密码     |
+| `MYSQL_DATABASE` | `bz_games`  | MySQL 数据库名 |
 
 ### MongoDB
 
-| 变量 | 默认值 | 说明 |
-| --- | --- | --- |
-| `MONGODB_URI` | 空字符串 | MongoDB 连接 URI |
-| `MONGODB_DB_NAME` | `bz_games` | MongoDB 数据库名 |
+| 变量                  | 默认值      | 说明              |
+| --------------------- | ----------- | ----------------- |
+| `MONGODB_URI`         | 空字符串    | MongoDB 连接 URI  |
+| `MONGODB_DB_NAME`     | `bz_games`  | MongoDB 数据库名  |
 | `MONGODB_BUCKET_NAME` | `userFiles` | GridFS 存储桶名称 |
 
 ### GitHub OAuth
 
-| 变量 | 默认值 | 说明 |
-| --- | --- | --- |
-| `GITHUB_CLIENT_ID` | 空字符串 | GitHub OAuth App Client ID |
-| `GITHUB_CLIENT_SECRET` | 空字符串 | GitHub OAuth App Client Secret |
-| `GITHUB_CALLBACK_URL` | 空字符串 | OAuth 回调地址（如 `http://relay.example.com:38090/auth/github/callback`） |
-| `GITHUB_OAUTH_SCOPE` | `read:user user:email` | OAuth 授权范围 |
-| `SESSION_COOKIE_NAME` | `bz_games_session` | Session Cookie 名称 |
-| `OAUTH_SESSION_TTL_MS` | `2592000000` | 登录 session 有效期（毫秒，默认 30 天） |
-| `OAUTH_STATE_TTL_MS` | `600000` | OAuth state 有效期（毫秒，默认 10 分钟） |
+| 变量                   | 默认值                 | 说明                                                                       |
+| ---------------------- | ---------------------- | -------------------------------------------------------------------------- |
+| `GITHUB_CLIENT_ID`     | 空字符串               | GitHub OAuth App Client ID                                                 |
+| `GITHUB_CLIENT_SECRET` | 空字符串               | GitHub OAuth App Client Secret                                             |
+| `GITHUB_CALLBACK_URL`  | 空字符串               | OAuth 回调地址（如 `http://relay.example.com:38090/auth/github/callback`） |
+| `GITHUB_OAUTH_SCOPE`   | `read:user user:email` | OAuth 授权范围                                                             |
+| `SESSION_COOKIE_NAME`  | `bz_games_session`     | Session Cookie 名称                                                        |
+| `OAUTH_SESSION_TTL_MS` | `2592000000`           | 登录 session 有效期（毫秒，默认 30 天）                                    |
+| `OAUTH_STATE_TTL_MS`   | `600000`               | OAuth state 有效期（毫秒，默认 10 分钟）                                   |
 
 ## 平台接入配置
 
@@ -888,4 +888,51 @@ sequenceDiagram
   Relay->>Host: 原样转发
   Host->>Relay: room:* / game:* (__relayTo=guestId 或广播)
   Relay->>Guest: 原样转发
+```
+
+## 建言献策
+
+### `POST /api/v1/feedback`
+
+提交文字和图片。请求必须携带发行版 `X-Relay-Token`，可选携带
+`Authorization: Bearer <session token>`。
+
+- Content-Type：`multipart/form-data`
+- 字段：`content`、`appVersion`、`platform`
+- 文件字段：`images`，最多 4 个 PNG/JPEG/WebP 文件，单个最大 5 MiB
+- 文字和图片至少存在一种，文字最多 5,000 字
+
+匿名请求以 TCP Socket IP为键进行进程内 48 小时冷却；有效 GitHub
+会话以 GitHub ID为键进行进程内 6 小时冷却。两类冷却状态都不会跨服务重启或多实例共享。
+
+成功响应：
+
+```json
+{
+  "ok": true,
+  "id": "uuid"
+}
+```
+
+匿名冷却响应为 `429`，包含 `retryAfterSeconds` 和 `resetAt`。
+
+### 管理接口
+
+- `GET /api/admin/v1/me`
+- `GET /api/admin/v1/feedback`
+- `GET /api/admin/v1/feedback/:id`
+- `GET /api/admin/v1/feedback/:id/images/:imageId`
+- `PATCH /api/admin/v1/feedback/:id`
+
+管理接口使用 GitHub会话 Cookie或 Bearer Token，并在服务端校验
+`ADMIN_GITHUB_IDS` 白名单。非管理员返回 `403`。
+
+列表接口接受 `page`（1 到 1,000,000）、`pageSize`（1 到 100）、
+可选 `status` 和 `q`。更新接口 JSON 为：
+
+```json
+{
+  "status": "reviewing",
+  "adminNote": "最多 5,000 个字符"
+}
 ```

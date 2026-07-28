@@ -88,6 +88,39 @@ export function createMySqlService({ config }) {
         KEY idx_cloud_sync_operation_files_created_at (created_at)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS feedback (
+        id CHAR(36) NOT NULL,
+        content TEXT NOT NULL,
+        status ENUM('new', 'reviewing', 'planned', 'resolved', 'closed') NOT NULL DEFAULT 'new',
+        admin_note TEXT NOT NULL,
+        submitter_type ENUM('anonymous', 'github') NOT NULL,
+        user_id BIGINT UNSIGNED NULL,
+        github_login VARCHAR(255) NOT NULL DEFAULT '',
+        app_version VARCHAR(64) NOT NULL,
+        platform VARCHAR(64) NOT NULL,
+        image_count SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+        created_at DATETIME(3) NOT NULL,
+        updated_at DATETIME(3) NOT NULL,
+        PRIMARY KEY (id),
+        KEY idx_feedback_status_created_at (status, created_at),
+        KEY idx_feedback_created_at (created_at),
+        KEY idx_feedback_user_id (user_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS feedback_images (
+        id CHAR(36) NOT NULL,
+        feedback_id CHAR(36) NOT NULL,
+        storage_id VARCHAR(64) NOT NULL,
+        file_name VARCHAR(255) NOT NULL,
+        content_type VARCHAR(64) NOT NULL,
+        size BIGINT UNSIGNED NOT NULL,
+        created_at DATETIME(3) NOT NULL,
+        PRIMARY KEY (id),
+        KEY idx_feedback_images_feedback_id (feedback_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
   }
 
   async function ensureReady() {

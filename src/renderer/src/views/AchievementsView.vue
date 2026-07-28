@@ -54,7 +54,6 @@
             >
               <GameIcon
                 :game-id="game.id"
-                :game-name="game.name"
                 :version="selectedVersions[game.id]"
                 style="width: 100%; height: 100%; object-fit: cover"
               />
@@ -206,9 +205,7 @@ const displayGames = computed(() => {
     const record = gameStore.getGameRecord(g.id);
     const versions = record?.versions
       .map((v) => v.version)
-      .sort(compareGameVersionsDescending) || [
-      g.version,
-    ];
+      .sort(compareGameVersionsDescending) || [g.version];
 
     return {
       id: g.id,

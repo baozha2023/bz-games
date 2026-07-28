@@ -5,9 +5,13 @@
   "type": "module",
   "scripts": {
     "start": "node src/index.js",
-    "test:e2e": "node scripts/relay-e2e-test.js"
+    "test:admin-static": "node --test scripts/admin-static-service.test.js",
+    "test:e2e": "node scripts/relay-e2e-test.js",
+    "test:auth": "node --test scripts/auth-service.test.js",
+    "test:feedback": "node --test scripts/feedback-service.test.js"
   },
   "dependencies": {
+    "busboy": "^1.6.0",
     "mongodb": "^6.21.0",
     "mysql2": "^3.22.5",
     "ws": "^8.18.0"

@@ -7,6 +7,47 @@ export default {
     rooms: "房舍",
     backToRoom: "归房",
   },
+  feedback: {
+    button: "献策",
+    title: "建言献策",
+    loggedInHint: "已入者，六时辰可呈言一次。",
+    anonymousHint: "未入者，四十八时辰可呈言一次。",
+    placeholder: "请陈所议、所患、所愿之能……",
+    selectImages: "择图",
+    clearImages: "尽去诸图",
+    removeImage: "去此图",
+    imageLimits: "至多四图，纳 PNG、JPEG、WebP，单图不逾 5 MiB",
+    submit: "呈上",
+    history: "往录",
+    historyTitle: "献策往录",
+    historyEmpty: "尚无献策之录",
+    historySubmittedAt: "呈于 {time}",
+    successTitle: "谨谢所言",
+    successDescription: "已呈，编号：{id}",
+    cooldownUntil: "请于 {time} 后再呈。",
+    errors: {
+      too_many_images: "至多选四图",
+      image_too_large: "图逾 5 MiB",
+      unsupported_image_type: "仅纳 PNG、JPEG、WebP",
+      image_type_mismatch: "图之实式与所称不合",
+      invalid_image: "图档无效",
+      feedback_image_failed: "读图未成",
+      feedback_images_expired: "所择之图已过期，请复择",
+      feedback_empty: "请书言或择图",
+      feedback_text_too_long: "文不得逾五千字",
+      feedback_not_configured: "中继未设",
+      feedback_timeout: "传送逾时，请后再试",
+      feedback_network_failed: "网络不通，请后再试",
+      feedback_invalid_response: "服务所复有误，请后再试",
+      unauthorized: "GitHub 会已失，请复入或匿名呈言",
+      feedback_storage_not_configured: "呈言之库未设",
+      image_storage_not_configured: "图库未设",
+      payload_too_large: "所呈总量逾限",
+      multipart_required: "呈送之式有误",
+      feedback_storage_failed: "服务端未能存之",
+      unknown: "呈送未成，请后再试",
+    },
+  },
   common: {
     confirm: "确认",
     cancel: "取消",
@@ -53,8 +94,7 @@ export default {
       manifestEncryptedFormatInvalid: "密封 game.json 之式谬或版不纳",
       manifestKeyMismatch: "game.json 由异构之钥所封",
       manifestDecryptFailed: "game.json 解封或验真败",
-      platformVersionMismatch:
-        "平台版不合 (戏需: {required}, 今: {current})",
+      platformVersionMismatch: "平台版不合 (戏需: {required}, 今: {current})",
       entryNotFound: "入口文不存: {entry}",
       versionExists: "此版已存，请先删而后纳",
       idExists: "此戏ID已存，请易他ID",
@@ -72,7 +112,8 @@ export default {
     importDraftIdAvailable: "ID 可用",
     importDraftIdFormatHint: "宜用逆域名式，如 com.dev.game",
     importDraftRequired: "请填诸必填项",
-    importDraftEntryHint: "已自探入口，可按需修之（纳 .html / serve / url / exe）",
+    importDraftEntryHint:
+      "已自探入口，可按需修之（纳 .html / serve / url / exe）",
     importDraftWebUrlHint: "entry 为 url 时，必填 web_url",
     importDraftFields: {
       id: "游戏ID",
@@ -277,25 +318,37 @@ export default {
     lanConnectionHint: "可假 frp、EasyTier 等具联机。",
     lanGuideDetail: "详情",
     lanGuideTitle: "局域联机具置说",
-    lanGuideOverview: "今舍仍由 BZ-Games 在机 38080 门供服。natfrp 与 EasyTier 惟助他戏者自公网或虚局域达君舍耳。",
+    lanGuideOverview:
+      "今舍仍由 BZ-Games 在机 38080 门供服。natfrp 与 EasyTier 惟助他戏者自公网或虚局域达君舍耳。",
     lanGuideOpenSite: "启官网",
     lanGuideSiteLabel: "官网：",
     lanGuideRecommendedConfig: "荐置步",
     lanGuideNatfrpTitle: "natfrp",
     lanGuideNatfrpSummary: "宜无公网 IP、需藉公网址使友直连君舍者。",
-    lanGuideNatfrpStep1: "启 https://www.natfrp.com/ 注而下启器或户端，登后建一 TCP 隧。",
-    lanGuideNatfrpStep2: "本地址填 127.0.0.1，本地门填 38080；示转外访流至 BZ-Games 机舍服。",
-    lanGuideNatfrpStep3: "于 natfrp 板择可用节与远门，启隧后记分予君之公网址与门。",
-    lanGuideNatfrpStep4: "持 BZ-Games 舍在「局域」式，并保 natfrp 隧在客机入前已成连。",
-    lanGuideNatfrpStep5: "令他戏者在台中直输 natfrp 供之公网址:门以入；若君同启物理/虚局域，亦可续用对应式以现舍。",
+    lanGuideNatfrpStep1:
+      "启 https://www.natfrp.com/ 注而下启器或户端，登后建一 TCP 隧。",
+    lanGuideNatfrpStep2:
+      "本地址填 127.0.0.1，本地门填 38080；示转外访流至 BZ-Games 机舍服。",
+    lanGuideNatfrpStep3:
+      "于 natfrp 板择可用节与远门，启隧后记分予君之公网址与门。",
+    lanGuideNatfrpStep4:
+      "持 BZ-Games 舍在「局域」式，并保 natfrp 隧在客机入前已成连。",
+    lanGuideNatfrpStep5:
+      "令他戏者在台中直输 natfrp 供之公网址:门以入；若君同启物理/虚局域，亦可续用对应式以现舍。",
     lanGuideEasyTierTitle: "EasyTier",
-    lanGuideEasyTierSummary: "宜将异网境之戏者拉入同一虚局域，复如局域般直现或连舍。",
+    lanGuideEasyTierSummary:
+      "宜将异网境之戏者拉入同一虚局域，复如局域般直现或连舍。",
     lanGuideEasyTierNodeLabel: "初始节点：",
-    lanGuideEasyTierStep1: "启 https://easytier.cn/ 下而装 EasyTier，舍主及诸客机皆需装。",
-    lanGuideEasyTierStep2: "建或入同一虚网，网名与网钥需一致；若用初始节点，请填可信可用之节点地址。",
-    lanGuideEasyTierStep3: "连成后，校每机皆得 EasyTier 分之虚 IP，且彼此可藉虚 IP 通讯。",
-    lanGuideEasyTierStep4: "舍主于 BZ-Games 中持「局域」式启舍，客机可于「虚局域」页直现舍，或用舍主之 EasyTier 虚 IP:38080 手入。",
-    lanGuideEasyTierStep5: "若无以现舍，先校双方是否在同一虚网、初始节点是否填确、及系统火墙是否放 BZ-Games 之 38080 门。",
+    lanGuideEasyTierStep1:
+      "启 https://easytier.cn/ 下而装 EasyTier，舍主及诸客机皆需装。",
+    lanGuideEasyTierStep2:
+      "建或入同一虚网，网名与网钥需一致；若用初始节点，请填可信可用之节点地址。",
+    lanGuideEasyTierStep3:
+      "连成后，校每机皆得 EasyTier 分之虚 IP，且彼此可藉虚 IP 通讯。",
+    lanGuideEasyTierStep4:
+      "舍主于 BZ-Games 中持「局域」式启舍，客机可于「虚局域」页直现舍，或用舍主之 EasyTier 虚 IP:38080 手入。",
+    lanGuideEasyTierStep5:
+      "若无以现舍，先校双方是否在同一虚网、初始节点是否填确、及系统火墙是否放 BZ-Games 之 38080 门。",
     connectionStatus: {
       connecting: "正连舍...",
       reconnecting: "舍连断，正复连（{current}/5），计 {seconds} 秒后复试",
@@ -420,7 +473,8 @@ export default {
     cloudUpload: "云上传",
     cloudDownload: "云下载",
     cloudSyncHelpTitle: "云同步说",
-    cloudSyncHelp: "云上传：以上传今戏库配置、用者资料与游玩录至云，并覆云中旧资。GitHub Token 与登入会话不传。\n云下载：下云端资料施于本机；config.json 但更新云中所有之栏，云中所无者，本机仍存。",
+    cloudSyncHelp:
+      "云上传：以上传今戏库配置、用者资料与游玩录至云，并覆云中旧资。GitHub Token 与登入会话不传。\n云下载：下云端资料施于本机；config.json 但更新云中所有之栏，云中所无者，本机仍存。",
     cloudNeverUploaded: "云时：未尝上传",
     cloudLastUploadedAt: "云时：{time}",
     cloudUploadSuccess: "云上传毕",
@@ -456,10 +510,12 @@ export default {
     sensitiveWordFilterOn: "启",
     sensitiveWordFilterOff: "闭",
     sensitiveWordFilterHelpTitle: "敏词滤说",
-    sensitiveWordFilterHelp: "敏词滤仅施于房间聊天之消息（主界面房间聊天与独立聊天视窗）。\n中继伺服器房间：伺服器自滤，本地开关无涉。\n局域网 / 虚拟局域网房间：启后，聊天消息中合于敏词库之词皆易为 *。",
+    sensitiveWordFilterHelp:
+      "敏词滤仅施于房间聊天之消息（主界面房间聊天与独立聊天视窗）。\n中继伺服器房间：伺服器自滤，本地开关无涉。\n局域网 / 虚拟局域网房间：启后，聊天消息中合于敏词库之词皆易为 *。",
     githubToken: "GitHub Token",
     githubTokenHelpTitle: "GitHub Token 说",
-    githubTokenHelp: "GitHub Token 用于升 GitHub API 请频限额，保市集访与戏载之常。\n未设时：每时辰六十次请\n设后：每时辰五千次请\n生处：GitHub Settings → Developer settings → Personal access tokens → Tokens (classic)\n无须勾选何权，留空即可正用。",
+    githubTokenHelp:
+      "GitHub Token 用于升 GitHub API 请频限额，保市集访与戏载之常。\n未设时：每时辰六十次请\n设后：每时辰五千次请\n生处：GitHub Settings → Developer settings → Personal access tokens → Tokens (classic)\n无须勾选何权，留空即可正用。",
     githubTokenPlaceholder: "输 GitHub Personal Access Token（选填）",
     browsePath: "择径",
     storagePathList: "戏库径列",
@@ -468,22 +524,25 @@ export default {
     setDefaultStoragePath: "设为原设",
     addStoragePath: "添新戏库径",
     defaultGamesMigrationTitle: "议迁原设戏库",
-    defaultGamesMigrationContent: "为君善验，议迁 exe 同级录下原设戏库至他位。迁将移该戏库中全文，皆成后删原录。今原设戏库：{path}",
+    defaultGamesMigrationContent:
+      "为君善验，议迁 exe 同级录下原设戏库至他位。迁将移该戏库中全文，皆成后删原录。今原设戏库：{path}",
     migrateNow: "立迁",
     doNotRemind: "不复醒",
-    defaultGamesMigrationSuccess: "戏库迁毕，已迁 {gameCount} 戏、{versionCount} 版",
+    defaultGamesMigrationSuccess:
+      "戏库迁毕，已迁 {gameCount} 戏、{versionCount} 版",
     defaultGamesMigrationFailed: "戏库迁败",
     openPathFailed: "启径败",
     storagePathNotEmptyTitle: "录非空",
-    storagePathNotEmptyContent: "所择录必为空录。请择空录，或用建新匣能建新录，以免来日卸时误删他文。",
+    storagePathNotEmptyContent:
+      "所择录必为空录。请择空录，或用建新匣能建新录，以免来日卸时误删他文。",
     removeStoragePathTitle: "删戏库",
     removeStoragePathConfirm:
       "将自该戏库中删台可识之已入戏：{path}。不删用户自入之非戏文。此作不可复，续乎？",
-    removeStoragePathSuccess:
-      "已删径，移除 {gameCount} 戏、{versionCount} 版",
+    removeStoragePathSuccess: "已删径，移除 {gameCount} 戏、{versionCount} 版",
     removeStoragePathFailed: "删径败",
     storageErrors: {
-      cannot_remove_last_storage_path: "至少需留一戏库径，请先添新戏库后再删今径",
+      cannot_remove_last_storage_path:
+        "至少需留一戏库径，请先添新戏库后再删今径",
       storage_path_not_registered: "此径不在戏库列中，请刷新后复试",
       invalid_storage_path: "戏库径无效，请择有效录",
       storage_path_not_directory: "所择径非匣，请择有效录",
@@ -564,15 +623,22 @@ export default {
     uninstallClientDescription: "此作不可复，将全移 BZ-Games 户端。",
     uninstallDeleteGames: "并删诸戏库录",
     uninstallNotAvailable: "卸程不用，惟装版纳此能。",
+    uninstallMarketTasksActive: "请先毕或止方今下载、安装之戏。",
+    uninstallGameLibraryDeleteFailed:
+      "有戏库为他程所占，故未卸户端。请闭所占之程而复试：\n{paths}",
+    uninstallUnsafeStoragePath: "戏库之径不安，卸载已止。请先察戏库之设。",
+    uninstallFailed: "卸程未能启，请后复试。",
     clearCache: "清缓",
     migrateStorage: "迁戏库",
-    migrateStorageDescription: "先择欲迁之存戏库，复择一新空录。迁时钞原戏库中全文，皆迁成后删原戏库；若迁败，自删已迁至标录之部据。",
+    migrateStorageDescription:
+      "先择欲迁之存戏库，复择一新空录。迁时钞原戏库中全文，皆迁成后删原戏库；若迁败，自删已迁至标录之部据。",
     selectSourceStoragePath: "请择欲迁之戏库",
     selectTargetStoragePath: "请择新戏库位",
     migrateStorageWarning: "将迁原戏库中全文：{path}",
     migrateStorageSuccess: "戏库迁毕，已迁 {gameCount} 戏、{versionCount} 版",
     migrateStorageFailed: "戏库迁败",
-    clearCacheConfirm: "将清应用生之诸缓据（下缓、更新包、暂文等），不影已装戏与户置。",
+    clearCacheConfirm:
+      "将清应用生之诸缓据（下缓、更新包、暂文等），不影已装戏与户置。",
     clearCacheProcessing: "正清缓...",
     clearCacheSuccess: "缓清毕，释 {size} 空。",
   },
@@ -600,7 +666,8 @@ export default {
     hour: "时",
     minute: "分",
     weekDays: ",一,,三,,五,",
-    monthNames: "一月,二月,三月,四月,五月,六月,七月,八月,九月,十月,十一月,十二月",
+    monthNames:
+      "一月,二月,三月,四月,五月,六月,七月,八月,九月,十月,十一月,十二月",
     shareHeatmap: "分享",
     shareTotalDays: "累遊天數",
     shareLongestStreak: "至長連遊",
@@ -659,7 +726,9 @@ export default {
     saveNicknameStyleCost: "存（{coins} BZ币）",
     nicknameStyleSaved: "称样已存，耗 {coins} BZ币",
     nicknameStyleInsufficientCoins: "BZ币不敷，存称样需 {coins} BZ币",
-    nicknameColorContrastWarning: "今文色与题背景对不足：明题下禁用偏白色，暗题下禁用偏黑色。",
-    gradientHelp: "渐起与渐终为效色渡之两端：如霓虹、焰、极光等效自起色流至终色，复环归；无效时主用文色。每次存称样皆耗三十 BZ币。",
+    nicknameColorContrastWarning:
+      "今文色与题背景对不足：明题下禁用偏白色，暗题下禁用偏黑色。",
+    gradientHelp:
+      "渐起与渐终为效色渡之两端：如霓虹、焰、极光等效自起色流至终色，复环归；无效时主用文色。每次存称样皆耗三十 BZ币。",
   },
 };

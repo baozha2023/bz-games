@@ -7,6 +7,51 @@ export default {
     rooms: "部屋",
     backToRoom: "部屋に戻る",
   },
+  feedback: {
+    button: "ご意見・ご提案",
+    title: "ご意見・ご提案",
+    loggedInHint: "ログイン中は、6 時間に 1 回送信できます。",
+    anonymousHint: "未ログインの場合、48 時間に 1 回送信できます。",
+    placeholder: "ご意見、不具合、追加してほしい機能をご記入ください……",
+    selectImages: "画像を選択",
+    clearImages: "画像をクリア",
+    removeImage: "画像を削除",
+    imageLimits: "PNG・JPEG・WebP を最大 4 枚、1 枚 5 MiB まで",
+    submit: "送信",
+    history: "履歴",
+    historyTitle: "フィードバック履歴",
+    historyEmpty: "フィードバック履歴はありません",
+    historySubmittedAt: "{time} に送信",
+    successTitle: "ご意見ありがとうございます",
+    successDescription: "送信しました。フィードバック ID：{id}",
+    cooldownUntil: "{time} 以降にもう一度送信できます。",
+    errors: {
+      too_many_images: "画像は最大 4 枚です",
+      image_too_large: "画像が 5 MiB を超えています",
+      unsupported_image_type: "PNG、JPEG、WebP のみ対応しています",
+      image_type_mismatch: "画像の実形式と宣言形式が一致しません",
+      invalid_image: "画像ファイルが無効です",
+      feedback_image_failed: "画像を読み込めませんでした",
+      feedback_images_expired:
+        "画像選択の有効期限が切れました。再選択してください",
+      feedback_empty: "文章を入力するか画像を選択してください",
+      feedback_text_too_long: "文章は 5,000 文字以内です",
+      feedback_not_configured: "中継サービスが設定されていません",
+      feedback_timeout: "送信がタイムアウトしました",
+      feedback_network_failed: "ネットワーク接続に失敗しました",
+      feedback_invalid_response:
+        "サービスから不正な応答が返されました。後でもう一度お試しください",
+      unauthorized:
+        "GitHub セッションが失効しました。再ログインするか匿名で送信してください",
+      feedback_storage_not_configured:
+        "フィードバック保存先が設定されていません",
+      image_storage_not_configured: "画像保存先が設定されていません",
+      payload_too_large: "送信内容の合計サイズが上限を超えています",
+      multipart_required: "送信形式が正しくありません",
+      feedback_storage_failed: "サーバーへの保存に失敗しました",
+      unknown: "送信に失敗しました。後でもう一度お試しください",
+    },
+  },
   common: {
     confirm: "確認",
     cancel: "キャンセル",
@@ -50,17 +95,17 @@ export default {
         "ZIPファイルはサポートされていません。フォルダを解凍してインポートしてください",
       noManifest: "ゲームが認識されません（game.jsonが見つかりません）",
       manifestInvalid: "無効なgame.json形式: {message}",
-      manifestEncryptionKeyMissing: "ゲームマニフェストの暗号化キーが設定されていません",
+      manifestEncryptionKeyMissing:
+        "ゲームマニフェストの暗号化キーが設定されていません",
       manifestEncryptedFormatInvalid:
         "暗号化された game.json の形式が無効か、未対応です",
-      manifestKeyMismatch:
-        "game.json は別のビルドキーで暗号化されています",
-      manifestDecryptFailed:
-        "game.json の復号または整合性検証に失敗しました",
+      manifestKeyMismatch: "game.json は別のビルドキーで暗号化されています",
+      manifestDecryptFailed: "game.json の復号または整合性検証に失敗しました",
       platformVersionMismatch:
         "プラットフォームのバージョンが一致しません（必須: {required}, 現在: {current}）",
       entryNotFound: "エントリーファイルが見つかりません: {entry}",
-      versionExists: "このバージョンは既に存在します。削除してから再度取り込んでください",
+      versionExists:
+        "このバージョンは既に存在します。削除してから再度取り込んでください",
       idExists: "ゲームIDは既に存在します",
       versionInvalid: "バージョン形式が無効です。x.y.z 形式で入力してください",
       playersInvalid: "プレイヤー人数設定が無効です",
@@ -149,12 +194,14 @@ export default {
     taskAlreadyDone: "タスクはすでに終了しています",
     loadFailed: "市場の読み込みに失敗しました",
     downloadFailed: "ダウンロードまたはインストールに失敗しました",
-    networkError: "ネットワーク接続に失敗しました。ネットワークを確認して再試行してください",
+    networkError:
+      "ネットワーク接続に失敗しました。ネットワークを確認して再試行してください",
     downloadError: "ダウンロード失敗",
     verifyError: "検証失敗",
     extractError: "展開失敗",
     installError: "インストール失敗",
-    manifestMissing: "ゲームパッケージに game.json マニフェストがありません。インストールできません",
+    manifestMissing:
+      "ゲームパッケージに game.json マニフェストがありません。インストールできません",
     versionInvalid: "バージョンデータ異常",
     missingSha256: "SHA256欠落",
     missingSize: "サイズ欠落",
@@ -162,7 +209,8 @@ export default {
     platformIncompatible: "プラットフォームバージョン非互換",
     installSuccess: "{name} {version} のインストールが完了しました",
     marketIdMismatchTitle: "マーケットID不一致",
-    marketIdMismatchDesc: "現在のマーケットIDがプラットフォーム登録と一致しません。安全のため、ゲームのダウンロードは無効化されています。",
+    marketIdMismatchDesc:
+      "現在のマーケットIDがプラットフォーム登録と一致しません。安全のため、ゲームのダウンロードは無効化されています。",
     taskStatus: {
       idle: "待機中",
       downloading: "ダウンロード中",
@@ -233,11 +281,16 @@ export default {
     alreadyInRoom: "すでに部屋にいます。まず退出してください",
     createFailed: "部屋の作成に失敗しました",
     createError: {
-      room_game_manifest_invalid: "game.json がないか、破損または復号できません",
-      room_game_type_not_multiplayer: "このゲーム種別はルームに対応していません",
-      room_multiplayer_config_missing: "game.json にマルチプレイヤー設定がありません",
-      platformVersionMismatch: "現在のプラットフォームはゲームの要件を満たしていません",
-      roomPortInUse: "ルーム用ポートが使用中です。別のルームを閉じて再試行してください",
+      room_game_manifest_invalid:
+        "game.json がないか、破損または復号できません",
+      room_game_type_not_multiplayer:
+        "このゲーム種別はルームに対応していません",
+      room_multiplayer_config_missing:
+        "game.json にマルチプレイヤー設定がありません",
+      platformVersionMismatch:
+        "現在のプラットフォームはゲームの要件を満たしていません",
+      roomPortInUse:
+        "ルーム用ポートが使用中です。別のルームを閉じて再試行してください",
       localRoomConnectFailed: "作成したローカルルームに接続できませんでした",
       createFailed: "部屋の作成に失敗しました",
     },
@@ -257,7 +310,8 @@ export default {
     gameEnded: "ゲームが終了しました",
     launchFailed: "起動失敗: {reason}",
     launchError: {
-      roomRequired: "このゲームは対応するバージョンのルームから起動する必要があります",
+      roomRequired:
+        "このゲームは対応するバージョンのルームから起動する必要があります",
       versionNotFound: "ゲームバージョン {version} が見つかりません",
       manifestInvalid: "ゲームマニフェストがないか、破損または復号できません",
       manifestIdentityMismatch: "ゲームマニフェストがゲーム記録と一致しません",
@@ -272,14 +326,18 @@ export default {
     connectionModeLan: "LAN",
     connectionModeRelay: "公式サーバー",
     connectionModeChangeTitle: "接続モード切替",
-    connectionModeChangeContent: "モードを変更すると、現在の部屋の他プレイヤーの接続が切断されます。続行しますか？",
-    connectionModeRelayPending: "公式サーバーモードを選択しました。リレー作成フロー接続待ちです",
+    connectionModeChangeContent:
+      "モードを変更すると、現在の部屋の他プレイヤーの接続が切断されます。続行しますか？",
+    connectionModeRelayPending:
+      "公式サーバーモードを選択しました。リレー作成フロー接続待ちです",
     connectionModeRelayReady: "公式サーバー部屋を有効化しました: {address}",
-    connectionModeRelayFailed: "公式サーバー部屋の有効化に失敗しました: {reason}",
+    connectionModeRelayFailed:
+      "公式サーバー部屋の有効化に失敗しました: {reason}",
     connectionModeLanSelected: "LAN モードに切り替えました",
     passwordButton: "パスワード",
     passwordModalTitle: "部屋パスワードを設定",
-    passwordInputPlaceholder: "部屋パスワードを入力してください。空欄で解除します",
+    passwordInputPlaceholder:
+      "部屋パスワードを入力してください。空欄で解除します",
     passwordSaveSuccess: "部屋パスワードを更新しました",
     passwordClearSuccess: "部屋パスワードを解除しました",
     joinPasswordModalTitle: "部屋パスワードを入力",
@@ -288,25 +346,38 @@ export default {
     lanConnectionHint: "frp や EasyTier などのツールを使って対戦できます。",
     lanGuideDetail: "詳細",
     lanGuideTitle: "LAN ツール設定ガイド",
-    lanGuideOverview: "部屋そのものは BZ-Games がローカル 38080 ポートでホストしています。natfrp と EasyTier は、公開ネットワークや仮想 LAN からその部屋へ到達するための補助です。",
+    lanGuideOverview:
+      "部屋そのものは BZ-Games がローカル 38080 ポートでホストしています。natfrp と EasyTier は、公開ネットワークや仮想 LAN からその部屋へ到達するための補助です。",
     lanGuideOpenSite: "公式サイト",
     lanGuideSiteLabel: "サイト:",
     lanGuideRecommendedConfig: "推奨設定手順",
     lanGuideNatfrpTitle: "natfrp",
-    lanGuideNatfrpSummary: "グローバル IP がなく、公開アドレス経由で友達に直接接続してもらいたい場合に向いています。",
-    lanGuideNatfrpStep1: "https://www.natfrp.com/ を開いて登録し、ランチャーまたはクライアントをダウンロードして、ログイン後に TCP トンネルを作成します。",
-    lanGuideNatfrpStep2: "ローカルアドレスは 127.0.0.1、ローカルポートは 38080 に設定します。これで外部アクセスが BZ-Games のローカル部屋サービスへ転送されます。",
-    lanGuideNatfrpStep3: "natfrp 管理画面で利用可能なノードとリモートポートを選び、トンネルを起動したら割り当てられた公開アドレスとポートを控えます。",
-    lanGuideNatfrpStep4: "BZ-Games の部屋は LAN モードのままにし、ゲストが参加する前に natfrp トンネルが接続済みであることを確認します。",
-    lanGuideNatfrpStep5: "他のプレイヤーは natfrp が発行した 公開アドレス:ポート で参加できます。物理 LAN や仮想 LAN を併用している場合は、それらの方法でも構いません。",
+    lanGuideNatfrpSummary:
+      "グローバル IP がなく、公開アドレス経由で友達に直接接続してもらいたい場合に向いています。",
+    lanGuideNatfrpStep1:
+      "https://www.natfrp.com/ を開いて登録し、ランチャーまたはクライアントをダウンロードして、ログイン後に TCP トンネルを作成します。",
+    lanGuideNatfrpStep2:
+      "ローカルアドレスは 127.0.0.1、ローカルポートは 38080 に設定します。これで外部アクセスが BZ-Games のローカル部屋サービスへ転送されます。",
+    lanGuideNatfrpStep3:
+      "natfrp 管理画面で利用可能なノードとリモートポートを選び、トンネルを起動したら割り当てられた公開アドレスとポートを控えます。",
+    lanGuideNatfrpStep4:
+      "BZ-Games の部屋は LAN モードのままにし、ゲストが参加する前に natfrp トンネルが接続済みであることを確認します。",
+    lanGuideNatfrpStep5:
+      "他のプレイヤーは natfrp が発行した 公開アドレス:ポート で参加できます。物理 LAN や仮想 LAN を併用している場合は、それらの方法でも構いません。",
     lanGuideEasyTierTitle: "EasyTier",
-    lanGuideEasyTierSummary: "異なるネットワークにいるプレイヤーを同じ仮想 LAN に入れ、通常の LAN のように部屋を見つけたり参加したりしたい場合に向いています。",
+    lanGuideEasyTierSummary:
+      "異なるネットワークにいるプレイヤーを同じ仮想 LAN に入れ、通常の LAN のように部屋を見つけたり参加したりしたい場合に向いています。",
     lanGuideEasyTierNodeLabel: "初期ノード:",
-    lanGuideEasyTierStep1: "https://easytier.cn/ を開いて EasyTier をダウンロードしてインストールします。ホストもゲストも全員インストールが必要です。",
-    lanGuideEasyTierStep2: "同じ仮想ネットワークを作成または参加します。ネットワーク名とネットワークシークレットは全員同じにしてください。初期ノードを使う場合は、信頼できる利用可能なノードアドレスを入力します。",
-    lanGuideEasyTierStep3: "接続後、各端末に EasyTier の仮想 IP が割り当てられ、相互にその仮想 IP で通信できることを確認します。",
-    lanGuideEasyTierStep4: "ホストは BZ-Games で LAN モードのまま部屋を作成します。ゲストは「仮想 LAN」タブで部屋を見つけるか、ホストの EasyTier 仮想 IP:38080 で手動参加できます。",
-    lanGuideEasyTierStep5: "部屋が見つからない場合は、全員が同じ仮想ネットワークにいるか、初期ノードが正しいか、そして BZ-Games の 38080 ポートがファイアウォールで許可されているかを優先的に確認してください。",
+    lanGuideEasyTierStep1:
+      "https://easytier.cn/ を開いて EasyTier をダウンロードしてインストールします。ホストもゲストも全員インストールが必要です。",
+    lanGuideEasyTierStep2:
+      "同じ仮想ネットワークを作成または参加します。ネットワーク名とネットワークシークレットは全員同じにしてください。初期ノードを使う場合は、信頼できる利用可能なノードアドレスを入力します。",
+    lanGuideEasyTierStep3:
+      "接続後、各端末に EasyTier の仮想 IP が割り当てられ、相互にその仮想 IP で通信できることを確認します。",
+    lanGuideEasyTierStep4:
+      "ホストは BZ-Games で LAN モードのまま部屋を作成します。ゲストは「仮想 LAN」タブで部屋を見つけるか、ホストの EasyTier 仮想 IP:38080 で手動参加できます。",
+    lanGuideEasyTierStep5:
+      "部屋が見つからない場合は、全員が同じ仮想ネットワークにいるか、初期ノードが正しいか、そして BZ-Games の 38080 ポートがファイアウォールで許可されているかを優先的に確認してください。",
     connectionStatus: {
       connecting: "部屋に接続中...",
       reconnecting:
@@ -322,10 +393,12 @@ export default {
       ownRoom: "これは自分の部屋です。現在の部屋を開いてください。",
       passwordRequired: "この部屋にはパスワードが必要です",
       passwordIncorrect: "部屋パスワードが正しくありません",
-      manifestInvalid: "ローカルの game.json がないか、破損または復号できません",
+      manifestInvalid:
+        "ローカルの game.json がないか、破損または復号できません",
       gameTypeNotMultiplayer: "このゲーム種別はルームに対応していません",
       multiplayerConfigMissing: "game.json にマルチプレイヤー設定がありません",
-      platformVersionMismatch: "現在のプラットフォームはゲームの要件を満たしていません",
+      platformVersionMismatch:
+        "現在のプラットフォームはゲームの要件を満たしていません",
       probeFailed: "部屋のパスワード状態の確認に失敗しました",
       unknown: "不明なエラー",
     },
@@ -337,8 +410,10 @@ export default {
     refresh: "更新",
     lanTab: "LAN",
     relayTab: "サーバー",
-    lanDesc: "物理 LAN と仮想 LAN 内で待機中の BZ-Games 部屋を自動検索し、参加前にゲーム ID とバージョンを確認します。",
-    relayDesc: "サーバー部屋は公式リレーサービスから取得します。ホストが公式サーバーモードを有効にすると短縮アドレスが表示され、ゲストは直接参加できます。",
+    lanDesc:
+      "物理 LAN と仮想 LAN 内で待機中の BZ-Games 部屋を自動検索し、参加前にゲーム ID とバージョンを確認します。",
+    relayDesc:
+      "サーバー部屋は公式リレーサービスから取得します。ホストが公式サーバーモードを有効にすると短縮アドレスが表示され、ゲストは直接参加できます。",
     emptyLan: "参加可能な LAN 部屋はありません",
     emptyRelay: "参加可能なサーバー部屋はありません",
     refreshFailed: "部屋の更新に失敗しました",
@@ -413,12 +488,14 @@ export default {
     enterName: "ニックネームを入力してください",
     nameTooLong: "ニックネームは16文字以内で入力してください",
     nameInvalidChars: "ニックネームに < > \" ' ` & \\ / は使用できません",
-    enterPortReserved: "ポート 38081 は LAN 検出用に予約されています。別のポートを使用してください",
+    enterPortReserved:
+      "ポート 38081 は LAN 検出用に予約されています。別のポートを使用してください",
     enterPort: "有効なポートを入力してください",
     saveSuccess: "設定を保存しました",
     saveFail: "設定の保存に失敗しました",
     unsavedChangesTitle: "保存されていない変更",
-    unsavedChangesContent: "保存されていない設定変更があります。保存してから移動しますか？",
+    unsavedChangesContent:
+      "保存されていない設定変更があります。保存してから移動しますか？",
     unsavedChangesSave: "保存して移動",
     unsavedChangesDiscard: "破棄",
     unsavedChangesCancel: "キャンセル",
@@ -428,15 +505,18 @@ export default {
     uploadAvatar: "アバターをアップロード",
     cloudSync: "クラウドデータ",
     githubLogin: "GitHubでログイン",
-    githubLoginOpened: "GitHub認証ページを開きました。ログイン完了後にセッションが保存されます。",
+    githubLoginOpened:
+      "GitHub認証ページを開きました。ログイン完了後にセッションが保存されます。",
     cloudUpload: "クラウドアップロード",
     cloudDownload: "クラウドダウンロード",
     cloudSyncHelpTitle: "クラウド同期の説明",
-    cloudSyncHelp: "クラウドアップロード: 現在のゲームライブラリ設定、ユーザーデータ、プレイ記録をクラウドへアップロードし、既存のクラウドデータを上書きします。GitHub Token とログインセッション項目はアップロードされません。\nクラウドダウンロード: クラウドデータをダウンロードしてローカルに適用します。config.json はクラウドに存在する項目のみ更新し、クラウドにないローカル項目は保持されます。",
+    cloudSyncHelp:
+      "クラウドアップロード: 現在のゲームライブラリ設定、ユーザーデータ、プレイ記録をクラウドへアップロードし、既存のクラウドデータを上書きします。GitHub Token とログインセッション項目はアップロードされません。\nクラウドダウンロード: クラウドデータをダウンロードしてローカルに適用します。config.json はクラウドに存在する項目のみ更新し、クラウドにないローカル項目は保持されます。",
     cloudNeverUploaded: "クラウド時刻: 未アップロード",
     cloudLastUploadedAt: "クラウド時刻: {time}",
     cloudUploadSuccess: "クラウドアップロードが完了しました",
-    cloudDownloadSuccess: "クラウドダウンロードが完了しました。ローカルデータを上書きしました。",
+    cloudDownloadSuccess:
+      "クラウドダウンロードが完了しました。ローカルデータを上書きしました。",
     cloudProgress: {
       checking: "クラウド状態を確認中...",
       uploading: "クラウドデータを上書きアップロード中...",
@@ -447,12 +527,16 @@ export default {
     cloudErrors: {
       cloud_not_configured: "クラウド同期が設定されていません",
       unauthorized: "先にGitHub認証ログインを完了してください",
-      cloud_data_incomplete: "クラウドデータが不完全です。先に完全なデータをアップロードしてください。",
+      cloud_data_incomplete:
+        "クラウドデータが不完全です。先に完全なデータをアップロードしてください。",
       file_not_found: "クラウドファイルが見つかりません",
-      version_conflict: "クラウドバージョンが競合しています。更新してから再試行してください。",
+      version_conflict:
+        "クラウドバージョンが競合しています。更新してから再試行してください。",
       file_too_large: "ファイルがクラウド同期サイズ上限を超えています",
-      cloud_hash_mismatch: "クラウドファイルの検証に失敗しました。再試行してください。",
-      cloud_sync_rate_limited: "クラウド同期が頻繁すぎます。同一アカウントではアップロードとダウンロードがそれぞれ24時間に1回までです。",
+      cloud_hash_mismatch:
+        "クラウドファイルの検証に失敗しました。再試行してください。",
+      cloud_sync_rate_limited:
+        "クラウド同期が頻繁すぎます。同一アカウントではアップロードとダウンロードがそれぞれ24時間に1回までです。",
       unknown: "クラウド同期に失敗しました",
     },
     closeBehavior: "メインウィンドウを閉じる",
@@ -468,10 +552,12 @@ export default {
     sensitiveWordFilterOn: "オン",
     sensitiveWordFilterOff: "オフ",
     sensitiveWordFilterHelpTitle: "フィルターについて",
-    sensitiveWordFilterHelp: "センシティブワードフィルターはルームチャットメッセージ（メイン画面のルームチャットおよび独立したチャットウィンドウ）にのみ適用されます。\n中継サーバールーム：サーバーが自動的にフィルタリングするため、ローカルの切り替えは無効です。\nLAN / 仮想LANルーム：有効にすると、センシティブワードに一致する単語は * に置き換えられます。",
+    sensitiveWordFilterHelp:
+      "センシティブワードフィルターはルームチャットメッセージ（メイン画面のルームチャットおよび独立したチャットウィンドウ）にのみ適用されます。\n中継サーバールーム：サーバーが自動的にフィルタリングするため、ローカルの切り替えは無効です。\nLAN / 仮想LANルーム：有効にすると、センシティブワードに一致する単語は * に置き換えられます。",
     githubToken: "GitHub Token",
     githubTokenHelpTitle: "GitHub Token について",
-    githubTokenHelp: "GitHub Token は GitHub API のリクエスト制限を引き上げ、マーケットアクセスとゲームダウンロードを正常に保ちます。\n未設定: 60リクエスト/時間\n設定後: 5000リクエスト/時間\n作成場所: GitHub Settings → Developer settings → Personal access tokens → Tokens (classic)\n権限を選択する必要はありません。",
+    githubTokenHelp:
+      "GitHub Token は GitHub API のリクエスト制限を引き上げ、マーケットアクセスとゲームダウンロードを正常に保ちます。\n未設定: 60リクエスト/時間\n設定後: 5000リクエスト/時間\n作成場所: GitHub Settings → Developer settings → Personal access tokens → Tokens (classic)\n権限を選択する必要はありません。",
     githubTokenPlaceholder: "GitHub Personal Access Tokenを入力（任意）",
     browsePath: "参照",
     storagePathList: "ゲームライブラリ一覧",
@@ -480,14 +566,17 @@ export default {
     setDefaultStoragePath: "既定に設定",
     addStoragePath: "新しいゲームライブラリを追加",
     defaultGamesMigrationTitle: "既定ゲームライブラリの移動を推奨",
-    defaultGamesMigrationContent: "より良い体験のため、実行ファイルと同じ階層の既定ゲームライブラリを別の場所へ移動することをおすすめします。移動時はこのライブラリ内のすべてのファイルを移動し、すべて成功した場合のみ元のディレクトリを削除します。現在のライブラリ: {path}",
+    defaultGamesMigrationContent:
+      "より良い体験のため、実行ファイルと同じ階層の既定ゲームライブラリを別の場所へ移動することをおすすめします。移動時はこのライブラリ内のすべてのファイルを移動し、すべて成功した場合のみ元のディレクトリを削除します。現在のライブラリ: {path}",
     migrateNow: "今すぐ移動",
     doNotRemind: "今後表示しない",
-    defaultGamesMigrationSuccess: "ゲームライブラリを移動しました。{gameCount} 件のゲーム、{versionCount} 件のバージョンを移動しました",
+    defaultGamesMigrationSuccess:
+      "ゲームライブラリを移動しました。{gameCount} 件のゲーム、{versionCount} 件のバージョンを移動しました",
     defaultGamesMigrationFailed: "ゲームライブラリの移動に失敗しました",
     openPathFailed: "パスを開けませんでした",
     storagePathNotEmptyTitle: "ディレクトリが空ではありません",
-    storagePathNotEmptyContent: "選択したディレクトリは空である必要があります。アンインストール時に他のファイルを誤って削除しないよう、空のディレクトリを選択するか新しいディレクトリを作成してください。",
+    storagePathNotEmptyContent:
+      "選択したディレクトリは空である必要があります。アンインストール時に他のファイルを誤って削除しないよう、空のディレクトリを選択するか新しいディレクトリを作成してください。",
     removeStoragePathTitle: "保存先パスを削除",
     removeStoragePathConfirm:
       "このライブラリ内でプラットフォームが認識できる取り込み済みゲームデータを削除します: {path}。ユーザーが追加した非ゲームファイルは削除されません。この操作は元に戻せません。続行しますか？",
@@ -495,19 +584,32 @@ export default {
       "保存先を削除しました。{gameCount} 件のゲーム、{versionCount} 件のバージョンを削除しました",
     removeStoragePathFailed: "保存先の削除に失敗しました",
     storageErrors: {
-      cannot_remove_last_storage_path: "少なくとも 1 つのゲームライブラリパスを残す必要があります。別のライブラリを追加してから削除してください。",
-      storage_path_not_registered: "このパスは保存済みゲームライブラリ一覧にありません。更新してから再試行してください。",
-      invalid_storage_path: "ゲームライブラリパスが無効です。有効なディレクトリを選択してください。",
-      storage_path_not_directory: "選択したパスはフォルダーではありません。有効なディレクトリを選択してください。",
-      directory_not_empty: "選択したディレクトリは空ではありません。空のディレクトリを選択するか新規作成してください。",
-      target_is_source_path: "移動先パスを移動元パスと同じにすることはできません。",
-      target_inside_source_path: "移動先パスを移動元ライブラリ内にすることはできません。",
-      source_inside_target_path: "移動元ライブラリを移動先パス内にすることはできません。",
-      target_is_default_games_path: "移動先パスを実行ファイル横の既定 games ディレクトリのままにすることはできません。",
-      game_storage_path_not_configured: "利用可能なゲームライブラリパスが設定されていません。",
-      source_storage_path_not_found: "移動元ゲームライブラリが存在しません。更新してから再試行してください。",
-      source_storage_path_not_directory: "移動元ゲームライブラリは有効なフォルダーではありません。更新してから再試行してください。",
-      storage_migration_file_busy: "現在ファイルが開かれているため、移動できません。変更はロールバックされました。",
+      cannot_remove_last_storage_path:
+        "少なくとも 1 つのゲームライブラリパスを残す必要があります。別のライブラリを追加してから削除してください。",
+      storage_path_not_registered:
+        "このパスは保存済みゲームライブラリ一覧にありません。更新してから再試行してください。",
+      invalid_storage_path:
+        "ゲームライブラリパスが無効です。有効なディレクトリを選択してください。",
+      storage_path_not_directory:
+        "選択したパスはフォルダーではありません。有効なディレクトリを選択してください。",
+      directory_not_empty:
+        "選択したディレクトリは空ではありません。空のディレクトリを選択するか新規作成してください。",
+      target_is_source_path:
+        "移動先パスを移動元パスと同じにすることはできません。",
+      target_inside_source_path:
+        "移動先パスを移動元ライブラリ内にすることはできません。",
+      source_inside_target_path:
+        "移動元ライブラリを移動先パス内にすることはできません。",
+      target_is_default_games_path:
+        "移動先パスを実行ファイル横の既定 games ディレクトリのままにすることはできません。",
+      game_storage_path_not_configured:
+        "利用可能なゲームライブラリパスが設定されていません。",
+      source_storage_path_not_found:
+        "移動元ゲームライブラリが存在しません。更新してから再試行してください。",
+      source_storage_path_not_directory:
+        "移動元ゲームライブラリは有効なフォルダーではありません。更新してから再試行してください。",
+      storage_migration_file_busy:
+        "現在ファイルが開かれているため、移動できません。変更はロールバックされました。",
       unknown: "不明なゲームライブラリエラー",
     },
     dataHealth: "データ健全性",
@@ -527,22 +629,33 @@ export default {
       config_read_failed: "config.json の読み込みに失敗しました: {reason}",
       player_id_missing: "プレイヤー ID がありません",
       duplicate_game_id: "ゲーム ID が重複しています: {gameId}",
-      duplicate_game_version: "ゲームバージョンが重複しています: {gameId}@{version}",
-      version_path_missing: "ゲームバージョンのディレクトリがありません: {gameId}@{version}",
-      version_path_not_directory: "ゲームバージョンのパスがディレクトリではありません: {gameId}@{version}",
-      version_path_read_failed: "ゲームバージョンのディレクトリを確認できません: {reason}",
+      duplicate_game_version:
+        "ゲームバージョンが重複しています: {gameId}@{version}",
+      version_path_missing:
+        "ゲームバージョンのディレクトリがありません: {gameId}@{version}",
+      version_path_not_directory:
+        "ゲームバージョンのパスがディレクトリではありません: {gameId}@{version}",
+      version_path_read_failed:
+        "ゲームバージョンのディレクトリを確認できません: {reason}",
       manifest_missing: "game.json がありません: {gameId}@{version}",
-      manifest_plaintext: "game.json が暗号化されていません: {gameId}@{version}",
-      manifest_identity_mismatch: "game.json の ID またはバージョンがゲーム記録と一致しません",
+      manifest_plaintext:
+        "game.json が暗号化されていません: {gameId}@{version}",
+      manifest_identity_mismatch:
+        "game.json の ID またはバージョンがゲーム記録と一致しません",
       manifest_platform_incompatible:
         "必要なプラットフォームは {required}、現在は {current} です",
-      manifest_file_missing: "game.json で指定された {kind} ファイルがありません: {file}",
-      manifestEncryptionKeyMissing: "ゲームマニフェストの暗号鍵が設定されていません",
-      manifestEncryptedFormatInvalid: "暗号化された game.json の形式が無効または未対応です",
+      manifest_file_missing:
+        "game.json で指定された {kind} ファイルがありません: {file}",
+      manifestEncryptionKeyMissing:
+        "ゲームマニフェストの暗号鍵が設定されていません",
+      manifestEncryptedFormatInvalid:
+        "暗号化された game.json の形式が無効または未対応です",
       manifestKeyMismatch: "game.json は異なるビルド鍵を使用しています",
       manifestDecryptFailed: "game.json の復号または整合性検証に失敗しました",
-      manifest_invalid: "game.json が最新のマニフェスト仕様に適合しません: {reason}",
-      latest_version_invalid: "{gameId} の最新バージョン記録が無効です: {version}",
+      manifest_invalid:
+        "game.json が最新のマニフェスト仕様に適合しません: {reason}",
+      latest_version_invalid:
+        "{gameId} の最新バージョン記録が無効です: {version}",
       storage_root_missing: "ゲームライブラリの保存先がありません",
     },
     update: "クライアント更新",
@@ -572,25 +685,41 @@ export default {
       unknown: "不明な更新エラー",
     },
     updatePromptTitle: "新しいバージョンがあります",
-    updatePromptMessage: "新しいバージョン {version} を検出しました。今すぐ更新しますか？",
+    updatePromptMessage:
+      "新しいバージョン {version} を検出しました。今すぐ更新しますか？",
     updateNow: "今すぐ更新",
     updateLater: "後で",
     officialWebsite: "公式サイト",
     uninstallClient: "クライアントのアンインストール",
-    uninstallClientDescription: "この操作は取り消せません。BZ-Games が完全に削除されます。",
+    uninstallClientDescription:
+      "この操作は取り消せません。BZ-Games が完全に削除されます。",
     uninstallDeleteGames: "すべてのゲームディレクトリも削除する",
-    uninstallNotAvailable: "アンインストーラーは利用できません。インストール版のみ対応しています。",
+    uninstallNotAvailable:
+      "アンインストーラーは利用できません。インストール版のみ対応しています。",
+    uninstallMarketTasksActive:
+      "進行中のゲームのダウンロードまたはインストールを完了するか、キャンセルしてください。",
+    uninstallGameLibraryDeleteFailed:
+      "一部のゲームライブラリが別のプログラムで使用中です。クライアントはアンインストールされていません。使用中のプログラムを閉じて再試行してください：\n{paths}",
+    uninstallUnsafeStoragePath:
+      "ゲームライブラリのパスが安全でないため、アンインストールを停止しました。ライブラリ設定を確認してください。",
+    uninstallFailed:
+      "アンインストーラーを起動できませんでした。もう一度お試しください。",
     clearCache: "キャッシュクリア",
     migrateStorage: "ライブラリを移動",
-    migrateStorageDescription: "移動する既存のゲームライブラリを選択し、新しい空のディレクトリを選択してください。移動時は元のライブラリ内のすべてのファイルをコピーし、すべて成功した場合のみ元のライブラリを削除します。失敗した場合は、移動先にコピー済みの一部データを自動削除します。",
+    migrateStorageDescription:
+      "移動する既存のゲームライブラリを選択し、新しい空のディレクトリを選択してください。移動時は元のライブラリ内のすべてのファイルをコピーし、すべて成功した場合のみ元のライブラリを削除します。失敗した場合は、移動先にコピー済みの一部データを自動削除します。",
     selectSourceStoragePath: "移動するゲームライブラリを選択してください",
     selectTargetStoragePath: "新しいゲームライブラリの場所を選択してください",
-    migrateStorageWarning: "元のライブラリ内のすべてのファイルを移動します: {path}",
-    migrateStorageSuccess: "ゲームライブラリを移動しました。{gameCount} 件のゲーム、{versionCount} 件のバージョンを移動しました",
+    migrateStorageWarning:
+      "元のライブラリ内のすべてのファイルを移動します: {path}",
+    migrateStorageSuccess:
+      "ゲームライブラリを移動しました。{gameCount} 件のゲーム、{versionCount} 件のバージョンを移動しました",
     migrateStorageFailed: "ゲームライブラリの移動に失敗しました",
-    clearCacheConfirm: "すべてのキャッシュデータ（ダウンロードキャッシュ、更新パッケージ、一時ファイルなど）を削除します。インストール済みのゲームや設定には影響しません。",
+    clearCacheConfirm:
+      "すべてのキャッシュデータ（ダウンロードキャッシュ、更新パッケージ、一時ファイルなど）を削除します。インストール済みのゲームや設定には影響しません。",
     clearCacheProcessing: "キャッシュを削除中...",
-    clearCacheSuccess: "キャッシュを削除しました。{size} の空き容量を確保しました。",
+    clearCacheSuccess:
+      "キャッシュを削除しました。{size} の空き容量を確保しました。",
   },
   statistics: {
     title: "統計",
@@ -673,9 +802,13 @@ export default {
     effectHeartbeat: "鼓動パルス",
     resetNicknameStyle: "初期化",
     saveNicknameStyleCost: "保存（{coins} BZコイン）",
-    nicknameStyleSaved: "ニックネームスタイルを保存しました。{coins} BZコインを消費しました",
-    nicknameStyleInsufficientCoins: "BZコインが不足しています。保存には {coins} BZコインが必要です",
-    nicknameColorContrastWarning: "現在の文字色はテーマ背景とのコントラストが不足しています。ライトテーマでは白に近い色、ダークテーマでは黒に近い色は使用できません。",
-    gradientHelp: "グラデーション開始と終了は、エフェクトで使う色変化の両端です。ネオン、炎、オーロラなどは開始色から終了色へ流れ、循環します。エフェクトなしの場合は主に文字色を使用します。保存するたびに 30 BZコインを消費します。",
+    nicknameStyleSaved:
+      "ニックネームスタイルを保存しました。{coins} BZコインを消費しました",
+    nicknameStyleInsufficientCoins:
+      "BZコインが不足しています。保存には {coins} BZコインが必要です",
+    nicknameColorContrastWarning:
+      "現在の文字色はテーマ背景とのコントラストが不足しています。ライトテーマでは白に近い色、ダークテーマでは黒に近い色は使用できません。",
+    gradientHelp:
+      "グラデーション開始と終了は、エフェクトで使う色変化の両端です。ネオン、炎、オーロラなどは開始色から終了色へ流れ、循環します。エフェクトなしの場合は主に文字色を使用します。保存するたびに 30 BZコインを消費します。",
   },
 };
