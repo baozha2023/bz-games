@@ -48,19 +48,16 @@ export function createMySqlService({ config }) {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
     await pool.query(`
-      CREATE TABLE IF NOT EXISTS user_file_refs (
-        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      CREATE TABLE IF NOT EXISTS user_platform_snapshots (
         user_id BIGINT UNSIGNED NOT NULL,
-        file_key VARCHAR(64) NOT NULL,
         file_storage_id VARCHAR(64) NOT NULL,
-        version BIGINT UNSIGNED NOT NULL,
+        snapshot_version BIGINT UNSIGNED NOT NULL,
         size BIGINT UNSIGNED NOT NULL,
         sha256 CHAR(64) NOT NULL,
         content_type VARCHAR(255) NOT NULL,
         created_at DATETIME(3) NOT NULL,
         updated_at DATETIME(3) NOT NULL,
-        PRIMARY KEY (id),
-        UNIQUE KEY uniq_user_file_refs_user_file (user_id, file_key)
+        PRIMARY KEY (user_id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
     await pool.query(`
@@ -68,24 +65,10 @@ export function createMySqlService({ config }) {
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
         user_id BIGINT UNSIGNED NOT NULL,
         action_type ENUM('upload', 'download') NOT NULL,
-        operation_id VARCHAR(64) NOT NULL,
         last_action_at DATETIME(3) NOT NULL,
         PRIMARY KEY (id),
         UNIQUE KEY uniq_cloud_sync_limits_user_action (user_id, action_type),
         KEY idx_cloud_sync_limits_last_action_at (last_action_at)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    `);
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS cloud_sync_operation_files (
-        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-        user_id BIGINT UNSIGNED NOT NULL,
-        action_type ENUM('upload', 'download') NOT NULL,
-        operation_id VARCHAR(64) NOT NULL,
-        file_key VARCHAR(64) NOT NULL,
-        created_at DATETIME(3) NOT NULL,
-        PRIMARY KEY (id),
-        UNIQUE KEY uniq_cloud_sync_operation_file (user_id, action_type, operation_id, file_key),
-        KEY idx_cloud_sync_operation_files_created_at (created_at)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
     await pool.query(`

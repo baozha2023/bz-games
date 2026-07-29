@@ -1,7 +1,6 @@
 import crypto from "crypto";
-import { AsyncSqliteDatabase } from "./AsyncSqliteDatabase";
-import { PLAY_SESSIONS_DB_FILE_NAME } from "../../../../shared/AppConstants";
 import { logger } from "../../../utils/logger";
+import { bzGamesDatabase } from "./BzGamesDatabase";
 
 export interface PlaySession {
   id: string;
@@ -18,31 +17,8 @@ export interface DailyPlayDuration {
   total_duration_ms: number;
 }
 
-const CLOUD_SQL_DUMP_HEADER = "-- BZ-Games cloud SQL dump v1";
-const CLOUD_SYNC_TABLES = ["play_sessions"];
-
 class PlaySessionDatabaseService {
-  private readonly database = new AsyncSqliteDatabase("PlaySessionDatabaseService", PLAY_SESSIONS_DB_FILE_NAME, [
-    `CREATE TABLE IF NOT EXISTS play_sessions (
-      id TEXT PRIMARY KEY,
-      game_id TEXT NOT NULL,
-      game_name TEXT NOT NULL,
-      version TEXT NOT NULL,
-      start_time INTEGER NOT NULL,
-      end_time INTEGER,
-      duration_ms INTEGER
-    )`,
-    "CREATE INDEX IF NOT EXISTS idx_play_sessions_game_id ON play_sessions(game_id)",
-    "CREATE INDEX IF NOT EXISTS idx_play_sessions_start_time ON play_sessions(start_time)",
-  ]);
-
-  init(): void {
-    this.database.init();
-  }
-
-  getDatabasePath(): string {
-    return this.database.getDatabasePath();
-  }
+  private readonly database = bzGamesDatabase;
 
   startSession(gameId: string, gameName: string, version: string, startTime = Date.now()): string {
     const id = crypto.randomUUID();
@@ -105,18 +81,6 @@ class PlaySessionDatabaseService {
   async getTotalPlayDuration(): Promise<number> {
     const row = await this.database.get<{ total: number }>("SELECT COALESCE(SUM(duration_ms), 0) as total FROM play_sessions WHERE duration_ms IS NOT NULL");
     return row?.total || 0;
-  }
-
-  async exportCloudSqlDump(): Promise<string> {
-    return this.database.exportSqlDump(CLOUD_SQL_DUMP_HEADER, CLOUD_SYNC_TABLES);
-  }
-
-  async importCloudSqlDump(sql: string): Promise<void> {
-    await this.database.importSqlDump(CLOUD_SQL_DUMP_HEADER, CLOUD_SYNC_TABLES, sql);
-  }
-
-  close(): Promise<void> {
-    return this.database.close();
   }
 
 }

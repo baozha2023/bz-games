@@ -1,25 +1,26 @@
 # BZ-Games 游戏平台
 
-[![Electron](https://img.shields.io/badge/Electron-v28+-blue)](https://www.electronjs.org/)
-[![Vue](https://img.shields.io/badge/Vue-v3-green)](https://vuejs.org/)
+[![Electron](https://img.shields.io/badge/Electron-v40+-blue)](https://www.electronjs.org/)
+[![Vue](https://img.shields.io/badge/Vue-v3.5-green)](https://vuejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-v5-blue)](https://www.typescriptlang.org/)
+[![SQLite](https://img.shields.io/badge/SQLite-multiple--ciphers-orange)](https://www.npmjs.com/package/better-sqlite3-multiple-ciphers)
 
 简体中文 | [English](./README.en.md) | [日本語](./README.ja.md) | [Deutsch](./README.de.md) | [繁體中文](./README.zh-TW.md) | [文言文](./README.lzh.md)
 
-**BZ-Games** 是一个**本地优先的 Windows 游戏平台**，专为 Windows 设计。它允许用户导入本地游戏，并通过内置的 P2P 联机房间系统与好友进行多人游戏。支持局域网发现、用户自备 frp 直连、官方中继短地址三种联机入口，并提供 GitHub OAuth 登录与云端数据同步服务。
+**BZ-Games** 是一个**本地优先的 Windows 游戏平台**，专为 Windows 设计。它允许用户导入本地游戏，并通过内置的 P2P 联机房间系统与好友进行多人游戏。支持局域网自动发现、用户自备 frp 直连、官方中继短地址三种联机入口，并提供 GitHub OAuth 登录与云端数据同步服务。
 
 ## ✨ 核心特性
 
-- **📂 开放式游戏库**：支持导入任意符合规范的本地游戏，自动管理游戏版本与文件。
-- **🔌 本地优先数据**：所有数据存储在本地，配置文件加密保存，无需注册云端账户。可选 GitHub OAuth 登录实现云端同步。
-- **🎮 统一联机大厅**：内置房间系统（创建/加入/准备/聊天/踢人/断线重连），游戏只需接入本地 Game API 即可获得完整联机能力。
-- **🌐 多入口联机**：支持局域网自动发现、用户自备 frp 直连、官方 Relay Server 短地址中继三种入口，按场景自由切换。房间发现页按物理局域网/虚拟局域网/服务器三栏分类。
-- **☁️ GitHub 登录与云同步**：通过 GitHub OAuth 授权登录，支持 `config.json` 和 `play_sessions.db` 上传至云端、下载同步回本地，含进度条与哈希校验。
-- **🏪 游戏市场**：内置游戏市场，支持多来源社区游戏浏览、下载与安装，下载任务支持进度、暂停、恢复、取消与悬浮球提醒，安装自动校验和导入。
-- **🏆 成就与统计系统**：每个游戏可定义成就列表与统计数据，平台自动追踪并展示。支持日历热力图与战绩报告。
-- **🪙 经济系统**：签到领 BZ 币，累计游玩时长自动奖励。头像框解锁与装备、昵称颜色/字体/特效个性化。
-- **🚀 进程管理**：自动启动/关闭游戏进程，处理异常退出。
-- **🔄 版本管理**：支持同一游戏的多版本共存与切换。
+- **📂 开放式游戏库**：支持导入任意符合规范的本地游戏，自动管理多版本共存与切换。
+- **🔌 本地优先数据**：配置加密存储于本地，无需注册即可使用。可选 GitHub OAuth 登录实现云端同步。
+- **🎮 统一联机大厅**：内置房间系统（创建/加入/准备/聊天/踢人/断线重连），游戏只需接入 Game API 即可获得完整联机能力。
+- **🌐 多入口联机**：支持局域网自动发现、用户自备 frp 直连、官方 Relay Server 短地址中继。房间发现页按物理局域网 / 虚拟局域网（EasyTier）/ 服务器三栏分类。
+- **☁️ GitHub 登录与云同步**：通过 GitHub OAuth 授权，支持 `config.json`、`bz_games.db` 云端上传/下载同步，含进度条与哈希校验。
+- **🏪 游戏市场**：内置两级市场架构，支持多来源社区游戏浏览、下载与一键安装。下载任务支持进度追踪、暂停、恢复、取消与悬浮球提醒。
+- **🏆 成就与统计系统**：游戏可自定义成就列表与统计指标，平台自动追踪解锁。支持日历热力图、单日/累计/连续游玩统计，可一键分享为图片。
+- **🪙 经济系统**：签到领 BZ 币，累计游玩时长自动奖励。头像框解锁与装备、昵称颜色/字体/特效个性化装扮。
+- **🚀 进程管理**：自动启动/关闭游戏进程，处理异常退出与崩溃恢复。
+- **🎨 游戏 API**：提供本地 Game API 服务（V1/V2 协议），游戏可通过 HTTP 读取存档、上报统计与成就。
 - **🌍 国际化**：支持简体中文、繁体中文、英文、日文、德文、文言文。
 
 ## 📸 界面预览
@@ -39,20 +40,22 @@
 
 ## 🛠️ 技术栈
 
-- **Core**: Electron, TypeScript
-- **Frontend**: Vue 3, Naive UI, Pinia, Vue Router
+- **Core**: Electron 40, TypeScript 5
+- **Frontend**: Vue 3.5, Naive UI, Pinia, Vue Router, Vue I18n
 - **Build**: Electron-Vite, Electron-Builder
-- **Storage**: electron-store (Local JSON)
-- **Communication**: WebSocket (Room Server/Client), Electron IPC
-- **Archive**: extract-zip (ZIP), 7zip-bin / 7za (7Z)
+- **Database**: better-sqlite3-multiple-ciphers（ChaCha20 加密 SQLite）
+- **Config**: electron-store（加密 JSON）
+- **Communication**: WebSocket（ws 库）, Electron IPC
+- **Archive**: 7zip-bin / 7za (7Z), adm-zip (ZIP)
+- **Image**: html2canvas（热力图分享渲染）
 - **Update**: electron-updater (GitHub Releases)
 
 ## 🚀 快速开始
 
 ### 环境要求
 
-- Node.js 18+
-- pnpm 8+
+- Node.js 20+
+- pnpm 9+
 - Windows 10/11 x64
 
 ### 安装依赖
@@ -83,19 +86,37 @@ pnpm build:win
 
 ```
 bz-launcher/
-├── games/                 # 游戏数据存储目录 (Portable Mode)
+├── games/                 # 游戏数据存储目录（可配置多路径）
+├── resources/             # 应用图标、占位图等静态资源
 ├── src/
-│   ├── main/              # Electron 主进程 (Node.js)
-│   │   ├── services/      # 核心业务逻辑 (GameManager, RoomServer, CloudSyncService 等)
-│   │   └── ipc/           # IPC 通信处理器
-│   ├── preload/           # Preload 脚本 (暴露安全 API)
-│   ├── renderer/          # 渲染进程 (Vue 3 UI)
-│   └── shared/            # 前后端共享类型定义
-├── relay-server/          # 官方中继服务器（房间中继 / GitHub OAuth / 云同步）
-├── resources/             # 应用图标等静态资源
+│   ├── main/              # Electron 主进程
+│   │   ├── index.ts          # 入口：窗口管理、应用生命周期
+│   │   ├── window.ts         # 悬浮球窗口
+│   │   ├── ipc/              # IPC 处理器（game / room / market / stats / system / storage）
+│   │   ├── services/         # 核心业务
+│   │   │   ├── game/            # GameManager、GameLoader、GameAPI（V1/V2）
+│   │   │   ├── room/            # RoomServer、RoomClient、局域网/UDP/中继发现
+│   │   │   ├── market/          # 市场下载与安装任务管理
+│   │   │   ├── storage/         # 加密 SQLite（游戏、版本、会话、成就、统计）
+│   │   │   └── system/          # CloudSync、Update、Notification
+│   │   └── utils/            # 日志、文件工具、路径处理
+│   ├── preload/           # Preload 脚本（game.ts / index.ts + API 桥接）
+│   ├── renderer/          # 渲染进程（Vue 3）
+│   │   ├── src/
+│   │   │   ├── views/         # 页面（Library / Market / Room / Statistics / Settings 等）
+│   │   │   ├── components/    # 公共组件（game / room / settings / heatmap）
+│   │   │   ├── stores/        # Pinia（game / room / settings）
+│   │   │   ├── composables/   # 组合式函数
+│   │   │   ├── locales/       # 6 语言国际化
+│   │   │   └── router/        # Vue Router
+│   │   └── index.html
+│   └── shared/            # 前后端共享（类型、常量、IPC 通道、协议）
+├── relay-server/          # 官方中继服务器（独立部署）
+├── bz-games-website/      # 官方网站
+├── bz-games-github-release-market/  # GitHub Release 市场索引
 └── electron.vite.config.ts
 ```
 
 > 市场索引数据由独立的 [bz-games-market](https://github.com/baozha2023/bz-games-market) 仓库维护，平台通过两级市场架构拉取展示。
 
-更多细节请参考 `CLAUDE.md` 中的开发规范。
+更多开发规范请参考 `CLAUDE.md`。

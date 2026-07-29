@@ -8,12 +8,35 @@ const requireFromMain = createRequire(__filename);
 
 type SqliteParam = string | number | bigint | Buffer | null;
 
+export interface SqliteRunResult {
+  changes: number;
+  lastInsertRowid: number | bigint;
+}
+
 interface PendingTask<T> {
   resolve: (value: T) => void;
   reject: (error: Error) => void;
 }
 
-type RequestType = "run" | "get" | "all" | "exec" | "close";
+type RequestType =
+  | "run"
+  | "get"
+  | "all"
+  | "exec"
+  | "batch"
+  | "export"
+  | "close";
+
+export interface SqliteBatchStatement {
+  sql: string;
+  params?: SqliteParam[];
+}
+
+interface ExportedTable {
+  name: string;
+  columns: string[];
+  rows: Array<Record<string, unknown>>;
+}
 
 export class AsyncSqliteDatabase {
   private worker: Worker | null = null;
@@ -27,11 +50,14 @@ export class AsyncSqliteDatabase {
     private readonly serviceName: string,
     private readonly relativeDbPath: string,
     private readonly schemaSql: string[],
+    private readonly encryptionKey: Buffer,
   ) {}
 
   init(): void {
     if (this.worker) return;
-    const betterSqlite3Path = requireFromMain.resolve("better-sqlite3");
+    const betterSqlite3Path = requireFromMain.resolve(
+      "better-sqlite3-multiple-ciphers",
+    );
     const workerScript = `
 const { parentPort, workerData } = require("worker_threads");
 const path = require("path");
@@ -40,6 +66,9 @@ const Database = require(workerData.betterSqlite3Path);
 
 fs.mkdirSync(path.dirname(workerData.dbPath), { recursive: true });
 const db = new Database(workerData.dbPath, { nativeBinding: workerData.nativeBindingPath });
+db.pragma("cipher='chacha20'");
+db.key(Buffer.from(workerData.encryptionKeyHex, "hex"));
+db.prepare("SELECT name FROM sqlite_master LIMIT 1").get();
 db.pragma("journal_mode = WAL");
 for (const sql of workerData.schemaSql) db.exec(sql);
 
@@ -54,6 +83,39 @@ parentPort?.on("message", (message) => {
       result = db.prepare(message.sql).all(...message.params);
     } else if (message.type === "exec") {
       db.exec(message.sql);
+    } else if (message.type === "batch") {
+      const execute = db.transaction((statements) => {
+        for (const statement of statements) {
+          db.prepare(statement.sql).run(...(statement.params || []));
+        }
+      });
+      execute(message.statements);
+    } else if (message.type === "export") {
+      const quoteIdentifier = (value) => \`"\${String(value).replace(/"/g, '""')}"\`;
+      const exportTables = db.transaction((tableNames, omittedColumns) => {
+        const existingTables = new Set(
+          db.prepare(\`SELECT name FROM sqlite_master
+            WHERE type = 'table' AND name NOT LIKE 'sqlite_%'\`)
+            .all()
+            .map((row) => row.name),
+        );
+        return tableNames
+          .filter((tableName) => existingTables.has(tableName))
+          .map((tableName) => {
+            const omitted = new Set(omittedColumns[tableName] || []);
+            const columns = db
+              .prepare(\`PRAGMA table_info(\${quoteIdentifier(tableName)})\`)
+              .all()
+              .map((row) => row.name)
+              .filter((column) => !omitted.has(column));
+            const rows = db
+              .prepare(\`SELECT \${columns.map(quoteIdentifier).join(", ")}
+                FROM \${quoteIdentifier(tableName)} ORDER BY rowid\`)
+              .all();
+            return { name: tableName, columns, rows };
+          });
+      });
+      result = exportTables(message.tableNames, message.omittedColumns);
     } else if (message.type === "close") {
       db.close();
     } else {
@@ -70,6 +132,7 @@ parentPort?.on("message", (message) => {
       workerData: {
         dbPath: this.getDatabasePath(),
         schemaSql: this.schemaSql,
+        encryptionKeyHex: this.encryptionKey.toString("hex"),
         betterSqlite3Path,
         nativeBindingPath: this.resolveNativeBindingPath(betterSqlite3Path),
       },
@@ -101,8 +164,8 @@ parentPort?.on("message", (message) => {
     return path.join(packageEntryPath, "..", "..", "build", "Release", "better_sqlite3.node");
   }
 
-  run(sql: string, params: SqliteParam[] = []): Promise<void> {
-    return this.post("run", sql, params).then(() => undefined);
+  run(sql: string, params: SqliteParam[] = []): Promise<SqliteRunResult> {
+    return this.post<SqliteRunResult>("run", sql, params);
   }
 
   get<T>(sql: string, params: SqliteParam[] = []): Promise<T | undefined> {
@@ -117,25 +180,28 @@ parentPort?.on("message", (message) => {
     return this.post("exec", sql).then(() => undefined);
   }
 
-  async exportSqlDump(header: string, tableNames: string[]): Promise<string> {
-    const existingTables = new Set((await this.all<{ name: string }>(
-      `SELECT name FROM sqlite_master
-       WHERE type = 'table'
-         AND name NOT LIKE 'sqlite_%'`,
-    )).map((row) => row.name));
-    const exportTables = tableNames.filter((tableName) => existingTables.has(tableName));
+  batch(statements: SqliteBatchStatement[]): Promise<void> {
+    return this.postWithPayload("batch", { statements }).then(() => undefined);
+  }
+
+  async exportSqlDump(
+    header: string,
+    tableNames: string[],
+    omittedColumns: Readonly<Record<string, readonly string[]>> = {},
+  ): Promise<string> {
+    const exportTables = await this.postWithPayload<ExportedTable[]>("export", {
+      tableNames,
+      omittedColumns,
+    });
     const lines = [
       header,
       `-- generated_at: ${new Date().toISOString()}`,
-      `-- tables: ${exportTables.join(",")}`,
+      `-- tables: ${exportTables.map((table) => table.name).join(",")}`,
       "BEGIN TRANSACTION;",
     ];
-    for (const tableName of exportTables) {
-      const columns = await this.getTableColumns(tableName);
-      lines.push(`DELETE FROM ${this.quoteIdentifier(tableName)};`);
-      const rows = await this.all<Record<string, unknown>>(`SELECT ${columns.map((column) => this.quoteIdentifier(column)).join(", ")} FROM ${this.quoteIdentifier(tableName)}`);
-      for (const row of rows) {
-        lines.push(`INSERT INTO ${this.quoteIdentifier(tableName)} (${columns.map((column) => this.quoteIdentifier(column)).join(", ")}) VALUES (${columns.map((column) => this.toSqlLiteral(row[column])).join(", ")});`);
+    for (const table of exportTables) {
+      for (const row of table.rows) {
+        lines.push(`INSERT OR IGNORE INTO ${this.quoteIdentifier(table.name)} (${table.columns.map((column) => this.quoteIdentifier(column)).join(", ")}) VALUES (${table.columns.map((column) => this.toSqlLiteral(row[column])).join(", ")});`);
       }
     }
     lines.push("COMMIT;");
@@ -143,13 +209,8 @@ parentPort?.on("message", (message) => {
     return lines.join("\n");
   }
 
-  async importSqlDump(header: string, tableNames: string[], sql: string): Promise<void> {
-    const normalizedSql = String(sql || "").trim();
-    if (!normalizedSql.startsWith(header)) {
-      throw new Error("invalid_cloud_sql_dump");
-    }
-    await this.validateSqlDump(normalizedSql, new Set(tableNames));
-    await this.exec(normalizedSql);
+  importSqlDump(sql: string): Promise<void> {
+    return this.exec(sql);
   }
 
   async close(): Promise<void> {
@@ -171,13 +232,20 @@ parentPort?.on("message", (message) => {
   }
 
   private post<T>(type: RequestType, sql = "", params: SqliteParam[] = []): Promise<T> {
+    return this.postWithPayload(type, { sql, params });
+  }
+
+  private postWithPayload<T>(
+    type: RequestType,
+    payload: Record<string, unknown>,
+  ): Promise<T> {
     if (this.isClosing && type !== "close") return Promise.reject(new Error(`${this.serviceName}_worker_closing`));
     this.init();
     if (!this.worker) return Promise.reject(new Error(`${this.serviceName}_worker_unavailable`));
     const id = this.nextTaskId++;
     return new Promise((resolve, reject) => {
       this.pendingTasks.set(id, { resolve: resolve as (value: unknown) => void, reject });
-      this.worker?.postMessage({ id, type, sql, params });
+      this.worker?.postMessage({ id, type, ...payload });
     });
   }
 
@@ -215,11 +283,6 @@ parentPort?.on("message", (message) => {
     this.idleResolvers.clear();
   }
 
-  private async getTableColumns(tableName: string): Promise<string[]> {
-    const rows = await this.all<{ name: string }>(`PRAGMA table_info(${this.quoteIdentifier(tableName)})`);
-    return rows.map((row) => row.name);
-  }
-
   private quoteIdentifier(value: string): string {
     return `"${String(value).replace(/"/g, '""')}"`;
   }
@@ -232,39 +295,4 @@ parentPort?.on("message", (message) => {
     return `'${String(value).replace(/'/g, "''")}'`;
   }
 
-  private async validateSqlDump(sql: string, allowedTables: Set<string>): Promise<void> {
-    const existingTables = new Set((await this.all<{ name: string }>(
-      `SELECT name FROM sqlite_master
-       WHERE type = 'table'
-         AND name NOT LIKE 'sqlite_%'`,
-    )).map((row) => row.name));
-    const currentTables = new Set([...allowedTables].filter((tableName) => existingTables.has(tableName)));
-    const deletedTables = new Set<string>();
-    const stripped = sql
-      .replace(/'(?:''|[^'])*'/g, "''")
-      .replace(/X'(?:[0-9a-fA-F]{2})*'/g, "X''")
-      .split("\n")
-      .filter((line) => !line.trim().startsWith("--"))
-      .join("\n");
-    const statements = stripped.split(";").map((statement) => statement.trim()).filter(Boolean);
-    if (!statements.some((statement) => /^COMMIT$/i.test(statement))) throw new Error("invalid_cloud_sql_transaction");
-    for (const statement of statements) {
-      if (/^BEGIN\s+TRANSACTION$/i.test(statement) || /^COMMIT$/i.test(statement)) continue;
-      const deleteMatch = statement.match(/^DELETE\s+FROM\s+"((?:""|[^"])*)"$/i);
-      if (deleteMatch) {
-        const tableName = deleteMatch[1].replace(/""/g, '"');
-        if (!currentTables.has(tableName)) throw new Error("invalid_cloud_sql_table");
-        deletedTables.add(tableName);
-        continue;
-      }
-      const insertMatch = statement.match(/^INSERT\s+INTO\s+"((?:""|[^"])*)"\s*\(/i);
-      if (insertMatch) {
-        const tableName = insertMatch[1].replace(/""/g, '"');
-        if (!currentTables.has(tableName)) throw new Error("invalid_cloud_sql_table");
-        if (!deletedTables.has(tableName)) throw new Error("invalid_cloud_sql_order");
-        continue;
-      }
-      throw new Error("invalid_cloud_sql_statement");
-    }
-  }
 }

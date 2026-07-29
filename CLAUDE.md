@@ -37,7 +37,7 @@
 - 游戏市场（远程发现、详情展示、下载并安装到默认游戏库，GitHub Release Asset 自动补齐 sha256/size）
 - 个性化系统（头像框解锁、装备、预览，支持多场景展示）
 - 系统设置（玩家信息、主题、端口、语言、更新、游戏库列表、GitHub Token）
-- 官方登录与云同步服务（GitHub OAuth 登录；本地 `config.json` 与 `play_sessions.db` / `achievement_unlocks.db` / `stats_reports.db` 上传云端 / 下载同步回本地，含进度条与哈希校验）
+- 官方登录与云同步服务（GitHub OAuth 登录；脱敏配置与三张业务表 SQL 逻辑备份组成单一平台快照，原子发布并在本地幂等合并）
 - 建言献策（可选文字与图片；未登录每 48 小时一次，GitHub 登录后每 6 小时一次）
 - 反馈管理后台（GitHub 管理员白名单、反馈筛选/详情/图片/状态与管理备注；Vue 3 + Vite 独立构建，中继服务 `/admin/` 同源提供）
 - 客户端卸载系统（游戏进程批量收口、游戏库可选择删除、路径安全校验、符号链接防护）
@@ -61,7 +61,7 @@
 | 包管理器         | pnpm                        | <br />                         |
 | 进程间通信        | Electron IPC（contextBridge） | <br />                         |
 | 本地数据存储       | electron-store              | v10+ (ESM)，需在构建中配置 include     |
-| SQLite 数据存储      | better-sqlite3              | 游玩会话记录、日历热力图数据查询            |
+| SQLite 数据存储      | better-sqlite3-multiple-ciphers | ChaCha20 加密的游戏实体、会话、成就与统计事件 |
 | 在线服务元数据 | MySQL                       | 用户、OAuth、会话、云文件元数据以及反馈正文/状态/图片索引 |
 | 云文件对象存储     | MongoDB GridFS              | 保存云同步文件与反馈图片 |
 | Multipart 解析 | busboy | 中继服务流式接收反馈图片并限制字段、文件数量及大小 |
@@ -96,6 +96,7 @@ bz-games/
 │   ├── package.json                       # 中继服务器独立依赖
 │   ├── scripts/
 │   │   ├── relay-e2e-test.js              # 房间中继端到端测试
+│   │   ├── cloud-data-service.test.js     # 单一平台快照原子发布与旧端点收口测试
 │   │   ├── feedback-service.test.js       # 反馈限流、上传与管理接口测试
 │   │   ├── auth-service.test.js           # OAuth 回跳白名单测试
 │   │   └── admin-static-service.test.js   # 管理静态站点与路径安全测试
@@ -108,7 +109,7 @@ bz-games/
 │       ├── services/
 │       │   ├── auth-service.js            # GitHub OAuth 认证与会话管理
 │       │   ├── admin-static-service.js     # `/admin/` 静态资源、SPA fallback 与安全响应头
-│       │   ├── cloud-data-service.js      # 云端文件同步（config.json / play_sessions.db / achievement_unlocks.db / stats_reports.db）
+│       │   ├── cloud-data-service.js      # 单一平台快照上传、下载与原子指针发布
 │       │   ├── feedback-service.js        # 反馈上传、匿名限流、GridFS 图片与管理 API
 │       │   ├── message-router.js          # WebSocket 消息路由分发（含中继侧敏感词过滤与图片拦截）
 │       │   ├── mongo-service.js           # MongoDB GridFS 连接管理
@@ -125,7 +126,10 @@ bz-games/
 │   └── installer.nsh                     # NSIS 自定义安装/卸载钩子（多语言支持）
 ├── package.json                          # 依赖、脚本与打包发布配置
 ├── private-build.config.example.json      # 私有构建配置模板（CDN/OSS/中继/加密种子等环境变量）
-├── scripts/check-config-examples.mjs      # 三端配置示例字段及敏感路径忽略规则检查
+├── scripts/
+│   ├── check-config-examples.mjs          # 三端配置示例字段及敏感路径忽略规则检查
+│   ├── run-database-test.mjs              # 隔离目录内构建并运行数据库服务测试
+│   └── test-database-service.ts           # 旧数据迁移、加密仓储及云端幂等合并测试
 ├── pnpm-lock.yaml                        # pnpm 依赖锁定文件
 ├── tsconfig.json                         # TypeScript 根配置
 ├── tsconfig.node.json                    # 主进程/预加载/共享代码 TS 配置
@@ -133,9 +137,7 @@ bz-games/
 ├── electron.vite.config.ts               # Electron-Vite 构建配置（读取 private-build.config.json 注入构建期常量）
 ├── config.json                           # 本地持久化配置（运行生成）
 ├── db/                                   # SQLite 数据库目录（运行生成）
-│   ├── play_sessions.db                  # 游玩会话数据库
-│   ├── achievement_unlocks.db            # 成就解锁历史数据库
-│   └── stats_reports.db                  # 统计上报历史数据库
+│   └── bz_games.db                       # 游戏/版本实体、游玩会话、成就解锁与统计上报统一加密数据库
 ├── games/                                # 首次初始化的默认游戏库目录（运行生成，可由用户迁移）
 │   └── <id>/
 │       └── <version>/
@@ -157,10 +159,9 @@ bz-games/
 │   │   ├── services/
 │   │   │   ├── storage/
 │   │   │   │   ├── database/
-│   │   │   │   │   ├── AsyncSqliteDatabase.ts        # 通用异步 SQLite 引擎（Worker Thread 隔离，支持 run/get/all/exec + SQL dump 导入导出）
-│   │   │   │   │   ├── PlaySessionDatabaseService.ts # 游玩会话记录（启动/结束/查询/日历热力图/云端同步）
-│   │   │   │   │   ├── AchievementUnlockDatabaseService.ts # 成就解锁历史记录（写入/云端同步）
-│   │   │   │   │   └── StatsReportDatabaseService.ts # 统计上报历史记录（写入/云端同步）
+│   │   │   │   │   ├── AsyncSqliteDatabase.ts        # 加密异步 SQLite 引擎（Worker Thread、事务批处理、SQL dump）
+│   │   │   │   │   ├── BzGamesDatabase.ts            # 当前统一 schema、游戏仓储与云同步表导入导出
+│   │   │   │   │   └── PlaySessionDatabaseService.ts # 游玩会话启动/结束及统计查询
 │   │   │   │   └── StoreService.ts        # 本地数据读写与业务数据维护
 │   │   │   ├── game/
 │   │   │   │   ├── GameEnvironment.ts     # 游戏启动环境变量、bz-config.js 生成与清理
@@ -272,7 +273,7 @@ bz-games/
 │   │
 │   └── shared/
 │       ├── avatar-frames.ts                # 头像框定义数据（8款头像框的解锁条件与图片文件名）
-│       ├── AppConstants.ts                 # 平台构建期常量（CDN/OSS/GitHub/官方中继/Manifest 加密种子等，值由 electron.vite.config.ts 构建期注入 private-build.config.json）
+│       ├── AppConstants.ts                 # 平台构建期常量（CDN/OSS/GitHub/官方中继/配置、数据库及 Manifest 加密种子等，由 electron.vite.config.ts 构建期注入）
 │       ├── RoomConstants.ts                # 房间通信与 Game API 常量（消息大小限制、心跳间隔、重连/延迟探测定时器等）
 │       ├── binary-protocol.ts              # v2 二进制帧编码/解码工具（4字节头长度 + JSON header + binary body）
 │       ├── game-launch.ts                  # 四种入口分流与 Web/Native 启动配置纯函数
@@ -694,9 +695,8 @@ interface FloatBallProgress {
 - 运行 Game API Server（每次有游戏运行时）
 - 注册并处理所有 IPC Handler
 - 广播游戏进程生命周期事件（start/end）
-- 通过 `PlaySessionDatabaseService` 自动记录每次游戏启动→关闭为一次"游玩会话"（写入 SQLite `play_sessions.db`）
-- 通过 `AchievementUnlockDatabaseService` 记录成就解锁历史（写入 SQLite `achievement_unlocks.db`）
-- 通过 `StatsReportDatabaseService` 记录统计上报历史（写入 SQLite `stats_reports.db`）
+- 通过 `PlaySessionDatabaseService` 自动记录每次游戏启动→关闭为一次"游玩会话"（写入 SQLite `bz_games.db`）
+- 通过 `StoreService` 与统一数据库仓储记录成就解锁和统计事件（写入加密 SQLite `bz_games.db`）
 - 系统托盘动态菜单：游戏退出时自动刷新「最近游玩」列表，支持从托盘快速启动最近玩过的游戏
 - 更新检查、下载、安装由 `UpdateService` 统一处理
 
@@ -718,13 +718,12 @@ interface FloatBallProgress {
 
 使用 `electron-store`，数据存储于应用根目录下的`config.json`（便携模式）：
 
-- **配置加密存储**：`config.json` 以加密格式持久化，启动时识别明文配置并自动迁移为加密格式。
+- **配置加密存储**：`config.json` 只接受当前加密格式，不提供明文回退或旧 `games` 字段迁移；游戏实体只存在于当前加密 SQLite 数据库。
 
 ```typescript
 // src/shared/types/store.types.ts
 interface UserData {
     bzCoins: number;
-    cumulativePlayTime: number;
     checkIn: {
         lastCheckInDate: string;
         consecutiveDays: number;
@@ -735,10 +734,8 @@ interface UserData {
 }
 
 interface AppStore {
-    games: GameRecord[];
     settings: AppSettings;
     userData: UserData;
-    recentPlayed: string[];
 }
 
 interface UnlockedAchievement {
@@ -779,10 +776,22 @@ interface NicknameStyle {
     weight: "normal" | "semibold" | "bold";
 }
 
+interface FeedbackHistoryItem {
+    id: string;
+    submittedAt: number;
+}
+
 interface AppSettings {
     playerName: string;
     playerId: string;
     avatar?: string;
+    cloudSessionToken?: string;
+    cloudSessionExpiresAt?: string;
+    cloudUserLogin?: string;
+    cloudUserName?: string;
+    cloudUserProfileUrl?: string;
+    cloudLastUploadedAt?: string;
+    feedbackHistory?: FeedbackHistoryItem[];
     nicknameStyle?: NicknameStyle;
     libraryLayout?: "card" | "icon" | "steam";
     lastJoinRoomAddress?: string;
@@ -850,23 +859,24 @@ interface AppSettings {
     - 主进程 `log.ipc.ts` 注册 `ipcMain.on(SYSTEM_LOG_ERROR)` 监听器，接收 `RendererLogPayload` 并调用 `logger.captureRendererError()` 记录。
 - **游戏库布局状态**：`settings.libraryLayout` 持久化游戏库布局，取值为 `card`、`icon`、`steam`。`LibraryView` 挂载时必须先读取设置再渲染游戏库，避免启动时默认布局闪烁；Steam 布局右侧详情页使用嵌入式 `GameDetailView`，通过 `/library?steamGameId=<id>` 恢复来源游戏详情。
 - **游玩会话记录**：每次游戏启动（`spawnGameProcess` / `createGameWindow`）调用 `playSessionDatabaseService.startSession()` 在
-  `play_sessions.db` 创建一条记录（含 `game_id`、`game_name`、`version`、`start_time`）；游戏退出时（
+  `bz_games.db` 创建一条记录（含 `game_id`、`game_name`、`version`、`start_time`）；游戏退出时（
   `handleProcessExit` → `recordPlaytime`）调用 `playSessionDatabaseService.endSession(sessionId, startTime)` 直接传入启动时间戳计算 duration_ms，避免额外的 DB 查询。
-  `storeService.updatePlaytime()` 维护 JSON 汇总统计，SQLite 作为独立游玩历史记录层，为日历热力图和统计图表提供数据支撑。
+  `storeService.updatePlaytime()` 从会话表推导累计时间并结算奖励，SQLite 会话是游玩历史和时长统计的唯一数据源。
   `handleProcessExit` 中通过动态 `import("../window")` 调用 `updateTrayMenu()` 刷新托盘快捷菜单。
 - **SQLite 异步架构**：
-    - **AsyncSqliteDatabase**：通用异步 SQLite 引擎，通过 `worker_threads` Worker 将 better-sqlite3 操作隔离到独立线程，避免阻塞主进程事件循环。Worker 脚本内联（`eval: true`），支持 `run`/`get`/`all`/`exec` 四种操作类型 + `close`。基于自增 `taskId` + `pendingTasks` Map 实现请求-响应匹配。`waitForIdle()` 在 close 前确保所有 pending 任务完成。`expectedWorkerExits` WeakSet 区分正常 terminate 与异常退出。
-    - **PlaySessionDatabaseService**：管理 `play_sessions` 表，提供 `startSession()`/`endSession()`（fire-and-forget 模式）、`getRecentSessions()`/`getSessionsByDate()`/`getRecentGames()`/`getDailyPlayDurations()`/`getTotalPlayDuration()` 查询方法，以及 `exportCloudSqlDump()`/`importCloudSqlDump()` 云端同步方法。
-    - **AchievementUnlockDatabaseService**：管理 `achievement_unlocks` 表，`recordUnlock()` 记录成就解锁事件（含 game_id/game_name/version/achievement_id/achievement_name/unlocked_at），支持云端同步。GameApiServer 在处理 `achievement.unlock` API 时自动写入。
-    - **StatsReportDatabaseService**：管理 `stats_reports` 表，`recordReport()` 记录统计上报事件（含 game_id/game_name/version/stat_id/stat_name/reported_at），支持云端同步。GameApiServer 在处理 `stats.report` API 时自动写入，`resolveStatName()` 从 Manifest 中解析统计项国际化名称。
+    - **AsyncSqliteDatabase**：通过 `worker_threads` 隔离数据库访问，连接后先设置 ChaCha20 和密钥再读取 schema，支持 `run`/`get`/`all`/`exec`/`batch`/`close`。
+    - **BzGamesDatabase**：唯一数据库工厂和当前数据仓储，维护游戏、版本、会话、成就与统计事件；不包含旧 schema、旧路径或兼容分支，表之间只使用逻辑关联，不声明物理外键。
+    - **数据库加密边界**：`databaseEncryptionSeed` 是离线生成一次后固定使用的规范 Base64，解码结果必须恰好为 32 个随机字节；运行时禁止生成、替换或修复种子，缺失或无效时开发启动和构建必须直接失败。种子由私有构建配置注入主进程，运行时经 SHA-256 派生 ChaCha20 密钥。种子编译在桌面客户端中，只用于提高本地文件直接读取门槛，不能抵御能够逆向客户端的攻击者。
+    - **PlaySessionDatabaseService**：只封装会话启动、结束和统计查询；云同步导入导出由统一数据库负责。
     - SQLite WAL 模式：`journal_mode = WAL` 提升并发读写性能（在 Worker 初始化时设置）。
-    - 应用退出 (`before-quit`) 必须调用各服务的 `close()` 正常关闭 WAL 连接，否则 WAL 文件不会自动合并。
+    - 应用退出路径必须先停止接受新的云同步，等待当前同步结束，再等待统一数据库 `close()` 完成及 Worker 退出，最后才允许 Electron 进程退出。
 - **CloudSyncService 设计**：
-    - **同步文件范围**：v3.0.3 扩展为 4 个文件 — `config.json`（必需）、`play_sessions.db`（必需）、`achievement_unlocks.db`（可选）、`stats_reports.db`（可选）。必需文件缺失时拒绝下载（`cloud_data_incomplete`）；可选文件云端存在时自动同步，不存在时优雅跳过。
-    - **同步黑名单**：`StoreService.CLOUD_SETTINGS_SYNC_BLACKLIST` 定义上传与下载合并时均需排除的敏感字段（`githubToken`、`cloudSessionToken`、`cloudSessionExpiresAt`、`cloudUserLogin`、`cloudUserName`、`cloudUserProfileUrl`、`cloudLastUploadedAt`），`createCloudConfigFile()` 在上传前删除这些字段，`applyCloudConfigFile()` 在下载合并时也删除云端的对应字段，防止云端覆写本地私有凭证。
-    - **上传流程**：`upload()` 创建临时目录，调用 `createCloudConfigFile()` 生成脱敏后的 config 副本，遍历 `CLOUD_DATABASE_FILES` 通过 `exportDatabaseDump()` 生成各 DB 的 SQL dump，按序 `PUT /api/cloud/files/:fileKey`。`try...finally` 确保临时目录在任何退出路径下都被清理。
-    - **下载选择性合并**：`download()` 下载完成后调用 `applyCloudConfigFile()` 而非之前的 `replaceConfigFile()` + `init(true)`。`applyCloudConfigFile()` 对 `games`、`userData`、`recentPlayed` 执行全量替换，对 `settings` 执行浅合并（`{ ...currentSettings, ...cloudSettings }`），云端没有的本地字段保留不丢失。各 DB 文件通过 `importDatabaseDump()` 导入对应 SQLite 数据库。不再需要重启 store 实例。
-    - **会话一致性**：上传时 `PUT` 请求可携带 `X-Cloud-Operation-Id` 请求头实现原子操作；下载时同样传递该请求头确保读到同一原子快照。
+    - **单快照协议**：客户端与服务端只支持 `/api/cloud/platform-snapshot` 和 `/api/cloud/platform-snapshot/meta`；不保留旧 `/api/cloud/files/*` 协议、双写或降级逻辑。`PlatformCloudSnapshot` 将脱敏加密配置与 SQL dump 封装为一个 GridFS 对象，MySQL `user_platform_snapshots` 仅保存每个用户的唯一当前指针。
+    - **原子发布**：完整对象先写入 GridFS，再在 MySQL 事务中锁定并切换当前指针；旧对象在宽限期后清理。下载只读取一次指针，禁止拼接不同上传批次。GridFS 元数据必须使用 `kind=platform-snapshot`，清理不得触碰其他 kind。
+    - **数据库范围**：SQL dump 只包含 `play_sessions`、`achievement_unlocks`、`stats_reports`，并排除本地自增字段 `stats_reports.event_sequence`；`games`、`game_versions` 及其 `path`、`is_present`、收藏和排序状态完全属于当前设备，不上传、不下载、不合并。当前按单设备日常使用、换机时整包恢复设计，不实现多设备并发合并；统计记录按 `reported_at`、`event_id` 的稳定顺序重建，不能使用新电脑上的本机自增序号决定 `full` 报告的覆盖顺序。
+    - **下载应用顺序**：配置先在内存中解密确认可应用，SQL 在单一事务中完成幂等合并，随后从统一数据库刷新游戏缓存中的会话、成就和统计派生数据，最后才一次性提交配置；SQL 导入或缓存刷新失败时不得写入配置。
+    - **同步黑名单**：`CLOUD_SETTINGS_SYNC_BLACKLIST` 在上传与下载合并时都排除 `githubToken`、云会话和云用户身份字段，并只合并 `userData` 与非敏感设置。
+    - **未来边界**：游戏云存档不得加入 `PlatformCloudSnapshot`。未来必须使用独立的 `GameSaveCloudService`、`/api/cloud/game-saves/*`、引用表和 `kind=game-save` 对象。
 - **MarketService 设计**：
     - **两级市场架构**：`getSources()` 拉取顶层市场目录（通过 `fetchDirectory()` 获取，主源 GitHub + 备源 OSS），
       `getIndex(sourceIdx)` 拉取指定市场源的游戏索引。sourceIdx=0 使用 `fetchIndexInternal()`（主备双源），sourceIdx>0 使用
@@ -949,7 +959,7 @@ interface AppSettings {
 - **CalendarHeatmap 日历热力图组件**：
     - 纯 Vue 3 + CSS Grid 实现，不依赖第三方图表库，渲染 GitHub 贡献墙风格的 7×53+ 格子日历。
     - 颜色渐变 5 档（空 → `#39d353` → `#26a641` → `#006d32` → `#0e4429`），图例标注"少 ↔ 多"。
-    - 通过 IPC `stats:getDailyPlayDurations(365)` 从 `PlaySessionDatabaseService`（内部查询 `play_sessions.db`）加载近一年每日游玩时长。起始日期为当前日期向前 364 天并回退到周日，确保覆盖最近约 52 周（365 天数据点）。
+    - 通过 IPC `stats:getDailyPlayDurations(365)` 从 `PlaySessionDatabaseService`（内部查询 `bz_games.db`）加载近一年每日游玩时长。起始日期为当前日期向前 364 天并回退到周日，确保覆盖最近约 52 周（365 天数据点）。
     - `dayLabels`、`monthNames`、`formatDurationMs` 均通过 `useI18n()` 实现三语切换，
       使用逗号分隔字符串 `t('statistics.weekDays')` / `t('statistics.monthNames')` 存储数组数据，`t('statistics.hour/minute')` 存储时间单位。
     - 每个格子通过 `n-tooltip` 展示日期和当天游玩时长。底部显示近一年总游玩时长。
@@ -1353,10 +1363,10 @@ interface AppSettings {
 
 ### 6.4 打包与原生成模块
 
-- **原生模块编译**：`better-sqlite3` 为 C++ 原生模块，`postinstall` 脚本中的 `electron-builder install-app-deps` 会在每次 `npm install` 后自动针对当前 Electron 版本重编译 `.node` 文件。
-- **asarUnpack 必需**：原生 `.node` 文件从 `app.asar` 外部加载，`package.json` 的 `build.asarUnpack` 配置为 `["node_modules/better-sqlite3/**"]`。
+- **原生模块编译**：`better-sqlite3-multiple-ciphers` 为 C++ 原生模块，`postinstall` 脚本中的 `electron-builder install-app-deps` 会针对当前 Electron 版本重编译 `.node` 文件。
+- **asarUnpack 必需**：原生 `.node` 文件从 `app.asar` 外部加载，`package.json` 的 `build.asarUnpack` 配置包含 `node_modules/better-sqlite3-multiple-ciphers/**`。
 - **extraResources 用于原生可执行文件**：`7zip-bin` 提供的 `7za.exe` 通过 `child_process.spawn()` 调用。使用 `build.extraResources` 将其拷贝到 `process.resourcesPath`，代码中通过 `process.resourcesPath` 手动拼接路径。配置示例：`{ "from": "node_modules/7zip-bin/win/x64", "to": "7za", "filter": ["7za.exe"] }`。
-- **electron-rebuild 手动补充**：开发阶段出现 `NODE_MODULE_VERSION` 不匹配错误时，执行 `npx electron-rebuild -f -w better-sqlite3` 补齐重编译。
+- **electron-rebuild 手动补充**：开发阶段出现 `NODE_MODULE_VERSION` 不匹配错误时，执行 `npx electron-rebuild -f -w better-sqlite3-multiple-ciphers`。
 - **GitHub Release Asset 自动校验**：
   - `sha256` 和 `size` 为可选字段（`sha256` 全可选，`size` 仅 GitHub 直链时可省略）。
   - **双重解析路径**：① **前端预解析**（展开卡片时）：`MarketView.toggleExpand()` → `resolveMissingAssetInfo()` → `loadAssetInfo()` → IPC `market:resolveAssetInfo` → `MarketService.resolveAssetInfo()`。展开后 sha256/size 尚未返回时，size 区域显示 `<n-skeleton>` 骨架；返回后自动更新。② **下载时懒解析**：`downloadAndInstall()` 阶段对 GitHub 直链实时调用 `resolveGitHubAssetInfo()` 从 GitHub API 获取并缓存。

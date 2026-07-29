@@ -514,7 +514,7 @@ export default {
     cloudDownload: "Cloud Download",
     cloudSyncHelpTitle: "Cloud Sync Details",
     cloudSyncHelp:
-      "Cloud Upload: Uploads the current game library config, user data, and play records to the cloud, overwriting existing cloud data. GitHub Token and login session fields are not uploaded.\nCloud Download: Downloads cloud data and applies it locally. For config.json, only fields present in the cloud file are updated; local fields missing from the cloud file are kept.",
+      "Cloud Upload: Uploads settings, user data, play sessions, achievements, and statistics, overwriting the existing cloud objects. Game entities and version lists are not uploaded, nor are GitHub tokens or login session fields.\nCloud Download: Only fields present in config.json are updated; sessions, achievements, and statistics are merged by unique key without creating game entities.",
     cloudNeverUploaded: "Cloud time: never uploaded",
     cloudLastUploadedAt: "Cloud time: {time}",
     cloudUploadSuccess: "Cloud upload completed",
@@ -530,12 +530,15 @@ export default {
     cloudErrors: {
       cloud_not_configured: "Cloud sync is not configured",
       unauthorized: "Please complete GitHub authorization first",
-      cloud_data_incomplete:
-        "Cloud data is incomplete. Upload a full copy first.",
-      file_not_found: "Cloud file not found",
-      version_conflict: "Cloud version conflict. Refresh and try again.",
-      file_too_large: "File exceeds cloud sync size limit",
-      cloud_hash_mismatch: "Cloud file verification failed. Please try again.",
+      snapshot_not_found: "No platform snapshot exists. Upload one first.",
+      snapshot_too_large: "Platform snapshot exceeds the cloud sync limit",
+      cloud_upload_failed: "Cloud upload failed. Please try again later.",
+      internal_error: "The cloud sync service encountered an error. Please try again later.",
+      cloud_snapshot_invalid: "Platform snapshot format is invalid",
+      cloud_hash_mismatch:
+        "Platform snapshot verification failed. Please try again.",
+      cloud_sync_busy: "Another cloud sync is already in progress",
+      app_shutting_down: "The app is shutting down and cannot start cloud sync",
       cloud_sync_rate_limited:
         "Cloud sync is too frequent. Upload and download are each limited to once per 24 hours per account.",
       unknown: "Cloud sync failed",
@@ -626,9 +629,8 @@ export default {
       config_invalid_json: "config.json is not valid JSON",
       config_decrypt_failed: "config.json decryption failed",
       config_invalid_structure: "config.json has an invalid structure",
-      config_plaintext_legacy:
-        "config.json still uses the legacy plaintext format",
       config_read_failed: "Failed to read config.json: {reason}",
+      database_integrity_failed: "bz_games.db integrity check failed: {reason}",
       player_id_missing: "Player ID is missing",
       duplicate_game_id: "Duplicate game ID: {gameId}",
       duplicate_game_version: "Duplicate game version: {gameId}@{version}",

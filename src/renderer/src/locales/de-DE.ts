@@ -523,7 +523,7 @@ export default {
     cloudDownload: "Cloud-Download",
     cloudSyncHelpTitle: "Cloud-Sync-Details",
     cloudSyncHelp:
-      "Cloud-Upload: Lädt die aktuelle Spielbibliothek-Konfiguration, Benutzerdaten und Spielaufzeichnungen in die Cloud hoch und überschreibt vorhandene Cloud-Daten. GitHub Token und Anmeldesitzungsfelder werden nicht hochgeladen.\nCloud-Download: Lädt Cloud-Daten herunter und wendet sie lokal an. Bei config.json werden nur Felder aktualisiert, die in der Cloud-Datei vorhanden sind; lokale Felder, die dort fehlen, bleiben erhalten.",
+      "Cloud-Upload: Lädt Einstellungen, Benutzerdaten, Spielsitzungen, Erfolge und Statistiken hoch und überschreibt die vorhandenen Cloud-Objekte. Spielentitäten und Versionslisten sowie GitHub-Token und Anmeldesitzungen werden nicht hochgeladen.\nCloud-Download: In config.json werden nur vorhandene Felder aktualisiert; Sitzungen, Erfolge und Statistiken werden anhand eindeutiger Schlüssel zusammengeführt, ohne Spielentitäten anzulegen.",
     cloudNeverUploaded: "Cloud-Zeit: Nie hochgeladen",
     cloudLastUploadedAt: "Cloud-Zeit: {time}",
     cloudUploadSuccess: "Cloud-Upload abgeschlossen",
@@ -539,14 +539,20 @@ export default {
     cloudErrors: {
       cloud_not_configured: "Cloud-Synchronisation nicht konfiguriert",
       unauthorized: "Bitte zuerst mit GitHub anmelden",
-      cloud_data_incomplete:
-        "Cloud-Daten unvollständig, bitte zuerst einen vollständigen Upload durchführen",
-      file_not_found: "Cloud-Datei nicht gefunden",
-      version_conflict:
-        "Cloud-Versionskonflikt, bitte aktualisieren und erneut versuchen",
-      file_too_large: "Datei überschreitet das Cloud-Sync-Limit",
+      snapshot_not_found:
+        "Kein Plattform-Snapshot vorhanden. Bitte zuerst hochladen.",
+      snapshot_too_large:
+        "Plattform-Snapshot überschreitet das Cloud-Sync-Limit",
+      cloud_upload_failed:
+        "Cloud-Upload fehlgeschlagen. Bitte später erneut versuchen.",
+      internal_error:
+        "Beim Cloud-Synchronisationsdienst ist ein Fehler aufgetreten. Bitte später erneut versuchen.",
+      cloud_snapshot_invalid: "Format des Plattform-Snapshots ist ungültig",
       cloud_hash_mismatch:
-        "Cloud-Dateiprüfung fehlgeschlagen, bitte erneut versuchen",
+        "Prüfung des Plattform-Snapshots fehlgeschlagen, bitte erneut versuchen",
+      cloud_sync_busy: "Eine andere Cloud-Synchronisation läuft bereits",
+      app_shutting_down:
+        "Die App wird beendet; Cloud-Sync kann nicht gestartet werden",
       cloud_sync_rate_limited:
         "Cloud-Sync zu häufig. Upload und Download sind jeweils auf einmal pro 24 Stunden pro Konto begrenzt",
       unknown: "Cloud-Synchronisation fehlgeschlagen",
@@ -634,9 +640,9 @@ export default {
       config_invalid_json: "config.json enthält kein gültiges JSON",
       config_decrypt_failed: "config.json konnte nicht entschlüsselt werden",
       config_invalid_structure: "config.json hat eine ungültige Struktur",
-      config_plaintext_legacy:
-        "config.json verwendet noch das alte Klartextformat",
       config_read_failed: "config.json konnte nicht gelesen werden: {reason}",
+      database_integrity_failed:
+        "Integritätsprüfung von bz_games.db fehlgeschlagen: {reason}",
       player_id_missing: "Die Spieler-ID fehlt",
       duplicate_game_id: "Doppelte Spiel-ID: {gameId}",
       duplicate_game_version: "Doppelte Spielversion: {gameId}@{version}",

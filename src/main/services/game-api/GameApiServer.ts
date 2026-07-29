@@ -24,8 +24,6 @@ import { mainWindow } from "../../window";
 import { IPC } from "../../../shared/ipc-channels";
 import { notificationService } from "../system/NotificationService";
 import { GameLoader } from "../game/GameLoader";
-import { achievementUnlockDatabaseService } from "../storage/database/AchievementUnlockDatabaseService";
-import { statsReportDatabaseService } from "../storage/database/StatsReportDatabaseService";
 import { encodeBinaryEnvelope } from "../../../shared/binary-protocol";
 import { V1GameApiProtocol } from "./V1GameApiProtocol";
 import { V2GameApiProtocol } from "./V2GameApiProtocol";
@@ -474,24 +472,18 @@ export class GameApiServer {
       return;
     }
 
-    const unlocked = storeService.unlockAchievement(
+    const unlocked = await storeService.unlockAchievement(
       this.gameId,
       this.gameVersion,
       achievementId,
+      manifest?.name || this.gameId,
+      achievement?.title || achievementId,
     );
     if (unlocked) {
       mainWindow?.webContents.send(IPC.GAME_UNLOCK_ACHIEVEMENT, {
         gameId: this.gameId,
         version: this.gameVersion,
         achievementId,
-      });
-      void achievementUnlockDatabaseService.recordUnlock({
-        game_id: this.gameId,
-        game_name: manifest?.name || this.gameId,
-        version: this.gameVersion,
-        achievement_id: achievementId,
-        achievement_name: achievement?.title || achievementId,
-        unlocked_at: Date.now(),
       });
       this.showAchievementNotification(achievementId);
     }
@@ -545,27 +537,21 @@ export class GameApiServer {
         string,
         number
       >;
-      storeService.updateGameStats(
+      const statNames: Record<string, string> = {};
+      for (const statId of Object.keys(validatedStats)) {
+        statNames[statId] =
+          manifest?.statistics
+            ?.map((stat) => resolveStatName(stat, statId))
+            .find(Boolean) || statId;
+      }
+      await storeService.updateGameStats(
         this.gameId,
         this.gameVersion,
         validatedStats,
         modes,
+        manifest?.name || this.gameId,
+        statNames,
       );
-      const reportedAt = Date.now();
-      for (const statId of Object.keys(validatedStats)) {
-        const statName =
-          manifest?.statistics
-            ?.map((stat) => resolveStatName(stat, statId))
-            .find(Boolean) || statId;
-        void statsReportDatabaseService.recordReport({
-          game_id: this.gameId,
-          game_name: manifest?.name || this.gameId,
-          version: this.gameVersion,
-          stat_id: statId,
-          stat_name: statName,
-          reported_at: reportedAt,
-        });
-      }
       this.sendResponse(ws, req.id, "stats.report", { success: true });
     } else {
       this.sendError(ws, req.id, "stats.report", {

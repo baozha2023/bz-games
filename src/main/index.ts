@@ -1,14 +1,17 @@
 import { app, BrowserWindow, session } from "electron";
 import { spawnSync } from "child_process";
 import path from "path";
-import { createWindow, markAppQuitting, mainWindow, createFloatBallWindow } from "./window";
+import {
+  createWindow,
+  markAppQuitting,
+  mainWindow,
+  createFloatBallWindow,
+} from "./window";
 import { registerAllIpc } from "./ipc";
 import { electronApp } from "@electron-toolkit/utils";
 import { storeService } from "./services/storage/StoreService";
 import { marketService } from "./services/market/MarketService";
-import { playSessionDatabaseService } from "./services/storage/database/PlaySessionDatabaseService";
-import { achievementUnlockDatabaseService } from "./services/storage/database/AchievementUnlockDatabaseService";
-import { statsReportDatabaseService } from "./services/storage/database/StatsReportDatabaseService";
+import { bzGamesDatabase } from "./services/storage/database/BzGamesDatabase";
 import { requestInterceptor } from "./utils/requestInterceptor";
 import { roomDiscoveryService } from "./services/room/RoomDiscoveryService";
 import { cloudSyncService } from "./services/system/CloudSyncService";
@@ -20,6 +23,9 @@ const gotTheLock = app.requestSingleInstanceLock();
 const PROTOCOL_SCHEME = "bzgames";
 const pendingProtocolUrls: string[] = [];
 let appReadyForProtocol = false;
+let appServicesInitialized = false;
+let shutdownStarted = false;
+let shutdownCompleted = false;
 
 function quoteWindowsArg(value: string): string {
   return `"${value.replace(/"/g, '\\"')}"`;
@@ -32,12 +38,50 @@ function findProtocolUrl(argv: string[]): string {
 function registerProtocolClient(): void {
   if (process.defaultApp) {
     const mainScriptPath = path.join(__dirname, "index.js");
-    app.setAsDefaultProtocolClient(PROTOCOL_SCHEME, process.execPath, [mainScriptPath]);
+    app.setAsDefaultProtocolClient(PROTOCOL_SCHEME, process.execPath, [
+      mainScriptPath,
+    ]);
     if (process.platform === "win32") {
       const command = `${quoteWindowsArg(process.execPath)} ${quoteWindowsArg(mainScriptPath)} "%1"`;
-      spawnSync("reg", ["add", `HKCU\\Software\\Classes\\${PROTOCOL_SCHEME}`, "/ve", "/d", "URL:BZ-Games Protocol", "/f"], { windowsHide: true });
-      spawnSync("reg", ["add", `HKCU\\Software\\Classes\\${PROTOCOL_SCHEME}`, "/v", "URL Protocol", "/t", "REG_SZ", "/d", "", "/f"], { windowsHide: true });
-      spawnSync("reg", ["add", `HKCU\\Software\\Classes\\${PROTOCOL_SCHEME}\\shell\\open\\command`, "/ve", "/d", command, "/f"], { windowsHide: true });
+      spawnSync(
+        "reg",
+        [
+          "add",
+          `HKCU\\Software\\Classes\\${PROTOCOL_SCHEME}`,
+          "/ve",
+          "/d",
+          "URL:BZ-Games Protocol",
+          "/f",
+        ],
+        { windowsHide: true },
+      );
+      spawnSync(
+        "reg",
+        [
+          "add",
+          `HKCU\\Software\\Classes\\${PROTOCOL_SCHEME}`,
+          "/v",
+          "URL Protocol",
+          "/t",
+          "REG_SZ",
+          "/d",
+          "",
+          "/f",
+        ],
+        { windowsHide: true },
+      );
+      spawnSync(
+        "reg",
+        [
+          "add",
+          `HKCU\\Software\\Classes\\${PROTOCOL_SCHEME}\\shell\\open\\command`,
+          "/ve",
+          "/d",
+          command,
+          "/f",
+        ],
+        { windowsHide: true },
+      );
     }
     return;
   }
@@ -97,9 +141,7 @@ if (!gotTheLock) {
     requestInterceptor.registerSessionHandler(session.defaultSession);
 
     await storeService.init();
-    playSessionDatabaseService.init();
-    achievementUnlockDatabaseService.init();
-    statsReportDatabaseService.init();
+    appServicesInitialized = true;
     appReadyForProtocol = true;
     const settings = storeService.getSettings();
     app.setLoginItemSettings({
@@ -153,13 +195,29 @@ if (!gotTheLock) {
   });
 }
 
-app.on("before-quit", () => {
-  storeService.recordAppClosed();
-  roomDiscoveryService.stop();
-  void playSessionDatabaseService.close();
-  void achievementUnlockDatabaseService.close();
-  void statsReportDatabaseService.close();
+app.on("before-quit", (event) => {
   markAppQuitting();
+  if (shutdownCompleted) return;
+
+  event.preventDefault();
+  if (shutdownStarted) return;
+  shutdownStarted = true;
+
+  void (async () => {
+    try {
+      if (appServicesInitialized) {
+        storeService.recordAppClosed();
+        roomDiscoveryService.stop();
+      }
+      await cloudSyncService.shutdown();
+      await bzGamesDatabase.close();
+    } catch (error) {
+      logger.error("[Main] Failed to close services before quit", error);
+    } finally {
+      shutdownCompleted = true;
+      app.quit();
+    }
+  })();
 });
 
 app.on("window-all-closed", () => {

@@ -78,6 +78,7 @@ games/
 db/*.db
 db/*.db-shm
 db/*.db-wal
+db/*.backup
 
 # 示例游戏目录
 井字棋/

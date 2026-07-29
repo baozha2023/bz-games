@@ -1,22 +1,38 @@
 <template>
-  <div style="padding: 24px; max-width: 600px; margin: 0 auto;">
+  <div style="padding: 24px; max-width: 600px; margin: 0 auto">
     <n-page-header :title="t('settings.title')" @back="handleBack" />
     <n-divider />
-    <n-form ref="formRef" :model="formValue" :rules="rules" v-if="formValue" label-placement="left" label-width="120">
+    <n-form
+      ref="formRef"
+      :model="formValue"
+      :rules="rules"
+      v-if="formValue"
+      label-placement="left"
+      label-width="120"
+    >
       <n-form-item :label="t('settings.playerName')" path="playerName">
-        <n-input v-model:value="formValue.playerName" :placeholder="t('settings.playerNamePlaceholder')" maxlength="16" show-count />
+        <n-input
+          v-model:value="formValue.playerName"
+          :placeholder="t('settings.playerNamePlaceholder')"
+          maxlength="16"
+          show-count
+        />
       </n-form-item>
 
       <n-form-item :label="t('settings.cloudSync')">
         <div class="cloud-sync-row">
           <div class="cloud-login-line">
-            <n-button class="github-login-button" :disabled="cloudBusy" @click="handleGitHubLogin">
+            <n-button
+              class="github-login-button"
+              :disabled="cloudBusy"
+              @click="handleGitHubLogin"
+            >
               <template #icon>
                 <n-icon :size="18">
                   <LogoGithub />
                 </n-icon>
               </template>
-              {{ t('settings.githubLogin') }}
+              {{ t("settings.githubLogin") }}
             </n-button>
             <button
               v-if="cloudStatus.authenticated && cloudAccountLabel"
@@ -29,22 +45,42 @@
             </button>
           </div>
           <div class="cloud-action-line">
-            <n-button type="primary" secondary :disabled="!cloudStatus.authenticated || cloudBusy" @click="handleCloudUpload">{{ t('settings.cloudUpload') }}</n-button>
-            <n-button type="primary" secondary :disabled="!cloudStatus.authenticated || cloudBusy" @click="handleCloudDownload">{{ t('settings.cloudDownload') }}</n-button>
+            <n-button
+              type="primary"
+              secondary
+              :disabled="!cloudStatus.authenticated || cloudBusy"
+              @click="handleCloudUpload"
+              >{{ t("settings.cloudUpload") }}</n-button
+            >
+            <n-button
+              type="primary"
+              secondary
+              :disabled="!cloudStatus.authenticated || cloudBusy"
+              @click="handleCloudDownload"
+              >{{ t("settings.cloudDownload") }}</n-button
+            >
             <n-tooltip trigger="hover" placement="top">
               <template #trigger>
-                <button class="cloud-help-button" type="button" :aria-label="t('settings.cloudSyncHelpTitle')">
+                <button
+                  class="cloud-help-button"
+                  type="button"
+                  :aria-label="t('settings.cloudSyncHelpTitle')"
+                >
                   <n-icon :size="18">
                     <HelpCircleOutline />
                   </n-icon>
                 </button>
               </template>
               <div class="cloud-help-content">
-                <div class="cloud-help-title">{{ t('settings.cloudSyncHelpTitle') }}</div>
-                <div>{{ t('settings.cloudSyncHelp') }}</div>
+                <div class="cloud-help-title">
+                  {{ t("settings.cloudSyncHelpTitle") }}
+                </div>
+                <div>{{ t("settings.cloudSyncHelp") }}</div>
               </div>
             </n-tooltip>
-            <n-text depth="3" class="cloud-upload-time">{{ cloudTimeText }}</n-text>
+            <n-text depth="3" class="cloud-upload-time">{{
+              cloudTimeText
+            }}</n-text>
           </div>
         </div>
       </n-form-item>
@@ -59,12 +95,20 @@
               :frame-file-name="settingsFrameFileName"
             />
           </div>
-          <n-button @click="handleUploadAvatar">{{ t('settings.uploadAvatar') }}</n-button>
+          <n-button @click="handleUploadAvatar">{{
+            t("settings.uploadAvatar")
+          }}</n-button>
         </n-space>
       </n-form-item>
-      
+
       <n-form-item :label="t('settings.roomPort')" path="defaultRoomPort">
-        <n-input-number v-model:value="formValue.defaultRoomPort" :min="1024" :max="65535" :placeholder="t('settings.defaultPortPlaceholder')" style="width: 100%" />
+        <n-input-number
+          v-model:value="formValue.defaultRoomPort"
+          :min="1024"
+          :max="65535"
+          :placeholder="t('settings.defaultPortPlaceholder')"
+          style="width: 100%"
+        />
       </n-form-item>
 
       <n-form-item :label="t('settings.theme')" path="theme">
@@ -72,47 +116,70 @@
       </n-form-item>
 
       <n-form-item :label="t('settings.language')" path="language">
-        <n-select v-model:value="formValue.language" :options="languageOptions" />
+        <n-select
+          v-model:value="formValue.language"
+          :options="languageOptions"
+        />
       </n-form-item>
 
       <n-form-item :label="t('settings.closeBehavior')" path="closeBehavior">
         <n-radio-group v-model:value="formValue.closeBehavior">
-          <n-radio value="tray">{{ t('settings.closeToTray') }}</n-radio>
-          <n-radio value="exit">{{ t('settings.exitDirectly') }}</n-radio>
+          <n-radio value="tray">{{ t("settings.closeToTray") }}</n-radio>
+          <n-radio value="exit">{{ t("settings.exitDirectly") }}</n-radio>
         </n-radio-group>
       </n-form-item>
 
       <n-form-item :label="t('settings.autoLaunch')" path="autoLaunch">
         <n-radio-group v-model:value="formValue.autoLaunch">
-          <n-radio :value="true">{{ t('settings.autoLaunchOn') }}</n-radio>
-          <n-radio :value="false">{{ t('settings.autoLaunchOff') }}</n-radio>
+          <n-radio :value="true">{{ t("settings.autoLaunchOn") }}</n-radio>
+          <n-radio :value="false">{{ t("settings.autoLaunchOff") }}</n-radio>
         </n-radio-group>
       </n-form-item>
 
-      <n-form-item :label="t('settings.downloadFloatBall')" path="downloadFloatBall">
+      <n-form-item
+        :label="t('settings.downloadFloatBall')"
+        path="downloadFloatBall"
+      >
         <n-radio-group v-model:value="formValue.downloadFloatBall">
-          <n-radio :value="true">{{ t('settings.downloadFloatBallOn') }}</n-radio>
-          <n-radio :value="false">{{ t('settings.downloadFloatBallOff') }}</n-radio>
+          <n-radio :value="true">{{
+            t("settings.downloadFloatBallOn")
+          }}</n-radio>
+          <n-radio :value="false">{{
+            t("settings.downloadFloatBallOff")
+          }}</n-radio>
         </n-radio-group>
       </n-form-item>
 
-      <n-form-item :label="t('settings.sensitiveWordFilter')" path="sensitiveWordFilter">
+      <n-form-item
+        :label="t('settings.sensitiveWordFilter')"
+        path="sensitiveWordFilter"
+      >
         <div class="github-token-row">
           <n-radio-group v-model:value="formValue.sensitiveWordFilter">
-            <n-radio :value="true">{{ t('settings.sensitiveWordFilterOn') }}</n-radio>
-            <n-radio :value="false">{{ t('settings.sensitiveWordFilterOff') }}</n-radio>
+            <n-radio :value="true">{{
+              t("settings.sensitiveWordFilterOn")
+            }}</n-radio>
+            <n-radio :value="false">{{
+              t("settings.sensitiveWordFilterOff")
+            }}</n-radio>
           </n-radio-group>
           <n-tooltip trigger="hover" placement="top">
             <template #trigger>
-              <button class="cloud-help-button" type="button" :aria-label="t('settings.sensitiveWordFilterHelpTitle')">
+              <button
+                class="cloud-help-button"
+                type="button"
+                :aria-label="t('settings.sensitiveWordFilterHelpTitle')"
+              >
                 <n-icon :size="18">
                   <HelpCircleOutline />
                 </n-icon>
               </button>
             </template>
             <div class="cloud-help-content">
-              <div class="cloud-help-title">{{ t('settings.sensitiveWordFilterHelpTitle') }}</div>
-              <div>{{ t('settings.sensitiveWordFilterHelp') }}</div>
+              <div class="cloud-help-title">
+                {{ t("settings.sensitiveWordFilterHelpTitle") }}
+              </div>
+              <div>{{ t("settings.sensitiveWordFilterHelp") }}</div>
             </div>
           </n-tooltip>
         </div>
@@ -129,33 +196,51 @@
           />
           <n-tooltip trigger="hover" placement="top">
             <template #trigger>
-              <button class="cloud-help-button" type="button" :aria-label="t('settings.githubTokenHelpTitle')">
+              <button
+                class="cloud-help-button"
+                type="button"
+                :aria-label="t('settings.githubTokenHelpTitle')"
+              >
                 <n-icon :size="18">
                   <HelpCircleOutline />
                 </n-icon>
               </button>
             </template>
             <div class="cloud-help-content">
-              <div class="cloud-help-title">{{ t('settings.githubTokenHelpTitle') }}</div>
-              <div>{{ t('settings.githubTokenHelp') }}</div>
+              <div class="cloud-help-title">
+                {{ t("settings.githubTokenHelpTitle") }}
+              </div>
+              <div>{{ t("settings.githubTokenHelp") }}</div>
             </div>
           </n-tooltip>
         </div>
       </n-form-item>
 
       <n-form-item :label="t('settings.storagePathList')">
-        <n-space vertical style="width: 100%;">
-          <n-empty v-if="allStoragePaths.length === 0" :description="t('settings.storagePathEmpty')" />
-          <div v-for="item in allStoragePaths" :key="item" class="storage-path-item">
+        <n-space vertical style="width: 100%">
+          <n-empty
+            v-if="allStoragePaths.length === 0"
+            :description="t('settings.storagePathEmpty')"
+          />
+          <div
+            v-for="item in allStoragePaths"
+            :key="item"
+            class="storage-path-item"
+          >
             <n-button
               quaternary
-              style="justify-content: flex-start; flex: 1;"
+              style="justify-content: flex-start; flex: 1"
               @click="handleOpenPath(item)"
             >
               {{ item }}
             </n-button>
-            <n-tag v-if="isDefaultStoragePath(item)" type="success" size="small" class="storage-path-default-tag">
-              {{ t('settings.defaultStoragePath') }}
+            <n-tag
+              v-if="isDefaultStoragePath(item)"
+              type="success"
+              size="small"
+              class="storage-path-default-tag"
+            >
+              {{ t("settings.defaultStoragePath") }}
             </n-tag>
             <n-button
               v-else
@@ -163,7 +248,7 @@
               size="small"
               @click="handleSetDefaultStoragePath(item)"
             >
-              {{ t('settings.setDefaultStoragePath') }}
+              {{ t("settings.setDefaultStoragePath") }}
             </n-button>
             <n-button
               tertiary
@@ -176,19 +261,22 @@
             </n-button>
           </div>
           <n-button dashed block @click="handleAddGameStoragePath">
-            {{ t('settings.addStoragePath') }}
+            {{ t("settings.addStoragePath") }}
           </n-button>
         </n-space>
       </n-form-item>
 
       <n-form-item :label="t('settings.dataHealth')">
-        <n-space vertical style="width: 100%;">
+        <n-space vertical style="width: 100%">
           <n-space>
-            <n-button :loading="isCheckingHealth" @click="handleDataHealthCheck">
-              {{ t('settings.runDataHealthCheck') }}
+            <n-button
+              :loading="isCheckingHealth"
+              @click="handleDataHealthCheck"
+            >
+              {{ t("settings.runDataHealthCheck") }}
             </n-button>
             <n-text v-if="dataHealthReport" depth="3">
-              {{ t('settings.dataHealthSummary', dataHealthSummaryText) }}
+              {{ t("settings.dataHealthSummary", dataHealthSummaryText) }}
             </n-text>
           </n-space>
           <n-alert
@@ -197,30 +285,46 @@
           >
             {{
               dataHealthReport.ok
-                ? t('settings.dataHealthOk')
-                : t('settings.dataHealthIssuesFound')
+                ? t("settings.dataHealthOk")
+                : t("settings.dataHealthIssuesFound")
             }}
           </n-alert>
           <n-list v-if="dataHealthReport?.issues.length">
-            <n-list-item v-for="issue in dataHealthReport.issues" :key="`${issue.code}-${issue.target || issue.message}`">
+            <n-list-item
+              v-for="issue in dataHealthReport.issues"
+              :key="`${issue.code}-${issue.target || issue.message}`"
+            >
               <n-space vertical size="small">
-                <n-tag :type="issue.level === 'error' ? 'error' : 'warning'" size="small">
-                  {{ issue.level === 'error' ? t('settings.healthError') : t('settings.healthWarning') }}
+                <n-tag
+                  :type="issue.level === 'error' ? 'error' : 'warning'"
+                  size="small"
+                >
+                  {{
+                    issue.level === "error"
+                      ? t("settings.healthError")
+                      : t("settings.healthWarning")
+                  }}
                 </n-tag>
                 <n-text>{{ formatHealthIssue(issue) }}</n-text>
-                <n-text v-if="issue.target" depth="3">{{ issue.target }}</n-text>
+                <n-text v-if="issue.target" depth="3">{{
+                  issue.target
+                }}</n-text>
               </n-space>
             </n-list-item>
           </n-list>
         </n-space>
       </n-form-item>
 
-    <n-form-item :label="t('settings.update')">
+      <n-form-item :label="t('settings.update')">
         <n-space>
-        <n-button :loading="isCheckingUpdate" @click="handleCheckUpdate">
-          {{ t('settings.checkUpdate') }}
-        </n-button>
-          <n-text depth="3">{{ t('settings.currentVersion', { version: updateState.currentVersion }) }}</n-text>
+          <n-button :loading="isCheckingUpdate" @click="handleCheckUpdate">
+            {{ t("settings.checkUpdate") }}
+          </n-button>
+          <n-text depth="3">{{
+            t("settings.currentVersion", {
+              version: updateState.currentVersion,
+            })
+          }}</n-text>
         </n-space>
       </n-form-item>
 
@@ -231,82 +335,165 @@
       </n-form-item>
 
       <n-form-item label="Player ID">
-        <n-text depth="3">{{ formValue.playerId }} {{ t('settings.idHint') }}</n-text>
+        <n-text depth="3"
+          >{{ formValue.playerId }} {{ t("settings.idHint") }}</n-text
+        >
       </n-form-item>
 
-      <div style="display: flex; justify-content: space-between; align-items: center;">
+      <div
+        style="
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        "
+      >
         <n-space>
           <n-button type="primary" secondary @click="showFeedbackModal = true">
-            {{ t('feedback.button') }}
+            {{ t("feedback.button") }}
           </n-button>
           <n-button type="error" secondary @click="showUninstallModal = true">
-            {{ t('settings.uninstallClient') }}
+            {{ t("settings.uninstallClient") }}
           </n-button>
           <n-button secondary @click="handleClearCache">
-            {{ t('settings.clearCache') }}
+            {{ t("settings.clearCache") }}
           </n-button>
-          <n-button type="warning" secondary @click="handleOpenMigrateStorageModal">
-            {{ t('settings.migrateStorage') }}
+          <n-button
+            type="warning"
+            secondary
+            @click="handleOpenMigrateStorageModal"
+          >
+            {{ t("settings.migrateStorage") }}
           </n-button>
         </n-space>
-        <n-button type="primary" :disabled="!canSave" @click="handleSave">{{ t('settings.save') }}</n-button>
+        <n-button type="primary" :disabled="!canSave" @click="handleSave">{{
+          t("settings.save")
+        }}</n-button>
       </div>
     </n-form>
 
-    <n-modal v-model:show="showUninstallModal" preset="dialog" :title="t('settings.uninstallClient')" positive-text="" negative-text="" :closable="!isUninstalling" :mask-closable="!isUninstalling">
-      <n-space vertical :size="16" style="width: 100%;">
-        <n-text>{{ t('settings.uninstallClientDescription') }}</n-text>
-        <n-checkbox v-model:checked="uninstallDeleteGames" :disabled="isUninstalling">
-          {{ t('settings.uninstallDeleteGames') }}
+    <n-modal
+      v-model:show="showUninstallModal"
+      preset="dialog"
+      :title="t('settings.uninstallClient')"
+      positive-text=""
+      negative-text=""
+      :closable="!isUninstalling"
+      :mask-closable="!isUninstalling"
+    >
+      <n-space vertical :size="16" style="width: 100%">
+        <n-text>{{ t("settings.uninstallClientDescription") }}</n-text>
+        <n-checkbox
+          v-model:checked="uninstallDeleteGames"
+          :disabled="isUninstalling"
+        >
+          {{ t("settings.uninstallDeleteGames") }}
         </n-checkbox>
-        <n-list v-if="uninstallDeleteGames && allStoragePaths.length > 0" bordered>
+        <n-list
+          v-if="uninstallDeleteGames && allStoragePaths.length > 0"
+          bordered
+        >
           <n-list-item v-for="item in allStoragePaths" :key="item">
-            <n-text depth="3" style="word-break: break-all;">{{ item }}</n-text>
+            <n-text depth="3" style="word-break: break-all">{{ item }}</n-text>
           </n-list-item>
         </n-list>
       </n-space>
       <template #action>
         <n-space>
-          <n-button :disabled="isUninstalling" @click="showUninstallModal = false">{{ t('common.cancel') }}</n-button>
-          <n-button type="error" :loading="isUninstalling" @click="confirmUninstall">{{ t('settings.uninstallClient') }}</n-button>
+          <n-button
+            :disabled="isUninstalling"
+            @click="showUninstallModal = false"
+            >{{ t("common.cancel") }}</n-button
+          >
+          <n-button
+            type="error"
+            :loading="isUninstalling"
+            @click="confirmUninstall"
+            >{{ t("settings.uninstallClient") }}</n-button
+          >
         </n-space>
       </template>
     </n-modal>
 
-    <n-modal v-model:show="showClearCacheModal" preset="card" :title="t('settings.clearCache')" style="width: 400px;" :closable="!isClearingCache" :mask-closable="!isClearingCache">
-      <n-space vertical :size="16" style="width: 100%;">
-        <n-text v-if="!isClearingCache && !clearCacheResult">{{ t('settings.clearCacheConfirm') }}</n-text>
+    <n-modal
+      v-model:show="showClearCacheModal"
+      preset="card"
+      :title="t('settings.clearCache')"
+      style="width: 400px"
+      :closable="!isClearingCache"
+      :mask-closable="!isClearingCache"
+    >
+      <n-space vertical :size="16" style="width: 100%">
+        <n-text v-if="!isClearingCache && !clearCacheResult">{{
+          t("settings.clearCacheConfirm")
+        }}</n-text>
         <template v-if="isClearingCache">
-          <n-progress type="line" :percentage="clearCacheProgress" :indicator-placement="'inside'" processing />
-          <n-text depth="3">{{ t('settings.clearCacheProcessing') }}</n-text>
+          <n-progress
+            type="line"
+            :percentage="clearCacheProgress"
+            :indicator-placement="'inside'"
+            processing
+          />
+          <n-text depth="3">{{ t("settings.clearCacheProcessing") }}</n-text>
         </template>
         <template v-if="clearCacheResult">
-          <n-text>{{ t('settings.clearCacheSuccess', { size: formatBytes(clearCacheResult.clearedSize) }) }}</n-text>
+          <n-text>{{
+            t("settings.clearCacheSuccess", {
+              size: formatBytes(clearCacheResult.clearedSize),
+            })
+          }}</n-text>
         </template>
       </n-space>
       <template #action>
         <n-space v-if="!isClearingCache" justify="end">
-          <n-button @click="showClearCacheModal = false">{{ clearCacheResult ? t('common.confirm') : t('common.cancel') }}</n-button>
-          <n-button v-if="!clearCacheResult" type="warning" @click="confirmClearCache">{{ t('settings.clearCache') }}</n-button>
+          <n-button @click="showClearCacheModal = false">{{
+            clearCacheResult ? t("common.confirm") : t("common.cancel")
+          }}</n-button>
+          <n-button
+            v-if="!clearCacheResult"
+            type="warning"
+            @click="confirmClearCache"
+            >{{ t("settings.clearCache") }}</n-button
+          >
         </n-space>
       </template>
     </n-modal>
 
-    <n-modal v-model:show="showCloudProgressModal" preset="card" :title="cloudProgressTitle" style="width: 400px;" :closable="!cloudBusy" :mask-closable="!cloudBusy">
-      <n-space vertical :size="16" style="width: 100%;">
-        <n-progress type="line" :percentage="cloudProgress" :indicator-placement="'inside'" :processing="cloudBusy" />
+    <n-modal
+      v-model:show="showCloudProgressModal"
+      preset="card"
+      :title="cloudProgressTitle"
+      style="width: 400px"
+      :closable="!cloudBusy"
+      :mask-closable="!cloudBusy"
+    >
+      <n-space vertical :size="16" style="width: 100%">
+        <n-progress
+          type="line"
+          :percentage="cloudProgress"
+          :indicator-placement="'inside'"
+          :processing="cloudBusy"
+        />
         <n-text depth="3">{{ cloudProgressText }}</n-text>
       </n-space>
       <template #action>
         <n-space v-if="!cloudBusy" justify="end">
-          <n-button @click="showCloudProgressModal = false">{{ t('common.confirm') }}</n-button>
+          <n-button @click="showCloudProgressModal = false">{{
+            t("common.confirm")
+          }}</n-button>
         </n-space>
       </template>
     </n-modal>
 
-    <n-modal v-model:show="showMigrateStorageModal" preset="card" :title="t('settings.migrateStorage')" style="width: 520px;" :closable="!isMigratingStorage" :mask-closable="!isMigratingStorage">
-      <n-space vertical :size="16" style="width: 100%;">
-        <n-text>{{ t('settings.migrateStorageDescription') }}</n-text>
+    <n-modal
+      v-model:show="showMigrateStorageModal"
+      preset="card"
+      :title="t('settings.migrateStorage')"
+      style="width: 520px"
+      :closable="!isMigratingStorage"
+      :mask-closable="!isMigratingStorage"
+    >
+      <n-space vertical :size="16" style="width: 100%">
+        <n-text>{{ t("settings.migrateStorageDescription") }}</n-text>
         <n-select
           v-model:value="selectedMigrationSourcePath"
           :options="migrationStorageOptions"
@@ -319,26 +506,54 @@
             :placeholder="t('settings.selectTargetStoragePath')"
             readonly
           />
-          <n-button :disabled="isMigratingStorage" @click="handlePickMigrationTargetPath">
-            {{ t('settings.browsePath') }}
+          <n-button
+            :disabled="isMigratingStorage"
+            @click="handlePickMigrationTargetPath"
+          >
+            {{ t("settings.browsePath") }}
           </n-button>
         </n-input-group>
         <n-alert v-if="selectedMigrationSourcePath" type="warning">
-          {{ t('settings.migrateStorageWarning', { path: selectedMigrationSourcePath }) }}
+          {{
+            t("settings.migrateStorageWarning", {
+              path: selectedMigrationSourcePath,
+            })
+          }}
         </n-alert>
       </n-space>
       <template #action>
         <n-space justify="end">
-          <n-button :disabled="isMigratingStorage" @click="showMigrateStorageModal = false">{{ t('common.cancel') }}</n-button>
-          <n-button type="primary" :loading="isMigratingStorage" @click="confirmMigrateStorage">
-            {{ t('settings.migrateStorage') }}
+          <n-button
+            :disabled="isMigratingStorage"
+            @click="showMigrateStorageModal = false"
+            >{{ t("common.cancel") }}</n-button
+          >
+          <n-button
+            type="primary"
+            :loading="isMigratingStorage"
+            @click="confirmMigrateStorage"
+          >
+            {{ t("settings.migrateStorage") }}
           </n-button>
         </n-space>
       </template>
     </n-modal>
 
-    <n-modal v-model:show="showAvatarPreview" preset="card" title="" style="width: 360px;" :bordered="false">
-      <div style="display: flex; justify-content: center; align-items: center; padding: 24px;">
+    <n-modal
+      v-model:show="showAvatarPreview"
+      preset="card"
+      title=""
+      style="width: 360px"
+      :bordered="false"
+    >
+      <div
+        style="
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          padding: 24px;
+        "
+      >
         <AvatarWithFrame
           :src="formValue?.avatar"
           :name="formValue?.playerName || ''"
@@ -348,7 +563,14 @@
       </div>
     </n-modal>
 
-    <n-modal v-model:show="showCropModal" preset="card" :title="t('settings.cropAvatarTitle')" style="width: 520px;" :closable="false" :mask-closable="false">
+    <n-modal
+      v-model:show="showCropModal"
+      preset="card"
+      :title="t('settings.cropAvatarTitle')"
+      style="width: 520px"
+      :closable="false"
+      :mask-closable="false"
+    >
       <div
         ref="cropContainerRef"
         class="crop-container"
@@ -361,13 +583,23 @@
         <canvas ref="cropCanvasRef" class="crop-canvas" />
       </div>
       <div class="crop-controls">
-        <span class="crop-zoom-label">{{ t('settings.cropZoom') }} {{ cropZoom }}%</span>
-        <n-slider v-model:value="cropZoom" :min="cropMinZoom" :max="300" :step="1" style="flex:1; margin: 0 12px;" />
+        <span class="crop-zoom-label"
+          >{{ t("settings.cropZoom") }} {{ cropZoom }}%</span
+        >
+        <n-slider
+          v-model:value="cropZoom"
+          :min="cropMinZoom"
+          :max="300"
+          :step="1"
+          style="flex: 1; margin: 0 12px"
+        />
       </div>
       <template #action>
         <n-space justify="end">
-          <n-button @click="cancelCrop">{{ t('common.cancel') }}</n-button>
-          <n-button type="primary" @click="confirmCrop">{{ t('common.confirm') }}</n-button>
+          <n-button @click="cancelCrop">{{ t("common.cancel") }}</n-button>
+          <n-button type="primary" @click="confirmCrop">{{
+            t("common.confirm")
+          }}</n-button>
         </n-space>
       </template>
     </n-modal>
@@ -377,747 +609,835 @@
       :authenticated="cloudStatus.authenticated"
       @auth-expired="refreshCloudStatus"
     />
-
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, nextTick, watch, onUnmounted } from 'vue'
-import { onBeforeRouteLeave, useRouter } from 'vue-router'
-import { useMessage, useDialog } from 'naive-ui'
-import { useI18n } from 'vue-i18n'
-import { useSettingsStore } from '../stores/useSettingsStore'
-import { useGameStore } from '../stores/useGameStore'
-import AvatarWithFrame from '../components/AvatarWithFrame.vue'
-import FeedbackModal from '../components/settings/FeedbackModal.vue'
-import type { AppSettings } from '../../../shared/types'
-import { getFrameImageFileName } from '../../../shared/avatar-frames'
-import { formatBytes } from '../utils/format'
-import { HelpCircleOutline, LogoGithub } from '@vicons/ionicons5'
+import { ref, onMounted, computed, nextTick, watch, onUnmounted } from "vue";
+import { onBeforeRouteLeave, useRouter } from "vue-router";
+import { useMessage, useDialog } from "naive-ui";
+import { useI18n } from "vue-i18n";
+import { useSettingsStore } from "../stores/useSettingsStore";
+import { useGameStore } from "../stores/useGameStore";
+import AvatarWithFrame from "../components/AvatarWithFrame.vue";
+import FeedbackModal from "../components/settings/FeedbackModal.vue";
+import type { AppSettings } from "../../../shared/types";
+import { getFrameImageFileName } from "../../../shared/avatar-frames";
+import { formatBytes } from "../utils/format";
+import { HelpCircleOutline, LogoGithub } from "@vicons/ionicons5";
 
-const { t, te } = useI18n()
-const router = useRouter()
-const settingsStore = useSettingsStore()
-const gameStore = useGameStore()
-const message = useMessage()
-const dialog = useDialog()
+const { t, te } = useI18n();
+const router = useRouter();
+const settingsStore = useSettingsStore();
+const gameStore = useGameStore();
+const message = useMessage();
+const dialog = useDialog();
 
-const formRef = ref(null)
-const formValue = ref<AppSettings | null>(null)
-const originalSettings = ref<string>('')
-const showUninstallModal = ref(false)
-const isUninstalling = ref(false)
-const showFeedbackModal = ref(false)
-const showAvatarPreview = ref(false)
-const showCropModal = ref(false)
-const cropImage = ref<HTMLImageElement | null>(null)
-const cropCanvasRef = ref<HTMLCanvasElement | null>(null)
-const cropContainerRef = ref<HTMLDivElement | null>(null)
-const cropZoom = ref(100)
-const cropMinZoom = ref(50)
-const cropPanX = ref(0)
-const cropPanY = ref(0)
-const cropDragging = ref(false)
-const cropDragStart = ref({ x: 0, y: 0 })
-const CROP_BOX_RATIO = 0.7
-const showClearCacheModal = ref(false)
-const showMigrateStorageModal = ref(false)
-const isClearingCache = ref(false)
-const isMigratingStorage = ref(false)
-const clearCacheProgress = ref(0)
-const clearCacheResult = ref<{ totalSize: number; clearedSize: number } | null>(null)
-const uninstallDeleteGames = ref(false)
-const selectedMigrationSourcePath = ref('')
-const selectedMigrationTargetPath = ref('')
-const registeredStoragePaths = ref<Array<{ path: string; isDefault: boolean }>>([])
-const updateState = computed(() => settingsStore.updateState)
-const dataHealthReport = computed(() => settingsStore.dataHealthReport)
-const isCheckingUpdate = ref(false)
-const isCheckingHealth = ref(false)
-const removingPath = ref('')
-const cloudBusy = ref(false)
-const showCloudProgressModal = ref(false)
-const cloudProgress = ref(0)
-const cloudProgressStage = ref('checking')
-const cloudProgressMode = ref<'upload' | 'download'>('upload')
-const cloudStatus = ref({ configured: false, authenticated: false, userLogin: '', userName: '', userProfileUrl: '', lastUploadedAt: '', files: [] as Array<any> })
+const formRef = ref(null);
+const formValue = ref<AppSettings | null>(null);
+const originalSettings = ref<string>("");
+const showUninstallModal = ref(false);
+const isUninstalling = ref(false);
+const showFeedbackModal = ref(false);
+const showAvatarPreview = ref(false);
+const showCropModal = ref(false);
+const cropImage = ref<HTMLImageElement | null>(null);
+const cropCanvasRef = ref<HTMLCanvasElement | null>(null);
+const cropContainerRef = ref<HTMLDivElement | null>(null);
+const cropZoom = ref(100);
+const cropMinZoom = ref(50);
+const cropPanX = ref(0);
+const cropPanY = ref(0);
+const cropDragging = ref(false);
+const cropDragStart = ref({ x: 0, y: 0 });
+const CROP_BOX_RATIO = 0.7;
+const showClearCacheModal = ref(false);
+const showMigrateStorageModal = ref(false);
+const isClearingCache = ref(false);
+const isMigratingStorage = ref(false);
+const clearCacheProgress = ref(0);
+const clearCacheResult = ref<{ totalSize: number; clearedSize: number } | null>(
+  null,
+);
+const uninstallDeleteGames = ref(false);
+const selectedMigrationSourcePath = ref("");
+const selectedMigrationTargetPath = ref("");
+const registeredStoragePaths = ref<Array<{ path: string; isDefault: boolean }>>(
+  [],
+);
+const updateState = computed(() => settingsStore.updateState);
+const dataHealthReport = computed(() => settingsStore.dataHealthReport);
+const isCheckingUpdate = ref(false);
+const isCheckingHealth = ref(false);
+const removingPath = ref("");
+const cloudBusy = ref(false);
+const showCloudProgressModal = ref(false);
+const cloudProgress = ref(0);
+const cloudProgressStage = ref("checking");
+const cloudProgressMode = ref<"upload" | "download">("upload");
+const cloudStatus = ref({
+  configured: false,
+  authenticated: false,
+  userLogin: "",
+  userName: "",
+  userProfileUrl: "",
+  lastUploadedAt: "",
+  snapshot: null as null | {
+    version: number;
+    size: number;
+    sha256: string;
+    contentType: string;
+    updatedAt: string;
+  },
+});
 const allStoragePaths = computed(() => {
-  const set = new Set<string>()
-  registeredStoragePaths.value.forEach(item => {
-    if (item.path?.trim()) set.add(item.path.trim())
-  })
-  return Array.from(set)
-})
+  const set = new Set<string>();
+  registeredStoragePaths.value.forEach((item) => {
+    if (item.path?.trim()) set.add(item.path.trim());
+  });
+  return Array.from(set);
+});
 
 const migrationStorageOptions = computed(() =>
-  allStoragePaths.value.map(path => ({ label: path, value: path }))
-)
+  allStoragePaths.value.map((path) => ({ label: path, value: path })),
+);
 
 const settingsFrameFileName = computed(() => {
-  const frameId = settingsStore.userData?.equippedFrame
-  if (!frameId) return undefined
-  return getFrameImageFileName(frameId)
-})
+  const frameId = settingsStore.userData?.equippedFrame;
+  if (!frameId) return undefined;
+  return getFrameImageFileName(frameId);
+});
 
 const nicknameValid = computed(() => {
-  const name = formValue.value?.playerName?.trim()
-  if (!name) return false
-  return name.length <= 16 && /^[^<>"'`&\\/]+$/.test(name)
-})
+  const name = formValue.value?.playerName?.trim();
+  if (!name) return false;
+  return name.length <= 16 && /^[^<>"'`&\\/]+$/.test(name);
+});
 
 const canSave = computed(() => {
-  return nicknameValid.value && formValue.value?.defaultRoomPort
-})
+  return nicknameValid.value && formValue.value?.defaultRoomPort;
+});
 
 const hasUnsavedChanges = computed(() => {
-  if (!formValue.value) return false
-  return JSON.stringify(formValue.value) !== originalSettings.value
-})
+  if (!formValue.value) return false;
+  return JSON.stringify(formValue.value) !== originalSettings.value;
+});
 
 const rules = {
   playerName: [
-    { required: true, message: () => t('settings.enterName'), trigger: 'blur' },
-    { max: 16, message: () => t('settings.nameTooLong'), trigger: ['blur', 'change'] },
+    { required: true, message: () => t("settings.enterName"), trigger: "blur" },
     {
-      validator: (_rule: unknown, value: string) => !value || /^[^<>"'`&\\/]+$/.test(value),
-      message: () => t('settings.nameInvalidChars'),
-      trigger: ['blur', 'change'],
+      max: 16,
+      message: () => t("settings.nameTooLong"),
+      trigger: ["blur", "change"],
+    },
+    {
+      validator: (_rule: unknown, value: string) =>
+        !value || /^[^<>"'`&\\/]+$/.test(value),
+      message: () => t("settings.nameInvalidChars"),
+      trigger: ["blur", "change"],
     },
   ],
   defaultRoomPort: [
-    { required: true, type: 'number', message: () => t('settings.enterPort'), trigger: ['blur', 'change'] },
-    { validator: (_rule: unknown, value: number) => value !== 38081, message: () => t('settings.enterPortReserved'), trigger: ['blur', 'change'] },
-  ]
-}
+    {
+      required: true,
+      type: "number",
+      message: () => t("settings.enterPort"),
+      trigger: ["blur", "change"],
+    },
+    {
+      validator: (_rule: unknown, value: number) => value !== 38081,
+      message: () => t("settings.enterPortReserved"),
+      trigger: ["blur", "change"],
+    },
+  ],
+};
 
 const themeOptions = computed(() => [
-  { label: t('settings.themeDark'), value: 'dark' },
-  { label: t('settings.themeLight'), value: 'light' },
-  { label: t('settings.themeAuto'), value: 'auto' }
-])
+  { label: t("settings.themeDark"), value: "dark" },
+  { label: t("settings.themeLight"), value: "light" },
+  { label: t("settings.themeAuto"), value: "auto" },
+]);
 
 const languageOptions = computed(() => [
-  { label: t('settings.langZhCN'), value: 'zh-CN' },
-  { label: t('settings.langEnUS'), value: 'en-US' },
-  { label: t('settings.langJaJP'), value: 'ja-JP' },
-  { label: t('settings.langZhTW'), value: 'zh-TW' },
-  { label: t('settings.langLzh'), value: 'lzh' },
-  { label: t('settings.langDeDE'), value: 'de-DE' }
-])
+  { label: t("settings.langZhCN"), value: "zh-CN" },
+  { label: t("settings.langEnUS"), value: "en-US" },
+  { label: t("settings.langJaJP"), value: "ja-JP" },
+  { label: t("settings.langZhTW"), value: "zh-TW" },
+  { label: t("settings.langLzh"), value: "lzh" },
+  { label: t("settings.langDeDE"), value: "de-DE" },
+]);
 
 const dataHealthSummaryText = computed(() => {
-  const summary = dataHealthReport.value?.summary
+  const summary = dataHealthReport.value?.summary;
   return {
     errors: summary?.errors || 0,
     warnings: summary?.warnings || 0,
     games: summary?.gameCount || 0,
     versions: summary?.versionCount || 0,
-    paths: summary?.storagePathCount || 0
-  }
-})
+    paths: summary?.storagePathCount || 0,
+  };
+});
 
 const formatHealthIssue = (issue: {
-  code: string
-  message: string
-  params?: Record<string, string | number>
+  code: string;
+  message: string;
+  params?: Record<string, string | number>;
 }) => {
-  const key = `settings.dataHealthIssue.${issue.code}`
-  return te(key) ? t(key, issue.params || {}) : issue.message
-}
+  const key = `settings.dataHealthIssue.${issue.code}`;
+  return te(key) ? t(key, issue.params || {}) : issue.message;
+};
 
 const cloudTimeText = computed(() => {
-  if (!cloudStatus.value.lastUploadedAt) return t('settings.cloudNeverUploaded')
-  return t('settings.cloudLastUploadedAt', { time: new Date(cloudStatus.value.lastUploadedAt).toLocaleString() })
-})
+  if (!cloudStatus.value.lastUploadedAt)
+    return t("settings.cloudNeverUploaded");
+  return t("settings.cloudLastUploadedAt", {
+    time: new Date(cloudStatus.value.lastUploadedAt).toLocaleString(),
+  });
+});
 
 const cloudAccountLabel = computed(() => {
-  const login = cloudStatus.value.userLogin?.trim() || ''
-  const name = cloudStatus.value.userName?.trim() || ''
-  if (login && name && login !== name) return `${login}（${name}）`
-  return login || name
-})
+  const login = cloudStatus.value.userLogin?.trim() || "";
+  const name = cloudStatus.value.userName?.trim() || "";
+  if (login && name && login !== name) return `${login}（${name}）`;
+  return login || name;
+});
 
-const cloudProgressTitle = computed(() => cloudProgressMode.value === 'upload' ? t('settings.cloudUpload') : t('settings.cloudDownload'))
+const cloudProgressTitle = computed(() =>
+  cloudProgressMode.value === "upload"
+    ? t("settings.cloudUpload")
+    : t("settings.cloudDownload"),
+);
 
 const cloudProgressText = computed(() => {
-  const key = `settings.cloudProgress.${cloudProgressStage.value}`
-  const text = t(key)
-  return text === key ? t('settings.cloudProgress.checking') : text
-})
+  const key = `settings.cloudProgress.${cloudProgressStage.value}`;
+  const text = t(key);
+  return text === key ? t("settings.cloudProgress.checking") : text;
+});
 
 const updateErrorText = (errorCode?: string, rawMessage?: string) => {
-  const key = errorCode ? `settings.updateErrors.${errorCode}` : 'settings.updateErrors.unknown'
-  const translated = t(key)
-  return translated === key ? rawMessage || t('settings.updateErrors.unknown') : translated
-}
+  const key = errorCode
+    ? `settings.updateErrors.${errorCode}`
+    : "settings.updateErrors.unknown";
+  const translated = t(key);
+  return translated === key
+    ? rawMessage || t("settings.updateErrors.unknown")
+    : translated;
+};
 
 const storageErrorText = (error: any) => {
-  const message = error?.error || error?.message || String(error || '')
-  const key = message ? `settings.storageErrors.${message}` : 'settings.storageErrors.unknown'
-  const translated = t(key)
-  return translated === key ? message || t('settings.storageErrors.unknown') : translated
-}
+  const message = error?.error || error?.message || String(error || "");
+  const key = message
+    ? `settings.storageErrors.${message}`
+    : "settings.storageErrors.unknown";
+  const translated = t(key);
+  return translated === key
+    ? message || t("settings.storageErrors.unknown")
+    : translated;
+};
 
 const refreshStoragePaths = async () => {
-  registeredStoragePaths.value = await window.electronAPI.settings.getGameStoragePaths()
-}
+  registeredStoragePaths.value =
+    await window.electronAPI.settings.getGameStoragePaths();
+};
 
 const refreshCloudStatus = async () => {
-  cloudStatus.value = await window.electronAPI.settings.getCloudStatus()
-}
+  cloudStatus.value = await window.electronAPI.settings.getCloudStatus();
+};
 
 const isDefaultStoragePath = (targetPath: string) => {
-  return registeredStoragePaths.value.some(item => item.path === targetPath && item.isDefault)
-}
+  return registeredStoragePaths.value.some(
+    (item) => item.path === targetPath && item.isDefault,
+  );
+};
 
 onMounted(async () => {
-  await settingsStore.loadSettings()
-  await refreshStoragePaths()
-  await refreshCloudStatus()
+  await settingsStore.loadSettings();
+  await refreshStoragePaths();
+  await refreshCloudStatus();
   if (settingsStore.settings) {
-    formValue.value = JSON.parse(JSON.stringify(settingsStore.settings))
-    originalSettings.value = JSON.stringify(formValue.value)
+    formValue.value = JSON.parse(JSON.stringify(settingsStore.settings));
+    originalSettings.value = JSON.stringify(formValue.value);
   }
-  settingsStore.initUpdateEvents()
-  await settingsStore.refreshUpdateStatus()
-})
+  settingsStore.initUpdateEvents();
+  await settingsStore.refreshUpdateStatus();
+});
 
-const removeCloudSyncListener = window.electronAPI.settings.onCloudSyncEvent((payload) => {
-  cloudProgress.value = payload.percentage
-  cloudProgressStage.value = payload.stage
-  if (cloudBusy.value && payload.stage !== 'checking') {
-    showCloudProgressModal.value = true
-  }
-})
+const removeCloudSyncListener = window.electronAPI.settings.onCloudSyncEvent(
+  (payload) => {
+    cloudProgress.value = payload.percentage;
+    cloudProgressStage.value = payload.stage;
+    if (cloudBusy.value && payload.stage !== "checking") {
+      showCloudProgressModal.value = true;
+    }
+  },
+);
 
-let cloudStatusTimer: ReturnType<typeof setInterval> | null = null
+let cloudStatusTimer: ReturnType<typeof setInterval> | null = null;
 
-if (typeof window !== 'undefined') {
+if (typeof window !== "undefined") {
   cloudStatusTimer = setInterval(() => {
     if (!cloudBusy.value) {
-      void refreshCloudStatus()
+      void refreshCloudStatus();
     }
-  }, 3000)
+  }, 3000);
 }
 
 onUnmounted(() => {
-  removeCloudSyncListener()
-  if (cloudStatusTimer) clearInterval(cloudStatusTimer)
-})
+  removeCloudSyncListener();
+  if (cloudStatusTimer) clearInterval(cloudStatusTimer);
+});
 
 const confirmLeave = () => {
   return new Promise<boolean>((resolve) => {
     dialog.warning({
-      title: t('settings.unsavedChangesTitle'),
-      content: t('settings.unsavedChangesContent'),
-      positiveText: t('settings.unsavedChangesSave'),
-      negativeText: t('settings.unsavedChangesDiscard'),
+      title: t("settings.unsavedChangesTitle"),
+      content: t("settings.unsavedChangesContent"),
+      positiveText: t("settings.unsavedChangesSave"),
+      negativeText: t("settings.unsavedChangesDiscard"),
       closable: false,
       maskClosable: false,
       onPositiveClick: async () => {
-        await handleSave()
-        resolve(true)
+        await handleSave();
+        resolve(true);
       },
       onNegativeClick: () => resolve(true),
       onClose: () => resolve(false),
-    })
-  })
-}
+    });
+  });
+};
 
 onBeforeRouteLeave(async (_to, _from, next) => {
   if (!hasUnsavedChanges.value) {
-    next()
-    return
+    next();
+    return;
   }
-  const proceed = await confirmLeave()
-  next(proceed)
-})
+  const proceed = await confirmLeave();
+  next(proceed);
+});
 
 const handleBack = async () => {
   if (!hasUnsavedChanges.value) {
-    router.push({ name: 'Library' })
-    return
+    router.push({ name: "Library" });
+    return;
   }
-  const proceed = await confirmLeave()
+  const proceed = await confirmLeave();
   if (proceed) {
-    router.push({ name: 'Library' })
+    router.push({ name: "Library" });
   }
-}
+};
 
 const handleSave = async () => {
   if (formValue.value) {
     try {
-      await (formRef.value as any)?.validate()
+      await (formRef.value as any)?.validate();
     } catch {
-      return
+      return;
     }
     try {
       const plainSettings = JSON.parse(JSON.stringify(formValue.value));
       await settingsStore.saveSettings(plainSettings);
-      originalSettings.value = JSON.stringify(formValue.value)
-      message.success(t('settings.saveSuccess'));
+      originalSettings.value = JSON.stringify(formValue.value);
+      message.success(t("settings.saveSuccess"));
     } catch (error: any) {
-      message.error(`${t('settings.saveFail')}: ${error.message || error}`);
+      message.error(`${t("settings.saveFail")}: ${error.message || error}`);
     }
   }
-}
+};
 
 const handleUploadAvatar = async () => {
-  const dataUrl = await window.electronAPI.settings.uploadAvatar()
-  if (!dataUrl) return
+  const dataUrl = await window.electronAPI.settings.uploadAvatar();
+  if (!dataUrl) return;
 
-  const img = new Image()
+  const img = new Image();
   img.onload = () => {
-    cropImage.value = img
-    cropPanX.value = 0
-    cropPanY.value = 0
-    showCropModal.value = true
+    cropImage.value = img;
+    cropPanX.value = 0;
+    cropPanY.value = 0;
+    showCropModal.value = true;
     nextTick(() => {
-      cropZoom.value = calcFitZoom()
-      cropMinZoom.value = Math.max(30, cropZoom.value)
-      drawCropCanvas()
-    })
-  }
-  img.src = dataUrl
-}
+      cropZoom.value = calcFitZoom();
+      cropMinZoom.value = Math.max(30, cropZoom.value);
+      drawCropCanvas();
+    });
+  };
+  img.src = dataUrl;
+};
 
 const cloudErrorText = (error?: string) => {
-  const key = error ? `settings.cloudErrors.${error}` : 'settings.cloudErrors.unknown'
-  const translated = t(key)
-  return translated === key ? error || t('settings.cloudErrors.unknown') : translated
-}
-
-const shouldSuppressCloudProgressModal = (error?: string) => error === 'cloud_sync_rate_limited'
+  const key = error
+    ? `settings.cloudErrors.${error}`
+    : "settings.cloudErrors.unknown";
+  const translated = t(key);
+  return translated === key
+    ? error || t("settings.cloudErrors.unknown")
+    : translated;
+};
 
 const handleGitHubLogin = async () => {
-  const result = await window.electronAPI.settings.loginWithGitHub()
+  const result = await window.electronAPI.settings.loginWithGitHub();
   if (!result.success) {
-    message.error(cloudErrorText(result.error))
-    return
+    message.error(cloudErrorText(result.error));
+    return;
   }
-  message.success(t('settings.githubLoginOpened'))
-}
+  message.success(t("settings.githubLoginOpened"));
+};
 
 const handleOpenGitHubProfile = () => {
-  const profileUrl = cloudStatus.value.userProfileUrl?.trim()
-  if (!profileUrl) return
-  window.electronAPI.settings.openUrl(profileUrl)
-}
+  const profileUrl = cloudStatus.value.userProfileUrl?.trim();
+  if (!profileUrl) return;
+  window.electronAPI.settings.openUrl(profileUrl);
+};
 
-const runCloudAction = async (mode: 'upload' | 'download') => {
-  if (cloudBusy.value) return
-  cloudBusy.value = true
-  cloudProgressMode.value = mode
-  cloudProgressStage.value = 'checking'
-  cloudProgress.value = 0
+const runCloudAction = async (mode: "upload" | "download") => {
+  if (cloudBusy.value) return;
+  cloudBusy.value = true;
+  cloudProgressMode.value = mode;
+  cloudProgressStage.value = "checking";
+  cloudProgress.value = 0;
   try {
-    const result = mode === 'upload'
-      ? await window.electronAPI.settings.uploadCloudData()
-      : await window.electronAPI.settings.downloadCloudData()
+    const result =
+      mode === "upload"
+        ? await window.electronAPI.settings.uploadCloudData()
+        : await window.electronAPI.settings.downloadCloudData();
     if (!result.success) {
-      showCloudProgressModal.value = !shouldSuppressCloudProgressModal(result.error)
-      message.error(cloudErrorText(result.error))
-      return
+      showCloudProgressModal.value = false;
+      message.error(cloudErrorText(result.error));
+      return;
     }
-    showCloudProgressModal.value = true
-    await settingsStore.loadSettings()
-    await refreshCloudStatus()
+    showCloudProgressModal.value = true;
+    await settingsStore.loadSettings();
+    await refreshCloudStatus();
     if (settingsStore.settings) {
-      formValue.value = JSON.parse(JSON.stringify(settingsStore.settings))
-      originalSettings.value = JSON.stringify(formValue.value)
+      formValue.value = JSON.parse(JSON.stringify(settingsStore.settings));
+      originalSettings.value = JSON.stringify(formValue.value);
     }
-    message.success(mode === 'upload' ? t('settings.cloudUploadSuccess') : t('settings.cloudDownloadSuccess'))
+    message.success(
+      mode === "upload"
+        ? t("settings.cloudUploadSuccess")
+        : t("settings.cloudDownloadSuccess"),
+    );
   } catch (error: any) {
-    showCloudProgressModal.value = false
-    message.error(cloudErrorText(error?.message || String(error || '')))
+    showCloudProgressModal.value = false;
+    message.error(cloudErrorText(error?.message || String(error || "")));
   } finally {
-    cloudProgress.value = 100
-    cloudProgressStage.value = 'completed'
-    cloudBusy.value = false
+    cloudBusy.value = false;
   }
-}
+};
 
-const handleCloudUpload = () => runCloudAction('upload')
+const handleCloudUpload = () => runCloudAction("upload");
 
-const handleCloudDownload = () => runCloudAction('download')
+const handleCloudDownload = () => runCloudAction("download");
 
 const calcFitZoom = () => {
-  if (!cropImage.value || !cropContainerRef.value) return 100
-  const containerSize = cropContainerRef.value.clientWidth
-  const iW = cropImage.value.naturalWidth
-  const iH = cropImage.value.naturalHeight
-  if (!iW || !iH || !containerSize) return 100
-  const cropBoxSize = containerSize * CROP_BOX_RATIO
-  return Math.round(Math.max(cropBoxSize / iW, cropBoxSize / iH) * 100)
-}
+  if (!cropImage.value || !cropContainerRef.value) return 100;
+  const containerSize = cropContainerRef.value.clientWidth;
+  const iW = cropImage.value.naturalWidth;
+  const iH = cropImage.value.naturalHeight;
+  if (!iW || !iH || !containerSize) return 100;
+  const cropBoxSize = containerSize * CROP_BOX_RATIO;
+  return Math.round(Math.max(cropBoxSize / iW, cropBoxSize / iH) * 100);
+};
 
 const drawCropCanvas = () => {
-  const canvas = cropCanvasRef.value
-  const container = cropContainerRef.value
-  const img = cropImage.value
-  if (!canvas || !container || !img) return
+  const canvas = cropCanvasRef.value;
+  const container = cropContainerRef.value;
+  const img = cropImage.value;
+  if (!canvas || !container || !img) return;
 
-  const S = container.clientWidth
-  canvas.width = S
-  canvas.height = S
-  const ctx = canvas.getContext("2d")!
-  const C = S * CROP_BOX_RATIO
-  const z = cropZoom.value / 100
+  const S = container.clientWidth;
+  canvas.width = S;
+  canvas.height = S;
+  const ctx = canvas.getContext("2d")!;
+  const C = S * CROP_BOX_RATIO;
+  const z = cropZoom.value / 100;
 
-  const imgW = img.naturalWidth * z
-  const imgH = img.naturalHeight * z
-  const destX = S / 2 + cropPanX.value - imgW / 2
-  const destY = S / 2 + cropPanY.value - imgH / 2
+  const imgW = img.naturalWidth * z;
+  const imgH = img.naturalHeight * z;
+  const destX = S / 2 + cropPanX.value - imgW / 2;
+  const destY = S / 2 + cropPanY.value - imgH / 2;
 
-  ctx.fillStyle = "#000"
-  ctx.fillRect(0, 0, S, S)
-  ctx.drawImage(img, destX, destY, imgW, imgH)
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, S, S);
+  ctx.drawImage(img, destX, destY, imgW, imgH);
 
-  const cx = (S - C) / 2
-  const cy = (S - C) / 2
+  const cx = (S - C) / 2;
+  const cy = (S - C) / 2;
 
-  ctx.fillStyle = "rgba(0, 0, 0, 0.55)"
-  ctx.fillRect(0, 0, S, cy)
-  ctx.fillRect(0, cy + C, S, S - cy - C)
-  ctx.fillRect(0, cy, cx, C)
-  ctx.fillRect(cx + C, cy, S - cx - C, C)
+  ctx.fillStyle = "rgba(0, 0, 0, 0.55)";
+  ctx.fillRect(0, 0, S, cy);
+  ctx.fillRect(0, cy + C, S, S - cy - C);
+  ctx.fillRect(0, cy, cx, C);
+  ctx.fillRect(cx + C, cy, S - cx - C, C);
 
-  ctx.strokeStyle = "#fff"
-  ctx.lineWidth = 2
-  ctx.strokeRect(cx, cy, C, C)
+  ctx.strokeStyle = "#fff";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(cx, cy, C, C);
 
-  ctx.strokeStyle = "rgba(255,255,255,0.25)"
-  ctx.lineWidth = 1
+  ctx.strokeStyle = "rgba(255,255,255,0.25)";
+  ctx.lineWidth = 1;
   for (let i = 1; i < 3; i++) {
-    const y = cy + (C / 3) * i
-    ctx.beginPath(); ctx.moveTo(cx, y); ctx.lineTo(cx + C, y); ctx.stroke()
-    const x = cx + (C / 3) * i
-    ctx.beginPath(); ctx.moveTo(x, cy); ctx.lineTo(x, cy + C); ctx.stroke()
+    const y = cy + (C / 3) * i;
+    ctx.beginPath();
+    ctx.moveTo(cx, y);
+    ctx.lineTo(cx + C, y);
+    ctx.stroke();
+    const x = cx + (C / 3) * i;
+    ctx.beginPath();
+    ctx.moveTo(x, cy);
+    ctx.lineTo(x, cy + C);
+    ctx.stroke();
   }
-}
+};
 
 const clampPan = () => {
-  if (!cropImage.value || !cropContainerRef.value) return
-  const S = cropContainerRef.value.clientWidth
-  const C = S * CROP_BOX_RATIO
-  const z = cropZoom.value / 100
-  const maxPanX = Math.max(0, (cropImage.value.naturalWidth * z) / 2 - C / 2)
-  const maxPanY = Math.max(0, (cropImage.value.naturalHeight * z) / 2 - C / 2)
-  cropPanX.value = Math.max(-maxPanX, Math.min(maxPanX, cropPanX.value))
-  cropPanY.value = Math.max(-maxPanY, Math.min(maxPanY, cropPanY.value))
-}
+  if (!cropImage.value || !cropContainerRef.value) return;
+  const S = cropContainerRef.value.clientWidth;
+  const C = S * CROP_BOX_RATIO;
+  const z = cropZoom.value / 100;
+  const maxPanX = Math.max(0, (cropImage.value.naturalWidth * z) / 2 - C / 2);
+  const maxPanY = Math.max(0, (cropImage.value.naturalHeight * z) / 2 - C / 2);
+  cropPanX.value = Math.max(-maxPanX, Math.min(maxPanX, cropPanX.value));
+  cropPanY.value = Math.max(-maxPanY, Math.min(maxPanY, cropPanY.value));
+};
 
 watch(cropZoom, () => {
-  clampPan()
-  drawCropCanvas()
-})
+  clampPan();
+  drawCropCanvas();
+});
 
 const onCropMouseDown = (e: MouseEvent) => {
-  cropDragging.value = true
-  cropDragStart.value = { x: e.clientX - cropPanX.value, y: e.clientY - cropPanY.value }
-}
+  cropDragging.value = true;
+  cropDragStart.value = {
+    x: e.clientX - cropPanX.value,
+    y: e.clientY - cropPanY.value,
+  };
+};
 
 const onCropMouseMove = (e: MouseEvent) => {
-  if (!cropDragging.value) return
-  cropPanX.value = e.clientX - cropDragStart.value.x
-  cropPanY.value = e.clientY - cropDragStart.value.y
-  clampPan()
-  drawCropCanvas()
-}
+  if (!cropDragging.value) return;
+  cropPanX.value = e.clientX - cropDragStart.value.x;
+  cropPanY.value = e.clientY - cropDragStart.value.y;
+  clampPan();
+  drawCropCanvas();
+};
 
 const onCropMouseUp = () => {
-  cropDragging.value = false
-}
+  cropDragging.value = false;
+};
 
 const onCropWheel = (e: WheelEvent) => {
-  const delta = e.deltaY > 0 ? -5 : 5
-  const newZoom = Math.max(cropMinZoom.value, Math.min(300, cropZoom.value + delta))
-  if (newZoom === cropZoom.value) return
-  cropZoom.value = newZoom
-}
+  const delta = e.deltaY > 0 ? -5 : 5;
+  const newZoom = Math.max(
+    cropMinZoom.value,
+    Math.min(300, cropZoom.value + delta),
+  );
+  if (newZoom === cropZoom.value) return;
+  cropZoom.value = newZoom;
+};
 
 const confirmCrop = () => {
-  const canvas = cropCanvasRef.value
-  const img = cropImage.value
-  const container = cropContainerRef.value
-  if (!canvas || !img || !container) return
+  const canvas = cropCanvasRef.value;
+  const img = cropImage.value;
+  const container = cropContainerRef.value;
+  if (!canvas || !img || !container) return;
 
-  const S = container.clientWidth
-  const C = Math.round(S * CROP_BOX_RATIO)
-  const cropX = (S - C) / 2
-  const cropY = (S - C) / 2
+  const S = container.clientWidth;
+  const C = Math.round(S * CROP_BOX_RATIO);
+  const cropX = (S - C) / 2;
+  const cropY = (S - C) / 2;
 
-  const result = document.createElement("canvas")
-  result.width = 256
-  result.height = 256
-  result.getContext("2d")!.drawImage(canvas, cropX, cropY, C, C, 0, 0, 256, 256)
+  const result = document.createElement("canvas");
+  result.width = 256;
+  result.height = 256;
+  result
+    .getContext("2d")!
+    .drawImage(canvas, cropX, cropY, C, C, 0, 0, 256, 256);
 
   if (formValue.value) {
-    formValue.value.avatar = result.toDataURL("image/jpeg", 0.8)
+    formValue.value.avatar = result.toDataURL("image/jpeg", 0.8);
   }
-  showCropModal.value = false
-  nextTick(() => handleSave())
-}
+  showCropModal.value = false;
+  nextTick(() => handleSave());
+};
 
 const cancelCrop = () => {
-  showCropModal.value = false
-  cropImage.value = null
-}
+  showCropModal.value = false;
+  cropImage.value = null;
+};
 
 const handleAvatarClick = () => {
-  showAvatarPreview.value = true
-}
+  showAvatarPreview.value = true;
+};
 
 const handleAddGameStoragePath = async () => {
-  const result = await window.electronAPI.settings.selectGameStoragePath()
-  if (!result) return
+  const result = await window.electronAPI.settings.selectGameStoragePath();
+  if (!result) return;
   if (result.error === "directory_not_empty") {
     dialog.warning({
-      title: t('settings.storagePathNotEmptyTitle'),
-      content: t('settings.storagePathNotEmptyContent'),
-    })
-    return
+      title: t("settings.storagePathNotEmptyTitle"),
+      content: t("settings.storagePathNotEmptyContent"),
+    });
+    return;
   }
-  await window.electronAPI.settings.addGameStoragePath(result.path)
-  await settingsStore.loadSettings()
-  await refreshStoragePaths()
+  await window.electronAPI.settings.addGameStoragePath(result.path);
+  await settingsStore.loadSettings();
+  await refreshStoragePaths();
   if (settingsStore.settings) {
-    formValue.value = JSON.parse(JSON.stringify(settingsStore.settings))
+    formValue.value = JSON.parse(JSON.stringify(settingsStore.settings));
   }
-  message.success(t('settings.saveSuccess'))
-}
+  message.success(t("settings.saveSuccess"));
+};
 
 const handleSetDefaultStoragePath = async (targetPath: string) => {
-  await window.electronAPI.settings.setDefaultGameStoragePath(targetPath)
-  await settingsStore.loadSettings()
-  await refreshStoragePaths()
+  await window.electronAPI.settings.setDefaultGameStoragePath(targetPath);
+  await settingsStore.loadSettings();
+  await refreshStoragePaths();
   if (settingsStore.settings) {
-    formValue.value = JSON.parse(JSON.stringify(settingsStore.settings))
+    formValue.value = JSON.parse(JSON.stringify(settingsStore.settings));
   }
-  message.success(t('settings.saveSuccess'))
-}
+  message.success(t("settings.saveSuccess"));
+};
 
 const handleOpenPath = async (targetPath: string) => {
-  const ok = await window.electronAPI.settings.openPath(targetPath)
+  const ok = await window.electronAPI.settings.openPath(targetPath);
   if (!ok) {
-    message.error(t('settings.openPathFailed'))
+    message.error(t("settings.openPathFailed"));
   }
-}
+};
 
 const handleRemovePath = async (targetPath: string) => {
   dialog.warning({
-    title: t('settings.removeStoragePathTitle'),
-    content: t('settings.removeStoragePathConfirm', { path: targetPath }),
-    positiveText: t('common.confirm'),
-    negativeText: t('common.cancel'),
+    title: t("settings.removeStoragePathTitle"),
+    content: t("settings.removeStoragePathConfirm", { path: targetPath }),
+    positiveText: t("common.confirm"),
+    negativeText: t("common.cancel"),
     onPositiveClick: async () => {
       try {
-        removingPath.value = targetPath
-        const result = await window.electronAPI.settings.removeGameStoragePath(targetPath)
+        removingPath.value = targetPath;
+        const result =
+          await window.electronAPI.settings.removeGameStoragePath(targetPath);
         if (!result.success) {
-          message.error(`${t('settings.removeStoragePathFailed')}: ${storageErrorText(result)}`)
-          return
+          message.error(
+            `${t("settings.removeStoragePathFailed")}: ${storageErrorText(result)}`,
+          );
+          return;
         }
-        await settingsStore.loadSettings()
-        await refreshStoragePaths()
+        await settingsStore.loadSettings();
+        await refreshStoragePaths();
         if (settingsStore.settings) {
-          formValue.value = JSON.parse(JSON.stringify(settingsStore.settings))
+          formValue.value = JSON.parse(JSON.stringify(settingsStore.settings));
         }
         message.success(
-          t('settings.removeStoragePathSuccess', {
+          t("settings.removeStoragePathSuccess", {
             gameCount: result.removedGames,
-            versionCount: result.removedVersions
-          })
-        )
+            versionCount: result.removedVersions,
+          }),
+        );
       } catch (error: any) {
-        message.error(`${t('settings.removeStoragePathFailed')}: ${storageErrorText(error)}`)
+        message.error(
+          `${t("settings.removeStoragePathFailed")}: ${storageErrorText(error)}`,
+        );
       } finally {
-        removingPath.value = ''
+        removingPath.value = "";
       }
-    }
-  })
-}
+    },
+  });
+};
 
 const handleCheckUpdate = async () => {
-  if (isCheckingUpdate.value) return
-  isCheckingUpdate.value = true
+  if (isCheckingUpdate.value) return;
+  isCheckingUpdate.value = true;
   try {
-    const state = await settingsStore.checkUpdateOnly()
-    if (state.status === 'available') {
+    const state = await settingsStore.checkUpdateOnly();
+    if (state.status === "available") {
       dialog.warning({
-        title: t('settings.updatePromptTitle'),
-        content: t('settings.updatePromptMessage', { version: state.latestVersion || '' }),
-        positiveText: t('settings.updateNow'),
-        negativeText: t('settings.updateLater'),
+        title: t("settings.updatePromptTitle"),
+        content: t("settings.updatePromptMessage", {
+          version: state.latestVersion || "",
+        }),
+        positiveText: t("settings.updateNow"),
+        negativeText: t("settings.updateLater"),
         onPositiveClick: async () => {
-          await settingsStore.checkUpdate()
+          await settingsStore.checkUpdate();
         },
         onNegativeClick: () => {
-          if (!state.latestVersion) return
-          void settingsStore.ignoreUpdateVersion(state.latestVersion).catch((error: any) => {
-            message.error(`${t('settings.saveFail')}: ${error?.message || error}`)
-          })
-        }
-      })
-      return
+          if (!state.latestVersion) return;
+          void settingsStore
+            .ignoreUpdateVersion(state.latestVersion)
+            .catch((error: any) => {
+              message.error(
+                `${t("settings.saveFail")}: ${error?.message || error}`,
+              );
+            });
+        },
+      });
+      return;
     }
-    if (state.status === 'up_to_date') {
-      message.success(t('settings.updateLatest'))
-    } else if (state.status === 'unsupported') {
-      message.warning(t('settings.updateUnsupported'))
-    } else if (state.status === 'error') {
+    if (state.status === "up_to_date") {
+      message.success(t("settings.updateLatest"));
+    } else if (state.status === "unsupported") {
+      message.warning(t("settings.updateUnsupported"));
+    } else if (state.status === "error") {
       message.error(
-        t('settings.updateError', {
-          message: updateErrorText(state.errorCode, state.message)
-        })
-      )
+        t("settings.updateError", {
+          message: updateErrorText(state.errorCode, state.message),
+        }),
+      );
     }
   } finally {
-    isCheckingUpdate.value = false
+    isCheckingUpdate.value = false;
   }
-}
+};
 
 const handleDataHealthCheck = async () => {
-  if (isCheckingHealth.value) return
-  isCheckingHealth.value = true
+  if (isCheckingHealth.value) return;
+  isCheckingHealth.value = true;
   try {
-    const report = await settingsStore.runDataHealthCheck()
+    const report = await settingsStore.runDataHealthCheck();
     if (report.ok) {
-      message.success(t('settings.dataHealthOk'))
+      message.success(t("settings.dataHealthOk"));
     } else {
-      message.warning(t('settings.dataHealthIssuesFound'))
+      message.warning(t("settings.dataHealthIssuesFound"));
     }
   } catch (error: any) {
-    message.error(`${t('common.error')}: ${error?.message || error}`)
+    message.error(`${t("common.error")}: ${error?.message || error}`);
   } finally {
-    isCheckingHealth.value = false
+    isCheckingHealth.value = false;
   }
-}
+};
 
 const handleOpenWebsite = () => {
-  window.electronAPI.settings.openUrl("http://www.bzgames.top/")
-}
+  window.electronAPI.settings.openUrl("http://www.bzgames.top/");
+};
 
 const confirmUninstall = async () => {
-  if (isUninstalling.value) return
-  isUninstalling.value = true
+  if (isUninstalling.value) return;
+  isUninstalling.value = true;
   try {
     const result = await window.electronAPI.settings.uninstall({
       deleteGames: uninstallDeleteGames.value,
-    })
-    if (result.success) return
+    });
+    if (result.success) return;
     if (result.error === "uninstaller_not_found") {
-      message.warning(t('settings.uninstallNotAvailable'))
+      message.warning(t("settings.uninstallNotAvailable"));
     } else if (result.error === "uninstall_market_tasks_active") {
-      message.warning(t('settings.uninstallMarketTasksActive'))
+      message.warning(t("settings.uninstallMarketTasksActive"));
     } else if (result.error === "uninstall_game_library_delete_failed") {
-      message.error(t('settings.uninstallGameLibraryDeleteFailed', {
-        paths: (result.paths || []).join('\n'),
-      }))
+      message.error(
+        t("settings.uninstallGameLibraryDeleteFailed", {
+          paths: (result.paths || []).join("\n"),
+        }),
+      );
     } else if (result.error === "unsafe_game_storage_path") {
-      message.error(t('settings.uninstallUnsafeStoragePath'))
+      message.error(t("settings.uninstallUnsafeStoragePath"));
     } else {
-      message.error(t('settings.uninstallFailed'))
+      message.error(t("settings.uninstallFailed"));
     }
   } finally {
-    isUninstalling.value = false
+    isUninstalling.value = false;
   }
-}
+};
 
 const handleClearCache = () => {
-  clearCacheResult.value = null
-  clearCacheProgress.value = 0
-  isClearingCache.value = false
-  showClearCacheModal.value = true
-}
+  clearCacheResult.value = null;
+  clearCacheProgress.value = 0;
+  isClearingCache.value = false;
+  showClearCacheModal.value = true;
+};
 
 const handleOpenMigrateStorageModal = () => {
   if (allStoragePaths.value.length === 0) {
-    message.warning(t('settings.storagePathEmpty'))
-    return
+    message.warning(t("settings.storagePathEmpty"));
+    return;
   }
-  selectedMigrationSourcePath.value = allStoragePaths.value[0]
-  selectedMigrationTargetPath.value = ''
-  isMigratingStorage.value = false
-  showMigrateStorageModal.value = true
-}
+  selectedMigrationSourcePath.value = allStoragePaths.value[0];
+  selectedMigrationTargetPath.value = "";
+  isMigratingStorage.value = false;
+  showMigrateStorageModal.value = true;
+};
 
 const handlePickMigrationTargetPath = async () => {
-  const result = await window.electronAPI.settings.selectGameStoragePath()
-  if (!result) return
+  const result = await window.electronAPI.settings.selectGameStoragePath();
+  if (!result) return;
   if (result.error === "directory_not_empty") {
     dialog.warning({
-      title: t('settings.storagePathNotEmptyTitle'),
-      content: t('settings.storagePathNotEmptyContent'),
-    })
-    return
+      title: t("settings.storagePathNotEmptyTitle"),
+      content: t("settings.storagePathNotEmptyContent"),
+    });
+    return;
   }
-  selectedMigrationTargetPath.value = result.path
-}
+  selectedMigrationTargetPath.value = result.path;
+};
 
 const confirmMigrateStorage = async () => {
   if (!selectedMigrationSourcePath.value) {
-    message.warning(t('settings.selectSourceStoragePath'))
-    return
+    message.warning(t("settings.selectSourceStoragePath"));
+    return;
   }
   if (!selectedMigrationTargetPath.value) {
-    message.warning(t('settings.selectTargetStoragePath'))
-    return
+    message.warning(t("settings.selectTargetStoragePath"));
+    return;
   }
 
-  isMigratingStorage.value = true
+  isMigratingStorage.value = true;
   try {
     const result = await window.electronAPI.settings.migrateGameStorageLibrary({
       sourcePath: selectedMigrationSourcePath.value,
       targetPath: selectedMigrationTargetPath.value,
-    })
+    });
     if (!result.success) {
-      message.error(`${t('settings.migrateStorageFailed')}: ${storageErrorText(result)}`)
-      return
+      message.error(
+        `${t("settings.migrateStorageFailed")}: ${storageErrorText(result)}`,
+      );
+      return;
     }
-    await settingsStore.loadSettings()
-    await refreshStoragePaths()
+    await settingsStore.loadSettings();
+    await refreshStoragePaths();
     if (settingsStore.settings) {
-      formValue.value = JSON.parse(JSON.stringify(settingsStore.settings))
+      formValue.value = JSON.parse(JSON.stringify(settingsStore.settings));
     }
-    await gameStore.loadGames()
-    showMigrateStorageModal.value = false
-    message.success(t('settings.migrateStorageSuccess', {
-      gameCount: result.migratedGames || 0,
-      versionCount: result.migratedVersions || 0,
-    }))
+    await gameStore.loadGames();
+    showMigrateStorageModal.value = false;
+    message.success(
+      t("settings.migrateStorageSuccess", {
+        gameCount: result.migratedGames || 0,
+        versionCount: result.migratedVersions || 0,
+      }),
+    );
   } catch (error: any) {
-    message.error(`${t('settings.migrateStorageFailed')}: ${storageErrorText(error)}`)
+    message.error(
+      `${t("settings.migrateStorageFailed")}: ${storageErrorText(error)}`,
+    );
   } finally {
-    isMigratingStorage.value = false
+    isMigratingStorage.value = false;
   }
-}
+};
 
 const confirmClearCache = async () => {
-  isClearingCache.value = true
-  clearCacheProgress.value = 0
+  isClearingCache.value = true;
+  clearCacheProgress.value = 0;
 
   const progressInterval = setInterval(() => {
     if (clearCacheProgress.value < 90) {
-      clearCacheProgress.value += Math.round(Math.random() * 15 + 5)
-      if (clearCacheProgress.value > 90) clearCacheProgress.value = 90
+      clearCacheProgress.value += Math.round(Math.random() * 15 + 5);
+      if (clearCacheProgress.value > 90) clearCacheProgress.value = 90;
     }
-  }, 200)
+  }, 200);
 
   try {
-    const result = await window.electronAPI.settings.clearCache()
-    clearInterval(progressInterval)
-    clearCacheProgress.value = 100
-    clearCacheResult.value = result
+    const result = await window.electronAPI.settings.clearCache();
+    clearInterval(progressInterval);
+    clearCacheProgress.value = 100;
+    clearCacheResult.value = result;
   } catch {
-    clearInterval(progressInterval)
-    clearCacheProgress.value = 100
-    clearCacheResult.value = { totalSize: 0, clearedSize: 0 }
+    clearInterval(progressInterval);
+    clearCacheProgress.value = 100;
+    clearCacheResult.value = { totalSize: 0, clearedSize: 0 };
   } finally {
-    isClearingCache.value = false
+    isClearingCache.value = false;
   }
-}
-
+};
 </script>
 
 <style scoped>
@@ -1225,7 +1545,9 @@ const confirmClearCache = async () => {
 }
 .avatar-clickable {
   cursor: pointer;
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition:
+    transform 0.2s,
+    box-shadow 0.2s;
 }
 .avatar-clickable:hover {
   transform: scale(1.08);

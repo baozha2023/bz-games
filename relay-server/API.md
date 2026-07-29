@@ -9,7 +9,7 @@ BZ-Games 官方服务端提供中继联机、GitHub OAuth 登录和云端数据�
 - 平台负责短地址拼接、展示、复制、输入和解析。
 - 平台向中继服务器加入房间时只发送 `roomCode`。
 - 中继服务器透明转发 RoomMessage、Game API v1 JSON 消息和 Game API v2 binary frame。
-- 登录与云同步服务依赖 MySQL + MongoDB，用于用户身份认证、`config.json` 文件同步及 `play_sessions.db` 对应 SQL 逻辑备份同步。
+- 登录与云同步服务依赖 MySQL + MongoDB，用于用户身份认证，以及脱敏加密配置与业务 SQL dump 组成的单一平台快照同步。
 
 ## 基础地址
 
@@ -255,187 +255,29 @@ Authorization: Bearer <session_token>
 
 ---
 
-## 云数据同步
+## Cloud snapshot sync (v3.1.2)
 
-云同步服务需要 MySQL 和 MongoDB 均已配置才启用。当前支持两个文件的云端存取：
+Only the atomic platform snapshot protocol is supported. The legacy `/api/cloud/files/*` routes, dual writes, and fallback behavior have been removed.
 
-| 文件               | Content-Type                     | 说明                                                                                        |
-| ------------------ | -------------------------------- | ------------------------------------------------------------------------------------------- |
-| `config.json`      | `application/json`               | 用户配置文件                                                                                |
-| `play_sessions.db` | `application/sql; charset=utf-8` | 游戏记录数据库的 SQL 逻辑备份；file_key 保持 `play_sessions.db`，内容不是 SQLite 二进制文件 |
+`PlatformCloudSnapshot` contains `formatVersion: 1`, `createdAt`, an encrypted/sanitized `config` string, and a `databaseSql` dump. The dump contains only `play_sessions`, `achievement_unlocks`, and `stats_reports`; local `games` and `game_versions` rows are excluded.
 
-所有云同步端点均需要有效的登录 session（通过 `Authorization: Bearer` 或 Cookie 传递）。
+### GET /api/cloud/platform-snapshot/meta
 
-版本控制机制：上传时可通过 `If-Match` 头传入预期版本号做乐观并发控制；版本冲突时返回 `409`。
+Returns `{ snapshot: { version, size, sha256, contentType, updatedAt } }`. Returns `404 snapshot_not_found` when the user has no snapshot.
 
-限流机制：同一个 GitHub 账号上传和下载分别限流，上传每小时只能完成一次完整同步，下载每小时只能完成一次完整同步。客户端一次完整同步会通过 `X-Cloud-Operation-Id` 复用同一个操作 ID，以便连续处理 `config.json` 与 `play_sessions.db` 两个对象；同一操作 ID 重复处理同一个文件会被拒绝。
+### GET /api/cloud/platform-snapshot
 
-### GET /api/cloud/files
+Downloads exactly one current snapshot. Response headers include `content-length`, `etag`, `x-file-sha256`, and `cache-control: no-store`.
 
-列出当前用户的云文件状态。
+### PUT /api/cloud/platform-snapshot
 
-请求：
+Uploads one complete JSON snapshot. `Content-Length` is required and cannot exceed `MAX_PLATFORM_CLOUD_SNAPSHOT_BYTES` (128 MiB by default).
 
-```http
-GET /api/cloud/files HTTP/1.1
-Authorization: Bearer <session_token>
-```
+The server finishes the GridFS upload first, then atomically switches `user_platform_snapshots` inside a MySQL transaction. A failed transaction deletes the new object and preserves the old pointer. After a successful switch, the old object is deleted after `PLATFORM_SNAPSHOT_GC_GRACE_MS`.
 
-响应：
+Successful response: `{ ok: true, snapshot: { version, size, sha256, contentType, updatedAt } }`.
 
-```json
-{
-  "files": [
-    {
-      "fileKey": "config.json",
-      "version": 3,
-      "size": 2048,
-      "sha256": "abc123...",
-      "contentType": "application/json",
-      "updatedAt": "2026-06-11T12:00:00.000Z"
-    },
-    {
-      "fileKey": "play_sessions.db",
-      "version": 1,
-      "size": 32768,
-      "sha256": "def456...",
-      "contentType": "application/sql; charset=utf-8",
-      "updatedAt": "2026-06-10T08:30:00.000Z"
-    }
-  ]
-}
-```
-
-未上传过的文件对应数组元素为 `null`。
-
-### GET /api/cloud/files/:name/meta
-
-获取单个文件的元信息（不下载内容）。
-
-请求：
-
-```http
-GET /api/cloud/files/config.json/meta HTTP/1.1
-Authorization: Bearer <session_token>
-```
-
-响应：
-
-```json
-{
-  "file": {
-    "fileKey": "config.json",
-    "version": 3,
-    "size": 2048,
-    "sha256": "abc123...",
-    "contentType": "application/json",
-    "updatedAt": "2026-06-11T12:00:00.000Z"
-  }
-}
-```
-
-响应头含 `ETag: "3"`，可用于后续上传的版本校验。
-
-文件不存在时返回 `404`。
-
-### GET /api/cloud/files/:name
-
-下载用户云文件。
-
-请求：
-
-```http
-GET /api/cloud/files/config.json HTTP/1.1
-Authorization: Bearer <session_token>
-```
-
-响应头：
-
-| Header                 | 说明                                                             |
-| ---------------------- | ---------------------------------------------------------------- |
-| `content-type`         | 文件类型                                                         |
-| `content-length`       | 文件大小（字节）                                                 |
-| `content-disposition`  | `attachment; filename="config.json"`                             |
-| `etag`                 | 版本号                                                           |
-| `x-file-sha256`        | 文件 SHA-256 哈希                                                |
-| `x-cloud-operation-id` | 本次云同步操作 ID；同一次完整上传/下载的后续文件请求需要原样带回 |
-| `retry-after`          | 被限流时距离可重试的秒数                                         |
-| `x-ratelimit-reset`    | 被限流时的重置时间                                               |
-| `cache-control`        | `no-store`                                                       |
-
-文件不存在时返回 `404`；触发账号限流时返回 `429`。
-
-响应（失败）：
-
-| 状态码 | error                     | 说明                                                                     |
-| ------ | ------------------------- | ------------------------------------------------------------------------ |
-| `401`  | `unauthorized`            | 未登录                                                                   |
-| `404`  | `file_not_found`          | 文件不存在                                                               |
-| `429`  | `cloud_sync_rate_limited` | 同一账号一小时内已执行过同类型上传或下载，或同一操作 ID 重复处理同一文件 |
-| `500`  | `cloud_download_failed`   | 下载过程中服务端异常                                                     |
-| `503`  | `cloud_not_configured`    | MySQL 或 MongoDB 未配置                                                  |
-
-### PUT /api/cloud/files/:name
-
-上传 / 覆盖用户云文件。
-
-请求：
-
-```http
-PUT /api/cloud/files/config.json HTTP/1.1
-Authorization: Bearer <session_token>
-Content-Type: application/json
-Content-Length: 2048
-If-Match: "3"
-
-{...file content...}
-```
-
-请求头：
-
-| Header                 | 必填 | 说明                                                             |
-| ---------------------- | ---- | ---------------------------------------------------------------- |
-| `content-type`         | 是   | 文件 MIME 类型                                                   |
-| `content-length`       | 是   | 文件字节数，超过 `MAX_CLOUD_FILE_BYTES` 时返回 `413`             |
-| `if-match`             | 否   | 预期版本号（如 `"3"`），用于防止覆盖冲突                         |
-| `x-cloud-operation-id` | 否   | 本次云同步操作 ID；同一次完整上传/下载的后续文件请求需要原样带回 |
-
-响应（成功）：
-
-```json
-{
-  "ok": true,
-  "file": {
-    "fileKey": "config.json",
-    "version": 4,
-    "size": 2048,
-    "sha256": "newsha...",
-    "contentType": "application/json",
-    "updatedAt": "2026-06-11T13:00:00.000Z"
-  }
-}
-```
-
-响应（失败）：
-
-| 状态码 | error                     | 说明                                                                     |
-| ------ | ------------------------- | ------------------------------------------------------------------------ |
-| `401`  | `unauthorized`            | 未登录                                                                   |
-| `409`  | `version_conflict`        | `If-Match` 版本号与当前版本不匹配                                        |
-| `429`  | `cloud_sync_rate_limited` | 同一账号一小时内已执行过同类型上传或下载，或同一操作 ID 重复处理同一文件 |
-| `413`  | `file_too_large`          | 文件超过大小限制                                                         |
-| `500`  | `cloud_upload_failed`     | 上传过程中服务端异常                                                     |
-| `503`  | `cloud_not_configured`    | MySQL 或 MongoDB 未配置                                                  |
-
-### 其它 HTTP 路径
-
-返回：
-
-```json
-{
-  "error": "not_found"
-}
-```
+Upload and download are independently limited to once per GitHub account per 24 hours. Common errors are `401 unauthorized`, `404 snapshot_not_found`, `413 snapshot_too_large`, `429 cloud_sync_rate_limited`, `500 cloud_upload_failed`, and `503 cloud_not_configured`.
 
 ## WebSocket 接口
 
@@ -785,7 +627,8 @@ __relayTo -> relayTo -> to -> targetPlayerId -> payload.__relayTo
 
 | 变量                   | 默认值     | 说明                                  |
 | ---------------------- | ---------- | ------------------------------------- |
-| `MAX_CLOUD_FILE_BYTES` | `67108864` | 云文件上传大小上限（字节，默认 64MB） |
+| `MAX_PLATFORM_CLOUD_SNAPSHOT_BYTES` | `134217728` | 完整平台快照上传大小上限（默认 128 MiB） |
+| `PLATFORM_SNAPSHOT_GC_GRACE_MS` | `300000` | 原子切换后旧快照对象的清理宽限期 |
 
 ### MySQL
 

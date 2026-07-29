@@ -6,6 +6,7 @@ declare const __BZ_RELAY_SERVER_URL__: string;
 declare const __BZ_RELAY_PUBLIC_HOST__: string;
 declare const __BZ_RELAY_TOKEN__: string;
 declare const __BZ_CONFIG_ENCRYPTION_SEED__: string;
+declare const __BZ_DATABASE_ENCRYPTION_SEED__: string;
 declare const __BZ_GAME_MANIFEST_ENCRYPTION_SEED__: string;
 declare const __BZ_OAUTH_RETURN_URL__: string;
 
@@ -31,6 +32,7 @@ export const DEFAULT_RELAY_PUBLIC_HOST = __BZ_RELAY_PUBLIC_HOST__;
 export const DEFAULT_RELAY_TOKEN = __BZ_RELAY_TOKEN__;
 
 export const CONFIG_ENCRYPTION_SEED = __BZ_CONFIG_ENCRYPTION_SEED__;
+export const DATABASE_ENCRYPTION_SEED = __BZ_DATABASE_ENCRYPTION_SEED__;
 
 export const GAME_MANIFEST_ENCRYPTION_SEED =
   __BZ_GAME_MANIFEST_ENCRYPTION_SEED__;
@@ -51,8 +53,4 @@ export const FLOAT_BALL_DEFAULT_SIZE = 72;
 
 export const DB_DIR = "db";
 
-export const PLAY_SESSIONS_DB_FILE_NAME = "db/play_sessions.db";
-
-export const ACHIEVEMENT_UNLOCKS_DB_FILE_NAME = "db/achievement_unlocks.db";
-
-export const STATS_REPORTS_DB_FILE_NAME = "db/stats_reports.db";
+export const BZ_GAMES_DB_FILE_NAME = "db/bz_games.db";

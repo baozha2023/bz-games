@@ -100,7 +100,7 @@ export function registerGameIpc() {
       .map((id) => games.find((g) => g.id === id))
       .filter((g): g is any => !!g);
     const remainingGames = games.filter((g) => !gameIds.includes(g.id));
-    storeService.saveGames([...sortedGames, ...remainingGames]);
+    await storeService.saveGames([...sortedGames, ...remainingGames]);
     return true;
   });
 

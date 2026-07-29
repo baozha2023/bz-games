@@ -33,7 +33,7 @@ BZ-Games 已完成从 v1.x 到 v3.0 的核心迭代，当前具备以下能力�
 | **统计系统**     | 游玩时长自动累计、日历热力图与 PNG 分享、会话记录、成就解锁记录、统计上报记录，均以 SQLite 持久化                                      |
 | **经济系统**     | BZ 币、每日签到（连续/累计）、游玩时长奖励、签到 7 天额外奖励，完全本地计算                                                            |
 | **个性化**       | 头像上传裁剪、8款头像框（游玩/签到/购买解锁）、昵称样式（渐变色/发光/粒子特效等 9 种）                                                 |
-| **云端同步**     | GitHub OAuth 登录，config.json + play_sessions.db + achievement_unlocks.db + stats_reports.db 云备份，MySQL + MongoDB GridFS，可选使用 |
+| **云端同步**     | GitHub OAuth 登录，config.json + bz_games.db 云备份，MySQL + MongoDB GridFS，可选使用 |
 | **Relay Server** | 房间中继、短地址、OAuth、云文件同步、建言献策与管理接口，独立 Node.js 服务，不属于平台核心                                             |
 | **国际化**       | 简体中文 / English / 日本語 / 繁體中文 / 文言文 / Deutsch 六语言                                                                       |
 | **聊天**         | 支持文字、语音消息（最长10秒）、图片（拖拽/粘贴），弹出独立聊天窗口                                                                    |
@@ -102,16 +102,14 @@ BZ-Games 采用 **渐进式版本演进** 策略，每个大版本聚焦一个�
 
 #### 4. 数据库加密
 
-**现状**：本地 SQLite 文件（play_sessions.db / achievement_unlocks.db / stats_reports.db）为明文存储，可通过通用工具直接查看。
+**现状**：本地 `bz_games.db` 已使用 `better-sqlite3-multiple-ciphers` 和 ChaCha20 加密，游戏实体、会话、成就与统计事件统一存储。
 
-**方案**：
+**已完成**：
 
-- 切换到 `better-sqlite3-multiple-ciphers` 等加密 SQLite 实现
-- 数据库密钥通过系统级安全存储管理
-- 旧明文数据自动迁移到加密库
-- 对游戏存档的 `gamedata.json` 同步提供加密选项
-
-**依赖**：`better-sqlite3-multiple-ciphers`（API 兼容），系统密钥存储。
+- 数据库连接统一使用 `better-sqlite3-multiple-ciphers`。
+- 构建私有配置中的固定种子经 SHA-256 派生数据库密钥。
+- 正式旧版配置与三库布局一次性迁移到加密统一库。
+- 云同步只导出业务表的明文 SQL，不上传游戏实体和本地加密库文件。
 
 #### 5. 数据健康自动修复
 
@@ -203,7 +201,7 @@ BZ-Games 采用 **渐进式版本演进** 策略，每个大版本聚焦一个�
 - 7z 解压使用各平台对应二进制（`7zip-bin` 已支持跨平台）
 - 窗口管理适配各平台托盘、菜单、快捷键规范
 
-**可行性**：Electron 本身跨平台，`better-sqlite3` 支持 macOS/Linux/Windows，主要工作量在打包配置和平台细节适配。
+**可行性**：Electron 本身跨平台，当前 `better-sqlite3-multiple-ciphers` 原生模块需要分别验证 macOS、Linux 与 Windows 的编译、签名和打包。
 
 #### 2. LAN 伴侣 App
 

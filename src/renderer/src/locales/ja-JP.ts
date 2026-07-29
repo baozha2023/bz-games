@@ -511,7 +511,7 @@ export default {
     cloudDownload: "クラウドダウンロード",
     cloudSyncHelpTitle: "クラウド同期の説明",
     cloudSyncHelp:
-      "クラウドアップロード: 現在のゲームライブラリ設定、ユーザーデータ、プレイ記録をクラウドへアップロードし、既存のクラウドデータを上書きします。GitHub Token とログインセッション項目はアップロードされません。\nクラウドダウンロード: クラウドデータをダウンロードしてローカルに適用します。config.json はクラウドに存在する項目のみ更新し、クラウドにないローカル項目は保持されます。",
+      "クラウドアップロード: 設定、ユーザーデータ、プレイセッション、実績、統計をアップロードし、既存のクラウドオブジェクトを上書きします。ゲーム実体とバージョン一覧、GitHub Token、ログインセッションはアップロードされません。\nクラウドダウンロード: config.json はクラウドに存在する項目のみ更新します。セッション、実績、統計は一意キーで統合され、ゲーム実体は作成されません。",
     cloudNeverUploaded: "クラウド時刻: 未アップロード",
     cloudLastUploadedAt: "クラウド時刻: {time}",
     cloudUploadSuccess: "クラウドアップロードが完了しました",
@@ -527,14 +527,20 @@ export default {
     cloudErrors: {
       cloud_not_configured: "クラウド同期が設定されていません",
       unauthorized: "先にGitHub認証ログインを完了してください",
-      cloud_data_incomplete:
-        "クラウドデータが不完全です。先に完全なデータをアップロードしてください。",
-      file_not_found: "クラウドファイルが見つかりません",
-      version_conflict:
-        "クラウドバージョンが競合しています。更新してから再試行してください。",
-      file_too_large: "ファイルがクラウド同期サイズ上限を超えています",
+      snapshot_not_found:
+        "クラウドにプラットフォームスナップショットがありません。先にアップロードしてください。",
+      snapshot_too_large:
+        "プラットフォームスナップショットがクラウド同期サイズ上限を超えています",
+      cloud_upload_failed:
+        "クラウドへのアップロードに失敗しました。しばらくしてから再試行してください。",
+      internal_error:
+        "クラウド同期サービスでエラーが発生しました。しばらくしてから再試行してください。",
+      cloud_snapshot_invalid:
+        "プラットフォームスナップショットの形式が無効です",
       cloud_hash_mismatch:
-        "クラウドファイルの検証に失敗しました。再試行してください。",
+        "プラットフォームスナップショットの検証に失敗しました。再試行してください。",
+      cloud_sync_busy: "別のクラウド同期が進行中です",
+      app_shutting_down: "アプリを終了中のため、クラウド同期を開始できません",
       cloud_sync_rate_limited:
         "クラウド同期が頻繁すぎます。同一アカウントではアップロードとダウンロードがそれぞれ24時間に1回までです。",
       unknown: "クラウド同期に失敗しました",
@@ -625,8 +631,9 @@ export default {
       config_invalid_json: "config.json は有効な JSON ではありません",
       config_decrypt_failed: "config.json の復号に失敗しました",
       config_invalid_structure: "config.json の構造が無効です",
-      config_plaintext_legacy: "config.json は旧式の平文形式です",
       config_read_failed: "config.json の読み込みに失敗しました: {reason}",
+      database_integrity_failed:
+        "bz_games.db の整合性チェックに失敗しました: {reason}",
       player_id_missing: "プレイヤー ID がありません",
       duplicate_game_id: "ゲーム ID が重複しています: {gameId}",
       duplicate_game_version:

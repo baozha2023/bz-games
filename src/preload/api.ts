@@ -312,15 +312,11 @@ export const electronAPI = {
       return () => ipcRenderer.removeListener(IPC.SYSTEM_UPDATE_EVENT, handler);
     },
     onCloudSyncEvent: (
-      callback: (payload: {
-        stage: string;
-        percentage: number;
-        fileKey?: string;
-      }) => void,
+      callback: (payload: { stage: string; percentage: number }) => void,
     ) => {
       const handler = (
         _: any,
-        payload: { stage: string; percentage: number; fileKey?: string },
+        payload: { stage: string; percentage: number },
       ) => callback(payload);
       ipcRenderer.on(IPC.SYSTEM_CLOUD_SYNC_EVENT, handler);
       return () =>

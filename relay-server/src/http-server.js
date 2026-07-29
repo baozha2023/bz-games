@@ -60,10 +60,7 @@ export function createHttpServer({
     } catch (error) {
       console.error("[relay-server] http route failed", error);
       if (!res.headersSent) {
-        sendJson(res, 500, {
-          error: "internal_error",
-          message: error instanceof Error ? error.message : String(error),
-        });
+        sendJson(res, 500, { error: "internal_error" });
       } else {
         res.destroy();
       }

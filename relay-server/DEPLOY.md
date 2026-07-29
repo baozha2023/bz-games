@@ -4,12 +4,12 @@
 
 BZ-Games 官方服务是独立 Node.js 服务，提供 HTTP 房间查询、GitHub OAuth 登录、用户云数据存储和 WebSocket 透明转发能力。
 
-- HTTP：`/health`、`/rooms`、`/auth/github/start`、`/auth/github/callback`、`/api/auth/me`、`/api/auth/logout`、`/api/cloud/files`。
+- HTTP：`/health`、`/rooms`、`/auth/github/start`、`/auth/github/callback`、`/api/auth/me`、`/api/auth/logout`、`/api/cloud/platform-snapshot`。
 - WebSocket：`relay:host`、`relay:join`、`relay:leave`、`relay:heartbeat`。
 - 转发内容：RoomMessage、Game API v1 JSON 消息、Game API v2 binary frame。
 - 房间码：中继服务器生成、发送和识别 `roomCode`。
 - 短地址：平台侧使用 `DEFAULT_RELAY_PUBLIC_HOST` 与 `roomCode` 拼接。
-- 云数据：保存 `config.json` 与 `play_sessions.db` 对应的 SQL 逻辑备份，供平台上传、下载、覆盖同步。
+- 云数据：脱敏加密配置与三张业务表 SQL dump 组成单一平台快照；GridFS 写入完成后通过 MySQL 唯一指针原子发布。
 - 用户基础数据：使用 MySQL 保存账号、OAuth state、登录会话、文件元数据。
 - 云端对象内容：使用 MongoDB GridFS 保存，避免配置文件或 SQL dump 增长后触发 16MB BSON 限制。
 
@@ -41,7 +41,7 @@ relay-server/
 - 公网 TCP 端口，默认 `38090`。
 - npm。
 - MySQL 8+（保存用户基础数据和文件元数据）。
-- MongoDB 6+（保存 `config.json` 文件内容和 `play_sessions.db` 对应 SQL dump）。
+- MongoDB 6+（保存完整平台快照与反馈图片）。
 
 ## 环境变量
 
@@ -52,7 +52,8 @@ relay-server/
 | `HEARTBEAT_INTERVAL_MS` | `30000` | WebSocket ping 与清理间隔 |
 | `MAX_TEXT_BYTES` | `1048576` | 单条文本消息最大字节数 |
 | `MAX_BINARY_BYTES` | `12582912` | 单条二进制消息最大字节数 |
-| `MAX_CLOUD_FILE_BYTES` | `67108864` | 单次上传云文件大小上限 |
+| `MAX_PLATFORM_CLOUD_SNAPSHOT_BYTES` | `134217728` | 单次上传完整平台快照的大小上限 |
+| `PLATFORM_SNAPSHOT_GC_GRACE_MS` | `300000` | 指针切换成功后旧平台快照的清理宽限期 |
 | `RELAY_TOKEN` | 空字符串 | 全接口鉴权 token；必须通过 systemd 环境变量配置，平台侧通过构建配置注入同值 |
 | `MAX_ROOMS` | `80` | 最大同时房间数 |
 | `MAX_CLIENTS` | `400` | 最大已登记客户端数 |
@@ -500,9 +501,9 @@ ufw status
 
 - `MYSQL_HOST` / `MYSQL_USER` / `MYSQL_PASSWORD` / `MYSQL_DATABASE` 是否可用。
 - `MONGODB_URI` 是否可用。
-- `MAX_CLOUD_FILE_BYTES` 是否过小。
+- `MAX_PLATFORM_CLOUD_SNAPSHOT_BYTES` 是否过小。
 - 上传时是否携带登录会话 Cookie 或 Bearer Token。
-- 客户端下载 `play_sessions.db` 对应 SQL dump 后是否可以正常清空并重建本地 SQLite 表数据。
+- 客户端下载 `bz_games.db` 对应 SQL dump 后，是否能按会话 ID、成就业务键和统计 `event_id` 幂等合并，且不会创建游戏实体。
 
 ## 上线验证流程
 

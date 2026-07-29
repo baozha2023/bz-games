@@ -1,25 +1,27 @@
 # BZ-Games Game Platform
 
-[![Electron](https://img.shields.io/badge/Electron-v28+-blue)](https://www.electronjs.org/)
-[![Vue](https://img.shields.io/badge/Vue-v3-green)](https://vuejs.org/)
+[![Electron](https://img.shields.io/badge/Electron-v40+-blue)](https://www.electronjs.org/)
+[![Vue](https://img.shields.io/badge/Vue-v3.5-green)](https://vuejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-v5-blue)](https://www.typescriptlang.org/)
+[![SQLite](https://img.shields.io/badge/SQLite-multiple--ciphers-orange)](https://www.npmjs.com/package/better-sqlite3-multiple-ciphers)
 
 [简体中文](./README.md) | English | [日本語](./README.ja.md) | [Deutsch](./README.de.md) | [繁體中文](./README.zh-TW.md) | [文言文](./README.lzh.md)
 
-**BZ-Games** is a **serverless local game platform** designed for Windows. It allows users to import local games and play multiplayer with friends through the built-in P2P room system, without relying on any third-party game servers.
+**BZ-Games** is a **local-first Windows game platform** designed for Windows. It allows users to import local games and play multiplayer with friends through the built-in P2P room system. It supports LAN discovery, user-provided frp direct connections, and official relay short addresses as connectivity options, with optional GitHub OAuth login and cloud data sync.
 
 ## ✨ Core Features
 
-- **📂 Open Game Library**: Supports importing any locally compliant games, with automatic version and file management.
-- **🔌 Serverless Architecture**: All data is stored locally, independent of any cloud account system.
-- **🎮 Unified Online Lobby**: Built-in room system (create/join/ready), so games don't need to implement complex network lobby logic themselves.
-- **🌐 Flexible NAT Traversal**: Exposes rooms via standard TCP ports, compatible with any NAT traversal tools such as SakuraFrp.
-- **🚀 Process Management**: Automatically launches/closes game processes and handles abnormal exits.
-- **🔄 Version Management**: Supports coexistence and switching of multiple versions of the same game.
-- **🏪 Game Market**: Built-in game market for remote game discovery, browsing, downloading and installation. Supports `.zip` and `.7z` formats.
-- **🏆 Achievements & Statistics**: Each game can define achievement lists and statistics, automatically tracked and displayed by the platform.
-- **🪙 Economy System**: Daily check-in rewards with BZ Coins, automatic rewards for cumulative playtime.
-- **🌍 Internationalization**: Supports Chinese (Simplified & Traditional), English, Japanese, German, and Classical Chinese.
+- **📂 Open Game Library**: Import any spec-compliant local games with automatic multi-version management.
+- **🔌 Local-First Data**: Configs are encrypted and stored locally — no cloud account required. Optional GitHub OAuth login for cloud sync.
+- **🎮 Unified Online Lobby**: Built-in room system (create/join/ready/chat/kick/reconnect). Games only need to integrate with the local Game API for full multiplayer capability.
+- **🌐 Multi-Entry Connectivity**: LAN auto-discovery, user-provided frp direct connection, and official Relay Server short addresses. Room discovery page organized by physical LAN / virtual LAN (EasyTier) / server.
+- **☁️ GitHub Login & Cloud Sync**: GitHub OAuth authentication, with cloud upload/download for `config.json` and `bz_games.db`, including progress bars and integrity verification.
+- **🏪 Game Market**: Built-in two-tier market for browsing and installing community games from multiple sources. Download tasks support progress tracking, pause, resume, cancel, and floating ball notifications.
+- **🏆 Achievements & Statistics**: Games define achievement lists and statistics — automatically tracked by the platform. Calendar heatmap with daily/cumulative/consecutive stats, one-click share as image.
+- **🪙 Economy System**: Daily check-in for BZ Coins, automatic rewards for cumulative playtime. Avatar frame unlocks, nickname color/font/effect personalization.
+- **🚀 Process Management**: Auto start/stop game processes with crash and abnormal exit handling.
+- **🎨 Game API**: Local Game API service (V1/V2 protocols) for games to read saves, report stats, and unlock achievements via HTTP.
+- **🌍 Internationalization**: Supports Simplified Chinese, Traditional Chinese, English, Japanese, German, and Classical Chinese.
 
 ## 📸 Screenshots
 
@@ -38,21 +40,22 @@
 
 ## 🛠️ Tech Stack
 
-- **Core**: Electron, TypeScript
-- **Frontend**: Vue 3, Naive UI, Pinia, Vue Router
+- **Core**: Electron 40, TypeScript 5
+- **Frontend**: Vue 3.5, Naive UI, Pinia, Vue Router, Vue I18n
 - **Build**: Electron-Vite, Electron-Builder
-- **Storage**: electron-store (Local JSON), better-sqlite3 (Play session database)
-- **Communication**: WebSocket (Room Server/Client, Game API v1/v2), Electron IPC
-- **Relay Server**: Node.js + MySQL + MongoDB GridFS (Room relay / GitHub OAuth / Cloud file sync)
-- **Archive**: extract-zip (ZIP), 7zip-bin / 7za (7Z)
+- **Database**: better-sqlite3-multiple-ciphers (ChaCha20-encrypted SQLite)
+- **Config**: electron-store (encrypted JSON)
+- **Communication**: WebSocket (ws library), Electron IPC
+- **Archive**: 7zip-bin / 7za (7Z), adm-zip (ZIP)
+- **Image**: html2canvas (heatmap share rendering)
 - **Update**: electron-updater (GitHub Releases)
 
 ## 🚀 Quick Start
 
 ### Requirements
 
-- Node.js 18+
-- pnpm 8+
+- Node.js 20+
+- pnpm 9+
 - Windows 10/11 x64
 
 ### Install Dependencies
@@ -83,15 +86,34 @@ Build artifacts will be located in the `dist` directory.
 
 ```
 bz-launcher/
-├── games/                 # Game data storage directory (Portable Mode)
+├── games/                 # Game data storage directory (configurable multi-path)
+├── resources/             # App icons, placeholder images, and static resources
 ├── src/
-│   ├── main/              # Electron main process (Node.js)
-│   │   ├── services/      # Core business logic (GameManager, RoomServer, etc.)
-│   │   └── ipc/           # IPC communication handlers
-│   ├── preload/           # Preload scripts (expose secure API)
-│   ├── renderer/          # Renderer process (Vue 3 UI)
-│   └── shared/            # Shared type definitions for main & renderer
-├── resources/             # App icons and static resources
+│   ├── main/              # Electron main process
+│   │   ├── index.ts          # Entry: window management, app lifecycle
+│   │   ├── window.ts         # Floating ball window
+│   │   ├── ipc/              # IPC handlers (game / room / market / stats / system / storage)
+│   │   ├── services/         # Core business logic
+│   │   │   ├── game/            # GameManager, GameLoader, GameAPI (V1/V2)
+│   │   │   ├── room/            # RoomServer, RoomClient, LAN/UDP/relay discovery
+│   │   │   ├── market/          # Market download & install task management
+│   │   │   ├── storage/         # Encrypted SQLite (games, versions, sessions, achievements, statistics)
+│   │   │   └── system/          # CloudSync, Update, Notification
+│   │   └── utils/            # Logging, file utils, path handling
+│   ├── preload/           # Preload scripts (game.ts / index.ts + API bridge)
+│   ├── renderer/          # Renderer process (Vue 3)
+│   │   ├── src/
+│   │   │   ├── views/         # Pages (Library / Market / Room / Statistics / Settings etc.)
+│   │   │   ├── components/    # Shared components (game / room / settings / heatmap)
+│   │   │   ├── stores/        # Pinia stores (game / room / settings)
+│   │   │   ├── composables/   # Composables
+│   │   │   ├── locales/       # 6-language i18n
+│   │   │   └── router/        # Vue Router
+│   │   └── index.html
+│   └── shared/            # Shared between main & renderer (types, constants, IPC channels, protocols)
+├── relay-server/          # Official relay server (standalone deployment)
+├── bz-games-website/      # Official website
+├── bz-games-github-release-market/  # GitHub Release market index
 └── electron.vite.config.ts
 ```
 

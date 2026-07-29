@@ -203,14 +203,13 @@ declare global {
           userName: string;
           userProfileUrl: string;
           lastUploadedAt: string;
-          files: Array<{
-            fileKey: "config.json" | "play_sessions.db";
+          snapshot: {
             version: number;
             size: number;
             sha256: string;
             contentType: string;
             updatedAt: string;
-          } | null>;
+          } | null;
         }>;
         loginWithGitHub: () => Promise<{ success: boolean; error?: string }>;
         uploadCloudData: () => Promise<{
@@ -310,9 +309,7 @@ declare global {
         checkUpdate: () => Promise<UpdateState>;
         downloadUpdate: () => Promise<UpdateState>;
         installUpdate: () => Promise<boolean>;
-        uninstall: (payload?: {
-          deleteGames?: boolean;
-        }) => Promise<{
+        uninstall: (payload?: { deleteGames?: boolean }) => Promise<{
           success: boolean;
           error?: string;
           paths?: string[];
@@ -329,11 +326,7 @@ declare global {
         }>;
         onUpdateEvent: (callback: (payload: UpdateState) => void) => () => void;
         onCloudSyncEvent: (
-          callback: (payload: {
-            stage: string;
-            percentage: number;
-            fileKey?: string;
-          }) => void,
+          callback: (payload: { stage: string; percentage: number }) => void,
         ) => () => void;
       };
       stats: {

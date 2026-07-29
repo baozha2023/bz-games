@@ -16,6 +16,7 @@ type PrivateBuildConfig = {
   relayPublicHost?: string;
   relayToken?: string;
   configEncryptionSeed?: string;
+  databaseEncryptionSeed?: string;
   gameManifestEncryptionSeed?: string;
   oauthReturnUrl?: string;
 };
@@ -31,7 +32,7 @@ function readPrivateBuildConfig(): PrivateBuildConfig {
 
 const privateBuildConfig = readPrivateBuildConfig();
 
-function requireGameManifestEncryptionSeed(value?: string): string {
+function requireEncryptionSeed(configKey: string, value?: string): string {
   const seed = value?.trim() || "";
   let decoded: Buffer;
   try {
@@ -40,16 +41,21 @@ function requireGameManifestEncryptionSeed(value?: string): string {
     decoded = Buffer.alloc(0);
   }
   const canonical = decoded.toString("base64");
-  if (decoded.length < 32 || canonical !== seed) {
+  if (decoded.length !== 32 || canonical !== seed) {
     throw new Error(
-      "[BZ-Games] private-build.config.json must define gameManifestEncryptionSeed " +
-        "as a canonical Base64 value containing at least 32 random bytes.",
+      `[BZ-Games] private-build.config.json must define ${configKey} ` +
+        "as a canonical Base64 value containing exactly 32 random bytes.",
     );
   }
   return seed;
 }
 
-const gameManifestEncryptionSeed = requireGameManifestEncryptionSeed(
+const databaseEncryptionSeed = requireEncryptionSeed(
+  "databaseEncryptionSeed",
+  privateBuildConfig.databaseEncryptionSeed,
+);
+const gameManifestEncryptionSeed = requireEncryptionSeed(
+  "gameManifestEncryptionSeed",
   privateBuildConfig.gameManifestEncryptionSeed,
 );
 
@@ -70,6 +76,7 @@ const injectedPrivateConfig = {
   __BZ_CONFIG_ENCRYPTION_SEED__: JSON.stringify(
     privateBuildConfig.configEncryptionSeed || "",
   ),
+  __BZ_DATABASE_ENCRYPTION_SEED__: JSON.stringify(databaseEncryptionSeed),
   __BZ_GAME_MANIFEST_ENCRYPTION_SEED__: JSON.stringify(
     gameManifestEncryptionSeed,
   ),
@@ -89,7 +96,7 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin({ exclude: ["electron-store"] })],
     build: {
       rollupOptions: {
-        external: ["better-sqlite3"],
+        external: ["better-sqlite3-multiple-ciphers"],
       },
     },
   },

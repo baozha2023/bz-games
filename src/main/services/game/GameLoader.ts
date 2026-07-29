@@ -869,10 +869,8 @@ export class GameLoader {
       });
     }
 
-    // Save if changed (simple comparison or just save)
-    // For simplicity and robustness, just save.
-    // But we need to be careful not to overwrite if StoreService.saveGames is not available or behaves differently.
-    // Assuming saveGames overwrites the 'games' array.
+    // Persist the current on-disk presence set. Missing entities remain in SQLite
+    // with is_present=0 and can be reactivated when discovered again.
     await storeService.saveGames(newRecords);
     this.cache = null; // Invalidate cache
   }

@@ -16,7 +16,6 @@ export interface AvatarFrameDef {
 
 export interface UserData {
   bzCoins: number;
-  cumulativePlayTime: number; // in milliseconds
   checkIn: {
     lastCheckInDate: string; // YYYY-MM-DD
     consecutiveDays: number;
@@ -27,10 +26,8 @@ export interface UserData {
 }
 
 export interface AppStore {
-  games: GameRecord[];
   settings: AppSettings;
   userData: UserData;
-  recentPlayed: string[];
 }
 
 export interface UnlockedAchievement {

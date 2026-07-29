@@ -25,6 +25,7 @@ import { openExternalHttpUrl } from "../../utils/externalUrl";
 import { gameWindowIdentityRegistry } from "./GameWindowIdentityRegistry";
 import { resolveGameEntryMode } from "../../../shared/game-launch";
 import { findMatchingRoom } from "../room/RoomContext";
+import { logger } from "../../utils/logger";
 
 class GameManager {
   private activeProcesses: Map<string, ChildProcess> = new Map();
@@ -588,7 +589,9 @@ class GameManager {
     const startTimeData = this.startTimes.get(id);
     if (startTimeData) {
       const durationMs = Date.now() - startTimeData.start;
-      storeService.updatePlaytime(id, startTimeData.version, durationMs);
+      void storeService
+        .updatePlaytime(id, startTimeData.version, durationMs)
+        .catch((error) => logger.error("Failed to update playtime rewards", error));
       playSessionDatabaseService.endSession(
         startTimeData.sessionId,
         startTimeData.start,

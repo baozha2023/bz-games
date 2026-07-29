@@ -25,13 +25,12 @@ import {
   PLAYTIME_REWARD_AMOUNT,
   PLAYTIME_REWARD_INTERVAL_MS,
 } from "../../../shared/AppConstants";
-import {
-  compareGameVersionsDescending,
-} from "../../../shared/game-manifest";
+import { compareGameVersionsDescending } from "../../../shared/game-manifest";
 import {
   GameManifestFileError,
   readGameManifestFileWithMetadata,
 } from "../game/GameManifestFileService";
+import { bzGamesDatabase } from "./database/BzGamesDatabase";
 
 const defaultSettings: AppSettings = {
   playerName: "玩家",
@@ -63,7 +62,6 @@ const defaultSettings: AppSettings = {
 
 const defaultUserData: UserData = {
   bzCoins: 0,
-  cumulativePlayTime: 0,
   checkIn: {
     lastCheckInDate: "",
     consecutiveDays: 0,
@@ -74,10 +72,8 @@ const defaultUserData: UserData = {
 };
 
 const defaultStore: AppStore = {
-  games: [],
   settings: defaultSettings,
   userData: defaultUserData,
-  recentPlayed: [],
 };
 
 const CLOUD_SETTINGS_SYNC_BLACKLIST: Array<keyof AppSettings> = [
@@ -98,7 +94,10 @@ function encryptConfigPayload(data: AppStore): string {
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
   const plaintext = JSON.stringify(data);
-  const encrypted = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
+  const encrypted = Buffer.concat([
+    cipher.update(plaintext, "utf8"),
+    cipher.final(),
+  ]);
   const tag = cipher.getAuthTag();
 
   return JSON.stringify({
@@ -110,53 +109,48 @@ function encryptConfigPayload(data: AppStore): string {
   });
 }
 
-function tryDecryptConfigPayload(raw: any): AppStore | null {
-  if (!raw || raw.__encrypted !== true) {
-    return null;
+function decryptConfigPayload(raw: unknown): AppStore {
+  if (
+    !raw ||
+    typeof raw !== "object" ||
+    !("__encrypted" in raw) ||
+    raw.__encrypted !== true
+  ) {
+    throw new Error("config_encrypted_format_required");
   }
 
   try {
+    const envelope = raw as Record<string, unknown>;
+    if (
+      typeof envelope.iv !== "string" ||
+      typeof envelope.tag !== "string" ||
+      typeof envelope.payload !== "string"
+    ) {
+      throw new Error("config_encrypted_format_invalid");
+    }
     const key = createConfigCipherKey();
-    const iv = Buffer.from(raw.iv, "base64");
-    const tag = Buffer.from(raw.tag, "base64");
-    const payload = Buffer.from(raw.payload, "base64");
+    const iv = Buffer.from(envelope.iv, "base64");
+    const tag = Buffer.from(envelope.tag, "base64");
+    const payload = Buffer.from(envelope.payload, "base64");
     const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
     decipher.setAuthTag(tag);
-    const decrypted = Buffer.concat([decipher.update(payload), decipher.final()]).toString("utf8");
+    const decrypted = Buffer.concat([
+      decipher.update(payload),
+      decipher.final(),
+    ]).toString("utf8");
     const parsed = JSON.parse(decrypted);
-    return typeof parsed === "object" && parsed ? (parsed as AppStore) : null;
-  } catch {
-    return null;
+    if (!parsed || typeof parsed !== "object") {
+      throw new Error("config_invalid_structure");
+    }
+    return parsed as AppStore;
+  } catch (error) {
+    if ((error as Error).message === "config_invalid_structure") throw error;
+    throw new Error("config_decrypt_failed", { cause: error });
   }
 }
 
 function deserializeConfig(content: string): AppStore {
-  try {
-    const parsed = JSON.parse(content);
-    const decrypted = tryDecryptConfigPayload(parsed);
-    if (decrypted) return decrypted;
-    if (typeof parsed === "object" && parsed) {
-      return parsed as AppStore;
-    }
-  } catch {}
-  return defaultStore;
-}
-
-function mergeStoreWithDefaults(raw: Partial<AppStore>): AppStore {
-  return {
-    ...defaultStore,
-    ...raw,
-    games: raw.games || [],
-    recentPlayed: raw.recentPlayed || [],
-    settings: {
-      ...defaultSettings,
-      ...(raw.settings || {}),
-    },
-    userData: {
-      ...defaultUserData,
-      ...(raw.userData || {}),
-    },
-  };
+  return decryptConfigPayload(JSON.parse(content));
 }
 
 async function pathExists(targetPath: string): Promise<boolean> {
@@ -178,8 +172,11 @@ function toSnapshotLabel(targetPath: string): string {
 class StoreService {
   private store: ElectronStore<AppStore> | null = null;
   private _initPromise: Promise<void> | null = null;
+  private gamesCache: GameRecord[] = [];
 
-  private async restoreDataFromSnapshotIfNeeded(dataRoot: string): Promise<void> {
+  private async restoreDataFromSnapshotIfNeeded(
+    dataRoot: string,
+  ): Promise<void> {
     const configPath = path.join(dataRoot, "config.json");
     const defaultGamesPath = path.join(dataRoot, "games");
     const dbPath = path.join(dataRoot, "db");
@@ -195,7 +192,10 @@ class StoreService {
     const configBackupName = `config_${toSnapshotLabel(configPath)}.backup`;
     const gamesBackupName = `games_${toSnapshotLabel(defaultGamesPath)}`;
     const dbBackupName = `db_${toSnapshotLabel(dbPath)}`;
-    const snapshotRoot = path.join(app.getPath("userData"), ".update-snapshots");
+    const snapshotRoot = path.join(
+      app.getPath("userData"),
+      ".update-snapshots",
+    );
 
     let snapshots: string[] = [];
     try {
@@ -212,11 +212,16 @@ class StoreService {
       const dirPath = path.join(snapshotRoot, dirName);
 
       if (needConfig) {
-        const configBackups = [path.join(dirPath, configBackupName), path.join(dirPath, "config.json.backup")];
+        const configBackups = [
+          path.join(dirPath, configBackupName),
+          path.join(dirPath, "config.json.backup"),
+        ];
         for (const backupPath of configBackups) {
           if (await pathExists(backupPath)) {
             await fs.copyFile(backupPath, configPath);
-            logger.info(`[StoreService] Restored config.json from snapshot: ${dirPath}`);
+            logger.info(
+              `[StoreService] Restored config.json from snapshot: ${dirPath}`,
+            );
             break;
           }
         }
@@ -226,7 +231,9 @@ class StoreService {
         const gamesBackupPath = path.join(dirPath, gamesBackupName);
         if (await pathExists(gamesBackupPath)) {
           await fs.cp(gamesBackupPath, defaultGamesPath, { recursive: true });
-          logger.info(`[StoreService] Restored games dir from snapshot: ${dirPath}`);
+          logger.info(
+            `[StoreService] Restored games dir from snapshot: ${dirPath}`,
+          );
         }
       }
 
@@ -234,7 +241,9 @@ class StoreService {
         const dbBackupPath = path.join(dirPath, dbBackupName);
         if (await pathExists(dbBackupPath)) {
           await fs.cp(dbBackupPath, dbPath, { recursive: true });
-          logger.info(`[StoreService] Restored db dir from snapshot: ${dirPath}`);
+          logger.info(
+            `[StoreService] Restored db dir from snapshot: ${dirPath}`,
+          );
         }
       }
 
@@ -246,11 +255,7 @@ class StoreService {
    * Initialize the store.
    * This must be called after app.whenReady().
    */
-  async init(forceReload = false): Promise<void> {
-    if (forceReload) {
-      this.store = null;
-      this._initPromise = null;
-    }
+  async init(): Promise<void> {
     if (this.store) return;
     if (this._initPromise) return this._initPromise;
 
@@ -260,18 +265,7 @@ class StoreService {
         await fs.mkdir(dataRoot, { recursive: true });
         await this.restoreDataFromSnapshotIfNeeded(dataRoot);
 
-        const configPath = path.join(dataRoot, "config.json");
-        let legacyData: AppStore | null = null;
-        try {
-          const rawText = await fs.readFile(configPath, "utf-8");
-          const raw = JSON.parse(rawText);
-          if (!raw || raw.__encrypted !== true) {
-            if (typeof raw === "object" && raw) {
-              legacyData = raw as AppStore;
-            }
-          }
-        } catch {}
-
+        await bzGamesDatabase.initialize();
         const Store = (await import("electron-store")).default;
         this.store = new Store<AppStore>({
           name: "config",
@@ -282,11 +276,7 @@ class StoreService {
         });
         logger.info(`[StoreService] Store initialized at: ${this.store.path}`);
 
-        if (legacyData) {
-          const merged = mergeStoreWithDefaults(legacyData);
-          this.store.store = merged;
-          logger.info("[StoreService] Migrated legacy config.json to encrypted");
-        }
+        this.gamesCache = await bzGamesDatabase.getGames();
       } catch (error) {
         logger.error("[StoreService] Failed to initialize store:", error);
         throw error;
@@ -296,23 +286,21 @@ class StoreService {
     return this._initPromise;
   }
 
-  getConfigPath(): string {
-    return this.getStore().path;
-  }
-
-  createCloudConfigFile(targetPath: string): void {
+  createCloudConfigContent(): string {
     const store = this.getStore();
     const data = store.store as AppStore;
     const settings = { ...(data.settings || {}) } as Partial<AppSettings>;
     for (const key of CLOUD_SETTINGS_SYNC_BLACKLIST) {
       delete settings[key];
     }
-    fsSync.writeFileSync(targetPath, encryptConfigPayload({ ...data, settings } as AppStore));
+    return encryptConfigPayload({ ...data, settings } as AppStore);
   }
 
-  applyCloudConfigFile(sourcePath: string): void {
-    const content = fsSync.readFileSync(sourcePath, "utf-8");
-    const cloudData = deserializeConfig(content) as Partial<AppStore>;
+  parseCloudConfigContent(content: string): Partial<AppStore> {
+    return deserializeConfig(content) as Partial<AppStore>;
+  }
+
+  applyCloudConfig(cloudData: Partial<AppStore>): void {
     const store = this.getStore();
     const currentSettings = this.getSettings();
     const cloudSettings = { ...(cloudData.settings || {}) };
@@ -320,19 +308,25 @@ class StoreService {
       delete cloudSettings[key];
     }
 
-    if (cloudData.games) {
-      store.set("games", cloudData.games);
-    }
-    if (cloudData.userData) {
-      store.set("userData", cloudData.userData);
-    }
-    if (cloudData.recentPlayed) {
-      store.set("recentPlayed", cloudData.recentPlayed);
-    }
-    store.set("settings", {
-      ...currentSettings,
-      ...cloudSettings,
-    });
+    const currentUserData = this.getUserData();
+    const nextUserData = cloudData.userData
+      ? {
+          ...currentUserData,
+          ...cloudData.userData,
+          checkIn: {
+            ...currentUserData.checkIn,
+            ...(cloudData.userData.checkIn || {}),
+          },
+        }
+      : currentUserData;
+    store.store = {
+      ...store.store,
+      userData: nextUserData,
+      settings: {
+        ...currentSettings,
+        ...cloudSettings,
+      },
+    };
   }
 
   private getStore(): ElectronStore<AppStore> {
@@ -343,10 +337,13 @@ class StoreService {
   }
 
   private getGamesList(): GameRecord[] {
-    return this.getStore().get("games", []) || [];
+    return this.gamesCache;
   }
 
-  private findGameById(games: GameRecord[], id: string): { game: GameRecord; index: number } | null {
+  private findGameById(
+    games: GameRecord[],
+    id: string,
+  ): { game: GameRecord; index: number } | null {
     const index = games.findIndex((g) => g.id === id);
     if (index === -1) return null;
     return { game: games[index], index };
@@ -354,6 +351,10 @@ class StoreService {
 
   getGames(): GameRecord[] {
     return this.getGamesList();
+  }
+
+  async refreshGameDerivedData(): Promise<void> {
+    this.gamesCache = await bzGamesDatabase.getGames();
   }
 
   getUserData(): UserData {
@@ -441,12 +442,9 @@ class StoreService {
     return userData.bzCoins;
   }
 
-  addPlayTime(durationMs: number): number {
+  private applyPlaytimeRewards(oldTime: number, newTime: number): number {
     const store = this.getStore();
     const userData = store.get("userData") || defaultUserData;
-
-    const oldTime = userData.cumulativePlayTime || 0;
-    const newTime = oldTime + durationMs;
 
     const oldIntervals = Math.floor(oldTime / PLAYTIME_REWARD_INTERVAL_MS);
     const newIntervals = Math.floor(newTime / PLAYTIME_REWARD_INTERVAL_MS);
@@ -458,21 +456,27 @@ class StoreService {
       logger.info(`[StoreService] Awarded ${reward} coins for playtime.`);
     }
 
-    userData.cumulativePlayTime = newTime;
-
-    this.tryUnlockPlaytimeFrames(userData);
+    this.tryUnlockPlaytimeFrames(userData, newTime);
 
     store.set("userData", userData);
     return rewardCount * PLAYTIME_REWARD_AMOUNT;
   }
 
-  private tryUnlockPlaytimeFrames(userData: UserData): void {
+  private tryUnlockPlaytimeFrames(
+    userData: UserData,
+    cumulativePlayTime: number,
+  ): void {
     if (!userData.ownedFrames) userData.ownedFrames = [];
     for (const f of AVATAR_FRAMES) {
       if (userData.ownedFrames.includes(f.id)) continue;
-      if (f.unlockMethod === "playtime" && (userData.cumulativePlayTime || 0) >= f.unlockValue) {
+      if (
+        f.unlockMethod === "playtime" &&
+        cumulativePlayTime >= f.unlockValue
+      ) {
         userData.ownedFrames.push(f.id);
-        logger.info(`[StoreService] Auto-unlocked frame: ${f.id} (playtime ${userData.cumulativePlayTime}ms)`);
+        logger.info(
+          `[StoreService] Auto-unlocked frame: ${f.id} (playtime ${cumulativePlayTime}ms)`,
+        );
       }
     }
   }
@@ -542,20 +546,29 @@ class StoreService {
     if (!userData.ownedFrames) userData.ownedFrames = [];
     for (const f of AVATAR_FRAMES) {
       if (userData.ownedFrames.includes(f.id)) continue;
-      if (f.unlockMethod === "consecutive_checkin" && (userData.checkIn?.consecutiveDays || 0) >= f.unlockValue) {
+      if (
+        f.unlockMethod === "consecutive_checkin" &&
+        (userData.checkIn?.consecutiveDays || 0) >= f.unlockValue
+      ) {
         userData.ownedFrames.push(f.id);
-        logger.info(`[StoreService] Auto-unlocked frame: ${f.id} (consecutive ${userData.checkIn?.consecutiveDays}d)`);
+        logger.info(
+          `[StoreService] Auto-unlocked frame: ${f.id} (consecutive ${userData.checkIn?.consecutiveDays}d)`,
+        );
       }
-      if (f.unlockMethod === "total_checkin" && (userData.checkIn?.totalDays || 0) >= f.unlockValue) {
+      if (
+        f.unlockMethod === "total_checkin" &&
+        (userData.checkIn?.totalDays || 0) >= f.unlockValue
+      ) {
         userData.ownedFrames.push(f.id);
-        logger.info(`[StoreService] Auto-unlocked frame: ${f.id} (total ${userData.checkIn?.totalDays}d)`);
+        logger.info(
+          `[StoreService] Auto-unlocked frame: ${f.id} (total ${userData.checkIn?.totalDays}d)`,
+        );
       }
     }
   }
 
-  addGame(game: GameRecord): void {
-    const store = this.getStore();
-    const games = store.get("games", []) || [];
+  async addGame(game: GameRecord): Promise<void> {
+    const games = [...this.getGamesList()];
     const index = games.findIndex((g) => g.id === game.id);
 
     if (index !== -1) {
@@ -564,15 +577,22 @@ class StoreService {
       games.push(game);
     }
 
-    store.set("games", games);
+    await bzGamesDatabase.saveGames(games);
+    this.gamesCache = games;
   }
 
-  saveGames(games: GameRecord[]): void {
-    this.getStore().set("games", games);
+  async saveGames(games: GameRecord[]): Promise<void> {
+    await bzGamesDatabase.saveGames(games);
+    this.gamesCache = games;
   }
 
-  unlockAchievement(gameId: string, version: string, achievementId: string): boolean {
-    const store = this.getStore();
+  async unlockAchievement(
+    gameId: string,
+    version: string,
+    achievementId: string,
+    gameName = gameId,
+    achievementName = achievementId,
+  ): Promise<boolean> {
     const games = this.getGamesList();
     const entry = this.findGameById(games, gameId);
     if (!entry) return false;
@@ -591,26 +611,34 @@ class StoreService {
       return false; // Already unlocked
     }
 
-    gameVersion.unlockedAchievements.push({
-      id: achievementId,
-      unlockedAt: Date.now(),
+    const unlockedAt = Date.now();
+    const inserted = await bzGamesDatabase.recordAchievement({
+      gameId,
+      gameName,
+      version,
+      achievementId,
+      achievementName,
+      unlockedAt,
     });
+    if (!inserted) return false;
+    gameVersion.unlockedAchievements.push({ id: achievementId, unlockedAt });
 
     games[entry.index] = game;
-    store.set("games", games);
+    this.gamesCache = games;
     return true; // Newly unlocked
   }
 
-  toggleFavorite(id: string): boolean {
-    const store = this.getStore();
+  async toggleFavorite(id: string): Promise<boolean> {
     const games = this.getGamesList();
     const entry = this.findGameById(games, id);
     if (!entry) return false;
 
-    entry.game.isFavorite = !entry.game.isFavorite;
+    const favorite = !entry.game.isFavorite;
+    await bzGamesDatabase.setFavorite(id, favorite);
+    entry.game.isFavorite = favorite;
     games[entry.index] = entry.game;
-    store.set("games", games);
-    return entry.game.isFavorite || false;
+    this.gamesCache = games;
+    return favorite;
   }
 
   private partitionVersions(
@@ -631,18 +659,26 @@ class StoreService {
     return { remaining, removing };
   }
 
-  private async removeVersionDirectories(id: string, versions: GameVersion[]): Promise<void> {
+  private async removeVersionDirectories(
+    id: string,
+    versions: GameVersion[],
+  ): Promise<void> {
     for (const v of versions) {
       try {
         await this.removePath(v.path, { recursive: true, force: true });
         logger.info(`[StoreService] Removed game version directory: ${v.path}`);
       } catch (e) {
-        logger.error(`[StoreService] Failed to remove game version directory for ${id} ${v.version}`, e);
+        logger.error(
+          `[StoreService] Failed to remove game version directory for ${id} ${v.version}`,
+          e,
+        );
       }
     }
   }
 
-  private async removeManifestGameVersionDirsInStorageRoot(storageRoot: string): Promise<void> {
+  private async removeManifestGameVersionDirsInStorageRoot(
+    storageRoot: string,
+  ): Promise<void> {
     let gameDirs: fsSync.Dirent[];
     try {
       gameDirs = fsSync.readdirSync(storageRoot, { withFileTypes: true });
@@ -665,7 +701,9 @@ class StoreService {
         const versionPath = path.join(gameRoot, versionDir.name);
         if (!fsSync.existsSync(path.join(versionPath, "game.json"))) continue;
         await this.removePath(versionPath, { recursive: true, force: true });
-        logger.info(`[StoreService] Removed game version directory by manifest: ${versionPath}`);
+        logger.info(
+          `[StoreService] Removed game version directory by manifest: ${versionPath}`,
+        );
       }
 
       await this.removeDirectoryIfEmpty(gameRoot);
@@ -680,12 +718,17 @@ class StoreService {
       logger.info(`[StoreService] Removed empty directory: ${dirPath}`);
       return true;
     } catch (e) {
-      logger.warn(`[StoreService] Failed to remove empty directory: ${dirPath}`, e);
+      logger.warn(
+        `[StoreService] Failed to remove empty directory: ${dirPath}`,
+        e,
+      );
       return false;
     }
   }
 
-  private async removeGameRootByVersionPath(versionPath: string | undefined): Promise<void> {
+  private async removeGameRootByVersionPath(
+    versionPath: string | undefined,
+  ): Promise<void> {
     if (!versionPath) return;
     const parentDir = path.dirname(versionPath);
 
@@ -697,7 +740,10 @@ class StoreService {
     }
   }
 
-  private async removePath(targetPath: string, options: Parameters<typeof fs.rm>[1]): Promise<void> {
+  private async removePath(
+    targetPath: string,
+    options: Parameters<typeof fs.rm>[1],
+  ): Promise<void> {
     const prevNoAsar = process.noAsar;
     process.noAsar = true;
     try {
@@ -707,7 +753,11 @@ class StoreService {
     }
   }
 
-  private async copyPath(sourcePath: string, targetPath: string, options: Parameters<typeof fs.cp>[2]): Promise<void> {
+  private async copyPath(
+    sourcePath: string,
+    targetPath: string,
+    options: Parameters<typeof fs.cp>[2],
+  ): Promise<void> {
     const prevNoAsar = process.noAsar;
     process.noAsar = true;
     try {
@@ -727,30 +777,35 @@ class StoreService {
   }
 
   async removeGame(id: string, versions?: string[]): Promise<void> {
-    const store = this.getStore();
     const games = this.getGamesList();
     const entry = this.findGameById(games, id);
     if (!entry) return;
 
     const game = entry.game;
 
-    const requestedVersions = versions === undefined ? game.versions.map((v) => v.version) : versions;
+    const requestedVersions =
+      versions === undefined ? game.versions.map((v) => v.version) : versions;
     if (requestedVersions.length === 0) return;
 
-    const { remaining, removing } = this.partitionVersions(game.versions, new Set(requestedVersions));
+    const { remaining, removing } = this.partitionVersions(
+      game.versions,
+      new Set(requestedVersions),
+    );
     await this.removeVersionDirectories(id, removing);
 
     if (remaining.length === 0) {
       await this.removeGameRootByVersionPath(game.versions[0]?.path);
       const newGames = games.filter((g) => g.id !== id);
-      store.set("games", newGames);
+      await bzGamesDatabase.softDelete(id);
+      this.gamesCache = newGames;
       return;
     }
 
     game.versions = remaining;
     this.ensureLatestVersion(game);
     games[entry.index] = game;
-    store.set("games", games);
+    await bzGamesDatabase.softDelete(id, requestedVersions);
+    this.gamesCache = games;
   }
 
   getSettings(): AppSettings {
@@ -776,7 +831,10 @@ class StoreService {
 
     const previousDefaultPath = merged.gameStoragePath || "";
     const previousHistory = JSON.stringify(merged.gameStorageHistory || []);
-    merged.gameStorageHistory = this.toStorageHistory(merged.gameStorageHistory, merged.gameStoragePath || "");
+    merged.gameStorageHistory = this.toStorageHistory(
+      merged.gameStorageHistory,
+      merged.gameStoragePath || "",
+    );
     if (!merged.gameStoragePath?.trim()) {
       merged.gameStoragePath = merged.gameStorageHistory[0] || defaultGamesPath;
     }
@@ -795,7 +853,9 @@ class StoreService {
       try {
         const langContent = fsSync.readFileSync(initialLangFile, "utf-8");
         const lang = langContent.trim();
-        if (["zh-CN", "en-US", "ja-JP", "zh-TW", "lzh", "de-DE"].includes(lang)) {
+        if (
+          ["zh-CN", "en-US", "ja-JP", "zh-TW", "lzh", "de-DE"].includes(lang)
+        ) {
           merged.language = lang as AppSettings["language"];
           logger.info(`[StoreService] Detected installer language: ${lang}`);
         }
@@ -835,7 +895,10 @@ class StoreService {
     const settings = this.getSettings();
     const roots = this.getConfiguredGameStoragePaths(settings);
     const preferred = settings.gameStoragePath?.trim();
-    if (preferred && roots.some((root) => path.resolve(root) === path.resolve(preferred))) {
+    if (
+      preferred &&
+      roots.some((root) => path.resolve(root) === path.resolve(preferred))
+    ) {
       return preferred;
     }
     const first = roots[0];
@@ -845,7 +908,9 @@ class StoreService {
     return first;
   }
 
-  private getConfiguredGameStoragePaths(settings = this.getSettings()): string[] {
+  private getConfiguredGameStoragePaths(
+    settings = this.getSettings(),
+  ): string[] {
     const roots = new Set<string>();
     for (const p of settings.gameStorageHistory || []) {
       if (typeof p === "string" && p.trim()) {
@@ -879,7 +944,10 @@ class StoreService {
     this.ensureStorageDirectoryEmpty(normalizedPath);
     const store = this.getStore();
     const current = this.getSettings();
-    const nextHistory = this.toStorageHistory(current.gameStorageHistory, normalizedPath);
+    const nextHistory = this.toStorageHistory(
+      current.gameStorageHistory,
+      normalizedPath,
+    );
     const nextDefault = current.gameStoragePath?.trim() || normalizedPath;
     const nextSettings = {
       ...current,
@@ -894,10 +962,17 @@ class StoreService {
     const normalizedPath = this.normalizeStoragePath(storagePath);
     const store = this.getStore();
     const current = this.getSettings();
-    if (!this.getConfiguredGameStoragePaths(current).some((item) => path.resolve(item) === normalizedPath)) {
+    if (
+      !this.getConfiguredGameStoragePaths(current).some(
+        (item) => path.resolve(item) === normalizedPath,
+      )
+    ) {
       throw new Error("storage_path_not_registered");
     }
-    const nextHistory = this.toStorageHistory(current.gameStorageHistory, normalizedPath);
+    const nextHistory = this.toStorageHistory(
+      current.gameStorageHistory,
+      normalizedPath,
+    );
     const nextSettings = {
       ...current,
       gameStoragePath: normalizedPath,
@@ -910,7 +985,9 @@ class StoreService {
   getGameVersionStoragePath(gameId: string, version: string): string {
     const targetVersion = version || "latest";
     const record = this.getGamesList().find((game) => game.id === gameId);
-    const versionRecord = record?.versions.find((item) => item.version === targetVersion);
+    const versionRecord = record?.versions.find(
+      (item) => item.version === targetVersion,
+    );
     if (versionRecord?.path?.trim()) {
       return versionRecord.path;
     }
@@ -939,7 +1016,10 @@ class StoreService {
     }
   }
 
-  private assertMigrationTargetAllowed(sourceRoot: string, targetRoot: string): void {
+  private assertMigrationTargetAllowed(
+    sourceRoot: string,
+    targetRoot: string,
+  ): void {
     if (sourceRoot === targetRoot) {
       throw new Error("target_is_source_path");
     }
@@ -963,7 +1043,10 @@ class StoreService {
     }
   }
 
-  private async migrateStorageDirectory(sourceRoot: string, targetRoot: string): Promise<void> {
+  private async migrateStorageDirectory(
+    sourceRoot: string,
+    targetRoot: string,
+  ): Promise<void> {
     if (!fsSync.existsSync(sourceRoot)) {
       throw new Error("source_storage_path_not_found");
     }
@@ -981,7 +1064,10 @@ class StoreService {
       try {
         await this.clearDirectoryContents(targetRoot);
       } catch (cleanupError) {
-        logger.warn(`[StoreService] Failed to clean partial migrated storage: ${targetRoot}`, cleanupError);
+        logger.warn(
+          `[StoreService] Failed to clean partial migrated storage: ${targetRoot}`,
+          cleanupError,
+        );
       }
       if (this.isFileBusyError(error)) {
         throw new Error("storage_migration_file_busy");
@@ -1014,7 +1100,10 @@ class StoreService {
     return code === "EBUSY" || code === "EPERM";
   }
 
-  private toStorageHistory(currentHistory: string[] | undefined, nextPath: string): string[] {
+  private toStorageHistory(
+    currentHistory: string[] | undefined,
+    nextPath: string,
+  ): string[] {
     const history = new Set<string>();
     if (nextPath.trim()) {
       history.add(nextPath.trim());
@@ -1031,11 +1120,16 @@ class StoreService {
   saveSettings(settings: Partial<AppSettings>): void {
     const store = this.getStore();
     const current = this.getSettings();
-    const incomingHistory = settings.gameStorageHistory || current.gameStorageHistory || [];
-    const incomingDefault = settings.gameStoragePath?.trim() || current.gameStoragePath || "";
+    const incomingHistory =
+      settings.gameStorageHistory || current.gameStorageHistory || [];
+    const incomingDefault =
+      settings.gameStoragePath?.trim() || current.gameStoragePath || "";
     const nextHistory = this.toStorageHistory(incomingHistory, incomingDefault);
     const finalStoragePath =
-      incomingDefault && nextHistory.some((item) => path.resolve(item) === path.resolve(incomingDefault))
+      incomingDefault &&
+      nextHistory.some(
+        (item) => path.resolve(item) === path.resolve(incomingDefault),
+      )
         ? incomingDefault
         : nextHistory[0] || "";
 
@@ -1052,15 +1146,14 @@ class StoreService {
     const history = this.getSettings().feedbackHistory;
     if (!Array.isArray(history)) return [];
     return history
-      .filter(
-        (item): item is FeedbackHistoryItem =>
-          Boolean(
-            item &&
-              typeof item.id === "string" &&
-              item.id.trim() &&
-              Number.isFinite(item.submittedAt) &&
-              item.submittedAt > 0,
-          ),
+      .filter((item): item is FeedbackHistoryItem =>
+        Boolean(
+          item &&
+          typeof item.id === "string" &&
+          item.id.trim() &&
+          Number.isFinite(item.submittedAt) &&
+          item.submittedAt > 0,
+        ),
       )
       .map((item) => ({
         id: item.id.trim(),
@@ -1088,12 +1181,15 @@ class StoreService {
     const settings = this.getSettings();
     const defaultGamesPath = path.join(getAppRoot(), "games");
     const defaultGamesRoot = path.resolve(defaultGamesPath);
-    const hasDefaultGamesStoragePath = this.getConfiguredGameStoragePaths(settings).some(
-      (storagePath) => path.resolve(storagePath) === defaultGamesRoot,
-    );
+    const hasDefaultGamesStoragePath = this.getConfiguredGameStoragePaths(
+      settings,
+    ).some((storagePath) => path.resolve(storagePath) === defaultGamesRoot);
 
     return {
-      shouldPrompt: !this.isFirstOpen() && !settings.ignoreDefaultGamesMigrationPrompt && hasDefaultGamesStoragePath,
+      shouldPrompt:
+        !this.isFirstOpen() &&
+        !settings.ignoreDefaultGamesMigrationPrompt &&
+        hasDefaultGamesStoragePath,
       defaultGamesPath,
     };
   }
@@ -1135,11 +1231,16 @@ class StoreService {
     const normalizedSource = this.normalizeStoragePath(sourceRoot);
     const normalizedTarget = this.normalizeStoragePath(targetRoot);
     const configuredPaths = this.getConfiguredGameStoragePaths();
-    const isRegisteredPath = configuredPaths.some((item) => path.resolve(item) === normalizedSource);
+    const isRegisteredPath = configuredPaths.some(
+      (item) => path.resolve(item) === normalizedSource,
+    );
     if (!isRegisteredPath) {
       throw new Error("storage_path_not_registered");
     }
-    return this.migrateGameStorageLibraryCore(normalizedSource, normalizedTarget);
+    return this.migrateGameStorageLibraryCore(
+      normalizedSource,
+      normalizedTarget,
+    );
   }
 
   private async migrateGameStorageLibraryCore(
@@ -1167,7 +1268,10 @@ class StoreService {
     for (const game of games) {
       const versionCount = game.versions.filter((version) => {
         if (!version.path?.trim()) return false;
-        return path.resolve(path.dirname(path.dirname(version.path))) === normalizedSource;
+        return (
+          path.resolve(path.dirname(path.dirname(version.path))) ===
+          normalizedSource
+        );
       }).length;
       if (versionCount > 0) {
         migratedGames += 1;
@@ -1180,7 +1284,9 @@ class StoreService {
     for (const game of games) {
       for (const version of game.versions) {
         if (!version.path?.trim()) continue;
-        const versionRoot = path.resolve(path.dirname(path.dirname(version.path)));
+        const versionRoot = path.resolve(
+          path.dirname(path.dirname(version.path)),
+        );
         if (versionRoot !== normalizedSource) continue;
         version.path = path.join(normalizedTarget, game.id, version.version);
       }
@@ -1189,22 +1295,28 @@ class StoreService {
     const currentSettings = this.getSettings();
     const currentPath = currentSettings.gameStoragePath?.trim() || "";
     const nextStoragePath =
-      options.forceDefault || (currentPath && path.resolve(currentPath) === normalizedSource)
+      options.forceDefault ||
+      (currentPath && path.resolve(currentPath) === normalizedSource)
         ? normalizedTarget
         : currentPath;
     const filteredHistory = (currentSettings.gameStorageHistory || [])
       .map((item) => item.trim())
       .filter((item) => item && path.resolve(item) !== normalizedSource);
-    const nextHistory = this.toStorageHistory(filteredHistory, normalizedTarget);
+    const nextHistory = this.toStorageHistory(
+      filteredHistory,
+      normalizedTarget,
+    );
 
-    store.set("games", games);
+    await bzGamesDatabase.saveGames(games);
+    this.gamesCache = games;
     store.set("settings", {
       ...currentSettings,
       gameStoragePath: nextStoragePath,
       gameStorageHistory: nextHistory,
-      ignoreDefaultGamesMigrationPrompt: options.ignoreDefaultGamesMigrationPrompt
-        ? true
-        : currentSettings.ignoreDefaultGamesMigrationPrompt,
+      ignoreDefaultGamesMigrationPrompt:
+        options.ignoreDefaultGamesMigrationPrompt
+          ? true
+          : currentSettings.ignoreDefaultGamesMigrationPrompt,
     });
 
     return {
@@ -1232,7 +1344,9 @@ class StoreService {
     const store = this.getStore();
     const currentSettings = this.getSettings();
     const configuredPaths = this.getConfiguredGameStoragePaths(currentSettings);
-    const isRegisteredPath = configuredPaths.some((item) => path.resolve(item) === normalizedTarget);
+    const isRegisteredPath = configuredPaths.some(
+      (item) => path.resolve(item) === normalizedTarget,
+    );
     if (!isRegisteredPath) {
       throw new Error("storage_path_not_registered");
     }
@@ -1258,7 +1372,9 @@ class StoreService {
 
       removedVersions += versionsInPath.length;
       await this.removeVersionDirectories(game.id, versionsInPath);
-      const remaining = game.versions.filter((version) => !versionsInPath.some((v) => v.version === version.version));
+      const remaining = game.versions.filter(
+        (version) => !versionsInPath.some((v) => v.version === version.version),
+      );
 
       if (remaining.length === 0) {
         removedGames += 1;
@@ -1279,10 +1395,13 @@ class StoreService {
 
     const currentPath = currentSettings.gameStoragePath?.trim() || "";
     const nextStoragePath =
-      currentPath && path.resolve(currentPath) === normalizedTarget ? filteredHistory[0] || "" : currentPath;
+      currentPath && path.resolve(currentPath) === normalizedTarget
+        ? filteredHistory[0] || ""
+        : currentPath;
     const nextHistory = this.toStorageHistory(filteredHistory, nextStoragePath);
 
-    store.set("games", nextGames);
+    await bzGamesDatabase.saveGames(nextGames);
+    this.gamesCache = nextGames;
     store.set("settings", {
       ...currentSettings,
       gameStoragePath: nextStoragePath,
@@ -1314,9 +1433,11 @@ class StoreService {
       try {
         const rawText = await fs.readFile(configPath, "utf-8");
         let parsed: unknown;
+        let validJson = true;
         try {
           parsed = JSON.parse(rawText);
         } catch {
+          validJson = false;
           issues.push({
             level: "error",
             code: "config_invalid_json",
@@ -1326,35 +1447,25 @@ class StoreService {
           parsed = null;
         }
 
-        if (parsed && typeof parsed === "object") {
-          const encryptedStore = parsed as { __encrypted?: boolean };
-          if (encryptedStore.__encrypted === true) {
-            const decrypted = tryDecryptConfigPayload(parsed);
-            if (!decrypted) {
+        if (validJson) {
+          if (parsed && typeof parsed === "object") {
+            try {
+              decryptConfigPayload(parsed);
+            } catch (error) {
               issues.push({
                 level: "error",
                 code: "config_decrypt_failed",
-                message: "config.json decryption failed",
+                message: (error as Error).message,
                 target: configPath,
               });
             }
           } else {
-            const migrated = deserializeConfig(rawText);
-            if (!migrated || typeof migrated !== "object") {
-              issues.push({
-                level: "error",
-                code: "config_invalid_structure",
-                message: "config.json has an invalid structure",
-                target: configPath,
-              });
-            } else {
-              issues.push({
-                level: "warning",
-                code: "config_plaintext_legacy",
-                message: "config.json still uses the legacy plaintext format",
-                target: configPath,
-              });
-            }
+            issues.push({
+              level: "error",
+              code: "config_invalid_structure",
+              message: "config.json has an invalid structure",
+              target: configPath,
+            });
           }
         }
       } catch (error) {
@@ -1366,6 +1477,27 @@ class StoreService {
           target: configPath,
         });
       }
+    }
+
+    try {
+      const integrityErrors = await bzGamesDatabase.checkIntegrity();
+      if (integrityErrors.length > 0) {
+        issues.push({
+          level: "error",
+          code: "database_integrity_failed",
+          message: "bz_games.db integrity check failed",
+          params: { reason: integrityErrors.join("; ") },
+          target: bzGamesDatabase.getDatabasePath(),
+        });
+      }
+    } catch (error) {
+      issues.push({
+        level: "error",
+        code: "database_integrity_failed",
+        message: `Failed to verify bz_games.db: ${(error as Error).message}`,
+        params: { reason: (error as Error).message },
+        target: bzGamesDatabase.getDatabasePath(),
+      });
     }
 
     if (!settings.playerId?.trim()) {
@@ -1461,10 +1593,7 @@ class StoreService {
               target: manifestPath,
             });
           }
-          if (
-            manifest.id !== game.id ||
-            manifest.version !== version.version
-          ) {
+          if (manifest.id !== game.id || manifest.version !== version.version) {
             issues.push({
               level: "error",
               code: "manifest_identity_mismatch",
@@ -1594,7 +1723,10 @@ class StoreService {
         errors: issues.filter((issue) => issue.level === "error").length,
         warnings: issues.filter((issue) => issue.level === "warning").length,
         gameCount: games.length,
-        versionCount: games.reduce((sum, game) => sum + game.versions.length, 0),
+        versionCount: games.reduce(
+          (sum, game) => sum + game.versions.length,
+          0,
+        ),
         storagePathCount: storageRoots.length,
       },
       issues,
@@ -1603,42 +1735,56 @@ class StoreService {
     return report;
   }
 
-  updateGameStats(
+  async updateGameStats(
     id: string,
     version: string,
     stats: Record<string, number>,
     modes: Record<string, "increment" | "full"> = {},
-  ): void {
-    const store = this.getStore();
+    gameName = id,
+    statNames: Record<string, string> = {},
+  ): Promise<void> {
     const games = this.getGamesList();
     const entry = this.findGameById(games, id);
     if (!entry) return;
 
-    const game = entry.game;
-    game.lastPlayedAt = Date.now();
+    const reportedAt = Date.now();
+    await bzGamesDatabase.recordStats(
+      Object.entries(stats).map(([statId, value]) => ({
+        gameId: id,
+        gameName,
+        version,
+        statId,
+        statName: statNames[statId] || statId,
+        value,
+        mode: modes[statId] || "increment",
+        reportedAt,
+      })),
+    );
 
+    const game = entry.game;
     const gameVersion = game.versions.find((v) => v.version === version);
     if (gameVersion) {
       if (!gameVersion.stats) gameVersion.stats = {};
-
       for (const [key, value] of Object.entries(stats)) {
         const mode = modes[key] || "increment";
-        if (mode === "full") {
-          gameVersion.stats[key] = value;
-        } else {
-          gameVersion.stats[key] = (gameVersion.stats[key] || 0) + value;
-        }
+        gameVersion.stats[key] =
+          mode === "full" ? value : (gameVersion.stats[key] || 0) + value;
       }
     }
-
     games[entry.index] = game;
-    store.set("games", games);
+    this.gamesCache = games;
   }
 
-  updatePlaytime(id: string, version: string, durationMs: number): void {
-    this.addPlayTime(durationMs);
-
-    const store = this.getStore();
+  async updatePlaytime(
+    id: string,
+    version: string,
+    durationMs: number,
+  ): Promise<void> {
+    const total = await bzGamesDatabase.get<{ total: number }>(
+      "SELECT COALESCE(SUM(duration_ms), 0) AS total FROM play_sessions WHERE duration_ms IS NOT NULL",
+    );
+    const oldTime = total?.total || 0;
+    this.applyPlaytimeRewards(oldTime, oldTime + durationMs);
     const games = this.getGamesList();
     const entry = this.findGameById(games, id);
     if (!entry) return;
@@ -1652,7 +1798,7 @@ class StoreService {
     }
 
     games[entry.index] = game;
-    store.set("games", games);
+    this.gamesCache = games;
   }
 }
 
