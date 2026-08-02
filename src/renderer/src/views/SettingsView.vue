@@ -607,7 +607,6 @@
     <FeedbackModal
       v-model:show="showFeedbackModal"
       :authenticated="cloudStatus.authenticated"
-      @auth-expired="refreshCloudStatus"
     />
   </div>
 </template>
@@ -841,8 +840,23 @@ const refreshStoragePaths = async () => {
     await window.electronAPI.settings.getGameStoragePaths();
 };
 
-const refreshCloudStatus = async () => {
-  cloudStatus.value = await window.electronAPI.settings.getCloudStatus();
+const refreshLocalCloudStatus = async () => {
+  const status = await window.electronAPI.settings.getLocalCloudStatus();
+  cloudStatus.value = {
+    ...cloudStatus.value,
+    ...status,
+  };
+};
+
+const refreshCloudSnapshotMeta = async () => {
+  try {
+    const result = await window.electronAPI.settings.getCloudSnapshotMeta();
+    if (result.success) {
+      cloudStatus.value.snapshot = result.snapshot;
+    }
+  } catch {
+    // Snapshot metadata is supplementary after a successful sync.
+  }
 };
 
 const isDefaultStoragePath = (targetPath: string) => {
@@ -854,7 +868,7 @@ const isDefaultStoragePath = (targetPath: string) => {
 onMounted(async () => {
   await settingsStore.loadSettings();
   await refreshStoragePaths();
-  await refreshCloudStatus();
+  await refreshLocalCloudStatus();
   if (settingsStore.settings) {
     formValue.value = JSON.parse(JSON.stringify(settingsStore.settings));
     originalSettings.value = JSON.stringify(formValue.value);
@@ -873,19 +887,25 @@ const removeCloudSyncListener = window.electronAPI.settings.onCloudSyncEvent(
   },
 );
 
-let cloudStatusTimer: ReturnType<typeof setInterval> | null = null;
-
-if (typeof window !== "undefined") {
-  cloudStatusTimer = setInterval(() => {
-    if (!cloudBusy.value) {
-      void refreshCloudStatus();
+const removeCloudAuthListener = window.electronAPI.settings.onCloudAuthChanged(
+  (payload) => {
+    cloudStatus.value = {
+      ...cloudStatus.value,
+      ...payload.status,
+      snapshot: null,
+    };
+    void settingsStore.loadSettings();
+    if (payload.reason === "session_expired") {
+      message.error(t("settings.cloudErrors.session_expired"));
+    } else if (payload.reason === "session_invalid") {
+      message.error(t("settings.cloudErrors.session_invalid"));
     }
-  }, 3000);
-}
+  },
+);
 
 onUnmounted(() => {
   removeCloudSyncListener();
-  if (cloudStatusTimer) clearInterval(cloudStatusTimer);
+  removeCloudAuthListener();
 });
 
 const confirmLeave = () => {
@@ -964,13 +984,13 @@ const handleUploadAvatar = async () => {
   img.src = dataUrl;
 };
 
-const cloudErrorText = (error?: string) => {
+const cloudErrorText = (error?: string, fallbackMessage?: string) => {
   const key = error
     ? `settings.cloudErrors.${error}`
     : "settings.cloudErrors.unknown";
   const translated = t(key);
   return translated === key
-    ? error || t("settings.cloudErrors.unknown")
+    ? fallbackMessage || error || t("settings.cloudErrors.unknown")
     : translated;
 };
 
@@ -1002,12 +1022,18 @@ const runCloudAction = async (mode: "upload" | "download") => {
         : await window.electronAPI.settings.downloadCloudData();
     if (!result.success) {
       showCloudProgressModal.value = false;
-      message.error(cloudErrorText(result.error));
+      if (
+        result.error !== "session_expired" &&
+        result.error !== "session_invalid"
+      ) {
+        message.error(cloudErrorText(result.error, result.message));
+      }
       return;
     }
     showCloudProgressModal.value = true;
     await settingsStore.loadSettings();
-    await refreshCloudStatus();
+    await refreshLocalCloudStatus();
+    await refreshCloudSnapshotMeta();
     if (settingsStore.settings) {
       formValue.value = JSON.parse(JSON.stringify(settingsStore.settings));
       originalSettings.value = JSON.stringify(formValue.value);

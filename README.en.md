@@ -86,12 +86,12 @@ Build artifacts will be located in the `dist` directory.
 
 ```
 bz-launcher/
-├── games/                 # Game data storage directory (configurable multi-path)
 ├── resources/             # App icons, placeholder images, and static resources
 ├── src/
 │   ├── main/              # Electron main process
 │   │   ├── index.ts          # Entry: window management, app lifecycle
 │   │   ├── window.ts         # Floating ball window
+│   │   ├── chat-window.ts    # Chat pop-out window
 │   │   ├── ipc/              # IPC handlers (game / room / market / stats / system / storage)
 │   │   ├── services/         # Core business logic
 │   │   │   ├── game/            # GameManager, GameLoader, GameAPI (V1/V2)
@@ -112,11 +112,10 @@ bz-launcher/
 │   │   └── index.html
 │   └── shared/            # Shared between main & renderer (types, constants, IPC channels, protocols)
 ├── relay-server/          # Official relay server (standalone deployment)
-├── bz-games-website/      # Official website
-├── bz-games-github-release-market/  # GitHub Release market index
+├── bz-games-admin/        # Admin panel (feedback review)
 └── electron.vite.config.ts
 ```
 
 > Market index data is maintained in the independent [bz-games-market](https://github.com/baozha2023/bz-games-market) repository, distributed via a two-tier market architecture.
 
-For more details, refer to the development guidelines in `CLAUDE.md`.
+For more details: development guidelines `CLAUDE.md`, game developer guide `DEVELOPER_GUIDE.md`, Game API docs `docs/GAME_API_V1_V2_REFERENCE.md`, roadmap `docs/ROADMAP.md`.

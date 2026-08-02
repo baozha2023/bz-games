@@ -14,6 +14,12 @@ export class RoomConstants {
   // 房主解散房间时，广播 room:disbanded 后等待该时长再关闭连接。
   static readonly ROOM_DISBAND_BROADCAST_DELAY_MS = 120;
 
+  // 房间服务关闭时允许客户端完成 WebSocket 关闭握手的宽限时间。
+  static readonly ROOM_SERVER_CLOSE_GRACE_MS = 1_000;
+
+  // 房间服务关闭的硬超时，避免异常底层连接永久阻塞离开或切换房间。
+  static readonly ROOM_SERVER_CLOSE_TIMEOUT_MS = 3_000;
+
   // 客户端加入房间的连接超时时间。
   static readonly ROOM_CONNECT_TIMEOUT_MS = 15_000;
 

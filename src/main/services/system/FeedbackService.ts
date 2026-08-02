@@ -7,12 +7,24 @@ import { DEFAULT_RELAY_SERVER_URL } from "../../../shared/AppConstants";
 import { requestInterceptor } from "../../utils/requestInterceptor";
 import { logger } from "../../utils/logger";
 import { storeService } from "../storage/StoreService";
-import type { FeedbackHistoryItem } from "../../../shared/types";
+import { cloudSyncService } from "./CloudSyncService";
+import type {
+  FeedbackDetail,
+  FeedbackHistoryItem,
+  FeedbackStatus,
+} from "../../../shared/types";
 
 const MAX_IMAGES = 4;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_TEXT_LENGTH = 5000;
 const REQUEST_TIMEOUT_MS = 45_000;
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const ALLOWED_IMAGE_CONTENT_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+]);
 
 interface FeedbackImagePreview {
   id: string;
@@ -37,12 +49,18 @@ type FeedbackSubmitResult =
       success: false;
       error: string;
       resetAt?: string;
+      message?: string;
     };
+
+type FeedbackDetailResult =
+  | { success: true; detail: FeedbackDetail }
+  | { success: false; error: string; message?: string };
 
 interface SelectedImage {
   id: string;
   fileName: string;
   contentType: string;
+  sha256: string;
   buffer: Buffer;
 }
 
@@ -90,6 +108,30 @@ function detectContentType(buffer: Buffer): string {
   return "";
 }
 
+function getDeclaredContentType(filePath: string): string {
+  const extension = path.extname(filePath).toLowerCase();
+  if (extension === ".png") return "image/png";
+  if (extension === ".jpg" || extension === ".jpeg") return "image/jpeg";
+  if (extension === ".webp") return "image/webp";
+  return "";
+}
+
+function toImagePreviews(images: SelectedImage[]): FeedbackImagePreview[] {
+  return images.map((image) => ({
+    id: image.id,
+    fileName: image.fileName,
+    previewUrl: `data:${image.contentType};base64,${image.buffer.toString(
+      "base64",
+    )}`,
+  }));
+}
+
+function isFeedbackStatus(value: unknown): value is FeedbackStatus {
+  return ["new", "reviewing", "planned", "resolved", "closed"].includes(
+    String(value),
+  );
+}
+
 class FeedbackService {
   private readonly selections = new Map<string, FeedbackSelection>();
   private readonly baseUrl = normalizeRelayHttpBase();
@@ -106,7 +148,21 @@ class FeedbackService {
     }
   }
 
-  async selectImages(): Promise<FeedbackSelectionResult> {
+  async selectImages(
+    existingSelectionId?: unknown,
+  ): Promise<FeedbackSelectionResult> {
+    const requestedSelectionId =
+      typeof existingSelectionId === "string" ? existingSelectionId : "";
+    const existingSelection = requestedSelectionId
+      ? this.selections.get(requestedSelectionId)
+      : undefined;
+    if (requestedSelectionId && !existingSelection) {
+      return { success: false, error: "feedback_images_expired" };
+    }
+    if ((existingSelection?.images.length || 0) >= MAX_IMAGES) {
+      return { success: false, error: "too_many_images" };
+    }
+
     const { canceled, filePaths } = await dialog.showOpenDialog({
       title: "Select feedback images",
       properties: ["openFile", "multiSelections"],
@@ -120,7 +176,10 @@ class FeedbackService {
     if (canceled || filePaths.length === 0) {
       return { success: true, canceled: true };
     }
-    if (filePaths.length > MAX_IMAGES) {
+    if (
+      (existingSelection?.images.length || 0) + filePaths.length >
+      MAX_IMAGES
+    ) {
       return { success: false, error: "too_many_images" };
     }
 
@@ -142,29 +201,38 @@ class FeedbackService {
           if (!contentType || nativeImage.createFromBuffer(buffer).isEmpty()) {
             throw new Error("unsupported_image_type");
           }
+          if (contentType !== getDeclaredContentType(filePath)) {
+            throw new Error("image_type_mismatch");
+          }
           return {
             id: crypto.randomUUID(),
             fileName: path.basename(filePath).slice(0, 255),
             contentType,
+            sha256: crypto.createHash("sha256").update(buffer).digest("hex"),
             buffer,
           };
         }),
       );
-      const selectionId = crypto.randomUUID();
+      const hashes = new Set(
+        (existingSelection?.images || []).map((image) => image.sha256),
+      );
+      for (const image of images) {
+        if (hashes.has(image.sha256)) {
+          throw new Error("duplicate_image");
+        }
+        hashes.add(image.sha256);
+      }
+
+      const selectionId = requestedSelectionId || crypto.randomUUID();
+      const combinedImages = [...(existingSelection?.images || []), ...images];
       this.selections.set(selectionId, {
-        images,
+        images: combinedImages,
         createdAt: Date.now(),
       });
       return {
         success: true,
         selectionId,
-        images: images.map((image) => ({
-          id: image.id,
-          fileName: image.fileName,
-          previewUrl: `data:${image.contentType};base64,${image.buffer.toString(
-            "base64",
-          )}`,
-        })),
+        images: toImagePreviews(combinedImages),
       };
     } catch (error) {
       const code =
@@ -183,7 +251,11 @@ class FeedbackService {
     const selection = this.selections.get(selectionId);
     if (!selection) return;
     selection.images = selection.images.filter((image) => image.id !== imageId);
-    if (selection.images.length === 0) this.selections.delete(selectionId);
+    if (selection.images.length === 0) {
+      this.selections.delete(selectionId);
+    } else {
+      selection.createdAt = Date.now();
+    }
   }
 
   getHistory(): FeedbackHistoryItem[] {
@@ -192,6 +264,154 @@ class FeedbackService {
     } catch (error) {
       logger.warn("[FeedbackService] Failed to read feedback history", error);
       return [];
+    }
+  }
+
+  async getDetail(feedbackId: unknown): Promise<FeedbackDetailResult> {
+    const id = typeof feedbackId === "string" ? feedbackId.trim() : "";
+    if (!UUID_PATTERN.test(id)) {
+      return { success: false, error: "invalid_feedback_id" };
+    }
+    if (!this.baseUrl) {
+      return { success: false, error: "feedback_not_configured" };
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    try {
+      const settings = storeService.getSettings();
+      const authorization = settings.cloudSessionToken
+        ? { Authorization: `Bearer ${settings.cloudSessionToken}` }
+        : undefined;
+      const detailUrl = `${this.baseUrl}/api/v1/feedback/${encodeURIComponent(id)}`;
+      const response = await fetch(detailUrl, {
+        headers: requestInterceptor.buildHeaders(detailUrl, authorization),
+        signal: controller.signal,
+      });
+      const body = (await response.json().catch(() => ({}))) as Record<
+        string,
+        unknown
+      >;
+      cloudSyncService.handleAuthFailure(
+        typeof body.error === "string" ? body.error : undefined,
+      );
+      if (!response.ok) {
+        return {
+          success: false,
+          error:
+            typeof body.error === "string"
+              ? body.error
+              : `feedback_http_${response.status}`,
+          message: typeof body.message === "string" ? body.message : undefined,
+        };
+      }
+      if (
+        body.id !== id ||
+        typeof body.content !== "string" ||
+        body.content.length > MAX_TEXT_LENGTH ||
+        !isFeedbackStatus(body.status) ||
+        typeof body.reply !== "string" ||
+        body.reply.length > MAX_TEXT_LENGTH ||
+        !Number.isInteger(body.imageCount) ||
+        (body.imageCount as number) < 0 ||
+        (body.imageCount as number) > MAX_IMAGES ||
+        typeof body.createdAt !== "string" ||
+        !Number.isFinite(Date.parse(body.createdAt)) ||
+        typeof body.updatedAt !== "string" ||
+        !Number.isFinite(Date.parse(body.updatedAt)) ||
+        !Array.isArray(body.images) ||
+        body.images.length !== body.imageCount
+      ) {
+        return { success: false, error: "feedback_invalid_response" };
+      }
+
+      const images = await Promise.all(
+        body.images.map(async (rawImage) => {
+          const image = rawImage as Record<string, unknown>;
+          if (
+            typeof image.id !== "string" ||
+            !UUID_PATTERN.test(image.id) ||
+            typeof image.fileName !== "string" ||
+            !image.fileName.trim() ||
+            image.fileName.length > 255 ||
+            typeof image.contentType !== "string" ||
+            !ALLOWED_IMAGE_CONTENT_TYPES.has(image.contentType) ||
+            !Number.isInteger(image.size) ||
+            (image.size as number) <= 0 ||
+            (image.size as number) > MAX_IMAGE_BYTES
+          ) {
+            throw new Error("feedback_invalid_response");
+          }
+          const imageUrl = `${detailUrl}/images/${encodeURIComponent(image.id)}`;
+          const imageResponse = await fetch(imageUrl, {
+            headers: requestInterceptor.buildHeaders(imageUrl, authorization),
+            signal: controller.signal,
+          });
+          if (!imageResponse.ok) {
+            const errorBody = (await imageResponse
+              .json()
+              .catch(() => ({}))) as Record<string, unknown>;
+            cloudSyncService.handleAuthFailure(
+              typeof errorBody.error === "string" ? errorBody.error : undefined,
+            );
+            throw new Error(
+              typeof errorBody.error === "string"
+                ? errorBody.error
+                : `feedback_http_${imageResponse.status}`,
+            );
+          }
+          const buffer = Buffer.from(await imageResponse.arrayBuffer());
+          if (!buffer.length || buffer.length > MAX_IMAGE_BYTES) {
+            throw new Error("feedback_invalid_response");
+          }
+          const contentType = imageResponse.headers
+            .get("content-type")
+            ?.split(";", 1)[0]
+            .trim();
+          if (
+            !contentType ||
+            !ALLOWED_IMAGE_CONTENT_TYPES.has(contentType) ||
+            contentType !== image.contentType ||
+            buffer.length !== image.size
+          ) {
+            throw new Error("feedback_invalid_response");
+          }
+          return {
+            id: image.id,
+            fileName: image.fileName,
+            contentType,
+            size: buffer.length,
+            previewUrl: `data:${contentType};base64,${buffer.toString("base64")}`,
+          };
+        }),
+      );
+
+      return {
+        success: true,
+        detail: {
+          id,
+          content: body.content,
+          status: body.status,
+          reply: body.reply,
+          imageCount: body.imageCount as number,
+          createdAt: body.createdAt,
+          updatedAt: body.updatedAt,
+          images,
+        },
+      };
+    } catch (error) {
+      logger.warn("[FeedbackService] Failed to load feedback detail", error);
+      return {
+        success: false,
+        error:
+          error instanceof Error && error.name === "AbortError"
+            ? "feedback_timeout"
+            : error instanceof Error && /^[a-z][a-z0-9_]+$/.test(error.message)
+              ? error.message
+              : "feedback_network_failed",
+      };
+    } finally {
+      clearTimeout(timeout);
     }
   }
 
@@ -254,21 +474,15 @@ class FeedbackService {
         id?: string;
         resetAt?: string;
         error?: string;
+        message?: string;
       };
-      if (response.status === 401 && settings.cloudSessionToken) {
-        storeService.saveSettings({
-          cloudSessionToken: "",
-          cloudSessionExpiresAt: "",
-          cloudUserLogin: "",
-          cloudUserName: "",
-          cloudUserProfileUrl: "",
-        });
-      }
+      cloudSyncService.handleAuthFailure(body.error);
       if (!response.ok) {
         return {
           success: false,
           error: body.error || `feedback_http_${response.status}`,
           resetAt: body.resetAt,
+          message: body.message,
         };
       }
       if (body.ok !== true || typeof body.id !== "string" || !body.id.trim()) {

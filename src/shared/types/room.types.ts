@@ -53,7 +53,11 @@ export interface ChatPayload {
 }
 
 export type GameRelayMode = "direct" | "broadcast" | "publish" | "batch";
-export type GameRelayDelivery = "reliable" | "ordered" | "latest" | "unreliable";
+export type GameRelayDelivery =
+  | "reliable"
+  | "ordered"
+  | "latest"
+  | "unreliable";
 
 export interface GameRelayPayload {
   senderId: string;
@@ -116,12 +120,24 @@ export interface DiscoveredRoom {
   updatedAt: number;
   hasPassword?: boolean;
   canJoin?: boolean;
-  joinBlockReason?: "game_missing" | "version_mismatch" | "room_full" | "game_started" | "own_room" | "unknown";
+  joinBlockReason?:
+    | "game_missing"
+    | "version_mismatch"
+    | "room_full"
+    | "game_started"
+    | "own_room"
+    | "unknown";
 }
 
 export interface RoomJoinValidationResult {
   canJoin: boolean;
-  reason?: "game_missing" | "version_mismatch" | "room_full" | "game_started" | "own_room" | "unknown";
+  reason?:
+    | "game_missing"
+    | "version_mismatch"
+    | "room_full"
+    | "game_started"
+    | "own_room"
+    | "unknown";
   message?: string;
 }
 
@@ -180,6 +196,7 @@ export interface RoomCreateResult extends RoomConnectResult {
 
 export interface RoomPasswordProbeAckPayload {
   hasPassword: boolean;
+  hostId: string;
 }
 
 export interface RoomKickedPayload {

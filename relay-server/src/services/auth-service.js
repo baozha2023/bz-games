@@ -1,12 +1,35 @@
 import crypto from "node:crypto";
 
-import { clearCookie, escapeHtml, parseCookies, readBearerToken, redirect, sendHtml, setCookie } from "../utils/http.js";
+import {
+  clearCookie,
+  escapeHtml,
+  parseCookies,
+  readBearerToken,
+  redirect,
+  sendHtml,
+  setCookie,
+} from "../utils/http.js";
 import { sendJson } from "../utils/ws.js";
 
 const GITHUB_AUTHORIZE_URL = "https://github.com/login/oauth/authorize";
 const GITHUB_ACCESS_TOKEN_URL = "https://github.com/login/oauth/access_token";
 const GITHUB_USER_API_URL = "https://api.github.com/user";
 const GITHUB_EMAILS_API_URL = "https://api.github.com/user/emails";
+
+const AUTH_FAILURES = {
+  missing: {
+    error: "unauthorized",
+    message: "Authentication required",
+  },
+  expired: {
+    error: "session_expired",
+    message: "GitHub login session has expired",
+  },
+  invalid: {
+    error: "session_invalid",
+    message: "GitHub login session is invalid",
+  },
+};
 
 function hashToken(value) {
   return crypto.createHash("sha256").update(value).digest("hex");
@@ -75,15 +98,27 @@ export function createAuthService({ config, mySqlService }) {
   function isConfigured() {
     return Boolean(
       mySqlService.isEnabled() &&
-        config.GITHUB_CLIENT_ID &&
-        config.GITHUB_CLIENT_SECRET &&
-        config.GITHUB_CALLBACK_URL,
+      config.GITHUB_CLIENT_ID &&
+      config.GITHUB_CLIENT_SECRET &&
+      config.GITHUB_CALLBACK_URL,
     );
   }
 
   async function cleanupExpiredAuthRecords() {
-    await mySqlService.query("DELETE FROM oauth_states WHERE expires_at <= UTC_TIMESTAMP(3)");
-    await mySqlService.query("DELETE FROM auth_sessions WHERE expires_at <= UTC_TIMESTAMP(3)");
+    await mySqlService.query(
+      "DELETE FROM oauth_states WHERE expires_at <= UTC_TIMESTAMP(3)",
+    );
+    const retentionMs = Number(config.AUTH_EXPIRED_SESSION_RETENTION_MS);
+    const cutoff = new Date(
+      Date.now() -
+        (Number.isFinite(retentionMs) && retentionMs >= 0
+          ? retentionMs
+          : 7 * 24 * 60 * 60 * 1000),
+    );
+    await mySqlService.query(
+      "DELETE FROM auth_sessions WHERE expires_at <= ?",
+      [cutoff],
+    );
   }
 
   async function createState(returnTo) {
@@ -107,7 +142,9 @@ export function createAuthService({ config, mySqlService }) {
     );
     const record = rows[0];
     if (!record) return null;
-    await mySqlService.query("DELETE FROM oauth_states WHERE id = ?", [record.id]);
+    await mySqlService.query("DELETE FROM oauth_states WHERE id = ?", [
+      record.id,
+    ]);
     if (record.expires_at.getTime() <= Date.now()) return null;
     return record;
   }
@@ -118,8 +155,13 @@ export function createAuthService({ config, mySqlService }) {
     let email = typeof profile.email === "string" ? profile.email : "";
     if (!email) {
       try {
-        const emails = await fetchGitHubJson(GITHUB_EMAILS_API_URL, accessToken);
-        const primary = Array.isArray(emails) ? emails.find((item) => item?.primary) : null;
+        const emails = await fetchGitHubJson(
+          GITHUB_EMAILS_API_URL,
+          accessToken,
+        );
+        const primary = Array.isArray(emails)
+          ? emails.find((item) => item?.primary)
+          : null;
         email = primary?.email || "";
       } catch {
         email = "";
@@ -180,12 +222,13 @@ export function createAuthService({ config, mySqlService }) {
   }
 
   async function getSessionFromRequest(req) {
-    if (!mySqlService.isEnabled()) return null;
+    if (!mySqlService.isEnabled()) return { status: "invalid" };
     await mySqlService.ensureReady();
     await cleanupExpiredAuthRecords();
     const cookies = parseCookies(req);
-    const sessionToken = readBearerToken(req) || cookies[config.SESSION_COOKIE_NAME] || "";
-    if (!sessionToken) return null;
+    const sessionToken =
+      readBearerToken(req) || cookies[config.SESSION_COOKIE_NAME] || "";
+    if (!sessionToken) return { status: "missing" };
 
     const [rows] = await mySqlService.query(
       `SELECT s.*, u.id AS user_id_value, u.github_id, u.login, u.name, u.avatar_url, u.profile_url, u.email,
@@ -197,33 +240,44 @@ export function createAuthService({ config, mySqlService }) {
       [hashToken(sessionToken)],
     );
     const row = rows[0];
-    if (!row) return null;
+    if (!row) return { status: "invalid" };
+    if (row.expires_at.getTime() <= Date.now()) {
+      return { status: "expired" };
+    }
 
-    await mySqlService.query("UPDATE auth_sessions SET updated_at = ? WHERE id = ?", [
-      new Date(),
-      row.id,
-    ]);
+    await mySqlService.query(
+      "UPDATE auth_sessions SET updated_at = ? WHERE id = ?",
+      [new Date(), row.id],
+    );
 
     return {
-      session: {
-        id: row.id,
-        user_id: row.user_id,
-        expiresAt: row.expires_at,
-      },
-      sessionToken,
-      user: {
-        id: row.user_id_value,
-        github_id: row.github_id,
-        login: row.login,
-        name: row.name,
-        avatar_url: row.avatar_url,
-        profile_url: row.profile_url,
-        email: row.email,
-        created_at: row.user_created_at,
-        updated_at: row.user_updated_at,
-        last_login_at: row.last_login_at,
+      status: "authenticated",
+      auth: {
+        session: {
+          id: row.id,
+          user_id: row.user_id,
+          expiresAt: row.expires_at,
+        },
+        sessionToken,
+        user: {
+          id: row.user_id_value,
+          github_id: row.github_id,
+          login: row.login,
+          name: row.name,
+          avatar_url: row.avatar_url,
+          profile_url: row.profile_url,
+          email: row.email,
+          created_at: row.user_created_at,
+          updated_at: row.user_updated_at,
+          last_login_at: row.last_login_at,
+        },
       },
     };
+  }
+
+  function sendAuthFailure(res, status) {
+    const failure = AUTH_FAILURES[status] || AUTH_FAILURES.invalid;
+    sendJson(res, 401, failure);
   }
 
   async function handleGitHubStart(req, res, url) {
@@ -355,11 +409,12 @@ export function createAuthService({ config, mySqlService }) {
       sendJson(res, 503, { error: "auth_not_configured" });
       return true;
     }
-    const auth = await getSessionFromRequest(req);
-    if (!auth) {
-      sendJson(res, 401, { error: "unauthorized" });
+    const resolution = await getSessionFromRequest(req);
+    if (resolution.status !== "authenticated") {
+      sendAuthFailure(res, resolution.status);
       return true;
     }
+    const auth = resolution.auth;
     sendJson(res, 200, {
       user: serializeUser(auth.user),
       expiresAt: auth.session.expiresAt,
@@ -373,7 +428,8 @@ export function createAuthService({ config, mySqlService }) {
       return true;
     }
     const cookies = parseCookies(req);
-    const token = readBearerToken(req) || cookies[config.SESSION_COOKIE_NAME] || "";
+    const token =
+      readBearerToken(req) || cookies[config.SESSION_COOKIE_NAME] || "";
     if (token) {
       await deleteSessionByToken(token);
     }
@@ -402,6 +458,7 @@ export function createAuthService({ config, mySqlService }) {
 
   return {
     getSessionFromRequest,
+    sendAuthFailure,
     handleRequest,
     isConfigured,
   };

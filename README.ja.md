@@ -86,12 +86,12 @@ pnpm build:win
 
 ```
 bz-launcher/
-├── games/                 # ゲームデータ保存ディレクトリ（複数パス設定可）
 ├── resources/             # アプリアイコン、プレースホルダー画像等
 ├── src/
 │   ├── main/              # Electron メインプロセス
 │   │   ├── index.ts          # エントリ：ウィンドウ管理、アプリライフサイクル
 │   │   ├── window.ts         # フローティングボールウィンドウ
+│   │   ├── chat-window.ts    # チャットポップアウトウィンドウ
 │   │   ├── ipc/              # IPC ハンドラー（game / room / market / stats / system / storage）
 │   │   ├── services/         # コアビジネスロジック
 │   │   │   ├── game/            # GameManager、GameLoader、GameAPI（V1/V2）
@@ -112,11 +112,10 @@ bz-launcher/
 │   │   └── index.html
 │   └── shared/            # メイン・レンダラー共有（型、定数、IPC チャンネル、プロトコル）
 ├── relay-server/          # 公式リレーサーバー（独立デプロイ）
-├── bz-games-website/      # 公式ウェブサイト
-├── bz-games-github-release-market/  # GitHub Release マーケットインデックス
+├── bz-games-admin/        # 管理パネル（フィードバック審査）
 └── electron.vite.config.ts
 ```
 
 > マーケットインデックスデータは独立した [bz-games-market](https://github.com/baozha2023/bz-games-market) リポジトリで管理され、二層マーケットアーキテクチャで配信されます。
 
-詳細な開発ガイドラインは `CLAUDE.md` を参照してください。
+開発ガイドラインは `CLAUDE.md` を、ゲーム開発者向けガイドは `DEVELOPER_GUIDE.md` を、Game API ドキュメントは `docs/GAME_API_V1_V2_REFERENCE.md` を、将来計画は `docs/ROADMAP.md` を参照してください。

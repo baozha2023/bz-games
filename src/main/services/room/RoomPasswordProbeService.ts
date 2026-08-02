@@ -1,11 +1,16 @@
 import { WebSocket } from "ws";
-import { DEFAULT_RELAY_PUBLIC_HOST, DEFAULT_RELAY_SERVER_URL, DEFAULT_RELAY_TOKEN } from "../../../shared/AppConstants";
+import {
+  DEFAULT_RELAY_PUBLIC_HOST,
+  DEFAULT_RELAY_SERVER_URL,
+  DEFAULT_RELAY_TOKEN,
+} from "../../../shared/AppConstants";
 import { requestInterceptor } from "../../utils/requestInterceptor";
 import { mapRelayCloseError } from "../../utils/relayCloseError";
 
 export interface RoomPasswordProbeResult {
   success: boolean;
   hasPassword: boolean;
+  hostId?: string;
   error?: string;
 }
 
@@ -44,11 +49,19 @@ class RoomPasswordProbeService {
 
       ws.on("message", (data) => {
         try {
-          const message = JSON.parse(Buffer.isBuffer(data) ? data.toString("utf8") : Buffer.concat(data as Buffer[]).toString("utf8"));
+          const message = JSON.parse(
+            Buffer.isBuffer(data)
+              ? data.toString("utf8")
+              : Buffer.concat(data as Buffer[]).toString("utf8"),
+          );
           if (message?.type !== "room:password:probe:ack") return;
           finish({
             success: true,
             hasPassword: Boolean(message.payload?.hasPassword),
+            hostId:
+              typeof message.payload?.hostId === "string"
+                ? message.payload.hostId
+                : undefined,
           });
         } catch {
           finish({ success: false, hasPassword: false, error: "probe_failed" });
@@ -60,7 +73,11 @@ class RoomPasswordProbeService {
       });
 
       ws.once("close", (code, reason) => {
-        finish({ success: false, hasPassword: false, error: mapRelayCloseError(code, reason, `probe_closed_${code}`) });
+        finish({
+          success: false,
+          hasPassword: false,
+          error: mapRelayCloseError(code, reason, `probe_closed_${code}`),
+        });
       });
     });
   }
@@ -69,7 +86,9 @@ class RoomPasswordProbeService {
     const relayUrl = this.toWebSocketUrl(DEFAULT_RELAY_SERVER_URL);
     const roomCode = address.trim().split(":").pop() || "";
     return new Promise((resolve) => {
-      const ws = new WebSocket(requestInterceptor.buildWebSocketUrl(relayUrl), { rejectUnauthorized: false });
+      const ws = new WebSocket(requestInterceptor.buildWebSocketUrl(relayUrl), {
+        rejectUnauthorized: false,
+      });
       let settled = false;
       const finish = (result: RoomPasswordProbeResult) => {
         if (settled) return;
@@ -84,22 +103,32 @@ class RoomPasswordProbeService {
       }, 5000);
 
       ws.once("open", () => {
-        ws.send(JSON.stringify({
-          type: "relay:room:password:probe",
-          payload: {
-            token: DEFAULT_RELAY_TOKEN,
-            roomCode,
-          },
-        }));
+        ws.send(
+          JSON.stringify({
+            type: "relay:room:password:probe",
+            payload: {
+              token: DEFAULT_RELAY_TOKEN,
+              roomCode,
+            },
+          }),
+        );
       });
 
       ws.on("message", (data) => {
         try {
-          const message = JSON.parse(Buffer.isBuffer(data) ? data.toString("utf8") : Buffer.concat(data as Buffer[]).toString("utf8"));
+          const message = JSON.parse(
+            Buffer.isBuffer(data)
+              ? data.toString("utf8")
+              : Buffer.concat(data as Buffer[]).toString("utf8"),
+          );
           if (message?.type === "relay:room:password:probe:ack") {
             finish({
               success: true,
               hasPassword: Boolean(message.payload?.hasPassword),
+              hostId:
+                typeof message.payload?.hostId === "string"
+                  ? message.payload.hostId
+                  : undefined,
             });
             return;
           }
@@ -120,19 +149,29 @@ class RoomPasswordProbeService {
       });
 
       ws.once("close", (code, reason) => {
-        finish({ success: false, hasPassword: false, error: mapRelayCloseError(code, reason, `probe_closed_${code}`) });
+        finish({
+          success: false,
+          hasPassword: false,
+          error: mapRelayCloseError(code, reason, `probe_closed_${code}`),
+        });
       });
     });
   }
 
   private isRelayAddress(address: string) {
-    return new RegExp(`^${this.escapeRegExp(DEFAULT_RELAY_PUBLIC_HOST)}:\\d+$`, "i").test(address);
+    return new RegExp(
+      `^${this.escapeRegExp(DEFAULT_RELAY_PUBLIC_HOST)}:\\d+$`,
+      "i",
+    ).test(address);
   }
 
   private toWebSocketUrl(address: string) {
-    if (address.startsWith("ws://") || address.startsWith("wss://")) return address;
-    if (address.startsWith("https://")) return `wss://${address.slice("https://".length)}`;
-    if (address.startsWith("http://")) return `ws://${address.slice("http://".length)}`;
+    if (address.startsWith("ws://") || address.startsWith("wss://"))
+      return address;
+    if (address.startsWith("https://"))
+      return `wss://${address.slice("https://".length)}`;
+    if (address.startsWith("http://"))
+      return `ws://${address.slice("http://".length)}`;
     return `ws://${address}`;
   }
 

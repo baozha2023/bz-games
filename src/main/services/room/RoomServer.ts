@@ -38,6 +38,7 @@ export class RoomServer {
   private relayConnections: Set<RelaySocket> = new Set();
   private kickedPlayers: Set<string> = new Set();
   private heartbeatInterval: NodeJS.Timeout | null = null;
+  private stopPromise: Promise<void> | null = null;
   private localRelayHandler:
     | ((gameId: string, msg: RoomMessage) => void)
     | null = null;
@@ -93,13 +94,23 @@ export class RoomServer {
   }
 
   async stop(): Promise<void> {
+    if (this.stopPromise) return this.stopPromise;
+    const activeStop = this.performStop().finally(() => {
+      if (this.stopPromise === activeStop) this.stopPromise = null;
+    });
+    this.stopPromise = activeStop;
+    return activeStop;
+  }
+
+  private async performStop(): Promise<void> {
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);
       this.heartbeatInterval = null;
     }
     this.stateSyncHandler = null;
 
-    if (this.wss) {
+    const activeServer = this.wss;
+    if (activeServer) {
       if (this.room) {
         this.broadcast({ type: "room:disbanded", payload: {} });
       }
@@ -107,15 +118,11 @@ export class RoomServer {
         setTimeout(resolve, RoomConstants.ROOM_DISBAND_BROADCAST_DELAY_MS),
       );
 
-      await new Promise<void>((resolve) => {
-        this.wss?.close(() => {
-          this.wss = null;
-          resolve();
-        });
-
-        this.playerConnections.forEach((ws) => ws.close());
-        this.playerConnections.clear();
-      });
+      this.relayConnections.forEach((socket) => socket.close());
+      this.playerConnections.clear();
+      this.relayConnections.clear();
+      await this.closeWebSocketServer(activeServer);
+      if (this.wss === activeServer) this.wss = null;
     }
 
     this.room = null;
@@ -124,6 +131,35 @@ export class RoomServer {
     this.playerConnections.clear();
     this.relayConnections.clear();
     this.stateSyncHandler = null;
+  }
+
+  private closeWebSocketServer(server: WebSocketServer): Promise<void> {
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(forceCloseTimer);
+        clearTimeout(hardTimeoutTimer);
+        resolve();
+      };
+      const terminateRemainingClients = () => {
+        server.clients.forEach((socket) => socket.terminate());
+      };
+      const forceCloseTimer = setTimeout(
+        terminateRemainingClients,
+        RoomConstants.ROOM_SERVER_CLOSE_GRACE_MS,
+      );
+      const hardTimeoutTimer = setTimeout(() => {
+        terminateRemainingClients();
+        finish();
+      }, RoomConstants.ROOM_SERVER_CLOSE_TIMEOUT_MS);
+
+      server.close(finish);
+      server.clients.forEach((socket) => {
+        if (socket.readyState === WebSocket.OPEN) socket.close();
+      });
+    });
   }
 
   broadcast(msg: RoomMessage, exclude?: RoomSocket) {
@@ -306,6 +342,7 @@ export class RoomServer {
           type: "room:password:probe:ack",
           payload: {
             hasPassword: Boolean(this.room?.hasPassword),
+            hostId: this.room.hostId,
           } as RoomPasswordProbeAckPayload,
         });
         break;

@@ -27,6 +27,50 @@ const PNG_SIGNATURE = Buffer.from([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
 ]);
 
+const RENDERER_WRITABLE_SETTING_KEYS = [
+  "playerName",
+  "avatar",
+  "language",
+  "theme",
+  "defaultRoomPort",
+  "closeBehavior",
+  "autoLaunch",
+  "downloadFloatBall",
+  "sensitiveWordFilter",
+  "githubToken",
+  "libraryLayout",
+  "lastJoinRoomAddress",
+  "chatInputHeight",
+] as const satisfies readonly (keyof AppSettings)[];
+
+type RendererWritableSettingKey =
+  (typeof RENDERER_WRITABLE_SETTING_KEYS)[number];
+type RendererWritableSettings = Partial<
+  Pick<AppSettings, RendererWritableSettingKey>
+>;
+
+/**
+ * Renderer settings are untrusted. Only fields that have renderer-owned UI or
+ * renderer runtime state may cross this IPC boundary. In particular,
+ * feedbackHistory and authentication/identity fields are main-process-owned.
+ */
+function selectRendererWritableSettings(
+  settings: unknown,
+): RendererWritableSettings {
+  if (!settings || typeof settings !== "object" || Array.isArray(settings)) {
+    return {};
+  }
+
+  const source = settings as Partial<AppSettings>;
+  const selected: Record<string, unknown> = {};
+  for (const key of RENDERER_WRITABLE_SETTING_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(source, key)) {
+      selected[key] = source[key];
+    }
+  }
+  return selected as RendererWritableSettings;
+}
+
 function decodePngDataUrl(dataUrl: unknown): Buffer {
   if (typeof dataUrl !== "string" || !dataUrl.startsWith(PNG_DATA_URL_PREFIX)) {
     throw new Error("invalid_png_data_url");
@@ -116,8 +160,12 @@ export function registerSystemIpc() {
     return loadSensitiveWords();
   });
 
-  ipcMain.handle(IPC.SYSTEM_CLOUD_GET_STATUS, async () => {
-    return await cloudSyncService.getStatus();
+  ipcMain.handle(IPC.SYSTEM_CLOUD_GET_LOCAL_STATUS, () => {
+    return cloudSyncService.getLocalStatus();
+  });
+
+  ipcMain.handle(IPC.SYSTEM_CLOUD_GET_SNAPSHOT_META, async () => {
+    return await cloudSyncService.getSnapshotMeta();
   });
 
   ipcMain.handle(IPC.SYSTEM_CLOUD_LOGIN_GITHUB, async () => {
@@ -136,8 +184,8 @@ export function registerSystemIpc() {
     });
   });
 
-  ipcMain.handle(IPC.SYSTEM_FEEDBACK_SELECT_IMAGES, () =>
-    feedbackService.selectImages(),
+  ipcMain.handle(IPC.SYSTEM_FEEDBACK_SELECT_IMAGES, (_, selectionId: unknown) =>
+    feedbackService.selectImages(selectionId),
   );
 
   ipcMain.handle(
@@ -155,14 +203,21 @@ export function registerSystemIpc() {
     feedbackService.getHistory(),
   );
 
-  ipcMain.handle(IPC.SYSTEM_SAVE_SETTINGS, async (_, settings: AppSettings) => {
-    logger.info("[SystemIPC] Saving settings:", settings);
+  ipcMain.handle(IPC.SYSTEM_FEEDBACK_GET_DETAIL, (_, feedbackId: unknown) =>
+    feedbackService.getDetail(feedbackId),
+  );
+
+  ipcMain.handle(IPC.SYSTEM_SAVE_SETTINGS, async (_, settings: unknown) => {
+    logger.info("[SystemIPC] Saving settings");
     try {
-      storeService.saveSettings(settings);
-      app.setLoginItemSettings({
-        openAtLogin: settings.autoLaunch,
-      });
-      applyFloatBallSetting(settings);
+      const safeSettings = selectRendererWritableSettings(settings);
+      storeService.saveSettings(safeSettings);
+      if (typeof safeSettings.autoLaunch === "boolean") {
+        app.setLoginItemSettings({
+          openAtLogin: safeSettings.autoLaunch,
+        });
+      }
+      applyFloatBallSetting(safeSettings);
       return true;
     } catch (error) {
       logger.error("[SystemIPC] Failed to save settings:", error);
@@ -172,9 +227,10 @@ export function registerSystemIpc() {
 
   ipcMain.handle(
     IPC.SYSTEM_SAVE_PARTIAL_SETTINGS,
-    async (_, partial: Partial<AppSettings>) => {
-      storeService.saveSettings(partial);
-      applyFloatBallSetting(partial);
+    async (_, partial: unknown) => {
+      const safeSettings = selectRendererWritableSettings(partial);
+      storeService.saveSettings(safeSettings);
+      applyFloatBallSetting(safeSettings);
     },
   );
 

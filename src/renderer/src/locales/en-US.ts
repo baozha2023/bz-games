@@ -24,11 +24,29 @@ export default {
     historyTitle: "Feedback History",
     historyEmpty: "No feedback submitted yet",
     historySubmittedAt: "Submitted at {time}",
+    historyStatus: "Status",
+    historyUpdatedAt: "Updated at",
+    historyContent: "Feedback",
+    historyReply: "Official reply",
+    historyNoContent: "(Images only)",
+    historyNoReply: "No reply yet",
+    statuses: {
+      new: "New",
+      reviewing: "Reviewing",
+      planned: "Planned",
+      resolved: "Resolved",
+      closed: "Closed",
+    },
     successTitle: "Thanks for your feedback",
     successDescription: "Submitted successfully. Feedback ID: {id}",
     cooldownUntil: "You can send feedback again after {time}.",
     errors: {
       too_many_images: "You can select up to 4 images",
+      duplicate_image: "This image has already been selected",
+      invalid_feedback_id: "The feedback ID is invalid",
+      feedback_not_found: "The feedback no longer exists",
+      forbidden: "You do not have access to this feedback",
+      image_not_found: "The feedback image no longer exists",
       image_too_large: "An image exceeds 5 MiB",
       unsupported_image_type: "Only PNG, JPEG, and WebP images are supported",
       image_type_mismatch: "The image content does not match its declared type",
@@ -43,8 +61,10 @@ export default {
       feedback_network_failed: "Network connection failed; please try again",
       feedback_invalid_response:
         "The service returned an invalid response; please try again",
-      unauthorized:
-        "Your GitHub session expired; sign in again or submit anonymously",
+      unauthorized: "Sign in with GitHub to view this feedback",
+      session_expired: "Your GitHub session expired; sign in again to view it",
+      session_invalid:
+        "Your GitHub session is invalid; sign in again to view it",
       feedback_storage_not_configured: "Feedback storage is not configured",
       image_storage_not_configured: "Image storage is not configured",
       payload_too_large: "The submission is too large",
@@ -394,6 +414,8 @@ export default {
       gameStarted: "Game already started",
       gameIdMismatch: "Game ID mismatch",
       ownRoom: "This is your own room. Open the current room instead.",
+      closeCurrentRoomFailed:
+        "Failed to close the current room. Please try again.",
       passwordRequired: "This room requires a password",
       passwordIncorrect: "Incorrect room password",
       manifestInvalid:
@@ -530,10 +552,13 @@ export default {
     cloudErrors: {
       cloud_not_configured: "Cloud sync is not configured",
       unauthorized: "Please complete GitHub authorization first",
+      session_expired: "Your GitHub login has expired. Please sign in again.",
+      session_invalid: "Your GitHub login is invalid. Please sign in again.",
       snapshot_not_found: "No platform snapshot exists. Upload one first.",
       snapshot_too_large: "Platform snapshot exceeds the cloud sync limit",
       cloud_upload_failed: "Cloud upload failed. Please try again later.",
-      internal_error: "The cloud sync service encountered an error. Please try again later.",
+      internal_error:
+        "The cloud sync service encountered an error. Please try again later.",
       cloud_snapshot_invalid: "Platform snapshot format is invalid",
       cloud_hash_mismatch:
         "Platform snapshot verification failed. Please try again.",

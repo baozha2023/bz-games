@@ -93,6 +93,73 @@ export interface FeedbackHistoryItem {
   submittedAt: number;
 }
 
+export type FeedbackStatus =
+  | "new"
+  | "reviewing"
+  | "planned"
+  | "resolved"
+  | "closed";
+
+export interface FeedbackDetailImage {
+  id: string;
+  fileName: string;
+  contentType: string;
+  size: number;
+  previewUrl: string;
+}
+
+export interface FeedbackDetail {
+  id: string;
+  content: string;
+  status: FeedbackStatus;
+  reply: string;
+  imageCount: number;
+  createdAt: string;
+  updatedAt: string;
+  images: FeedbackDetailImage[];
+}
+
+export interface PlatformCloudSnapshotMeta {
+  version: number;
+  size: number;
+  sha256: string;
+  contentType: string;
+  updatedAt: string;
+}
+
+export interface LocalCloudStatus {
+  configured: boolean;
+  authenticated: boolean;
+  userLogin: string;
+  userName: string;
+  userProfileUrl: string;
+  lastUploadedAt: string;
+}
+
+export type CloudAuthChangedReason =
+  | "login"
+  | "session_expired"
+  | "session_invalid";
+
+export interface CloudAuthChangedPayload {
+  reason: CloudAuthChangedReason;
+  status: LocalCloudStatus;
+}
+
+export interface CloudSyncResult {
+  success: boolean;
+  lastUploadedAt?: string;
+  error?: string;
+  message?: string;
+}
+
+export interface CloudSnapshotMetaResult {
+  success: boolean;
+  snapshot: PlatformCloudSnapshotMeta | null;
+  error?: string;
+  message?: string;
+}
+
 export interface AppSettings {
   playerName: string;
   playerId: string;

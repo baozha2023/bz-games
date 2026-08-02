@@ -27,18 +27,18 @@
 
 **主要字段**
 
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| `id` | `BIGINT UNSIGNED` | 自增主键 |
-| `github_id` | `VARCHAR(64)` | GitHub 用户 ID，唯一 |
-| `login` | `VARCHAR(255)` | GitHub 登录名 |
-| `name` | `VARCHAR(255)` | GitHub 显示名 |
-| `avatar_url` | `TEXT` | GitHub 头像地址 |
-| `profile_url` | `TEXT` | GitHub 主页地址 |
-| `email` | `VARCHAR(255)` | GitHub 邮箱，可能为空 |
-| `created_at` | `DATETIME(3)` | 首次创建时间 |
-| `updated_at` | `DATETIME(3)` | 最近资料更新时间 |
-| `last_login_at` | `DATETIME(3)` | 最近一次登录时间 |
+| 字段            | 类型              | 说明                  |
+| --------------- | ----------------- | --------------------- |
+| `id`            | `BIGINT UNSIGNED` | 自增主键              |
+| `github_id`     | `VARCHAR(64)`     | GitHub 用户 ID，唯一  |
+| `login`         | `VARCHAR(255)`    | GitHub 登录名         |
+| `name`          | `VARCHAR(255)`    | GitHub 显示名         |
+| `avatar_url`    | `TEXT`            | GitHub 头像地址       |
+| `profile_url`   | `TEXT`            | GitHub 主页地址       |
+| `email`         | `VARCHAR(255)`    | GitHub 邮箱，可能为空 |
+| `created_at`    | `DATETIME(3)`     | 首次创建时间          |
+| `updated_at`    | `DATETIME(3)`     | 最近资料更新时间      |
+| `last_login_at` | `DATETIME(3)`     | 最近一次登录时间      |
 
 **示例数据**
 
@@ -64,14 +64,14 @@ last_login_at: 2026-06-11 21:08:30.125
 
 **主要字段**
 
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| `id` | `BIGINT UNSIGNED` | 自增主键 |
-| `token_hash` | `CHAR(64)` | 会话 token 的 SHA-256 哈希，唯一 |
-| `user_id` | `BIGINT UNSIGNED` | 关联 `users.id` |
-| `created_at` | `DATETIME(3)` | 会话创建时间 |
-| `updated_at` | `DATETIME(3)` | 最近使用时间 |
-| `expires_at` | `DATETIME(3)` | 过期时间 |
+| 字段         | 类型              | 说明                             |
+| ------------ | ----------------- | -------------------------------- |
+| `id`         | `BIGINT UNSIGNED` | 自增主键                         |
+| `token_hash` | `CHAR(64)`        | 会话 token 的 SHA-256 哈希，唯一 |
+| `user_id`    | `BIGINT UNSIGNED` | 关联 `users.id`                  |
+| `created_at` | `DATETIME(3)`     | 会话创建时间                     |
+| `updated_at` | `DATETIME(3)`     | 最近使用时间                     |
+| `expires_at` | `DATETIME(3)`     | 过期时间                         |
 
 **示例数据**
 
@@ -95,13 +95,13 @@ expires_at: 2026-07-11 21:08:31.002
 
 **主要字段**
 
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| `id` | `BIGINT UNSIGNED` | 自增主键 |
-| `state_hash` | `CHAR(64)` | OAuth state 的 SHA-256 哈希，唯一 |
-| `return_to` | `TEXT` | 登录完成后要跳转的地址 |
-| `created_at` | `DATETIME(3)` | 创建时间 |
-| `expires_at` | `DATETIME(3)` | 过期时间 |
+| 字段         | 类型              | 说明                              |
+| ------------ | ----------------- | --------------------------------- |
+| `id`         | `BIGINT UNSIGNED` | 自增主键                          |
+| `state_hash` | `CHAR(64)`        | OAuth state 的 SHA-256 哈希，唯一 |
+| `return_to`  | `TEXT`            | 登录完成后要跳转的地址            |
+| `created_at` | `DATETIME(3)`     | 创建时间                          |
+| `expires_at` | `DATETIME(3)`     | 过期时间                          |
 
 **示例数据**
 
@@ -145,7 +145,7 @@ The SQL dump omits the local autoincrement implementation column `stats_reports.
 
 ### MySQL `feedback`
 
-保存反馈正文、处理状态、管理备注、提交者类型、可选 GitHub 用户、
+保存反馈正文、处理状态、面向用户的回复、管理备注、提交者类型、可选 GitHub 用户、
 客户端版本、平台、图片数量和创建/更新时间。匿名 IP、`playerId`
 和客户端 ID均不持久化。
 
@@ -156,6 +156,9 @@ The SQL dump omits the local autoincrement implementation column `stats_reports.
 
 两张表都由 `createMySqlService().ensureSchema()` 使用完整的
 `CREATE TABLE IF NOT EXISTS` 自动初始化，不提供独立迁移脚本。
+
+客户端本地历史只保存反馈编号和提交时间。展开历史记录时，通过用户反馈详情接口
+读取正文、处理状态、回复和图片；管理备注不会返回给客户端。
 
 ### MongoDB GridFS
 

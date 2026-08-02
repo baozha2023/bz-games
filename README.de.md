@@ -86,12 +86,12 @@ Die Build-Artefakte befinden sich im `dist`-Verzeichnis.
 
 ```
 bz-launcher/
-├── games/                 # Spieldaten-Verzeichnis (mehrere Pfade konfigurierbar)
 ├── resources/             # App-Icons, Platzhalterbilder und statische Ressourcen
 ├── src/
 │   ├── main/              # Electron-Hauptprozess
 │   │   ├── index.ts          # Einstieg: Fensterverwaltung, App-Lebenszyklus
 │   │   ├── window.ts         # Schwebendes Ball-Fenster
+│   │   ├── chat-window.ts    # Chat-Popup-Fenster
 │   │   ├── ipc/              # IPC-Handler (game / room / market / stats / system / storage)
 │   │   ├── services/         # Kerngeschäftslogik
 │   │   │   ├── game/            # GameManager, GameLoader, GameAPI (V1/V2)
@@ -112,11 +112,10 @@ bz-launcher/
 │   │   └── index.html
 │   └── shared/            # Gemeinsam genutzt (Typen, Konstanten, IPC-Kanäle, Protokolle)
 ├── relay-server/          # Offizieller Relay-Server (eigenständige Bereitstellung)
-├── bz-games-website/      # Offizielle Website
-├── bz-games-github-release-market/  # GitHub Release Marktindex
+├── bz-games-admin/        # Admin-Panel (Feedback-Prüfung)
 └── electron.vite.config.ts
 ```
 
 > Die Markt-Indexdaten werden im unabhängigen [bz-games-market](https://github.com/baozha2023/bz-games-market)-Repository verwaltet und über eine zweistufige Marktarchitektur verteilt.
 
-Weitere Details finden Sie in den Entwicklungsrichtlinien in `CLAUDE.md`.
+Weitere Details: Entwicklungsrichtlinien `CLAUDE.md`, Spieleentwickler `DEVELOPER_GUIDE.md`, Game API `docs/GAME_API_V1_V2_REFERENCE.md`, Roadmap `docs/ROADMAP.md`.

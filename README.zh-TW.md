@@ -86,12 +86,12 @@ pnpm build:win
 
 ```
 bz-launcher/
-├── games/                 # 遊戲資料儲存目錄（可設定多路徑）
 ├── resources/             # 應用圖示、佔位圖等靜態資源
 ├── src/
 │   ├── main/              # Electron 主程序
 │   │   ├── index.ts          # 入口：視窗管理、應用生命週期
 │   │   ├── window.ts         # 懸浮球視窗
+│   │   ├── chat-window.ts    # 聊天彈出視窗
 │   │   ├── ipc/              # IPC 處理器（game / room / market / stats / system / storage）
 │   │   ├── services/         # 核心業務
 │   │   │   ├── game/            # GameManager、GameLoader、GameAPI（V1/V2）
@@ -112,11 +112,10 @@ bz-launcher/
 │   │   └── index.html
 │   └── shared/            # 前後端共享（型別、常數、IPC 通道、協定）
 ├── relay-server/          # 官方中繼伺服器（獨立部署）
-├── bz-games-website/      # 官方網站
-├── bz-games-github-release-market/  # GitHub Release 市場索引
+├── bz-games-admin/        # 管理後台（回饋審核）
 └── electron.vite.config.ts
 ```
 
 > 市場索引資料由獨立的 [bz-games-market](https://github.com/baozha2023/bz-games-market) 倉庫維護，平台透過兩級市場架構拉取展示。
 
-更多開發規範請參考 `CLAUDE.md`。
+更多開發規範請參考 `CLAUDE.md`，遊戲開發者指南請參考 `DEVELOPER_GUIDE.md`，Game API 文件見 `docs/GAME_API_V1_V2_REFERENCE.md`，未來規劃見 `docs/ROADMAP.md`。

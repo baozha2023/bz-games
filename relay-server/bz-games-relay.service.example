@@ -40,6 +40,7 @@ Environment=GITHUB_CALLBACK_URL=https://relay.example.com/auth/github/callback
 Environment="GITHUB_OAUTH_SCOPE=read:user user:email"
 Environment=SESSION_COOKIE_NAME=bz_games_session
 Environment=OAUTH_SESSION_TTL_MS=2592000000
+Environment=AUTH_EXPIRED_SESSION_RETENTION_MS=604800000
 Environment=OAUTH_STATE_TTL_MS=600000
 Restart=always
 RestartSec=3

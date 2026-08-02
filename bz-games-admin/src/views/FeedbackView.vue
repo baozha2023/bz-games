@@ -47,54 +47,95 @@
     v-model:show="showDetail"
     preset="card"
     title="反馈详情"
-    style="width: min(900px, 94vw)"
+    style="
+      width: 72vw;
+      height: 78vh;
+      max-width: calc(100vw - 32px);
+      max-height: calc(100vh - 32px);
+    "
+    content-style="display: flex; flex: 1; min-height: 0; overflow: hidden"
+    header-style="flex-shrink: 0"
+    action-style="flex-shrink: 0"
   >
-    <n-spin :show="detailLoading">
-      <n-descriptions v-if="detail" bordered :column="2">
-        <n-descriptions-item label="编号">{{ detail.id }}</n-descriptions-item>
-        <n-descriptions-item label="提交时间">
-          {{ formatTime(detail.createdAt) }}
-        </n-descriptions-item>
-        <n-descriptions-item label="提交身份">
-          {{ detail.submitterType === "github" ? detail.githubLogin : "匿名" }}
-        </n-descriptions-item>
-        <n-descriptions-item label="客户端">
-          {{ detail.platform || "-" }} / {{ detail.appVersion || "-" }}
-        </n-descriptions-item>
-        <n-descriptions-item label="内容" :span="2">
-          <div class="feedback-content">
-            {{ detail.content || "（仅图片）" }}
+    <n-spin :show="detailLoading" class="feedback-detail-spin">
+      <div v-if="detail" class="feedback-detail-scroll">
+        <div class="feedback-detail-layout">
+          <div class="feedback-detail-column">
+            <n-descriptions bordered :column="2" size="small">
+              <n-descriptions-item label="编号" :span="2">
+                {{ detail.id }}
+              </n-descriptions-item>
+              <n-descriptions-item label="提交时间">
+                {{ formatTime(detail.createdAt) }}
+              </n-descriptions-item>
+              <n-descriptions-item label="更新时间">
+                {{ formatTime(detail.updatedAt) }}
+              </n-descriptions-item>
+              <n-descriptions-item label="提交身份">
+                {{
+                  detail.submitterType === "github"
+                    ? detail.githubLogin
+                    : "匿名"
+                }}
+              </n-descriptions-item>
+              <n-descriptions-item label="客户端">
+                {{ detail.platform || "-" }} / {{ detail.appVersion || "-" }}
+              </n-descriptions-item>
+              <n-descriptions-item label="反馈内容" :span="2">
+                <div class="feedback-content">
+                  {{ detail.content || "（仅图片）" }}
+                </div>
+              </n-descriptions-item>
+            </n-descriptions>
+
+            <div v-if="detail.images.length" class="detail-images">
+              <div
+                v-for="image in detail.images"
+                :key="image.id"
+                class="detail-image-item"
+              >
+                <div class="detail-image-preview">
+                  <n-image
+                    width="180"
+                    height="180"
+                    object-fit="contain"
+                    :src="imageUrl(detail.id, image.id)"
+                    :alt="image.fileName"
+                  />
+                </div>
+                <div class="detail-image-name">{{ image.fileName }}</div>
+              </div>
+            </div>
           </div>
-        </n-descriptions-item>
-      </n-descriptions>
 
-      <div v-if="detail?.images.length" class="detail-images">
-        <n-image
-          v-for="image in detail.images"
-          :key="image.id"
-          width="150"
-          height="150"
-          object-fit="cover"
-          :src="imageUrl(detail.id, image.id)"
-          :alt="image.fileName"
-        />
+          <div class="feedback-detail-column feedback-edit-column">
+            <n-form label-placement="top">
+              <n-form-item label="处理状态">
+                <n-select v-model:value="editStatus" :options="statusOptions" />
+              </n-form-item>
+              <n-form-item label="给用户的回复">
+                <n-input
+                  v-model:value="reply"
+                  type="textarea"
+                  maxlength="5000"
+                  show-count
+                  placeholder="此内容会展示在客户端的历史记录中"
+                  :autosize="{ minRows: 6, maxRows: 12 }"
+                />
+              </n-form-item>
+              <n-form-item label="管理备注（仅管理员可见）">
+                <n-input
+                  v-model:value="adminNote"
+                  type="textarea"
+                  maxlength="5000"
+                  show-count
+                  :autosize="{ minRows: 5, maxRows: 10 }"
+                />
+              </n-form-item>
+            </n-form>
+          </div>
+        </div>
       </div>
-
-      <n-divider />
-      <n-form v-if="detail" label-placement="top">
-        <n-form-item label="处理状态">
-          <n-select v-model:value="editStatus" :options="statusOptions" />
-        </n-form-item>
-        <n-form-item label="管理备注">
-          <n-input
-            v-model:value="adminNote"
-            type="textarea"
-            maxlength="5000"
-            show-count
-            :autosize="{ minRows: 3, maxRows: 8 }"
-          />
-        </n-form-item>
-      </n-form>
     </n-spin>
     <template #action>
       <n-space justify="end">
@@ -134,8 +175,10 @@ interface FeedbackItem {
 
 interface FeedbackDetail extends FeedbackItem {
   adminNote: string;
+  reply: string;
   appVersion: string;
   platform: string;
+  updatedAt: string;
   images: Array<{
     id: string;
     fileName: string;
@@ -186,6 +229,7 @@ const saving = ref(false);
 const detail = ref<FeedbackDetail | null>(null);
 const editStatus = ref<FeedbackStatus>("new");
 const adminNote = ref("");
+const reply = ref("");
 let loadSequence = 0;
 
 function formatTime(value: string) {
@@ -243,6 +287,7 @@ async function openDetail(row: FeedbackItem) {
     detail.value = body;
     editStatus.value = body.status;
     adminNote.value = body.adminNote;
+    reply.value = body.reply;
   } catch (error) {
     await handleError(error);
     showDetail.value = false;
@@ -262,6 +307,7 @@ async function saveDetail() {
         body: JSON.stringify({
           status: editStatus.value,
           adminNote: adminNote.value,
+          reply: reply.value,
         }),
       },
     );
@@ -344,3 +390,69 @@ const columns: DataTableColumns<FeedbackItem> = [
 
 onMounted(load);
 </script>
+
+<style scoped>
+.feedback-detail-spin,
+.feedback-detail-spin :deep(.n-spin-content) {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.feedback-detail-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.75fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.feedback-detail-scroll {
+  box-sizing: border-box;
+  height: 100%;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: scroll;
+  padding-right: 12px;
+  padding-bottom: 20px;
+  scrollbar-gutter: stable;
+}
+
+.feedback-edit-column {
+  padding-left: 20px;
+  border-left: 1px solid var(--n-border-color);
+}
+
+.feedback-content {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.detail-images {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 180px);
+  gap: 18px;
+  margin-top: 20px;
+}
+
+.detail-image-item {
+  min-width: 0;
+}
+
+.detail-image-preview {
+  display: grid;
+  width: 180px;
+  height: 180px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--n-border-color);
+  border-radius: 8px;
+  background: #f7f8fa;
+}
+
+.detail-image-name {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+</style>

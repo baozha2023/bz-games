@@ -10,6 +10,16 @@ import {
   importCloudSqlDump,
 } from "../storage/database/BzGamesDatabase";
 import { openExternalHttpUrl } from "../../utils/externalUrl";
+import { mainWindow } from "../../window";
+import { IPC } from "../../../shared/ipc-channels";
+import type {
+  CloudAuthChangedPayload,
+  CloudAuthChangedReason,
+  CloudSnapshotMetaResult,
+  CloudSyncResult,
+  LocalCloudStatus,
+  PlatformCloudSnapshotMeta,
+} from "../../../shared/types";
 
 export type CloudSyncProgressStage =
   | "checking"
@@ -25,35 +35,12 @@ export interface PlatformCloudSnapshot {
   databaseSql: string;
 }
 
-export interface PlatformCloudSnapshotMeta {
-  version: number;
-  size: number;
-  sha256: string;
-  contentType: string;
-  updatedAt: string;
-}
-
 export interface CloudSyncProgress {
   stage: CloudSyncProgressStage;
   percentage: number;
 }
 
-export interface CloudSyncStatus {
-  configured: boolean;
-  authenticated: boolean;
-  userLogin: string;
-  userName: string;
-  userProfileUrl: string;
-  lastUploadedAt: string;
-  snapshot: PlatformCloudSnapshotMeta | null;
-}
-
 type CloudSyncProgressHandler = (progress: CloudSyncProgress) => void;
-type CloudSyncResult = {
-  success: boolean;
-  lastUploadedAt?: string;
-  error?: string;
-};
 
 function normalizeRelayHttpBase(): string {
   const relayUrl = DEFAULT_RELAY_SERVER_URL.trim();
@@ -143,84 +130,58 @@ class CloudSyncService {
       cloudUserName: params.get("name") || "",
       cloudUserProfileUrl: params.get("profile_url") || "",
     });
+    this.emitAuthChanged("login");
     return true;
   }
 
-  async getStatus(): Promise<CloudSyncStatus> {
+  getLocalStatus(): LocalCloudStatus {
     const settings = storeService.getSettings();
-    const status: CloudSyncStatus = {
+    const authenticated = Boolean(settings.cloudSessionToken);
+    return {
       configured: this.isConfigured(),
-      authenticated: Boolean(settings.cloudSessionToken),
-      userLogin: settings.cloudUserLogin || "",
-      userName: settings.cloudUserName || "",
-      userProfileUrl: settings.cloudUserProfileUrl || "",
+      authenticated,
+      userLogin: authenticated ? settings.cloudUserLogin || "" : "",
+      userName: authenticated ? settings.cloudUserName || "" : "",
+      userProfileUrl: authenticated ? settings.cloudUserProfileUrl || "" : "",
       lastUploadedAt: settings.cloudLastUploadedAt || "",
-      snapshot: null,
     };
-    if (!this.baseUrl || !settings.cloudSessionToken) return status;
+  }
 
-    const authUrl = `${this.baseUrl}/api/auth/me`;
-    const authResponse = await fetch(authUrl, {
-      headers: getCloudHeaders(authUrl),
-    });
-    if (authResponse.status === 401) {
-      this.clearCloudIdentity();
-      return {
-        ...status,
-        authenticated: false,
-        userLogin: "",
-        userName: "",
-        userProfileUrl: "",
-      };
+  async getSnapshotMeta(): Promise<CloudSnapshotMetaResult> {
+    if (!this.baseUrl) {
+      return { success: false, snapshot: null, error: "cloud_not_configured" };
     }
-    if (authResponse.ok) {
-      const authBody = (await authResponse.json()) as {
-        user?: { login?: string; name?: string; profileUrl?: string };
-        expiresAt?: string;
-      };
-      status.userLogin = authBody.user?.login || status.userLogin;
-      status.userName = authBody.user?.name || status.userName;
-      status.userProfileUrl =
-        authBody.user?.profileUrl || status.userProfileUrl;
-      storeService.saveSettings({
-        cloudUserLogin: status.userLogin,
-        cloudUserName: status.userName,
-        cloudUserProfileUrl: status.userProfileUrl,
-        cloudSessionExpiresAt:
-          authBody.expiresAt || settings.cloudSessionExpiresAt || "",
-      });
+    if (!storeService.getSettings().cloudSessionToken) {
+      return { success: false, snapshot: null, error: "unauthorized" };
     }
-
     const metaUrl = `${this.baseUrl}/api/cloud/platform-snapshot/meta`;
     const response = await fetch(metaUrl, {
       headers: getCloudHeaders(metaUrl),
     });
-    if (response.status === 401) {
-      this.clearCloudIdentity();
+    const body = (await response.json().catch(() => ({}))) as {
+      snapshot?: PlatformCloudSnapshotMeta;
+      error?: string;
+      message?: string;
+    };
+    if (response.status === 404 && body.error === "snapshot_not_found") {
+      return { success: true, snapshot: null };
+    }
+    if (!response.ok) {
+      this.handleAuthFailure(body.error);
       return {
-        ...status,
-        authenticated: false,
-        userLogin: "",
-        userName: "",
-        userProfileUrl: "",
+        success: false,
+        snapshot: null,
+        error: body.error || `snapshot_meta_failed_${response.status}`,
+        message: body.message,
       };
     }
-    if (response.ok) {
-      const body = (await response.json()) as {
-        snapshot?: PlatformCloudSnapshotMeta;
-      };
-      status.snapshot = body.snapshot || null;
-      if (status.snapshot?.updatedAt) {
-        status.lastUploadedAt = new Date(
-          status.snapshot.updatedAt,
-        ).toISOString();
-        storeService.saveSettings({
-          cloudLastUploadedAt: status.lastUploadedAt,
-        });
-      }
+    const snapshot = body.snapshot || null;
+    if (snapshot?.updatedAt) {
+      storeService.saveSettings({
+        cloudLastUploadedAt: new Date(snapshot.updatedAt).toISOString(),
+      });
     }
-    status.authenticated = true;
-    return status;
+    return { success: true, snapshot };
   }
 
   upload(progress?: CloudSyncProgressHandler): Promise<CloudSyncResult> {
@@ -265,10 +226,13 @@ class CloudSyncService {
     if (!response.ok) {
       const errorBody = (await response.json().catch(() => ({}))) as {
         error?: string;
+        message?: string;
       };
+      this.handleAuthFailure(errorBody.error);
       return {
         success: false,
         error: errorBody.error || `upload_failed_${response.status}`,
+        message: errorBody.message,
       };
     }
     const responseBody = (await response.json()) as {
@@ -291,14 +255,16 @@ class CloudSyncService {
     progress?.({ stage: "checking", percentage: 5 });
     const url = `${this.baseUrl}/api/cloud/platform-snapshot`;
     const response = await fetch(url, { headers: getCloudHeaders(url) });
-    if (response.status === 401) this.clearCloudIdentity();
     if (!response.ok) {
       const errorBody = (await response.json().catch(() => ({}))) as {
         error?: string;
+        message?: string;
       };
+      this.handleAuthFailure(errorBody.error);
       return {
         success: false,
         error: errorBody.error || `download_failed_${response.status}`,
+        message: errorBody.message,
       };
     }
     const buffer = Buffer.from(await response.arrayBuffer());
@@ -348,14 +314,25 @@ class CloudSyncService {
     return active;
   }
 
-  private clearCloudIdentity(): void {
+  handleAuthFailure(error?: string): boolean {
+    if (error !== "session_expired" && error !== "session_invalid") {
+      return false;
+    }
     storeService.saveSettings({
       cloudSessionToken: "",
       cloudSessionExpiresAt: "",
-      cloudUserLogin: "",
-      cloudUserName: "",
-      cloudUserProfileUrl: "",
     });
+    this.emitAuthChanged(error);
+    return true;
+  }
+
+  private emitAuthChanged(reason: CloudAuthChangedReason): void {
+    const payload: CloudAuthChangedPayload = {
+      reason,
+      status: this.getLocalStatus(),
+    };
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.send(IPC.SYSTEM_CLOUD_AUTH_CHANGED, payload);
   }
 }
 

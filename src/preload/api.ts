@@ -18,6 +18,10 @@ import type {
   GameLaunchFailurePayload,
   RoomConnectResult,
   RoomCreateResult,
+  CloudAuthChangedPayload,
+  CloudSnapshotMetaResult,
+  CloudSyncResult,
+  LocalCloudStatus,
 } from "../shared/types";
 
 installErrorForwarding("main-window");
@@ -231,12 +235,17 @@ export const electronAPI = {
     getAppVersion: () => ipcRenderer.invoke(IPC.SYSTEM_GET_APP_VERSION),
     getSensitiveWords: (): Promise<string[]> =>
       ipcRenderer.invoke(IPC.SYSTEM_GET_SENSITIVE_WORDS),
-    getCloudStatus: () => ipcRenderer.invoke(IPC.SYSTEM_CLOUD_GET_STATUS),
+    getLocalCloudStatus: (): Promise<LocalCloudStatus> =>
+      ipcRenderer.invoke(IPC.SYSTEM_CLOUD_GET_LOCAL_STATUS),
+    getCloudSnapshotMeta: (): Promise<CloudSnapshotMetaResult> =>
+      ipcRenderer.invoke(IPC.SYSTEM_CLOUD_GET_SNAPSHOT_META),
     loginWithGitHub: () => ipcRenderer.invoke(IPC.SYSTEM_CLOUD_LOGIN_GITHUB),
-    uploadCloudData: () => ipcRenderer.invoke(IPC.SYSTEM_CLOUD_UPLOAD),
-    downloadCloudData: () => ipcRenderer.invoke(IPC.SYSTEM_CLOUD_DOWNLOAD),
-    selectFeedbackImages: () =>
-      ipcRenderer.invoke(IPC.SYSTEM_FEEDBACK_SELECT_IMAGES),
+    uploadCloudData: (): Promise<CloudSyncResult> =>
+      ipcRenderer.invoke(IPC.SYSTEM_CLOUD_UPLOAD),
+    downloadCloudData: (): Promise<CloudSyncResult> =>
+      ipcRenderer.invoke(IPC.SYSTEM_CLOUD_DOWNLOAD),
+    selectFeedbackImages: (selectionId?: string) =>
+      ipcRenderer.invoke(IPC.SYSTEM_FEEDBACK_SELECT_IMAGES, selectionId),
     releaseFeedbackImages: (selectionId: string, imageId?: string) =>
       ipcRenderer.invoke(
         IPC.SYSTEM_FEEDBACK_RELEASE_IMAGES,
@@ -247,6 +256,8 @@ export const electronAPI = {
       ipcRenderer.invoke(IPC.SYSTEM_FEEDBACK_SUBMIT, payload),
     getFeedbackHistory: () =>
       ipcRenderer.invoke(IPC.SYSTEM_FEEDBACK_GET_HISTORY),
+    getFeedbackDetail: (feedbackId: string) =>
+      ipcRenderer.invoke(IPC.SYSTEM_FEEDBACK_GET_DETAIL, feedbackId),
     save: (settings: AppSettings) =>
       ipcRenderer.invoke(IPC.SYSTEM_SAVE_SETTINGS, settings),
     savePartialSettings: (partial: Partial<AppSettings>) =>
@@ -321,6 +332,15 @@ export const electronAPI = {
       ipcRenderer.on(IPC.SYSTEM_CLOUD_SYNC_EVENT, handler);
       return () =>
         ipcRenderer.removeListener(IPC.SYSTEM_CLOUD_SYNC_EVENT, handler);
+    },
+    onCloudAuthChanged: (
+      callback: (payload: CloudAuthChangedPayload) => void,
+    ) => {
+      const handler = (_: any, payload: Parameters<typeof callback>[0]) =>
+        callback(payload);
+      ipcRenderer.on(IPC.SYSTEM_CLOUD_AUTH_CHANGED, handler);
+      return () =>
+        ipcRenderer.removeListener(IPC.SYSTEM_CLOUD_AUTH_CHANGED, handler);
     },
   },
   user: {

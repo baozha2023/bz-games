@@ -77,6 +77,7 @@ export function createMySqlService({ config }) {
         content TEXT NOT NULL,
         status ENUM('new', 'reviewing', 'planned', 'resolved', 'closed') NOT NULL DEFAULT 'new',
         admin_note TEXT NOT NULL,
+        reply TEXT NOT NULL,
         submitter_type ENUM('anonymous', 'github') NOT NULL,
         user_id BIGINT UNSIGNED NULL,
         github_login VARCHAR(255) NOT NULL DEFAULT '',

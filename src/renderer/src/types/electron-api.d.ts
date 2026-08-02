@@ -20,6 +20,11 @@ import type {
   RoomConnectResult,
   RoomCreateResult,
   FeedbackHistoryItem,
+  FeedbackDetail,
+  CloudAuthChangedPayload,
+  CloudSnapshotMetaResult,
+  CloudSyncResult,
+  LocalCloudStatus,
 } from "../../../shared/types";
 import type { GameManifest } from "../../../shared/game-manifest";
 
@@ -196,33 +201,12 @@ declare global {
         get: () => Promise<AppSettings>;
         getAppVersion: () => Promise<string>;
         getSensitiveWords: () => Promise<string[]>;
-        getCloudStatus: () => Promise<{
-          configured: boolean;
-          authenticated: boolean;
-          userLogin: string;
-          userName: string;
-          userProfileUrl: string;
-          lastUploadedAt: string;
-          snapshot: {
-            version: number;
-            size: number;
-            sha256: string;
-            contentType: string;
-            updatedAt: string;
-          } | null;
-        }>;
+        getLocalCloudStatus: () => Promise<LocalCloudStatus>;
+        getCloudSnapshotMeta: () => Promise<CloudSnapshotMetaResult>;
         loginWithGitHub: () => Promise<{ success: boolean; error?: string }>;
-        uploadCloudData: () => Promise<{
-          success: boolean;
-          lastUploadedAt?: string;
-          error?: string;
-        }>;
-        downloadCloudData: () => Promise<{
-          success: boolean;
-          lastUploadedAt?: string;
-          error?: string;
-        }>;
-        selectFeedbackImages: () => Promise<{
+        uploadCloudData: () => Promise<CloudSyncResult>;
+        downloadCloudData: () => Promise<CloudSyncResult>;
+        selectFeedbackImages: (selectionId?: string) => Promise<{
           success: boolean;
           canceled?: boolean;
           selectionId?: string;
@@ -249,9 +233,16 @@ declare global {
               success: false;
               error: string;
               resetAt?: string;
+              message?: string;
             }
         >;
         getFeedbackHistory: () => Promise<FeedbackHistoryItem[]>;
+        getFeedbackDetail: (
+          feedbackId: string,
+        ) => Promise<
+          | { success: true; detail: FeedbackDetail }
+          | { success: false; error: string; message?: string }
+        >;
         save: (settings: AppSettings) => Promise<boolean>;
         savePartialSettings: (partial: Partial<AppSettings>) => Promise<void>;
         saveNicknameStyle: (
@@ -327,6 +318,9 @@ declare global {
         onUpdateEvent: (callback: (payload: UpdateState) => void) => () => void;
         onCloudSyncEvent: (
           callback: (payload: { stage: string; percentage: number }) => void,
+        ) => () => void;
+        onCloudAuthChanged: (
+          callback: (payload: CloudAuthChangedPayload) => void,
         ) => () => void;
       };
       stats: {

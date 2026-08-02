@@ -26,13 +26,13 @@ relay-server/
   API.md
 ```
 
-| 路径 | 说明 |
-| --- | --- |
-| `src/index.js` | HTTP + WebSocket 服务入口 |
-| `package.json` | 服务依赖与启动脚本 |
-| `package-lock.json` | npm 锁定文件 |
-| `DEPLOY.md` | 部署手册 |
-| `API.md` | 接口文档 |
+| 路径                | 说明                      |
+| ------------------- | ------------------------- |
+| `src/index.js`      | HTTP + WebSocket 服务入口 |
+| `package.json`      | 服务依赖与启动脚本        |
+| `package-lock.json` | npm 锁定文件              |
+| `DEPLOY.md`         | 部署手册                  |
+| `API.md`            | 接口文档                  |
 
 ## 运行环境
 
@@ -45,35 +45,36 @@ relay-server/
 
 ## 环境变量
 
-| 变量 | 默认值 | 说明 |
-| --- | --- | --- |
-| `PORT` | `38090` | HTTP/WebSocket 监听端口 |
-| `ROOM_TTL_MS` | `60000` | 房间活跃超时时间 |
-| `HEARTBEAT_INTERVAL_MS` | `30000` | WebSocket ping 与清理间隔 |
-| `MAX_TEXT_BYTES` | `1048576` | 单条文本消息最大字节数 |
-| `MAX_BINARY_BYTES` | `12582912` | 单条二进制消息最大字节数 |
-| `MAX_PLATFORM_CLOUD_SNAPSHOT_BYTES` | `134217728` | 单次上传完整平台快照的大小上限 |
-| `PLATFORM_SNAPSHOT_GC_GRACE_MS` | `300000` | 指针切换成功后旧平台快照的清理宽限期 |
-| `RELAY_TOKEN` | 空字符串 | 全接口鉴权 token；必须通过 systemd 环境变量配置，平台侧通过构建配置注入同值 |
-| `MAX_ROOMS` | `80` | 最大同时房间数 |
-| `MAX_CLIENTS` | `400` | 最大已登记客户端数 |
-| `MAX_CLIENTS_PER_ROOM` | `8` | 单房间最大中继客户端数上限 |
-| `MAX_EVENT_LOOP_DELAY_MS` | `250` | 事件循环延迟限制 |
-| `MYSQL_HOST` | `127.0.0.1` | MySQL 主机 |
-| `MYSQL_PORT` | `3306` | MySQL 端口 |
-| `MYSQL_USER` | 空字符串 | MySQL 用户名；为空时登录和云同步接口不可用 |
-| `MYSQL_PASSWORD` | 空字符串 | MySQL 密码 |
-| `MYSQL_DATABASE` | `bz_games` | MySQL 数据库名 |
-| `MONGODB_URI` | 空字符串 | MongoDB 连接串；为空时登录和云同步接口不可用 |
-| `MONGODB_DB_NAME` | `bz_games` | MongoDB 数据库名 |
-| `MONGODB_BUCKET_NAME` | `userFiles` | GridFS bucket 名 |
-| `GITHUB_CLIENT_ID` | 空字符串 | GitHub OAuth App Client ID |
-| `GITHUB_CLIENT_SECRET` | 空字符串 | GitHub OAuth App Client Secret |
-| `GITHUB_CALLBACK_URL` | 空字符串 | GitHub OAuth 回调地址，必须与 GitHub OAuth App 配置完全一致 |
-| `GITHUB_OAUTH_SCOPE` | `read:user user:email` | GitHub OAuth scope |
-| `SESSION_COOKIE_NAME` | `bz_games_session` | 登录会话 Cookie 名称 |
-| `OAUTH_SESSION_TTL_MS` | `2592000000` | 登录会话有效期，默认 30 天 |
-| `OAUTH_STATE_TTL_MS` | `600000` | OAuth state 有效期，默认 10 分钟 |
+| 变量                                | 默认值                 | 说明                                                                        |
+| ----------------------------------- | ---------------------- | --------------------------------------------------------------------------- |
+| `PORT`                              | `38090`                | HTTP/WebSocket 监听端口                                                     |
+| `ROOM_TTL_MS`                       | `60000`                | 房间活跃超时时间                                                            |
+| `HEARTBEAT_INTERVAL_MS`             | `30000`                | WebSocket ping 与清理间隔                                                   |
+| `MAX_TEXT_BYTES`                    | `1048576`              | 单条文本消息最大字节数                                                      |
+| `MAX_BINARY_BYTES`                  | `12582912`             | 单条二进制消息最大字节数                                                    |
+| `MAX_PLATFORM_CLOUD_SNAPSHOT_BYTES` | `134217728`            | 单次上传完整平台快照的大小上限                                              |
+| `PLATFORM_SNAPSHOT_GC_GRACE_MS`     | `300000`               | 指针切换成功后旧平台快照的清理宽限期                                        |
+| `RELAY_TOKEN`                       | 空字符串               | 全接口鉴权 token；必须通过 systemd 环境变量配置，平台侧通过构建配置注入同值 |
+| `MAX_ROOMS`                         | `80`                   | 最大同时房间数                                                              |
+| `MAX_CLIENTS`                       | `400`                  | 最大已登记客户端数                                                          |
+| `MAX_CLIENTS_PER_ROOM`              | `8`                    | 单房间最大中继客户端数上限                                                  |
+| `MAX_EVENT_LOOP_DELAY_MS`           | `250`                  | 事件循环延迟限制                                                            |
+| `MYSQL_HOST`                        | `127.0.0.1`            | MySQL 主机                                                                  |
+| `MYSQL_PORT`                        | `3306`                 | MySQL 端口                                                                  |
+| `MYSQL_USER`                        | 空字符串               | MySQL 用户名；为空时登录和云同步接口不可用                                  |
+| `MYSQL_PASSWORD`                    | 空字符串               | MySQL 密码                                                                  |
+| `MYSQL_DATABASE`                    | `bz_games`             | MySQL 数据库名                                                              |
+| `MONGODB_URI`                       | 空字符串               | MongoDB 连接串；为空时登录和云同步接口不可用                                |
+| `MONGODB_DB_NAME`                   | `bz_games`             | MongoDB 数据库名                                                            |
+| `MONGODB_BUCKET_NAME`               | `userFiles`            | GridFS bucket 名                                                            |
+| `GITHUB_CLIENT_ID`                  | 空字符串               | GitHub OAuth App Client ID                                                  |
+| `GITHUB_CLIENT_SECRET`              | 空字符串               | GitHub OAuth App Client Secret                                              |
+| `GITHUB_CALLBACK_URL`               | 空字符串               | GitHub OAuth 回调地址，必须与 GitHub OAuth App 配置完全一致                 |
+| `GITHUB_OAUTH_SCOPE`                | `read:user user:email` | GitHub OAuth scope                                                          |
+| `SESSION_COOKIE_NAME`               | `bz_games_session`     | 登录会话 Cookie 名称                                                        |
+| `OAUTH_SESSION_TTL_MS`              | `2592000000`           | 登录会话有效期，默认 30 天                                                  |
+| `AUTH_EXPIRED_SESSION_RETENTION_MS` | `604800000`            | 已过期会话保留期，默认 7 天，用于区分过期与无效令牌                         |
+| `OAUTH_STATE_TTL_MS`                | `600000`               | OAuth state 有效期，默认 10 分钟                                            |
 
 公网部署必须配置 `RELAY_TOKEN`，并与平台侧构建注入的 `relayToken` 保持一致。服务端不会兼容未携带 token 的旧版平台。
 如需启用 GitHub 登录，必须额外配置 `MYSQL_USER`、`MYSQL_PASSWORD`、`MYSQL_DATABASE`、`GITHUB_CLIENT_ID`、`GITHUB_CLIENT_SECRET`、`GITHUB_CALLBACK_URL`。
@@ -364,11 +365,11 @@ Environment=MAX_EVENT_LOOP_DELAY_MS=250
 
 容量限制行为：
 
-| 限制 | 触发结果 |
-| --- | --- |
-| `MAX_ROOMS` | 拒绝新房间，返回 `capacity_full/max_rooms` |
-| `MAX_CLIENTS` | 拒绝新房间或新玩家，返回 `capacity_full/max_clients` |
-| `MAX_CLIENTS_PER_ROOM` | 拒绝新玩家，返回 `capacity_full/room_full` |
+| 限制                      | 触发结果                                             |
+| ------------------------- | ---------------------------------------------------- |
+| `MAX_ROOMS`               | 拒绝新房间，返回 `capacity_full/max_rooms`           |
+| `MAX_CLIENTS`             | 拒绝新房间或新玩家，返回 `capacity_full/max_clients` |
+| `MAX_CLIENTS_PER_ROOM`    | 拒绝新玩家，返回 `capacity_full/room_full`           |
 | `MAX_EVENT_LOOP_DELAY_MS` | 拒绝新房间或新玩家，返回 `capacity_full/server_busy` |
 
 根据 `/health` 返回的 `roomCount`、`clientCount`、`eventLoopDelayMs` 调整容量参数。
@@ -516,6 +517,7 @@ ufw status
 - 聊天消息正常收发。
 - 房主开始游戏、踢出玩家、解散房间正常同步。
 - Game API v1 JSON 消息和 v2 binary frame 正常通过中继转发。
+
 ## 建言献策和管理后台
 
 反馈与管理配置已完整列入 `relay-server/bz-games-relay.service.example`，无需在其他文档

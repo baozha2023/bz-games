@@ -11,30 +11,46 @@ export function createRoomService({ config, state, send }) {
   function resolveRoom(value) {
     if (!value) return null;
     const normalized = String(value).trim();
-    return Array.from(rooms.values()).find((room) => room.roomCode === normalized) || null;
+    return (
+      Array.from(rooms.values()).find((room) => room.roomCode === normalized) ||
+      null
+    );
   }
 
   function canAcceptRoom() {
-    if (rooms.size >= config.MAX_ROOMS) return { ok: false, reason: "max_rooms" };
-    if (clients.size >= config.MAX_CLIENTS) return { ok: false, reason: "max_clients" };
-    if (state.getEventLoopDelayMs() >= config.MAX_EVENT_LOOP_DELAY_MS) return { ok: false, reason: "server_busy" };
+    if (rooms.size >= config.MAX_ROOMS)
+      return { ok: false, reason: "max_rooms" };
+    if (clients.size >= config.MAX_CLIENTS)
+      return { ok: false, reason: "max_clients" };
+    if (state.getEventLoopDelayMs() >= config.MAX_EVENT_LOOP_DELAY_MS)
+      return { ok: false, reason: "server_busy" };
     return { ok: true };
   }
 
   function canAcceptClient(room) {
-    if (clients.size >= config.MAX_CLIENTS) return { ok: false, reason: "max_clients" };
-    if (room.playerCount >= room.maxPlayers) return { ok: false, reason: "room_full" };
-    if (room.clients.size >= Math.min(room.maxPlayers || config.MAX_CLIENTS_PER_ROOM, config.MAX_CLIENTS_PER_ROOM)) {
+    if (clients.size >= config.MAX_CLIENTS)
+      return { ok: false, reason: "max_clients" };
+    if (room.playerCount >= room.maxPlayers)
+      return { ok: false, reason: "room_full" };
+    if (
+      room.clients.size >=
+      Math.min(
+        room.maxPlayers || config.MAX_CLIENTS_PER_ROOM,
+        config.MAX_CLIENTS_PER_ROOM,
+      )
+    ) {
       return { ok: false, reason: "room_full" };
     }
-    if (state.getEventLoopDelayMs() >= config.MAX_EVENT_LOOP_DELAY_MS) return { ok: false, reason: "server_busy" };
+    if (state.getEventLoopDelayMs() >= config.MAX_EVENT_LOOP_DELAY_MS)
+      return { ok: false, reason: "server_busy" };
     return { ok: true };
   }
 
   function generateRoomCode() {
     for (let i = 0; i < 20; i += 1) {
       const code = String(Math.floor(100000 + Math.random() * 900000));
-      if (!Array.from(rooms.values()).some((room) => room.roomCode === code)) return code;
+      if (!Array.from(rooms.values()).some((room) => room.roomCode === code))
+        return code;
     }
     return `${Date.now()}`.slice(-6);
   }
@@ -81,15 +97,23 @@ export function createRoomService({ config, state, send }) {
   }
 
   function updateRoomState(room, statePayload) {
-    if (typeof statePayload.gameId === "string") room.gameId = statePayload.gameId;
-    if (typeof statePayload.gameName === "string") room.gameName = statePayload.gameName;
-    if (typeof statePayload.gameVersion === "string") room.gameVersion = statePayload.gameVersion;
-    if (typeof statePayload.hostId === "string") room.hostId = statePayload.hostId;
-    if (typeof statePayload.maxPlayers === "number") room.maxPlayers = statePayload.maxPlayers;
+    if (typeof statePayload.gameId === "string")
+      room.gameId = statePayload.gameId;
+    if (typeof statePayload.gameName === "string")
+      room.gameName = statePayload.gameName;
+    if (typeof statePayload.gameVersion === "string")
+      room.gameVersion = statePayload.gameVersion;
+    if (typeof statePayload.hostId === "string")
+      room.hostId = statePayload.hostId;
+    if (typeof statePayload.maxPlayers === "number")
+      room.maxPlayers = statePayload.maxPlayers;
     if (typeof statePayload.state === "string") room.state = statePayload.state;
-    if (typeof statePayload.hasPassword === "boolean") room.hasPassword = statePayload.hasPassword;
+    if (typeof statePayload.hasPassword === "boolean")
+      room.hasPassword = statePayload.hasPassword;
     if (Array.isArray(statePayload.players)) {
-      const hostPlayer = statePayload.players.find((player) => player?.id === room.hostId);
+      const hostPlayer = statePayload.players.find(
+        (player) => player?.id === room.hostId,
+      );
       room.hostName = hostPlayer?.name || room.hostName;
       room.hostStyle = hostPlayer?.nicknameStyle || room.hostStyle;
       room.name = `${room.hostName} 的房间`;
@@ -106,7 +130,10 @@ export function createRoomService({ config, state, send }) {
 
   function registerHost(client, payload) {
     if (!verifyRelayToken(payload)) {
-      send(client.ws, { type: "relay:error", payload: { code: "unauthorized" } });
+      send(client.ws, {
+        type: "relay:error",
+        payload: { code: "unauthorized" },
+      });
       return;
     }
     if (
@@ -115,7 +142,10 @@ export function createRoomService({ config, state, send }) {
       typeof payload.gameId !== "string" ||
       typeof payload.gameVersion !== "string"
     ) {
-      send(client.ws, { type: "relay:error", payload: { code: "invalid_host_payload" } });
+      send(client.ws, {
+        type: "relay:error",
+        payload: { code: "invalid_host_payload" },
+      });
       return;
     }
 
@@ -123,7 +153,10 @@ export function createRoomService({ config, state, send }) {
     if (!existingRoom) {
       const capacity = canAcceptRoom();
       if (!capacity.ok) {
-        send(client.ws, { type: "relay:error", payload: { code: "capacity_full", reason: capacity.reason } });
+        send(client.ws, {
+          type: "relay:error",
+          payload: { code: "capacity_full", reason: capacity.reason },
+        });
         return;
       }
     }
@@ -167,16 +200,28 @@ export function createRoomService({ config, state, send }) {
 
   function registerGuest(client, payload) {
     if (!verifyRelayToken(payload)) {
-      send(client.ws, { type: "relay:error", payload: { code: "unauthorized" } });
+      send(client.ws, {
+        type: "relay:error",
+        payload: { code: "unauthorized" },
+      });
       return;
     }
-    if (typeof payload.roomCode !== "string" || typeof payload.playerId !== "string") {
-      send(client.ws, { type: "relay:error", payload: { code: "invalid_join_payload" } });
+    if (
+      typeof payload.roomCode !== "string" ||
+      typeof payload.playerId !== "string"
+    ) {
+      send(client.ws, {
+        type: "relay:error",
+        payload: { code: "invalid_join_payload" },
+      });
       return;
     }
     const room = resolveRoom(payload.roomCode);
     if (!room) {
-      send(client.ws, { type: "relay:error", payload: { code: "room_not_found" } });
+      send(client.ws, {
+        type: "relay:error",
+        payload: { code: "room_not_found" },
+      });
       return;
     }
     if (payload.playerId === room.hostId) {
@@ -185,26 +230,41 @@ export function createRoomService({ config, state, send }) {
     }
     if (!clients.get(room.hostId)) {
       closeRoom(room.id, "relay:closed");
-      send(client.ws, { type: "relay:error", payload: { code: "room_not_found" } });
+      send(client.ws, {
+        type: "relay:error",
+        payload: { code: "room_not_found" },
+      });
       return;
     }
     if (room.state !== "waiting") {
-      send(client.ws, { type: "relay:error", payload: { code: "game_started" } });
+      send(client.ws, {
+        type: "relay:error",
+        payload: { code: "game_started" },
+      });
       return;
     }
     const password = normalizePassword(payload.password);
     if (room.hasPassword && !password) {
-      send(client.ws, { type: "relay:error", payload: { code: "password_required" } });
+      send(client.ws, {
+        type: "relay:error",
+        payload: { code: "password_required" },
+      });
       return;
     }
     if (room.hasPassword && password !== room.roomPassword) {
-      send(client.ws, { type: "relay:error", payload: { code: "password_incorrect" } });
+      send(client.ws, {
+        type: "relay:error",
+        payload: { code: "password_incorrect" },
+      });
       return;
     }
 
     const capacity = canAcceptClient(room);
     if (!capacity.ok) {
-      send(client.ws, { type: "relay:error", payload: { code: "capacity_full", reason: capacity.reason } });
+      send(client.ws, {
+        type: "relay:error",
+        payload: { code: "capacity_full", reason: capacity.reason },
+      });
       return;
     }
 
@@ -218,7 +278,10 @@ export function createRoomService({ config, state, send }) {
     room.playerCount = room.clients.size;
     room.updatedAt = Date.now();
 
-    send(client.ws, { type: "relay:join:ack", payload: { hostId: room.hostId } });
+    send(client.ws, {
+      type: "relay:join:ack",
+      payload: { hostId: room.hostId },
+    });
   }
 
   function replyRoomPasswordProbe(ws, payload) {
@@ -227,7 +290,10 @@ export function createRoomService({ config, state, send }) {
       return;
     }
     if (typeof payload.roomCode !== "string") {
-      send(ws, { type: "relay:error", payload: { code: "invalid_join_payload" } });
+      send(ws, {
+        type: "relay:error",
+        payload: { code: "invalid_join_payload" },
+      });
       return;
     }
     const room = resolveRoom(payload.roomCode);
@@ -239,6 +305,7 @@ export function createRoomService({ config, state, send }) {
       type: "relay:room:password:probe:ack",
       payload: {
         hasPassword: Boolean(room.hasPassword),
+        hostId: room.hostId,
       },
     });
   }

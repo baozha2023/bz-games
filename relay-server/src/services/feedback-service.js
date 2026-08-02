@@ -545,8 +545,22 @@ function serializeFeedbackDetail(row) {
   return {
     ...serializeFeedbackSummary(row),
     adminNote: row.admin_note || "",
+    reply: row.reply || "",
     appVersion: row.app_version || "",
     platform: row.platform || "",
+    updatedAt: row.updated_at,
+  };
+}
+
+function serializeUserFeedbackDetail(row) {
+  return {
+    id: row.id,
+    content: row.content,
+    status: row.status,
+    reply: row.reply || "",
+    imageCount: Number(row.image_count || 0),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 
@@ -570,25 +584,47 @@ export function createFeedbackService({
     if (!bearerToken && !sessionCookie) {
       return { auth: null, valid: true };
     }
-    const auth = await authService.getSessionFromRequest(req);
-    if (!auth) {
-      sendJson(res, 401, { error: "unauthorized" });
+    const resolution = await authService.getSessionFromRequest(req);
+    if (resolution.status !== "authenticated") {
+      authService.sendAuthFailure(res, resolution.status);
       return { auth: null, valid: false };
     }
-    return { auth, valid: true };
+    return { auth: resolution.auth, valid: true };
   }
 
   async function requireAdmin(req, res) {
-    const auth = await authService.getSessionFromRequest(req);
-    if (!auth) {
-      sendJson(res, 401, { error: "unauthorized" });
+    const resolution = await authService.getSessionFromRequest(req);
+    if (resolution.status !== "authenticated") {
+      authService.sendAuthFailure(res, resolution.status);
       return null;
     }
+    const auth = resolution.auth;
     if (!adminGitHubIds.has(String(auth.user.github_id))) {
       sendJson(res, 403, { error: "forbidden" });
       return null;
     }
     return auth;
+  }
+
+  async function requireFeedbackOwner(req, res, userId) {
+    const { auth, valid } = await getOptionalAuth(req, res);
+    if (!valid) return false;
+    if (userId == null) return true;
+    if (!auth) {
+      sendJson(res, 401, {
+        error: "unauthorized",
+        message: "GitHub login is required to view this feedback",
+      });
+      return false;
+    }
+    if (String(auth.user.id) !== String(userId)) {
+      sendJson(res, 403, {
+        error: "forbidden",
+        message: "This feedback belongs to another account",
+      });
+      return false;
+    }
+    return true;
   }
 
   async function handleSubmit(req, res, url) {
@@ -655,9 +691,9 @@ export function createFeedbackService({
       await mySqlService.transaction(async (connection) => {
         await connection.query(
           `INSERT INTO feedback
-            (id, content, status, admin_note, submitter_type, user_id, github_login,
+            (id, content, status, admin_note, reply, submitter_type, user_id, github_login,
              app_version, platform, image_count, created_at, updated_at)
-           VALUES (?, ?, 'new', '', ?, ?, ?, ?, ?, ?, ?, ?)`,
+           VALUES (?, ?, 'new', '', '', ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             feedbackId,
             parsed.content,
@@ -786,8 +822,8 @@ export function createFeedbackService({
   async function handleDetail(req, res, feedbackId) {
     if (!(await requireAdmin(req, res))) return;
     const [rows] = await mySqlService.query(
-      `SELECT id, content, status, admin_note, submitter_type, github_login,
-              app_version, platform, image_count, created_at
+      `SELECT id, content, status, admin_note, reply, submitter_type, github_login,
+              app_version, platform, image_count, created_at, updated_at
        FROM feedback
        WHERE id = ?
        LIMIT 1`,
@@ -848,6 +884,76 @@ export function createFeedbackService({
       .pipe(res);
   }
 
+  async function handleUserDetail(req, res, url, feedbackId) {
+    if (!requireHttpRelayToken(config, req, res, url)) return;
+    const [rows] = await mySqlService.query(
+      `SELECT id, content, status, reply, user_id, image_count, created_at, updated_at
+       FROM feedback
+       WHERE id = ?
+       LIMIT 1`,
+      [feedbackId],
+    );
+    const feedback = rows[0];
+    if (!feedback) {
+      sendJson(res, 404, { error: "feedback_not_found" });
+      return;
+    }
+    if (!(await requireFeedbackOwner(req, res, feedback.user_id))) return;
+    const [images] = await mySqlService.query(
+      `SELECT id, file_name, content_type, size
+       FROM feedback_images
+       WHERE feedback_id = ?
+       ORDER BY created_at ASC`,
+      [feedbackId],
+    );
+    sendJson(res, 200, {
+      ...serializeUserFeedbackDetail(feedback),
+      images: images.map((image) => ({
+        id: image.id,
+        fileName: image.file_name,
+        contentType: image.content_type,
+        size: Number(image.size || 0),
+      })),
+    });
+  }
+
+  async function handleUserImage(req, res, url, feedbackId, imageId) {
+    if (!requireHttpRelayToken(config, req, res, url)) return;
+    if (!mongoService.isEnabled()) {
+      sendJson(res, 503, { error: "image_storage_not_configured" });
+      return;
+    }
+    const [rows] = await mySqlService.query(
+      `SELECT fi.storage_id, fi.file_name, fi.content_type, fi.size, f.user_id
+       FROM feedback_images fi
+       INNER JOIN feedback f ON f.id = fi.feedback_id
+       WHERE fi.id = ? AND fi.feedback_id = ?
+       LIMIT 1`,
+      [imageId, feedbackId],
+    );
+    const image = rows[0];
+    if (!image || !ObjectId.isValid(image.storage_id)) {
+      sendJson(res, 404, { error: "image_not_found" });
+      return;
+    }
+    if (!(await requireFeedbackOwner(req, res, image.user_id))) return;
+    await mongoService.ensureReady();
+    res.writeHead(200, {
+      "content-type": image.content_type,
+      "content-length": String(image.size),
+      "content-disposition": `inline; filename*=UTF-8''${encodeURIComponent(
+        image.file_name,
+      )}`,
+      "cache-control": "private, max-age=300",
+      "x-content-type-options": "nosniff",
+    });
+    mongoService
+      .getBucket()
+      .openDownloadStream(new ObjectId(image.storage_id))
+      .once("error", () => res.destroy())
+      .pipe(res);
+  }
+
   async function handleUpdate(req, res, feedbackId) {
     if (!(await requireAdmin(req, res))) return;
     const body = await readJson(req, 64 * 1024);
@@ -861,11 +967,16 @@ export function createFeedbackService({
       sendJson(res, 400, { error: "invalid_admin_note" });
       return;
     }
+    const rawReply = body?.reply ?? "";
+    if (typeof rawReply !== "string" || rawReply.trim().length > 5000) {
+      sendJson(res, 400, { error: "invalid_feedback_reply" });
+      return;
+    }
     const [result] = await mySqlService.query(
       `UPDATE feedback
-       SET status = ?, admin_note = ?, updated_at = ?
+       SET status = ?, admin_note = ?, reply = ?, updated_at = ?
        WHERE id = ?`,
-      [status, rawAdminNote.trim(), new Date(), feedbackId],
+      [status, rawAdminNote.trim(), rawReply.trim(), new Date(), feedbackId],
     );
     if (!result.affectedRows) {
       sendJson(res, 404, { error: "feedback_not_found" });
@@ -877,6 +988,35 @@ export function createFeedbackService({
   async function handleRequest(req, res, url) {
     if (req.method === "POST" && url.pathname === "/api/v1/feedback") {
       return handleSubmit(req, res, url);
+    }
+    const userImageMatch = url.pathname.match(
+      /^\/api\/v1\/feedback\/([^/]+)\/images\/([^/]+)$/,
+    );
+    const userDetailMatch = url.pathname.match(
+      /^\/api\/v1\/feedback\/([^/]+)$/,
+    );
+    if (req.method === "GET" && (userImageMatch || userDetailMatch)) {
+      if (!mySqlService.isEnabled()) {
+        sendJson(res, 503, { error: "feedback_storage_not_configured" });
+        return true;
+      }
+      if (userImageMatch) {
+        await handleUserImage(
+          req,
+          res,
+          url,
+          safePathSegment(userImageMatch[1]),
+          safePathSegment(userImageMatch[2]),
+        );
+      } else {
+        await handleUserDetail(
+          req,
+          res,
+          url,
+          safePathSegment(userDetailMatch[1]),
+        );
+      }
+      return true;
     }
     if (!url.pathname.startsWith("/api/admin/v1/")) return false;
     if (!mySqlService.isEnabled()) {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import http from "node:http";
-import { Writable } from "node:stream";
+import { Readable, Writable } from "node:stream";
 import test from "node:test";
 
 import { ObjectId } from "mongodb";
@@ -116,13 +116,20 @@ test("feedback endpoint applies separate anonymous and authenticated cooldowns",
       const userNumber = /^valid-session-(\d+)$/.exec(token)?.[1];
       return userNumber
         ? {
-            user: {
-              id: Number(userNumber),
-              github_id: `github-${userNumber}`,
-              login: `test-user-${userNumber}`,
+            status: "authenticated",
+            auth: {
+              user: {
+                id: Number(userNumber),
+                github_id: `github-${userNumber}`,
+                login: `test-user-${userNumber}`,
+              },
             },
           }
-        : null;
+        : { status: "invalid" };
+    },
+    sendAuthFailure: (res, status) => {
+      res.writeHead(401, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: status }));
     },
   };
   const service = createFeedbackService({
@@ -256,24 +263,50 @@ test("feedback endpoint applies separate anonymous and authenticated cooldowns",
 
 test("admin endpoints validate pagination and keep response fields aligned", async () => {
   const now = new Date("2026-07-28T00:00:00.000Z");
+  const storageId = new ObjectId();
   const feedbackRow = {
     id: "11111111-1111-4111-8111-111111111111",
     content: "test feedback",
     status: "new",
     admin_note: "",
+    reply: "Thanks for the report",
     submitter_type: "github",
+    user_id: null,
     github_login: "test-admin",
     app_version: "3.1.1",
     platform: "win32",
     image_count: 1,
     created_at: now,
+    updated_at: now,
   };
   const mySqlService = {
     isEnabled: () => true,
     query: async (sql) => {
       if (sql.includes("COUNT(*)")) return [[{ total: 1 }]];
+      if (sql.includes("INNER JOIN feedback")) {
+        return [
+          [
+            {
+              storage_id: storageId.toHexString(),
+              file_name: "image.png",
+              content_type: "image/png",
+              size: VALID_PNG.length,
+              user_id: feedbackRow.user_id,
+            },
+          ],
+        ];
+      }
       if (sql.includes("FROM feedback_images")) {
-        return [[{ id: "image-id", file_name: "image.png" }]];
+        return [
+          [
+            {
+              id: "image-id",
+              file_name: "image.png",
+              content_type: "image/png",
+              size: VALID_PNG.length,
+            },
+          ],
+        ];
       }
       if (sql.includes("UPDATE feedback")) return [{ affectedRows: 1 }];
       return [[feedbackRow]];
@@ -292,15 +325,32 @@ test("admin endpoints validate pagination and keep response fields aligned", asy
       SESSION_COOKIE_NAME: "bz_games_session",
     },
     mySqlService,
-    mongoService: { isEnabled: () => false },
-    authService: {
-      getSessionFromRequest: async () => ({
-        user: {
-          github_id: "123456789",
-          login: "test-admin",
-          avatar_url: "",
+    mongoService: {
+      isEnabled: () => true,
+      ensureReady: async () => {},
+      getBucket: () => ({
+        openDownloadStream: (id) => {
+          assert.equal(id.toHexString(), storageId.toHexString());
+          return Readable.from(VALID_PNG);
         },
       }),
+    },
+    authService: {
+      getSessionFromRequest: async () => ({
+        status: "authenticated",
+        auth: {
+          user: {
+            id: 42,
+            github_id: "123456789",
+            login: "test-admin",
+            avatar_url: "",
+          },
+        },
+      }),
+      sendAuthFailure: (res, status) => {
+        res.writeHead(401, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: status }));
+      },
     },
   });
   const server = http.createServer(async (req, res) => {
@@ -353,10 +403,69 @@ test("admin endpoints validate pagination and keep response fields aligned", asy
       imageCount: feedbackRow.image_count,
       createdAt: now.toISOString(),
       adminNote: feedbackRow.admin_note,
+      reply: feedbackRow.reply,
       appVersion: feedbackRow.app_version,
       platform: feedbackRow.platform,
+      updatedAt: now.toISOString(),
       images: [{ id: "image-id", fileName: "image.png" }],
     });
+
+    const missingRelayToken = await fetch(
+      `${baseUrl}/api/v1/feedback/${feedbackRow.id}`,
+    );
+    assert.equal(missingRelayToken.status, 401);
+
+    const userDetailResponse = await fetch(
+      `${baseUrl}/api/v1/feedback/${feedbackRow.id}`,
+      { headers: { "x-relay-token": "test-relay-token" } },
+    );
+    assert.equal(userDetailResponse.status, 200);
+    assert.deepEqual(await userDetailResponse.json(), {
+      id: feedbackRow.id,
+      content: feedbackRow.content,
+      status: feedbackRow.status,
+      reply: feedbackRow.reply,
+      imageCount: feedbackRow.image_count,
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+      images: [
+        {
+          id: "image-id",
+          fileName: "image.png",
+          contentType: "image/png",
+          size: VALID_PNG.length,
+        },
+      ],
+    });
+
+    feedbackRow.user_id = 42;
+    const ownerLoginRequired = await fetch(
+      `${baseUrl}/api/v1/feedback/${feedbackRow.id}`,
+      { headers: { "x-relay-token": "test-relay-token" } },
+    );
+    assert.equal(ownerLoginRequired.status, 401);
+    const ownerDetailResponse = await fetch(
+      `${baseUrl}/api/v1/feedback/${feedbackRow.id}`,
+      {
+        headers: {
+          "x-relay-token": "test-relay-token",
+          authorization: "Bearer owner-session",
+        },
+      },
+    );
+    assert.equal(ownerDetailResponse.status, 200);
+    feedbackRow.user_id = null;
+
+    const userImageResponse = await fetch(
+      `${baseUrl}/api/v1/feedback/${feedbackRow.id}/images/image-id`,
+      { headers: { "x-relay-token": "test-relay-token" } },
+    );
+    assert.equal(userImageResponse.status, 200);
+    assert.equal(userImageResponse.headers.get("content-type"), "image/png");
+    assert.deepEqual(
+      Buffer.from(await userImageResponse.arrayBuffer()),
+      VALID_PNG,
+    );
 
     const oversizedNote = await fetch(
       `${baseUrl}/api/admin/v1/feedback/${feedbackRow.id}`,
@@ -371,12 +480,30 @@ test("admin endpoints validate pagination and keep response fields aligned", asy
     );
     assert.equal(oversizedNote.status, 400);
 
+    const oversizedReply = await fetch(
+      `${baseUrl}/api/admin/v1/feedback/${feedbackRow.id}`,
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          status: "reviewing",
+          adminNote: "",
+          reply: "x".repeat(5001),
+        }),
+      },
+    );
+    assert.equal(oversizedReply.status, 400);
+
     const updateResponse = await fetch(
       `${baseUrl}/api/admin/v1/feedback/${feedbackRow.id}`,
       {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ status: "reviewing", adminNote: "planned" }),
+        body: JSON.stringify({
+          status: "reviewing",
+          adminNote: "planned",
+          reply: "We have scheduled a fix",
+        }),
       },
     );
     assert.equal(updateResponse.status, 200);

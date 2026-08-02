@@ -259,6 +259,12 @@ Authorization: Bearer <session_token>
 
 Only the atomic platform snapshot protocol is supported. The legacy `/api/cloud/files/*` routes, dual writes, and fallback behavior have been removed.
 
+Authenticated HTTP endpoints use the following `401` response codes. Each response also includes a human-readable `message`:
+
+- `unauthorized`: no GitHub session token was supplied.
+- `session_expired`: the supplied GitHub session has expired.
+- `session_invalid`: the supplied token is invalid, revoked, or unknown.
+
 `PlatformCloudSnapshot` contains `formatVersion: 1`, `createdAt`, an encrypted/sanitized `config` string, and a `databaseSql` dump. The dump contains only `play_sessions`, `achievement_unlocks`, and `stats_reports`; local `games` and `game_versions` rows are excluded.
 
 ### GET /api/cloud/platform-snapshot/meta
@@ -277,7 +283,7 @@ The server finishes the GridFS upload first, then atomically switches `user_plat
 
 Successful response: `{ ok: true, snapshot: { version, size, sha256, contentType, updatedAt } }`.
 
-Upload and download are independently limited to once per GitHub account per 24 hours. Common errors are `401 unauthorized`, `404 snapshot_not_found`, `413 snapshot_too_large`, `429 cloud_sync_rate_limited`, `500 cloud_upload_failed`, and `503 cloud_not_configured`.
+Upload and download are independently limited to once per GitHub account per 24 hours. Common errors are `401 unauthorized`, `401 session_expired`, `401 session_invalid`, `404 snapshot_not_found`, `413 snapshot_too_large`, `429 cloud_sync_rate_limited`, `500 cloud_upload_failed`, and `503 cloud_not_configured`.
 
 ## WebSocket 接口
 
@@ -468,12 +474,13 @@ ws://127.0.0.1:38090
 {
   "type": "relay:room:password:probe:ack",
   "payload": {
-    "hasPassword": true
+    "hasPassword": true,
+    "hostId": "房主 playerId"
   }
 }
 ```
 
-`hasPassword` 为 `false` 时可直接加入，为 `true` 时需要提供 `password` 字段。
+`hasPassword` 为 `false` 时可直接加入，为 `true` 时需要提供 `password` 字段。`hostId` 用于客户端判断目标房间是否为本地正在主持的房间。
 
 房间不存在时返回 `relay:error`（`room_not_found`）。
 
@@ -625,10 +632,10 @@ __relayTo -> relayTo -> to -> targetPlayerId -> payload.__relayTo
 
 ### 云同步
 
-| 变量                   | 默认值     | 说明                                  |
-| ---------------------- | ---------- | ------------------------------------- |
+| 变量                                | 默认值      | 说明                                     |
+| ----------------------------------- | ----------- | ---------------------------------------- |
 | `MAX_PLATFORM_CLOUD_SNAPSHOT_BYTES` | `134217728` | 完整平台快照上传大小上限（默认 128 MiB） |
-| `PLATFORM_SNAPSHOT_GC_GRACE_MS` | `300000` | 原子切换后旧快照对象的清理宽限期 |
+| `PLATFORM_SNAPSHOT_GC_GRACE_MS`     | `300000`    | 原子切换后旧快照对象的清理宽限期         |
 
 ### MySQL
 
@@ -759,6 +766,27 @@ sequenceDiagram
 
 匿名冷却响应为 `429`，包含 `retryAfterSeconds` 和 `resetAt`。
 
+### `GET /api/v1/feedback/:id`
+
+按反馈编号读取用户可见详情。请求必须携带发行版 `X-Relay-Token`。匿名反馈以随机
+反馈编号作为访问凭据；GitHub 用户提交的反馈还必须携带该用户当前有效的
+`Authorization: Bearer <session token>`。
+
+响应包含：
+
+- `id`
+- `content`
+- `status`：`new`、`reviewing`、`planned`、`resolved` 或 `closed`
+- `reply`：管理员面向用户填写的回复
+- `imageCount`
+- `createdAt`
+- `updatedAt`
+- `images`：图片编号、文件名、实际 MIME 和大小
+
+### `GET /api/v1/feedback/:id/images/:imageId`
+
+读取反馈图片，访问规则与反馈详情相同。成功时返回原始图片流。
+
 ### 管理接口
 
 - `GET /api/admin/v1/me`
@@ -770,12 +798,16 @@ sequenceDiagram
 管理接口使用 GitHub会话 Cookie或 Bearer Token，并在服务端校验
 `ADMIN_GITHUB_IDS` 白名单。非管理员返回 `403`。
 
+管理详情包含仅管理员可见的 `adminNote` 以及面向用户的 `reply`。更新接口接受
+`status`、`adminNote` 和 `reply`，备注和回复均不得超过 5,000 个字符。
+
 列表接口接受 `page`（1 到 1,000,000）、`pageSize`（1 到 100）、
 可选 `status` 和 `q`。更新接口 JSON 为：
 
 ```json
 {
   "status": "reviewing",
-  "adminNote": "最多 5,000 个字符"
+  "adminNote": "仅管理员可见，最多 5,000 个字符",
+  "reply": "用户可见，最多 5,000 个字符"
 }
 ```

@@ -24,11 +24,29 @@ export default {
     historyTitle: "Feedbackverlauf",
     historyEmpty: "Noch kein Feedback gesendet",
     historySubmittedAt: "Gesendet am {time}",
+    historyStatus: "Status",
+    historyUpdatedAt: "Aktualisiert am",
+    historyContent: "Feedback",
+    historyReply: "Offizielle Antwort",
+    historyNoContent: "(Nur Bilder)",
+    historyNoReply: "Noch keine Antwort",
+    statuses: {
+      new: "Neu",
+      reviewing: "In Prüfung",
+      planned: "Geplant",
+      resolved: "Gelöst",
+      closed: "Geschlossen",
+    },
     successTitle: "Danke für dein Feedback",
     successDescription: "Erfolgreich gesendet. Feedback-ID: {id}",
     cooldownUntil: "Du kannst nach {time} erneut Feedback senden.",
     errors: {
       too_many_images: "Es können höchstens 4 Bilder ausgewählt werden",
+      duplicate_image: "Dieses Bild wurde bereits ausgewählt",
+      invalid_feedback_id: "Die Feedback-ID ist ungültig",
+      feedback_not_found: "Das Feedback ist nicht mehr vorhanden",
+      forbidden: "Kein Zugriff auf dieses Feedback",
+      image_not_found: "Das Feedbackbild ist nicht mehr vorhanden",
       image_too_large: "Ein Bild ist größer als 5 MiB",
       unsupported_image_type:
         "Nur PNG-, JPEG- und WebP-Bilder werden unterstützt",
@@ -45,8 +63,10 @@ export default {
       feedback_network_failed: "Netzwerkverbindung fehlgeschlagen",
       feedback_invalid_response:
         "Der Dienst hat eine ungültige Antwort gesendet",
-      unauthorized:
-        "Die GitHub-Sitzung ist abgelaufen; erneut anmelden oder anonym senden",
+      unauthorized: "Mit GitHub anmelden, um dieses Feedback anzuzeigen",
+      session_expired:
+        "Die GitHub-Sitzung ist abgelaufen; bitte erneut anmelden",
+      session_invalid: "Die GitHub-Sitzung ist ungültig; bitte erneut anmelden",
       feedback_storage_not_configured:
         "Der Feedback-Speicher ist nicht konfiguriert",
       image_storage_not_configured: "Der Bildspeicher ist nicht konfiguriert",
@@ -401,6 +421,8 @@ export default {
       gameStarted: "Spiel läuft bereits",
       gameIdMismatch: "Spiel-ID stimmt nicht überein",
       ownRoom: "Das ist dein eigener Raum, gehe direkt zurück",
+      closeCurrentRoomFailed:
+        "Der aktuelle Raum konnte nicht geschlossen werden. Bitte versuche es erneut.",
       passwordRequired: "Dieser Raum benötigt ein Passwort",
       passwordIncorrect: "Falsches Raumpasswort",
       manifestInvalid:
@@ -539,6 +561,10 @@ export default {
     cloudErrors: {
       cloud_not_configured: "Cloud-Synchronisation nicht konfiguriert",
       unauthorized: "Bitte zuerst mit GitHub anmelden",
+      session_expired:
+        "Die GitHub-Anmeldung ist abgelaufen. Bitte erneut anmelden.",
+      session_invalid:
+        "Die GitHub-Anmeldung ist ungültig. Bitte erneut anmelden.",
       snapshot_not_found:
         "Kein Plattform-Snapshot vorhanden. Bitte zuerst hochladen.",
       snapshot_too_large:

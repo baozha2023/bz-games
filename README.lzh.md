@@ -86,12 +86,12 @@ pnpm build:win
 
 ```
 bz-launcher/
-├── games/                 # 嬉資存錄（可設多徑）
 ├── resources/             # 應用圖示、佔位圖等靜物
 ├── src/
 │   ├── main/              # Electron 主程
 │   │   ├── index.ts          # 入戶：窗管、應用命週
 │   │   ├── window.ts         # 懸浮球窗
+│   │   ├── chat-window.ts    # 言語彈窗
 │   │   ├── ipc/              # IPC 處置（game / room / market / stats / system / storage）
 │   │   ├── services/         # 樞機商務
 │   │   │   ├── game/            # GameManager、GameLoader、GameAPI（V1/V2）
@@ -112,11 +112,10 @@ bz-launcher/
 │   │   └── index.html
 │   └── shared/            # 前後共享（型別、常數、IPC 道、約）
 ├── relay-server/          # 官府中繼伺服（獨立部署）
-├── bz-games-website/      # 官府網
-├── bz-games-github-release-market/  # GitHub Release 市集索引
+├── bz-games-admin/        # 治事後臺（反饋審核）
 └── electron.vite.config.ts
 ```
 
 > 市集索引之資由獨立之 [bz-games-market](https://github.com/baozha2023/bz-games-market) 倉所轄，嬉遊臺假二級市集之構以取展之。
 
-詳參 `CLAUDE.md` 中之開發繩墨。
+詳參 `CLAUDE.md` 中之開發繩墨，嬉者開發指南見 `DEVELOPER_GUIDE.md`，嬉界面約見 `docs/GAME_API_V1_V2_REFERENCE.md`，來日之規見 `docs/ROADMAP.md`。

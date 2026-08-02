@@ -96,11 +96,32 @@ export function registerRoomIpc() {
       }
       const localPlayerId = storeService.getSettings().playerId;
       if (roomServer.room?.hostId === localPlayerId) {
-        return {
-          success: false,
-          error: "own_room",
-          message: "Cannot join your own room",
-        };
+        const probe = await roomPasswordProbeService.probe(address);
+        if (!probe.success || !probe.hostId) {
+          return {
+            success: false,
+            error: probe.error || "probe_failed",
+          };
+        }
+        if (probe.hostId === localPlayerId) {
+          return {
+            success: false,
+            error: "own_room",
+            message: "Cannot join your own room",
+          };
+        }
+
+        try {
+          roomClient.disconnect();
+          relayRoomService.disconnect();
+          await roomServer.stop();
+        } catch {
+          return {
+            success: false,
+            error: "close_current_room_failed",
+            message: "Failed to close the current room",
+          };
+        }
       }
       return await roomClient.connect(address, gameId, version, password);
     },

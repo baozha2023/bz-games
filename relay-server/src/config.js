@@ -57,5 +57,8 @@ export const config = {
   OAUTH_SESSION_TTL_MS: Number(
     process.env.OAUTH_SESSION_TTL_MS || 30 * 24 * 60 * 60 * 1000,
   ),
+  AUTH_EXPIRED_SESSION_RETENTION_MS: Number(
+    process.env.AUTH_EXPIRED_SESSION_RETENTION_MS || 7 * 24 * 60 * 60 * 1000,
+  ),
   OAUTH_STATE_TTL_MS: Number(process.env.OAUTH_STATE_TTL_MS || 10 * 60 * 1000),
 };

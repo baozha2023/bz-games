@@ -103,7 +103,14 @@ function createHarness() {
       PLATFORM_SNAPSHOT_GC_GRACE_MS: 0,
     },
     authService: {
-      getSessionFromRequest: async () => ({ user: { id: 1 } }),
+      getSessionFromRequest: async () => ({
+        status: "authenticated",
+        auth: { user: { id: 1 } },
+      }),
+      sendAuthFailure: (res, status) => {
+        res.writeHead(401, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: status }));
+      },
     },
     mongoService: {
       isEnabled: () => true,

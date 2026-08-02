@@ -39,12 +39,12 @@ export function createCloudDataService({
       sendJson(res, 503, { error: "cloud_not_configured" });
       return null;
     }
-    const auth = await authService.getSessionFromRequest(req);
-    if (!auth) {
-      sendJson(res, 401, { error: "unauthorized" });
+    const resolution = await authService.getSessionFromRequest(req);
+    if (resolution.status !== "authenticated") {
+      authService.sendAuthFailure(res, resolution.status);
       return null;
     }
-    return auth;
+    return resolution.auth;
   }
 
   async function getSnapshotRef(userId) {
@@ -263,7 +263,10 @@ export function createCloudDataService({
         sendJson(res, 413, { error: "snapshot_too_large" });
         return true;
       }
-      console.error("[cloud-data-service] platform snapshot upload failed", error);
+      console.error(
+        "[cloud-data-service] platform snapshot upload failed",
+        error,
+      );
       sendJson(res, 500, { error: "cloud_upload_failed" });
       return true;
     }

@@ -22,11 +22,29 @@ export default {
     historyTitle: "フィードバック履歴",
     historyEmpty: "フィードバック履歴はありません",
     historySubmittedAt: "{time} に送信",
+    historyStatus: "対応状況",
+    historyUpdatedAt: "更新日時",
+    historyContent: "内容",
+    historyReply: "公式返信",
+    historyNoContent: "（画像のみ）",
+    historyNoReply: "返信はまだありません",
+    statuses: {
+      new: "新規",
+      reviewing: "確認中",
+      planned: "対応予定",
+      resolved: "解決済み",
+      closed: "終了",
+    },
     successTitle: "ご意見ありがとうございます",
     successDescription: "送信しました。フィードバック ID：{id}",
     cooldownUntil: "{time} 以降にもう一度送信できます。",
     errors: {
       too_many_images: "画像は最大 4 枚です",
+      duplicate_image: "この画像はすでに選択されています",
+      invalid_feedback_id: "フィードバック ID が無効です",
+      feedback_not_found: "フィードバックが存在しません",
+      forbidden: "このフィードバックを表示する権限がありません",
+      image_not_found: "フィードバック画像が存在しません",
       image_too_large: "画像が 5 MiB を超えています",
       unsupported_image_type: "PNG、JPEG、WebP のみ対応しています",
       image_type_mismatch: "画像の実形式と宣言形式が一致しません",
@@ -42,7 +60,10 @@ export default {
       feedback_invalid_response:
         "サービスから不正な応答が返されました。後でもう一度お試しください",
       unauthorized:
-        "GitHub セッションが失効しました。再ログインするか匿名で送信してください",
+        "このフィードバックを表示するには GitHub にログインしてください",
+      session_expired:
+        "GitHub セッションの期限が切れました。再ログインしてください",
+      session_invalid: "GitHub セッションが無効です。再ログインしてください",
       feedback_storage_not_configured:
         "フィードバック保存先が設定されていません",
       image_storage_not_configured: "画像保存先が設定されていません",
@@ -391,6 +412,8 @@ export default {
       gameStarted: "ゲームはすでに開始されています",
       gameIdMismatch: "ゲームIDが一致しません",
       ownRoom: "これは自分の部屋です。現在の部屋を開いてください。",
+      closeCurrentRoomFailed:
+        "現在の部屋を閉じられませんでした。もう一度お試しください。",
       passwordRequired: "この部屋にはパスワードが必要です",
       passwordIncorrect: "部屋パスワードが正しくありません",
       manifestInvalid:
@@ -527,6 +550,9 @@ export default {
     cloudErrors: {
       cloud_not_configured: "クラウド同期が設定されていません",
       unauthorized: "先にGitHub認証ログインを完了してください",
+      session_expired:
+        "GitHubログインの有効期限が切れました。再度ログインしてください。",
+      session_invalid: "GitHubログインが無効です。再度ログインしてください。",
       snapshot_not_found:
         "クラウドにプラットフォームスナップショットがありません。先にアップロードしてください。",
       snapshot_too_large:

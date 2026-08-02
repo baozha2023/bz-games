@@ -3,7 +3,7 @@
 > 本文档为 AI 辅助开发上下文文件，定义项目架构、功能边界、接口规范与实现约定。
 > 开发工作必须遵循本文档中的结构、命名、流程与安全要求。
 
-***
+---
 
 ## 一、项目概述
 
@@ -14,14 +14,14 @@
 
 ### 核心设计原则
 
-| 原则             | 说明                                                |
-|----------------|---------------------------------------------------|
-| **本地优先**       | 用户配置、游戏记录、经济数据与统计数据存储于本地；登录、云同步与反馈属于可选在线能力，不影响核心功能 |
-| **便携式存储**      | 配置默认存储在应用根目录，游戏可存放在默认目录或用户维护的多路径目录中               |
-| **开放式游戏管理**    | 用户可将符合平台规范的游戏载入平台，平台会自动复制并管理游戏文件                  |
-| **统一联机基础设施**   | 平台提供房间管理、玩家状态、聊天、游戏消息中继、断线重连与公网入口能力               |
-| **公网入口可切换**     | 局域网入口持续可用，公网入口支持用户自备 frp 与官方中继服务器短地址 |
-| **Windows 专用** | 面向 Windows 10/11 x64 设计、开发、测试与打包                             |
+| 原则                 | 说明                                                                                                 |
+| -------------------- | ---------------------------------------------------------------------------------------------------- |
+| **本地优先**         | 用户配置、游戏记录、经济数据与统计数据存储于本地；登录、云同步与反馈属于可选在线能力，不影响核心功能 |
+| **便携式存储**       | 配置默认存储在应用根目录，游戏可存放在默认目录或用户维护的多路径目录中                               |
+| **开放式游戏管理**   | 用户可将符合平台规范的游戏载入平台，平台会自动复制并管理游戏文件                                     |
+| **统一联机基础设施** | 平台提供房间管理、玩家状态、聊天、游戏消息中继、断线重连与公网入口能力                               |
+| **公网入口可切换**   | 局域网入口持续可用，公网入口支持用户自备 frp 与官方中继服务器短地址                                  |
+| **Windows 专用**     | 面向 Windows 10/11 x64 设计、开发、测试与打包                                                        |
 
 ### 平台核心功能
 
@@ -39,40 +39,40 @@
 - 系统设置（玩家信息、主题、端口、语言、更新、游戏库列表、GitHub Token）
 - 官方登录与云同步服务（GitHub OAuth 登录；脱敏配置与三张业务表 SQL 逻辑备份组成单一平台快照，原子发布并在本地幂等合并）
 - 建言献策（可选文字与图片；未登录每 48 小时一次，GitHub 登录后每 6 小时一次）
-- 反馈管理后台（GitHub 管理员白名单、反馈筛选/详情/图片/状态与管理备注；Vue 3 + Vite 独立构建，中继服务 `/admin/` 同源提供）
+- 反馈管理后台（GitHub 管理员白名单、反馈筛选/详情/图片/状态、用户回复与管理备注；Vue 3 + Vite 独立构建，中继服务 `/admin/` 同源提供）
 - 客户端卸载系统（游戏进程批量收口、游戏库可选择删除、路径安全校验、符号链接防护）
 - 默认封面/图标静态回退（`GameCover.vue` / `GameIcon.vue` 在无自定义资源时使用内置静态图片）
 
-***
+---
 
 ## 二、技术栈
 
-| 分类           | 技术 / 库                      | 备注                             |
-|--------------|-----------------------------|--------------------------------|
-| 桌面框架         | Electron                    | <br />                         |
-| 前端框架         | Vue 3                       | <br />                         |
-| 开发语言         | TypeScript（严格模式）            | <br />                         |
-| UI 组件库       | Naive UI                    | <br />                         |
-| 状态管理         | Pinia                       | <br />                         |
-| 页面截图         | html2canvas                 | 统计热力图分享图生成                    |
-| 静态文件服务       | serve-static                | `entry=serve` 游戏本地 HTTP 服务，根路径回落到 `index.html` |
-| 构建工具         | electron-vite               | <br />                         |
-| 打包工具         | electron-builder            | <br />                         |
-| 包管理器         | pnpm                        | <br />                         |
-| 进程间通信        | Electron IPC（contextBridge） | <br />                         |
-| 本地数据存储       | electron-store              | v10+ (ESM)，需在构建中配置 include     |
-| SQLite 数据存储      | better-sqlite3-multiple-ciphers | ChaCha20 加密的游戏实体、会话、成就与统计事件 |
-| 在线服务元数据 | MySQL                       | 用户、OAuth、会话、云文件元数据以及反馈正文/状态/图片索引 |
-| 云文件对象存储     | MongoDB GridFS              | 保存云同步文件与反馈图片 |
-| Multipart 解析 | busboy | 中继服务流式接收反馈图片并限制字段、文件数量及大小 |
-| 管理前端 | Vue 3 + TypeScript + Vite + Pinia + Naive UI | 构建为 `/admin/` 同源静态站点 |
-| 客户端更新        | electron-updater            | GitHub Releases 作为更新源          |
-| WebSocket 服务 | ws                          | Game API、Room Server、Room Client 均基于 WebSocket，v2 高频通信支持原始二进制帧 |
-| 版本比较         | semver                      | 用于平台版本与游戏版本兼容性检查               |
-| ZIP/7Z 解压     | 7zip-bin (7za)              | 通过 `child_process.spawn` 调用，统一处理 .zip 和 .7z |
-| 目标平台         | Windows 10/11 x64           | <br />                         |
+| 分类            | 技术 / 库                                    | 备注                                                                             |
+| --------------- | -------------------------------------------- | -------------------------------------------------------------------------------- |
+| 桌面框架        | Electron                                     | <br />                                                                           |
+| 前端框架        | Vue 3                                        | <br />                                                                           |
+| 开发语言        | TypeScript（严格模式）                       | <br />                                                                           |
+| UI 组件库       | Naive UI                                     | <br />                                                                           |
+| 状态管理        | Pinia                                        | <br />                                                                           |
+| 页面截图        | html2canvas                                  | 统计热力图分享图生成                                                             |
+| 静态文件服务    | serve-static                                 | `entry=serve` 游戏本地 HTTP 服务，根路径回落到 `index.html`                      |
+| 构建工具        | electron-vite                                | <br />                                                                           |
+| 打包工具        | electron-builder                             | <br />                                                                           |
+| 包管理器        | pnpm                                         | <br />                                                                           |
+| 进程间通信      | Electron IPC（contextBridge）                | <br />                                                                           |
+| 本地数据存储    | electron-store                               | v10+ (ESM)，需在构建中配置 include                                               |
+| SQLite 数据存储 | better-sqlite3-multiple-ciphers              | ChaCha20 加密的游戏实体、会话、成就与统计事件                                    |
+| 在线服务元数据  | MySQL                                        | 用户、OAuth、会话、云文件元数据以及反馈正文/状态/图片索引                        |
+| 云文件对象存储  | MongoDB GridFS                               | 保存云同步文件与反馈图片                                                         |
+| Multipart 解析  | busboy                                       | 中继服务流式接收反馈图片并限制字段、文件数量及大小                               |
+| 管理前端        | Vue 3 + TypeScript + Vite + Pinia + Naive UI | 构建为 `/admin/` 同源静态站点                                                    |
+| 客户端更新      | electron-updater                             | GitHub Releases 作为更新源                                                       |
+| WebSocket 服务  | ws                                           | Game API、Room Server、Room Client 均基于 WebSocket，v2 高频通信支持原始二进制帧 |
+| 版本比较        | semver                                       | 用于平台版本与游戏版本兼容性检查                                                 |
+| ZIP/7Z 解压     | 7zip-bin (7za)                               | 通过 `child_process.spawn` 调用，统一处理 .zip 和 .7z                            |
+| 目标平台        | Windows 10/11 x64                            | <br />                                                                           |
 
-***
+---
 
 ## 三、项目目录结构
 
@@ -185,7 +185,7 @@ bz-games/
 │   │   │   │   └── MarketService.ts       # 游戏市场索引拉取、下载、校验、解压与安装
 │   │   │   └── system/
 │   │       ├── CloudSyncService.ts    # 云端数据同步（GitHub OAuth 登录 / 配置与数据库上传下载 / 哈希校验 / 进度事件 / 上传黑名单过滤敏感字段 / 下载选择性合并 config）
-│   │       ├── FeedbackService.ts     # 图片选择/验证、反馈 multipart 上传与登录令牌封装
+│   │       ├── FeedbackService.ts     # 图片选择/验证、multipart 上传、历史详情查询与被动登录失效联动
 │   │       ├── NotificationService.ts # 系统通知窗口服务
 │   │       ├── UninstallService.ts    # 游戏进程收口、游戏库清理与系统卸载器启动确认
 │   │       └── UpdateService.ts       # 客户端更新检查/下载/安装服务
@@ -255,7 +255,7 @@ bz-games/
 │   │       │       ├── GameReportCard.vue   # 战绩报告卡片组件（纯文本 / 内置布局 / 自定义 HTML 三种模式）
 │   │       │       ├── RoomChat.vue        # 房间聊天组件
 │   │       │       ├── LanGuideModal.vue    # 局域网联机引导弹窗组件（NatFrp + EasyTier 配置指引，不再硬编码引导节点地址，RoomView 与 RoomDiscoveryView 共享）
-│   │       │       └── ImageViewer.vue      # 图片预览器（全屏蒙层，点击空白退出，自定义光标）
+│   │       │       └── ImageViewer.vue      # 聊天图片预览器（复用 Naive UI NImagePreview 工具栏）
 │   │       ├── locales/
 │   │       │   ├── de-DE.ts                # 德文文案
 │   │       │   ├── en-US.ts                # 英文文案
@@ -296,33 +296,33 @@ bz-games/
 │   └── vocabulary/                         # 客户端侧敏感词库（15 个分类 .txt 文件）
 ```
 
-***
+---
 
 ## 四、核心概念与术语
 
-| 术语                                  | 说明                                                                             |
-|-------------------------------------|--------------------------------------------------------------------------------|
-| **游戏清单 (Game Manifest)**            | `game.json` 文件，描述游戏元信息与平台集成配置；外部安装包为明文，已安装游戏库中为版本化密文信封                              |
-| **游戏库 (Library)**                   | 用户已载入平台的所有游戏集合，来源于本地默认目录与已记录的多游戏路径                                             |
-| **房间 (Room)**                       | 一次联机会话，包含房主与所有玩家的状态                                                            |
-| **房主 (Host)**                       | 创建房间的玩家，其平台负责运行 Room Server                                                    |
-| **玩家 (Player)**                     | 加入房间的用户（含房主自身）                                                                 |
-| **Room Server**                     | 房主平台运行的 WebSocket 服务器，经内网穿透工具对外暴露                                              |
-| **Room Client**                     | 非房主玩家的平台连接 Room Server 的 WebSocket 客户端                                         |
-| **Game API Server**                 | 平台在本机运行的本地 WebSocket 服务（`127.0.0.1`），供游戏进程调用平台能力；控制面走 JSON，v2 高频实时数据可走二进制帧 |
-| **v2 二进制帧**                       | 高频实时通信帧格式：4字节 big-endian header 长度 + UTF-8 JSON header + 原始 binary body，仅用于 `message.send` / `message.broadcast` / `message.publish` |
-| **官方中继服务器 (Relay Server)**      | 公网 Node.js HTTP + WebSocket 服务；房间链路保持透明转发，同时提供 OAuth、云同步、反馈和管理员 API。 |
-| **官方短地址**                         | 平台按 `DEFAULT_RELAY_PUBLIC_HOST + roomCode` 拼接的 `<relay-public-host>:随机数字` 地址，展示、复制、服务器列表和手动输入统一使用该格式。                         |
-| **官方房间码**                         | 中继服务器生成并识别的数字房间码；平台从短地址中解析后通过 `relay:join.payload.roomCode` 发送给中继服务器。                         |
-| **房间发现 (Room Discovery)**          | 平台房间页面的局域网/服务器 Tab。局域网 Tab 合并了物理局域网和虚拟局域网（通过 `Promise.all` 并发扫描），按网卡分类过滤；服务器通过官方中继 `/rooms` 获取房间列表。                      |
-| **游戏市场目录 (Market Directory)**       | 顶层 `market.json` 文件，`sources` 数组列出所有可用市场源，平台一级界面展示                             |
-| **游戏市场索引 (Market Index)**           | 远程 `market.json` 文件（每个市场源仓库中），描述该市场内可展示和可下载的游戏及其版本信息                           |
-| **市场安装包 (Market Package)**          | 市场游戏某个版本对应的下载产物，平台下载后校验并安装到默认游戏库                                              |
-| **下载任务 (Download Task)**            | 市场下载安装的一次任务实例，包含状态机、不可变元数据和 AbortController，支持暂停/恢复/取消                         |
-| **下载任务快照 (Download Task Snapshot)** | 暂停或中断时持久化到 `pending-tasks.json` 的进度数据，包含已下载字节数、下载 URL、SHA256 等，用于断点续传恢复        |
-| **断点续传 (Resume Download)**          | 利用 HTTP Range 请求头从上次断点继续下载，服务端不支持时自动降级为全量下载                                    |
-| **bz-config.js**                    | 平台仅为本地 HTML/Serve 游戏生成的临时配置文件（包含端口、Token、玩家、游戏、平台版本及房间信息），游戏退出或启动失败时自动删除。 |
-| **内网穿透**                            | 由用户自备（如 SakuraFrp），将 Room Server 本地端口映射到公网地址                                   |
+| 术语                                      | 说明                                                                                                                                                                |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **游戏清单 (Game Manifest)**              | `game.json` 文件，描述游戏元信息与平台集成配置；外部安装包为明文，已安装游戏库中为版本化密文信封                                                                    |
+| **游戏库 (Library)**                      | 用户已载入平台的所有游戏集合，来源于本地默认目录与已记录的多游戏路径                                                                                                |
+| **房间 (Room)**                           | 一次联机会话，包含房主与所有玩家的状态                                                                                                                              |
+| **房主 (Host)**                           | 创建房间的玩家，其平台负责运行 Room Server                                                                                                                          |
+| **玩家 (Player)**                         | 加入房间的用户（含房主自身）                                                                                                                                        |
+| **Room Server**                           | 房主平台运行的 WebSocket 服务器，经内网穿透工具对外暴露                                                                                                             |
+| **Room Client**                           | 非房主玩家的平台连接 Room Server 的 WebSocket 客户端                                                                                                                |
+| **Game API Server**                       | 平台在本机运行的本地 WebSocket 服务（`127.0.0.1`），供游戏进程调用平台能力；控制面走 JSON，v2 高频实时数据可走二进制帧                                              |
+| **v2 二进制帧**                           | 高频实时通信帧格式：4字节 big-endian header 长度 + UTF-8 JSON header + 原始 binary body，仅用于 `message.send` / `message.broadcast` / `message.publish`            |
+| **官方中继服务器 (Relay Server)**         | 公网 Node.js HTTP + WebSocket 服务；房间链路保持透明转发，同时提供 OAuth、云同步、反馈和管理员 API。                                                                |
+| **官方短地址**                            | 平台按 `DEFAULT_RELAY_PUBLIC_HOST + roomCode` 拼接的 `<relay-public-host>:随机数字` 地址，展示、复制、服务器列表和手动输入统一使用该格式。                          |
+| **官方房间码**                            | 中继服务器生成并识别的数字房间码；平台从短地址中解析后通过 `relay:join.payload.roomCode` 发送给中继服务器。                                                         |
+| **房间发现 (Room Discovery)**             | 平台房间页面的局域网/服务器 Tab。局域网 Tab 合并了物理局域网和虚拟局域网（通过 `Promise.all` 并发扫描），按网卡分类过滤；服务器通过官方中继 `/rooms` 获取房间列表。 |
+| **游戏市场目录 (Market Directory)**       | 顶层 `market.json` 文件，`sources` 数组列出所有可用市场源，平台一级界面展示                                                                                         |
+| **游戏市场索引 (Market Index)**           | 远程 `market.json` 文件（每个市场源仓库中），描述该市场内可展示和可下载的游戏及其版本信息                                                                           |
+| **市场安装包 (Market Package)**           | 市场游戏某个版本对应的下载产物，平台下载后校验并安装到默认游戏库                                                                                                    |
+| **下载任务 (Download Task)**              | 市场下载安装的一次任务实例，包含状态机、不可变元数据和 AbortController，支持暂停/恢复/取消                                                                          |
+| **下载任务快照 (Download Task Snapshot)** | 暂停或中断时持久化到 `pending-tasks.json` 的进度数据，包含已下载字节数、下载 URL、SHA256 等，用于断点续传恢复                                                       |
+| **断点续传 (Resume Download)**            | 利用 HTTP Range 请求头从上次断点继续下载，服务端不支持时自动降级为全量下载                                                                                          |
+| **bz-config.js**                          | 平台仅为本地 HTML/Serve 游戏生成的临时配置文件（包含端口、Token、玩家、游戏、平台版本及房间信息），游戏退出或启动失败时自动删除。                                   |
+| **内网穿透**                              | 由用户自备（如 SakuraFrp），将 Room Server 本地端口映射到公网地址                                                                                                   |
 
 ### 联机通信架构流程
 
@@ -377,14 +377,14 @@ bz-games/
 
 **关键设计理念**：
 
-| 理念 | 说明 |
-|-----|------|
-| **本地 Game API** | 游戏进程只与本地 `ws://127.0.0.1` 通信，无需感知网络拓扑；平台透明代理所有联机消息。 |
-| **房主单点** | RoomServer 运行在房主机上，经由 frp 或中继暴露；客机 RoomClient 连接房主地址。 |
-| **中继透明转发** | Relay Server 不解析游戏协议语义，仅按 `relay:*` 指令做房间管理 + 消息转发，保持零耦合。 |
-| **多入口并存** | 同一房间可同时有局域网直连、frp 公网、中继转发的玩家混入，房主本地 RoomServer 统一处理。 |
-| **断线重连** | RoomClient 在 WebSocket 断开后自动重连，房主侧维护 `reconnectPlayerIds` 列表，支持游戏进程无缝恢复。 |
-| **v2 二进制帧** | 高频实时通信走 4B 长度头 + JSON header + binary body，减少序列化开销，仅用于 `send/broadcast/publish`。 |
+| 理念              | 说明                                                                                                    |
+| ----------------- | ------------------------------------------------------------------------------------------------------- |
+| **本地 Game API** | 游戏进程只与本地 `ws://127.0.0.1` 通信，无需感知网络拓扑；平台透明代理所有联机消息。                    |
+| **房主单点**      | RoomServer 运行在房主机上，经由 frp 或中继暴露；客机 RoomClient 连接房主地址。                          |
+| **中继透明转发**  | Relay Server 不解析游戏协议语义，仅按 `relay:*` 指令做房间管理 + 消息转发，保持零耦合。                 |
+| **多入口并存**    | 同一房间可同时有局域网直连、frp 公网、中继转发的玩家混入，房主本地 RoomServer 统一处理。                |
+| **断线重连**      | RoomClient 在 WebSocket 断开后自动重连，房主侧维护 `reconnectPlayerIds` 列表，支持游戏进程无缝恢复。    |
+| **v2 二进制帧**   | 高频实时通信走 4B 长度头 + JSON header + binary body，减少序列化开销，仅用于 `send/broadcast/publish`。 |
 
 ### 4.0 游戏库路径体系
 
@@ -453,66 +453,66 @@ bz-games/
 
 #### 顶层字段说明
 
-| 字段              | 类型               | 必填 | 说明                                                    |
-|-----------------|------------------|----|-------------------------------------------------------|
-| `schemaVersion` | `string`         | 是  | 市场索引格式版本，使用语义化版本，供兼容逻辑识别。                        |
-| `marketId`      | `string`         | 是  | 当前市场的唯一标识，与 `sources[0].marketId` 一致。                 |
-| `marketName`    | `string`         | 是  | 当前市场的显示名称。                                            |
-| `generatedAt`   | `string`         | 是  | 索引生成时间，ISO 8601 格式。首次创建时填写。                                |
-| `updatedAt`     | `string`         | 是  | 索引最后更新时间，ISO 8601 格式。每次更新需刷新。                              |
-| `repository`    | `string`         | 否  | 该市场的 GitHub 仓库地址。                                               |
-| `author`        | `string`         | 否  | 该市场的维护作者。                                                       |
-| `sources`       | `MarketSource[]` | 是  | 市场源列表，至少 1 项。平台一级界面展示所有 `visibility !== "hidden"` 的源。 |
-| `games`         | `MarketGame[]`   | 是  | 当前市场（sources[0]）中的游戏列表。                               |
+| 字段            | 类型             | 必填 | 说明                                                                         |
+| --------------- | ---------------- | ---- | ---------------------------------------------------------------------------- |
+| `schemaVersion` | `string`         | 是   | 市场索引格式版本，使用语义化版本，供兼容逻辑识别。                           |
+| `marketId`      | `string`         | 是   | 当前市场的唯一标识，与 `sources[0].marketId` 一致。                          |
+| `marketName`    | `string`         | 是   | 当前市场的显示名称。                                                         |
+| `generatedAt`   | `string`         | 是   | 索引生成时间，ISO 8601 格式。首次创建时填写。                                |
+| `updatedAt`     | `string`         | 是   | 索引最后更新时间，ISO 8601 格式。每次更新需刷新。                            |
+| `repository`    | `string`         | 否   | 该市场的 GitHub 仓库地址。                                                   |
+| `author`        | `string`         | 否   | 该市场的维护作者。                                                           |
+| `sources`       | `MarketSource[]` | 是   | 市场源列表，至少 1 项。平台一级界面展示所有 `visibility !== "hidden"` 的源。 |
+| `games`         | `MarketGame[]`   | 是   | 当前市场（sources[0]）中的游戏列表。                                         |
 
 #### 市场源对象 `MarketSource`
 
-| 字段            | 类型        | 必填 | 说明                       |
-|---------------|-----------|----|--------------------------|
-| `marketId`    | `string`  | 是  | 市场唯一标识。                  |
-| `marketName`  | `string`  | 是  | 市场显示名称。                  |
-| `coverUrl`    | `string`  | 否  | 市场封面图，用于一级界面卡片。          |
-| `generatedAt` | `string`  | 是  | 该市场索引的生成时间。              |
-| `repository`  | `string`  | 是  | GitHub 仓库地址（仅支持 GitHub）。 |
-| `branch`      | `string`  | 是  | 仓库分支。                    |
-| `featured`    | `boolean` | 否  | 是否重点推荐。                  |
-| `visibility`  | `string`  | 否  | `public` / `hidden`。     |
+| 字段          | 类型      | 必填 | 说明                               |
+| ------------- | --------- | ---- | ---------------------------------- |
+| `marketId`    | `string`  | 是   | 市场唯一标识。                     |
+| `marketName`  | `string`  | 是   | 市场显示名称。                     |
+| `coverUrl`    | `string`  | 否   | 市场封面图，用于一级界面卡片。     |
+| `generatedAt` | `string`  | 是   | 该市场索引的生成时间。             |
+| `repository`  | `string`  | 是   | GitHub 仓库地址（仅支持 GitHub）。 |
+| `branch`      | `string`  | 是   | 仓库分支。                         |
+| `featured`    | `boolean` | 否   | 是否重点推荐。                     |
+| `visibility`  | `string`  | 否   | `public` / `hidden`。              |
 
 #### 游戏对象 `MarketGame`
 
-| 字段              | 类型                    | 必填 | 说明                                                                                        |
-|-----------------|-----------------------|----|-------------------------------------------------------------------------------------------|
-| `id`            | `string`              | 是  | 游戏唯一 ID，必须与安装包内 `game.json.id` 一致，推荐使用反向域名格式。                                             |
-| `name`          | `string`              | 是  | 游戏名。                                                                                      |
-| `author`        | `string`              | 是  | 游戏作者或工作室名称。                                                                               |
-| `author_url`    | `string`              | 否  | 作者主页链接，详情页展开后作者名称旁将显示跳转图标。                                                              |
-| `type`          | `string`              | 是  | 游戏类型，取值与 `game.json.type` 一致：`singleplayer`、`multiplayer`、`singlemultiple`、`networkgame`。 |
-| `summary`       | `string`              | 是  | 游戏简介，列表卡片和详情页都使用该字段展示，建议 1~2 句话。                                                          |
-| `tags`          | `string[]`            | 否  | 游戏标签，如 `["休闲", "平台跳跃"]`。                                                                  |
-| `iconUrl`       | `string`              | 否  | 游戏图标远程地址，建议 HTTPS。                                                                        |
-| `coverUrl`      | `string`              | 否  | 游戏封面远程地址，建议 16:9。                                                                         |
-| `screenshots`   | `string[]`            | 否  | 详情页截图列表。                                                                                  |
-| `featured`      | `boolean`             | 否  | 是否在市场首页重点推荐。                                                                              |
-| `visibility`    | `string`              | 否  | 可见性，推荐取值：`public`、`hidden`、`deprecated`。默认 `public`。                                      |
-| `minPlayers`    | `number`              | 否  | 多人游戏最小人数；仅多人相关类型建议填写。                                                                     |
-| `maxPlayers`    | `number`              | 否  | 多人游戏最大人数；仅多人相关类型建议填写。                                                                     |
-| `latestVersion` | `string`              | 是  | 当前推荐展示/安装的最新稳定版本号。                                                                        |
-| `versions`      | `MarketGameVersion[]` | 是  | 该游戏可安装的版本列表，至少 1 项。                                                                       |
+| 字段            | 类型                  | 必填 | 说明                                                                                                     |
+| --------------- | --------------------- | ---- | -------------------------------------------------------------------------------------------------------- |
+| `id`            | `string`              | 是   | 游戏唯一 ID，必须与安装包内 `game.json.id` 一致，推荐使用反向域名格式。                                  |
+| `name`          | `string`              | 是   | 游戏名。                                                                                                 |
+| `author`        | `string`              | 是   | 游戏作者或工作室名称。                                                                                   |
+| `author_url`    | `string`              | 否   | 作者主页链接，详情页展开后作者名称旁将显示跳转图标。                                                     |
+| `type`          | `string`              | 是   | 游戏类型，取值与 `game.json.type` 一致：`singleplayer`、`multiplayer`、`singlemultiple`、`networkgame`。 |
+| `summary`       | `string`              | 是   | 游戏简介，列表卡片和详情页都使用该字段展示，建议 1~2 句话。                                              |
+| `tags`          | `string[]`            | 否   | 游戏标签，如 `["休闲", "平台跳跃"]`。                                                                    |
+| `iconUrl`       | `string`              | 否   | 游戏图标远程地址，建议 HTTPS。                                                                           |
+| `coverUrl`      | `string`              | 否   | 游戏封面远程地址，建议 16:9。                                                                            |
+| `screenshots`   | `string[]`            | 否   | 详情页截图列表。                                                                                         |
+| `featured`      | `boolean`             | 否   | 是否在市场首页重点推荐。                                                                                 |
+| `visibility`    | `string`              | 否   | 可见性，推荐取值：`public`、`hidden`、`deprecated`。默认 `public`。                                      |
+| `minPlayers`    | `number`              | 否   | 多人游戏最小人数；仅多人相关类型建议填写。                                                               |
+| `maxPlayers`    | `number`              | 否   | 多人游戏最大人数；仅多人相关类型建议填写。                                                               |
+| `latestVersion` | `string`              | 是   | 当前推荐展示/安装的最新稳定版本号。                                                                      |
+| `versions`      | `MarketGameVersion[]` | 是   | 该游戏可安装的版本列表，至少 1 项。                                                                      |
 
 #### 版本对象 `MarketGameVersion`
 
-| 字段                | 类型        | 必填 | 说明                                          |
-|-------------------|-----------|----|---------------------------------------------|
-| `version`         | `string`  | 是  | 版本号，语义化版本格式，必须与安装包内 `game.json.version` 一致。 |
-| `description`     | `string`  | 是  | 该版本说明或版本简介。                         |
-| `platformVersion` | `string`  | 是  | 当前版本对平台版本的兼容范围，使用 `semver` 语法，如 `>=1.9.5`。  |
-| `downloadUrl`     | `string`  | 是  | 版本安装包下载地址，建议 HTTPS。                         |
-| `sha256`          | `string`  | 否  | 安装包 SHA-256 摘要，用于完整性校验。全可选（任何 downloadUrl 均可省略），若提供则格式必须为 64 位 hex。 |
-| `size`            | `number`  | 否* | 安装包字节大小，用于展示下载体积和二次校验。`downloadUrl` 为 GitHub Releases 直链时可省略，平台下载时自动获取。非 GitHub 直链时**必填**。 |
-| `publishedAt`     | `string`  | 否  | 版本发布时间，ISO 8601 格式。                         |
-| `releaseNotes`    | `string`  | 否  | 更详细的版本更新内容。                                 |
-| `isPrerelease`    | `boolean` | 否  | 是否为预发布版本；预发布版本默认不作为 `latestVersion`。        |
-| `gameManifest`    | `object`  | 否  | Manifest 覆盖配置（`GameManifestOverride`），可覆盖/补充安装包内 `game.json` 的任意字段。当安装包内不含 `game.json` 时，该项**必填**，平台将据此自动生成完整 Manifest。 |
+| 字段              | 类型      | 必填 | 说明                                                                                                                                                                    |
+| ----------------- | --------- | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `version`         | `string`  | 是   | 版本号，语义化版本格式，必须与安装包内 `game.json.version` 一致。                                                                                                       |
+| `description`     | `string`  | 是   | 该版本说明或版本简介。                                                                                                                                                  |
+| `platformVersion` | `string`  | 是   | 当前版本对平台版本的兼容范围，使用 `semver` 语法，如 `>=1.9.5`。                                                                                                        |
+| `downloadUrl`     | `string`  | 是   | 版本安装包下载地址，建议 HTTPS。                                                                                                                                        |
+| `sha256`          | `string`  | 否   | 安装包 SHA-256 摘要，用于完整性校验。全可选（任何 downloadUrl 均可省略），若提供则格式必须为 64 位 hex。                                                                |
+| `size`            | `number`  | 否\* | 安装包字节大小，用于展示下载体积和二次校验。`downloadUrl` 为 GitHub Releases 直链时可省略，平台下载时自动获取。非 GitHub 直链时**必填**。                               |
+| `publishedAt`     | `string`  | 否   | 版本发布时间，ISO 8601 格式。                                                                                                                                           |
+| `releaseNotes`    | `string`  | 否   | 更详细的版本更新内容。                                                                                                                                                  |
+| `isPrerelease`    | `boolean` | 否   | 是否为预发布版本；预发布版本默认不作为 `latestVersion`。                                                                                                                |
+| `gameManifest`    | `object`  | 否   | Manifest 覆盖配置（`GameManifestOverride`），可覆盖/补充安装包内 `game.json` 的任意字段。当安装包内不含 `game.json` 时，该项**必填**，平台将据此自动生成完整 Manifest。 |
 
 #### GameManifestOverride 覆盖机制
 
@@ -552,32 +552,45 @@ bz-games/
 // src/shared/types/market.types.ts
 
 type MarketTaskStatus =
-    | "idle" | "downloading" | "verifying" | "extracting"
-    | "installing" | "completed" | "error" | "canceled"
-    | "paused" | "interrupted";
+  | "idle"
+  | "downloading"
+  | "verifying"
+  | "extracting"
+  | "installing"
+  | "completed"
+  | "error"
+  | "canceled"
+  | "paused"
+  | "interrupted";
 
-type MarketErrorCode = "network" | "download" | "verify" | "extract" | "install" | "manifest";
+type MarketErrorCode =
+  | "network"
+  | "download"
+  | "verify"
+  | "extract"
+  | "install"
+  | "manifest";
 
 interface MarketTaskState {
-    taskId: string;           // 格式: `${gameId}@${version}`
-    gameId: string;
-    version: string;
-    status: MarketTaskStatus;
-    progress: number;         // 0-100
-    bytesReceived?: number;
-    totalBytes?: number;
-    message?: string;
-    error?: string;
-    errorCode?: MarketErrorCode;  // 失败时自动归类
-    createdAt: number;
-    updatedAt: number;
+  taskId: string; // 格式: `${gameId}@${version}`
+  gameId: string;
+  version: string;
+  status: MarketTaskStatus;
+  progress: number; // 0-100
+  bytesReceived?: number;
+  totalBytes?: number;
+  message?: string;
+  error?: string;
+  errorCode?: MarketErrorCode; // 失败时自动归类
+  createdAt: number;
+  updatedAt: number;
 }
 
 interface FloatBallProgress {
-    totalProgress: number;
-    activeTaskCount: number;
-    completedTaskCount: number;
-    totalTaskCount: number;
+  totalProgress: number;
+  activeTaskCount: number;
+  completedTaskCount: number;
+  totalTaskCount: number;
 }
 ```
 
@@ -592,7 +605,7 @@ interface FloatBallProgress {
 - **内存管理**：主进程 `finalize()` 在终态时删除临时文件并延迟 30 秒清理 `tasks` Map 条目。MarketView
   组件卸载时注销事件监听器并清理所有定时器。
 
-***
+---
 
 ## 五、架构设计
 
@@ -723,94 +736,103 @@ interface FloatBallProgress {
 ```typescript
 // src/shared/types/store.types.ts
 interface UserData {
-    bzCoins: number;
-    checkIn: {
-        lastCheckInDate: string;
-        consecutiveDays: number;
-        totalDays: number;
-    };
-    ownedFrames: string[];
-    equippedFrame?: string;
+  bzCoins: number;
+  checkIn: {
+    lastCheckInDate: string;
+    consecutiveDays: number;
+    totalDays: number;
+  };
+  ownedFrames: string[];
+  equippedFrame?: string;
 }
 
 interface AppStore {
-    settings: AppSettings;
-    userData: UserData;
+  settings: AppSettings;
+  userData: UserData;
 }
 
 interface UnlockedAchievement {
-    id: string;
-    unlockedAt: number;
+  id: string;
+  unlockedAt: number;
 }
 
 interface GameVersion {
-    version: string;
-    path: string;
-    addedAt: number;
-    stats: Record<string, number>;
-    unlockedAchievements: UnlockedAchievement[];
-    playtime: number;
+  version: string;
+  path: string;
+  addedAt: number;
+  stats: Record<string, number>;
+  unlockedAchievements: UnlockedAchievement[];
+  playtime: number;
 }
 
 interface GameRecord {
-    id: string;
-    versions: GameVersion[];
-    latestVersion: string;
-    addedAt: number;
-    lastPlayedAt?: number;
-    isFavorite?: boolean;
+  id: string;
+  versions: GameVersion[];
+  latestVersion: string;
+  addedAt: number;
+  lastPlayedAt?: number;
+  isFavorite?: boolean;
 }
 
 type NicknameFont = "system" | "rounded" | "serif" | "mono" | "fantasy";
 
 type NicknameEffect =
-  | "none" | "glow" | "sparkle" | "flame" | "neon"
-  | "rainbow" | "aurora" | "stardust" | "crystal" | "comet" | "heartbeat";
+  | "none"
+  | "glow"
+  | "sparkle"
+  | "flame"
+  | "neon"
+  | "rainbow"
+  | "aurora"
+  | "stardust"
+  | "crystal"
+  | "comet"
+  | "heartbeat";
 
 interface NicknameStyle {
-    color: string;
-    gradientStart?: string;
-    gradientEnd?: string;
-    font: NicknameFont;
-    effect: NicknameEffect;
-    weight: "normal" | "semibold" | "bold";
+  color: string;
+  gradientStart?: string;
+  gradientEnd?: string;
+  font: NicknameFont;
+  effect: NicknameEffect;
+  weight: "normal" | "semibold" | "bold";
 }
 
 interface FeedbackHistoryItem {
-    id: string;
-    submittedAt: number;
+  id: string;
+  submittedAt: number;
 }
 
 interface AppSettings {
-    playerName: string;
-    playerId: string;
-    avatar?: string;
-    cloudSessionToken?: string;
-    cloudSessionExpiresAt?: string;
-    cloudUserLogin?: string;
-    cloudUserName?: string;
-    cloudUserProfileUrl?: string;
-    cloudLastUploadedAt?: string;
-    feedbackHistory?: FeedbackHistoryItem[];
-    nicknameStyle?: NicknameStyle;
-    libraryLayout?: "card" | "icon" | "steam";
-    lastJoinRoomAddress?: string;
-    language: "zh-CN" | "en-US" | "ja-JP" | "zh-TW" | "lzh" | "de-DE";
-    theme: "dark" | "light" | "auto";
-    defaultRoomPort: number;
-    closeBehavior: "tray" | "exit";
-    autoLaunch: boolean;
-    ignoredUpdateVersion?: string;
-    gameStoragePath?: string;
-    gameStorageHistory?: string[];
-    lastOpenedAt?: number;
-    ignoreDefaultGamesMigrationPrompt?: boolean;
-    githubToken?: string;
-    chatWindowBounds?: { x: number; y: number; width: number; height: number };
-    chatInputHeight?: number;
-    downloadFloatBall?: boolean;
-    sensitiveWordFilter?: boolean;
-    floatBallPosition?: { x: number; y: number };
+  playerName: string;
+  playerId: string;
+  avatar?: string;
+  cloudSessionToken?: string;
+  cloudSessionExpiresAt?: string;
+  cloudUserLogin?: string;
+  cloudUserName?: string;
+  cloudUserProfileUrl?: string;
+  cloudLastUploadedAt?: string;
+  feedbackHistory?: FeedbackHistoryItem[];
+  nicknameStyle?: NicknameStyle;
+  libraryLayout?: "card" | "icon" | "steam";
+  lastJoinRoomAddress?: string;
+  language: "zh-CN" | "en-US" | "ja-JP" | "zh-TW" | "lzh" | "de-DE";
+  theme: "dark" | "light" | "auto";
+  defaultRoomPort: number;
+  closeBehavior: "tray" | "exit";
+  autoLaunch: boolean;
+  ignoredUpdateVersion?: string;
+  gameStoragePath?: string;
+  gameStorageHistory?: string[];
+  lastOpenedAt?: number;
+  ignoreDefaultGamesMigrationPrompt?: boolean;
+  githubToken?: string;
+  chatWindowBounds?: { x: number; y: number; width: number; height: number };
+  chatInputHeight?: number;
+  downloadFloatBall?: boolean;
+  sensitiveWordFilter?: boolean;
+  floatBallPosition?: { x: number; y: number };
 }
 ```
 
@@ -845,18 +867,18 @@ interface AppSettings {
 - **GameManager 生命周期**：`cleanupApiOnly()` 方法仅清理 WebSocket/HTTP 服务器资源，不终止游戏进程也不关闭窗口。当 API
   Server 超时自动停止时调用，避免误杀正在运行的游戏。
 - **Logger 类设计**：
-    - 模块级 `Logger` 类单例（`export const logger = new Logger()`）。`installGlobalHandlers()` 在 `index.ts` 入口处调用。
-    - **Console 代理**：`installConsoleProxy()` 将全局 `console.log`/`console.warn`/`console.error` 替换为 Logger 方法，统一所有日志路由。
-    - **双模式输出**：开发模式（`!app.isPackaged`）全部级别输出到控制台（调用保留下来的 `nativeConsole` 原始引用，避免无限递归）；生产模式 `info`/`warn` 静默丢弃，仅 `error` 写入 exe 同级 `bz-games-error.log` 文件。
-    - **错误日志轮转**：`rotateErrorLogsIfNeeded()` 在每次写入前检查文件大小，超过 `maxErrorLogBytes`（5MB）时执行轮转（保留 3 份历史备份 `bz-games-error.log.1`/`.2`/`.3`）。单条消息超过 5MB 时先轮转再写入（不拒绝超大消息）。
-    - **全局异常捕获**：注册 `process.on("uncaughtException")`、`process.on("unhandledRejection")`、`app.on("render-process-gone")`、`app.on("child-process-gone")` 四个全局处理器，异常信息通过 Logger 统一写入错误日志。
-    - **结构化渲染进程错误**：`captureRendererError(payload)` 接收来自 preload 脚本的 `RendererLogPayload` 结构化对象（含 `context.source`/`url`/`userAgent`/`timestamp`/`gameId`/`version` + `args` 数组），通过 `normalizeRendererLogPayload()` 校验并补全默认值，格式化输出 `[Renderer:<source>]` 前缀日志。对非结构化旧格式数据也有降级处理。
+  - 模块级 `Logger` 类单例（`export const logger = new Logger()`）。`installGlobalHandlers()` 在 `index.ts` 入口处调用。
+  - **Console 代理**：`installConsoleProxy()` 将全局 `console.log`/`console.warn`/`console.error` 替换为 Logger 方法，统一所有日志路由。
+  - **双模式输出**：开发模式（`!app.isPackaged`）全部级别输出到控制台（调用保留下来的 `nativeConsole` 原始引用，避免无限递归）；生产模式 `info`/`warn` 静默丢弃，仅 `error` 写入 exe 同级 `bz-games-error.log` 文件。
+  - **错误日志轮转**：`rotateErrorLogsIfNeeded()` 在每次写入前检查文件大小，超过 `maxErrorLogBytes`（5MB）时执行轮转（保留 3 份历史备份 `bz-games-error.log.1`/`.2`/`.3`）。单条消息超过 5MB 时先轮转再写入（不拒绝超大消息）。
+  - **全局异常捕获**：注册 `process.on("uncaughtException")`、`process.on("unhandledRejection")`、`app.on("render-process-gone")`、`app.on("child-process-gone")` 四个全局处理器，异常信息通过 Logger 统一写入错误日志。
+  - **结构化渲染进程错误**：`captureRendererError(payload)` 接收来自 preload 脚本的 `RendererLogPayload` 结构化对象（含 `context.source`/`url`/`userAgent`/`timestamp`/`gameId`/`version` + `args` 数组），通过 `normalizeRendererLogPayload()` 校验并补全默认值，格式化输出 `[Renderer:<source>]` 前缀日志。对非结构化旧格式数据也有降级处理。
 - **Renderer 错误捕获管线**：
-    - **共享序列化模块**：`src/shared/log-serialization.ts` 提供 `serializeLogArg()` / `serializeLogArgs()` / `formatLogValue()` / `normalizeRendererLogPayload()` 统一序列化工具。序列化有界保护：最大深度 6 层、数组最多 100 项、对象最多 100 键、字符串最长 20000 字符，超出截断并标记 `[truncated ...]`。定义 `LogSource` 联合类型（`main-window` / `game-window` / `chat-window` / `float-ball` / `notification-window`）和 `RendererLogPayload` / `RendererLogContext` 接口。
-    - **Preload 世界**：`installPreloadWorldForwarding()` 代理 `console.error`，调用 `buildContext()` 构建窗口身份上下文（source 通过 URL hash 自动识别窗口类型，game-window 额外附带 gameId/version），通过 `buildPayload()` 生成结构化 `RendererLogPayload` 后经 IPC `system:log:error` 发送至主进程。
-    - **Main World 桥接**（contextIsolated 模式）：注入精简版 `MAIN_WORLD_BRIDGE_SOURCE` 脚本，仅负责将原始 args 通过 CustomEvent 抛出，序列化统一在 preload 侧完成，消除双世界之间的序列化代码重复。
-    - `window.addEventListener("error", ...)` 和 `window.addEventListener("unhandledrejection", ...)` 捕获未被 try-catch 覆盖的运行时异常。
-    - 主进程 `log.ipc.ts` 注册 `ipcMain.on(SYSTEM_LOG_ERROR)` 监听器，接收 `RendererLogPayload` 并调用 `logger.captureRendererError()` 记录。
+  - **共享序列化模块**：`src/shared/log-serialization.ts` 提供 `serializeLogArg()` / `serializeLogArgs()` / `formatLogValue()` / `normalizeRendererLogPayload()` 统一序列化工具。序列化有界保护：最大深度 6 层、数组最多 100 项、对象最多 100 键、字符串最长 20000 字符，超出截断并标记 `[truncated ...]`。定义 `LogSource` 联合类型（`main-window` / `game-window` / `chat-window` / `float-ball` / `notification-window`）和 `RendererLogPayload` / `RendererLogContext` 接口。
+  - **Preload 世界**：`installPreloadWorldForwarding()` 代理 `console.error`，调用 `buildContext()` 构建窗口身份上下文（source 通过 URL hash 自动识别窗口类型，game-window 额外附带 gameId/version），通过 `buildPayload()` 生成结构化 `RendererLogPayload` 后经 IPC `system:log:error` 发送至主进程。
+  - **Main World 桥接**（contextIsolated 模式）：注入精简版 `MAIN_WORLD_BRIDGE_SOURCE` 脚本，仅负责将原始 args 通过 CustomEvent 抛出，序列化统一在 preload 侧完成，消除双世界之间的序列化代码重复。
+  - `window.addEventListener("error", ...)` 和 `window.addEventListener("unhandledrejection", ...)` 捕获未被 try-catch 覆盖的运行时异常。
+  - 主进程 `log.ipc.ts` 注册 `ipcMain.on(SYSTEM_LOG_ERROR)` 监听器，接收 `RendererLogPayload` 并调用 `logger.captureRendererError()` 记录。
 - **游戏库布局状态**：`settings.libraryLayout` 持久化游戏库布局，取值为 `card`、`icon`、`steam`。`LibraryView` 挂载时必须先读取设置再渲染游戏库，避免启动时默认布局闪烁；Steam 布局右侧详情页使用嵌入式 `GameDetailView`，通过 `/library?steamGameId=<id>` 恢复来源游戏详情。
 - **游玩会话记录**：每次游戏启动（`spawnGameProcess` / `createGameWindow`）调用 `playSessionDatabaseService.startSession()` 在
   `bz_games.db` 创建一条记录（含 `game_id`、`game_name`、`version`、`start_time`）；游戏退出时（
@@ -864,190 +886,193 @@ interface AppSettings {
   `storeService.updatePlaytime()` 从会话表推导累计时间并结算奖励，SQLite 会话是游玩历史和时长统计的唯一数据源。
   `handleProcessExit` 中通过动态 `import("../window")` 调用 `updateTrayMenu()` 刷新托盘快捷菜单。
 - **SQLite 异步架构**：
-    - **AsyncSqliteDatabase**：通过 `worker_threads` 隔离数据库访问，连接后先设置 ChaCha20 和密钥再读取 schema，支持 `run`/`get`/`all`/`exec`/`batch`/`close`。
-    - **BzGamesDatabase**：唯一数据库工厂和当前数据仓储，维护游戏、版本、会话、成就与统计事件；不包含旧 schema、旧路径或兼容分支，表之间只使用逻辑关联，不声明物理外键。
-    - **数据库加密边界**：`databaseEncryptionSeed` 是离线生成一次后固定使用的规范 Base64，解码结果必须恰好为 32 个随机字节；运行时禁止生成、替换或修复种子，缺失或无效时开发启动和构建必须直接失败。种子由私有构建配置注入主进程，运行时经 SHA-256 派生 ChaCha20 密钥。种子编译在桌面客户端中，只用于提高本地文件直接读取门槛，不能抵御能够逆向客户端的攻击者。
-    - **PlaySessionDatabaseService**：只封装会话启动、结束和统计查询；云同步导入导出由统一数据库负责。
-    - SQLite WAL 模式：`journal_mode = WAL` 提升并发读写性能（在 Worker 初始化时设置）。
-    - 应用退出路径必须先停止接受新的云同步，等待当前同步结束，再等待统一数据库 `close()` 完成及 Worker 退出，最后才允许 Electron 进程退出。
+  - **AsyncSqliteDatabase**：通过 `worker_threads` 隔离数据库访问，连接后先设置 ChaCha20 和密钥再读取 schema，支持 `run`/`get`/`all`/`exec`/`batch`/`close`。
+  - **BzGamesDatabase**：唯一数据库工厂和当前数据仓储，维护游戏、版本、会话、成就与统计事件；不包含旧 schema、旧路径或兼容分支，表之间只使用逻辑关联，不声明物理外键。
+  - **数据库加密边界**：`databaseEncryptionSeed` 是离线生成一次后固定使用的规范 Base64，解码结果必须恰好为 32 个随机字节；运行时禁止生成、替换或修复种子，缺失或无效时开发启动和构建必须直接失败。种子由私有构建配置注入主进程，运行时经 SHA-256 派生 ChaCha20 密钥。种子编译在桌面客户端中，只用于提高本地文件直接读取门槛，不能抵御能够逆向客户端的攻击者。
+  - **PlaySessionDatabaseService**：只封装会话启动、结束和统计查询；云同步导入导出由统一数据库负责。
+  - SQLite WAL 模式：`journal_mode = WAL` 提升并发读写性能（在 Worker 初始化时设置）。
+  - 应用退出路径必须先停止接受新的云同步，等待当前同步结束，再等待统一数据库 `close()` 完成及 Worker 退出，最后才允许 Electron 进程退出。
 - **CloudSyncService 设计**：
-    - **单快照协议**：客户端与服务端只支持 `/api/cloud/platform-snapshot` 和 `/api/cloud/platform-snapshot/meta`；不保留旧 `/api/cloud/files/*` 协议、双写或降级逻辑。`PlatformCloudSnapshot` 将脱敏加密配置与 SQL dump 封装为一个 GridFS 对象，MySQL `user_platform_snapshots` 仅保存每个用户的唯一当前指针。
-    - **原子发布**：完整对象先写入 GridFS，再在 MySQL 事务中锁定并切换当前指针；旧对象在宽限期后清理。下载只读取一次指针，禁止拼接不同上传批次。GridFS 元数据必须使用 `kind=platform-snapshot`，清理不得触碰其他 kind。
-    - **数据库范围**：SQL dump 只包含 `play_sessions`、`achievement_unlocks`、`stats_reports`，并排除本地自增字段 `stats_reports.event_sequence`；`games`、`game_versions` 及其 `path`、`is_present`、收藏和排序状态完全属于当前设备，不上传、不下载、不合并。当前按单设备日常使用、换机时整包恢复设计，不实现多设备并发合并；统计记录按 `reported_at`、`event_id` 的稳定顺序重建，不能使用新电脑上的本机自增序号决定 `full` 报告的覆盖顺序。
-    - **下载应用顺序**：配置先在内存中解密确认可应用，SQL 在单一事务中完成幂等合并，随后从统一数据库刷新游戏缓存中的会话、成就和统计派生数据，最后才一次性提交配置；SQL 导入或缓存刷新失败时不得写入配置。
-    - **同步黑名单**：`CLOUD_SETTINGS_SYNC_BLACKLIST` 在上传与下载合并时都排除 `githubToken`、云会话和云用户身份字段，并只合并 `userData` 与非敏感设置。
-    - **未来边界**：游戏云存档不得加入 `PlatformCloudSnapshot`。未来必须使用独立的 `GameSaveCloudService`、`/api/cloud/game-saves/*`、引用表和 `kind=game-save` 对象。
+  - **单快照协议**：客户端与服务端只支持 `/api/cloud/platform-snapshot` 和 `/api/cloud/platform-snapshot/meta`；不保留旧 `/api/cloud/files/*` 协议、双写或降级逻辑。`PlatformCloudSnapshot` 将脱敏加密配置与 SQL dump 封装为一个 GridFS 对象，MySQL `user_platform_snapshots` 仅保存每个用户的唯一当前指针。
+  - **原子发布**：完整对象先写入 GridFS，再在 MySQL 事务中锁定并切换当前指针；旧对象在宽限期后清理。下载只读取一次指针，禁止拼接不同上传批次。GridFS 元数据必须使用 `kind=platform-snapshot`，清理不得触碰其他 kind。
+  - **数据库范围**：SQL dump 只包含 `play_sessions`、`achievement_unlocks`、`stats_reports`，并排除本地自增字段 `stats_reports.event_sequence`；`games`、`game_versions` 及其 `path`、`is_present`、收藏和排序状态完全属于当前设备，不上传、不下载、不合并。当前按单设备日常使用、换机时整包恢复设计，不实现多设备并发合并；统计记录按 `reported_at`、`event_id` 的稳定顺序重建，不能使用新电脑上的本机自增序号决定 `full` 报告的覆盖顺序。
+  - **下载应用顺序**：配置先在内存中解密确认可应用，SQL 在单一事务中完成幂等合并，随后从统一数据库刷新游戏缓存中的会话、成就和统计派生数据，最后才一次性提交配置；SQL 导入或缓存刷新失败时不得写入配置。
+  - **同步黑名单**：`CLOUD_SETTINGS_SYNC_BLACKLIST` 在上传与下载合并时都排除 `githubToken`、云会话和云用户身份字段，并只合并 `userData` 与非敏感设置。
+  - **被动会话失效**：设置页只通过 `getLocalCloudStatus()` 读取 `config.json`，不轮询且不调用 `/api/auth/me` 主动探测。OAuth 成功以及业务接口返回 `session_expired` / `session_invalid` 时，主进程发送 `system:cloud:authChanged`；仅这两类稳定错误会清空 `cloudSessionToken` 与 `cloudSessionExpiresAt`。普通 `unauthorized`、网络错误、超时、限流和服务端错误不得清理本地令牌。快照元数据只在上传或下载成功后按需查询。
+  - **设置写入隔离**：渲染进程提交完整或部分普通设置时，`system.ipc.ts` 必须按明确白名单提取允许渲染层维护的字段；`feedbackHistory`、`playerId`、云会话/云用户身份、存储迁移状态、更新时间和窗口位置等字段均由主进程或专用 IPC 独占写入，防止旧表单或陈旧状态覆盖后台更新的数据。
+  - **未来边界**：游戏云存档不得加入 `PlatformCloudSnapshot`。未来必须使用独立的 `GameSaveCloudService`、`/api/cloud/game-saves/*`、引用表和 `kind=game-save` 对象。
 - **MarketService 设计**：
-    - **两级市场架构**：`getSources()` 拉取顶层市场目录（通过 `fetchDirectory()` 获取，主源 GitHub + 备源 OSS），
-      `getIndex(sourceIdx)` 拉取指定市场源的游戏索引。sourceIdx=0 使用 `fetchIndexInternal()`（主备双源），sourceIdx>0 使用
-      `fetchIndexForSource()`（通过 `gitToRawUrl()` 推导 raw URL 直接加载）。
-    - `fetchJson(url)` 为通用 HTTP JSON 获取器，内部使用 `withRetry(3, 1000)` 包裹 fetch（指数退避 1s→2s→4s）。请求头通过 `RequestInterceptor.buildHeaders()` 统一注入 `Referer` 防盗链和可选的 GitHub Token。`fetchDirectory()` 与
-      `fetchIndexFromUrl()` 均基于此构建：前者解析 `MarketDirectorySchema`，后者使用**容错解析**（`parseGameTolerant()`）逐游戏校验并过滤 `hidden` 游戏。单个游戏或版本数据异常时跳过无效数据并记录警告日志。
-    - `getSources()` 与 `getIndex(sourceIdx, forceRefresh)` 均内置 1 小时内存缓存，按 sourceIdx 独立缓存，
-      `forceRefresh=true` 或缓存过期时重新拉取，应用重启后自动失效。同时，`forceRefresh=true` 时一并清除全部图片缓存（
-      `cachedImages`），保证封面/图标数据与索引数据同步刷新。
-    - `getCachedImageDataUrl(url)` 为按需图片缓存方法，通过 `fetch(url)` 下载远程图片并转 base64 Data URL，缓存于
-      `cachedImages` Map（1 小时 TTL）。15 秒超时 + `AbortController` 保护，`finally` 块必定清理定时器。**双重防线**：校验
-      response body 非空和 `content-type` 必须以 `image/` 开头。
-      渲染进程的 `<CachedImg>` 组件按需触发下载。
-    - `CachedImg` 为通用图片缓存组件，初始显示原始 URL（浏览器直连），异步调用 `getCachedImage` IPC 拿到 Data URL 后无缝替换。
-      `onUnmounted` 时 abort 飞行中的请求，防止内存泄漏。
-    - `downloadAndInstall(gameId, version, sourceIdx)` 中 `sourceIdx` 为**必传参数**，直接从对应 source
-      拉取索引后查找目标游戏。
-    - `gitToRawUrl()` 从 GitHub 仓库地址推导 raw 文件
-      URL：`https://raw.githubusercontent.com/{owner}/{repo}/{branch}/market.json`。
-    - `inferArchiveType()` 根据 `downloadUrl` 后缀自动识别压缩包格式，支持 `.zip` 和 `.7z`。`.zip` 和 `.7z` 统一使用 `7zip-bin` 内置的 `7za` 通过 `child_process.spawn` 解压。
-    - **Electron asar 补丁防御**：`copyFolderRecursiveSync()` 在执行文件复制前设置 `process.noAsar = true`，复制完成后通过 `finally` 块恢复原值，用于复制含 `.asar` 的游戏包。
-    - **EBUSY 重试防御**：`removeIfExists()` 和 `GameLoader.installGameFiles()` 中的 `fs.rmSync` 统一使用 `{ maxRetries: 10, retryDelay: 500 }` 参数。
-    - **安装包内 .asar 防御**：`GameLoader.installGameFiles()` 检查 `gameRootDir` 是否为文件；若为文件则先 `rmSync` 删除后再创建目录。
-    - **下载管线架构**：下载子系统采用 **不可变元数据 + 活动任务 + 单一状态机** 三层模型。
-        - `TaskMeta`（不可变元数据）：包含 `downloadUrl`、`sha256`、`size`、`downloadPath`、`archiveType`、`sourceIdx` 等固定参数。
-        - `ActiveTask`：运行时对象，绑定 `state`（MarketTaskState）、`meta`（TaskMeta）、`abort`（AbortController）。
-          每个活动任务绑定一个 `AbortController`。
-        - `transition(taskId, status, extra?)` 是**唯一的状态转换入口**（Single Source of Truth），内置状态机守卫：终态（
-          completed/error/canceled）不可再转换。`paused` / `interrupted` 可被 `cancel` 正常取消（并清理快照文件）。
-          所有状态变更必须经过此方法。
-    - **Pipeline 与状态管理解耦**：`startPipeline()` (fire-and-forget) → `runPipeline()`（纯执行，仅接收 `AbortSignal`
-      参数）。`runPipeline()` 编排五阶段流程（download → verify → extract → install → finalize），各阶段之间通过
-      `signal.throwIfAborted()` 检查是否被中止。错误处理统一在 `startPipeline().catch()` 中：若 `signal.aborted`
-      则静默返回（状态已由 pause/cancel 设置）；否则调用 `transition("error", ...)` + `finalize()`。
-    - **断点续传**：`downloadArchive()` 下载前通过 `getPartialFileSize()` 检查已存在部分文件。若有部分文件且服务端支持
-      HTTP Range（返回 `206`），以追加模式续传；若服务端返回 `200`（不支持 Range），自动删除部分文件从头下载（自动降级）。下载流通过
-      `writer.write()` 返回值判断背压，配合 `drain` 事件保证内存安全。`settled` 闭包标志位防止 `writer.on("error")` 和 `reader.read()` 异常双重 reject Promise。
-    - **暂停/恢复/取消**：
-        - `pauseTask()`：先将 status 设为 `paused`（同步，保证 pipeline catch 块见到"paused"而不覆盖状态），再
-          `abort.abort()`，最后将进度写入 `pending-tasks.json` 持久化快照。仅 `downloading` / `verifying` 状态可暂停；`extracting` / `installing` 阶段暂停按钮禁用并在 hover 时提示"解压或安装过程中无法暂停"。
-        - `resumeTask()`：从 `pending-tasks.json` 读取快照，重新拉取索引校验兼容性后调用 `startTask()` + `startPipeline()`
-          启动新管线。
-        - `cancelTask()`：对运行中任务先 `transition("canceled")` 再 `abort.abort()` + `finalize()`；对已暂停任务直接
-          `transition("canceled")` + `finalize()` + 删除快照。
-    - **快照持久化**：`writeSnapshot()` / `removeSnapshot()` 操作 `${userData}/.market-cache/pending-tasks.json`。应用启动时
-      `restorePendingTasks()` 读取快照重建 `interrupted` 状态任务，前端通过 `getPendingTasks` 在 `onMounted` 时同步到 UI。
-    - **文件生命周期**：`finalize()` 在终态（completed/error/canceled）时删除临时下载文件与解压目录。暂停/中断时**保留**
-      部分文件以便续传。
-    - **容错解析**：`parseGameTolerant(rawGame)` 提供两层容错机制：先尝试 `MarketGameSchema.safeParse()` 严格解析，成功则直接返回；失败后分别校验游戏元数据（宽松版 `GameMetaSchema`，ID 只需非空即可）和版本列表（`MarketGameVersionSchema.safeParse` 逐个版本校验），跳过无效版本但保留有效版本。至少有一个有效版本的游戏才会被展示，全部无效则记录警告并跳过该游戏。
-    - **sha256 全可选 + 下载时懒解析**：版本对象的 `sha256` 字段已变为全可选。下载阶段 `downloadAndInstall()` 按优先级获取 sha256/size：① 版本对象直接提供 → ② `resolvedAssets` 缓存（1小时 TTL）→ ③ GitHub Releases 直链时通过 `resolveGitHubAssetInfo()` 实时从 GitHub API 获取（`parseGitHubReleaseUrl()` 解析 owner/repo/tag/assetName，调用 `GET /repos/{owner}/{repo}/releases/tags/{tag}` 获取 asset 的 digest/size）。GitHub API 返回值中的 digest 必须同时满足 64 位长度和纯 hex 格式才被接受为 sha256，否则置 undefined。若 size 最终仍为 null，拒绝下载（`market_missing_size`）；sha256 为 undefined 时仅跳过校验不拒绝。
-    - **下载校验条件化**：`verifyArchive()` 中 size 校验仅当 `meta.size > 0` 时执行，sha256 校验仅当 `meta.sha256` 存在时执行。若版本未提供 sha256 且 GitHub API 也未返回有效 sha256，则跳过哈希校验直接进入解压阶段。
-    - 错误分类由 `classifyErrorCode()` 统一处理，根据错误消息自动归类为四种错误码（download/verify/extract/install）。
-    - `tasks` Map 维护任务全生命周期，`finalize()` 在清理临时文件后延迟 30 秒删除 Map 条目，确保 UI 能读到终态。
-    - **下载悬浮球进度推送**：`emitFloatBallProgress(force)` 方法在每次 `emit()` 状态变更时自动调用，将加权合并进度通过 `market:floatBall:event` 推送给悬浮球窗口。推送速率由 `FLOAT_BALL_THROTTLE_MS`（1 秒）节流控制，`force` 参数用于关键事件（恢复、取消、暂停、终态清理）立即推送。`computeTotalProgress()` 使用任务文件大小加权平均算法计算整体进度百分比，同时统计活跃/已完成/总任务数。有活跃任务时自动显示悬浮球（`showInactive()`），全部完成后自动隐藏（`hide()`）。`getAllTaskStates()` 返回所有当前任务状态快照，供悬浮球窗口挂载时初始同步。
+  - **两级市场架构**：`getSources()` 拉取顶层市场目录（通过 `fetchDirectory()` 获取，主源 GitHub + 备源 OSS），
+    `getIndex(sourceIdx)` 拉取指定市场源的游戏索引。sourceIdx=0 使用 `fetchIndexInternal()`（主备双源），sourceIdx>0 使用
+    `fetchIndexForSource()`（通过 `gitToRawUrl()` 推导 raw URL 直接加载）。
+  - `fetchJson(url)` 为通用 HTTP JSON 获取器，内部使用 `withRetry(3, 1000)` 包裹 fetch（指数退避 1s→2s→4s）。请求头通过 `RequestInterceptor.buildHeaders()` 统一注入 `Referer` 防盗链和可选的 GitHub Token。`fetchDirectory()` 与
+    `fetchIndexFromUrl()` 均基于此构建：前者解析 `MarketDirectorySchema`，后者使用**容错解析**（`parseGameTolerant()`）逐游戏校验并过滤 `hidden` 游戏。单个游戏或版本数据异常时跳过无效数据并记录警告日志。
+  - `getSources()` 与 `getIndex(sourceIdx, forceRefresh)` 均内置 1 小时内存缓存，按 sourceIdx 独立缓存，
+    `forceRefresh=true` 或缓存过期时重新拉取，应用重启后自动失效。同时，`forceRefresh=true` 时一并清除全部图片缓存（
+    `cachedImages`），保证封面/图标数据与索引数据同步刷新。
+  - `getCachedImageDataUrl(url)` 为按需图片缓存方法，通过 `fetch(url)` 下载远程图片并转 base64 Data URL，缓存于
+    `cachedImages` Map（1 小时 TTL）。15 秒超时 + `AbortController` 保护，`finally` 块必定清理定时器。**双重防线**：校验
+    response body 非空和 `content-type` 必须以 `image/` 开头。
+    渲染进程的 `<CachedImg>` 组件按需触发下载。
+  - `CachedImg` 为通用图片缓存组件，初始显示原始 URL（浏览器直连），异步调用 `getCachedImage` IPC 拿到 Data URL 后无缝替换。
+    `onUnmounted` 时 abort 飞行中的请求，防止内存泄漏。
+  - `downloadAndInstall(gameId, version, sourceIdx)` 中 `sourceIdx` 为**必传参数**，直接从对应 source
+    拉取索引后查找目标游戏。
+  - `gitToRawUrl()` 从 GitHub 仓库地址推导 raw 文件
+    URL：`https://raw.githubusercontent.com/{owner}/{repo}/{branch}/market.json`。
+  - `inferArchiveType()` 根据 `downloadUrl` 后缀自动识别压缩包格式，支持 `.zip` 和 `.7z`。`.zip` 和 `.7z` 统一使用 `7zip-bin` 内置的 `7za` 通过 `child_process.spawn` 解压。
+  - **Electron asar 补丁防御**：`copyFolderRecursiveSync()` 在执行文件复制前设置 `process.noAsar = true`，复制完成后通过 `finally` 块恢复原值，用于复制含 `.asar` 的游戏包。
+  - **EBUSY 重试防御**：`removeIfExists()` 和 `GameLoader.installGameFiles()` 中的 `fs.rmSync` 统一使用 `{ maxRetries: 10, retryDelay: 500 }` 参数。
+  - **安装包内 .asar 防御**：`GameLoader.installGameFiles()` 检查 `gameRootDir` 是否为文件；若为文件则先 `rmSync` 删除后再创建目录。
+  - **下载管线架构**：下载子系统采用 **不可变元数据 + 活动任务 + 单一状态机** 三层模型。
+    - `TaskMeta`（不可变元数据）：包含 `downloadUrl`、`sha256`、`size`、`downloadPath`、`archiveType`、`sourceIdx` 等固定参数。
+    - `ActiveTask`：运行时对象，绑定 `state`（MarketTaskState）、`meta`（TaskMeta）、`abort`（AbortController）。
+      每个活动任务绑定一个 `AbortController`。
+    - `transition(taskId, status, extra?)` 是**唯一的状态转换入口**（Single Source of Truth），内置状态机守卫：终态（
+      completed/error/canceled）不可再转换。`paused` / `interrupted` 可被 `cancel` 正常取消（并清理快照文件）。
+      所有状态变更必须经过此方法。
+  - **Pipeline 与状态管理解耦**：`startPipeline()` (fire-and-forget) → `runPipeline()`（纯执行，仅接收 `AbortSignal`
+    参数）。`runPipeline()` 编排五阶段流程（download → verify → extract → install → finalize），各阶段之间通过
+    `signal.throwIfAborted()` 检查是否被中止。错误处理统一在 `startPipeline().catch()` 中：若 `signal.aborted`
+    则静默返回（状态已由 pause/cancel 设置）；否则调用 `transition("error", ...)` + `finalize()`。
+  - **断点续传**：`downloadArchive()` 下载前通过 `getPartialFileSize()` 检查已存在部分文件。若有部分文件且服务端支持
+    HTTP Range（返回 `206`），以追加模式续传；若服务端返回 `200`（不支持 Range），自动删除部分文件从头下载（自动降级）。下载流通过
+    `writer.write()` 返回值判断背压，配合 `drain` 事件保证内存安全。`settled` 闭包标志位防止 `writer.on("error")` 和 `reader.read()` 异常双重 reject Promise。
+  - **暂停/恢复/取消**：
+    - `pauseTask()`：先将 status 设为 `paused`（同步，保证 pipeline catch 块见到"paused"而不覆盖状态），再
+      `abort.abort()`，最后将进度写入 `pending-tasks.json` 持久化快照。仅 `downloading` / `verifying` 状态可暂停；`extracting` / `installing` 阶段暂停按钮禁用并在 hover 时提示"解压或安装过程中无法暂停"。
+    - `resumeTask()`：从 `pending-tasks.json` 读取快照，重新拉取索引校验兼容性后调用 `startTask()` + `startPipeline()`
+      启动新管线。
+    - `cancelTask()`：对运行中任务先 `transition("canceled")` 再 `abort.abort()` + `finalize()`；对已暂停任务直接
+      `transition("canceled")` + `finalize()` + 删除快照。
+  - **快照持久化**：`writeSnapshot()` / `removeSnapshot()` 操作 `${userData}/.market-cache/pending-tasks.json`。应用启动时
+    `restorePendingTasks()` 读取快照重建 `interrupted` 状态任务，前端通过 `getPendingTasks` 在 `onMounted` 时同步到 UI。
+  - **文件生命周期**：`finalize()` 在终态（completed/error/canceled）时删除临时下载文件与解压目录。暂停/中断时**保留**
+    部分文件以便续传。
+  - **容错解析**：`parseGameTolerant(rawGame)` 提供两层容错机制：先尝试 `MarketGameSchema.safeParse()` 严格解析，成功则直接返回；失败后分别校验游戏元数据（宽松版 `GameMetaSchema`，ID 只需非空即可）和版本列表（`MarketGameVersionSchema.safeParse` 逐个版本校验），跳过无效版本但保留有效版本。至少有一个有效版本的游戏才会被展示，全部无效则记录警告并跳过该游戏。
+  - **sha256 全可选 + 下载时懒解析**：版本对象的 `sha256` 字段已变为全可选。下载阶段 `downloadAndInstall()` 按优先级获取 sha256/size：① 版本对象直接提供 → ② `resolvedAssets` 缓存（1小时 TTL）→ ③ GitHub Releases 直链时通过 `resolveGitHubAssetInfo()` 实时从 GitHub API 获取（`parseGitHubReleaseUrl()` 解析 owner/repo/tag/assetName，调用 `GET /repos/{owner}/{repo}/releases/tags/{tag}` 获取 asset 的 digest/size）。GitHub API 返回值中的 digest 必须同时满足 64 位长度和纯 hex 格式才被接受为 sha256，否则置 undefined。若 size 最终仍为 null，拒绝下载（`market_missing_size`）；sha256 为 undefined 时仅跳过校验不拒绝。
+  - **下载校验条件化**：`verifyArchive()` 中 size 校验仅当 `meta.size > 0` 时执行，sha256 校验仅当 `meta.sha256` 存在时执行。若版本未提供 sha256 且 GitHub API 也未返回有效 sha256，则跳过哈希校验直接进入解压阶段。
+  - 错误分类由 `classifyErrorCode()` 统一处理，根据错误消息自动归类为四种错误码（download/verify/extract/install）。
+  - `tasks` Map 维护任务全生命周期，`finalize()` 在清理临时文件后延迟 30 秒删除 Map 条目，确保 UI 能读到终态。
+  - **下载悬浮球进度推送**：`emitFloatBallProgress(force)` 方法在每次 `emit()` 状态变更时自动调用，将加权合并进度通过 `market:floatBall:event` 推送给悬浮球窗口。推送速率由 `FLOAT_BALL_THROTTLE_MS`（1 秒）节流控制，`force` 参数用于关键事件（恢复、取消、暂停、终态清理）立即推送。`computeTotalProgress()` 使用任务文件大小加权平均算法计算整体进度百分比，同时统计活跃/已完成/总任务数。有活跃任务时自动显示悬浮球（`showInactive()`），全部完成后自动隐藏（`hide()`）。`getAllTaskStates()` 返回所有当前任务状态快照，供悬浮球窗口挂载时初始同步。
 - **useImageCache 统一图片缓存层**：
-    - 模块级 `Map<string, CacheEntry>` 跨所有组件共享，一份 data URL 在整个渲染进程中只加载一次，消除视图切换导致的重复
-      IPC
-      调用与磁盘 I/O。
-    - `load(key, loader, ttlMs)` 采用**策略模式**：缓存层不关心数据来源，通过 `loader` 闭包注入；TTL 由调用方通过 `ttlMs`
-      参数自行管理（`ttlMs <= 0` 永不过期，`ttlMs > 0` 超时后重新拉取）。
-    - 内置 `pendingLoads` Map 防止缓存击穿：同一 key 的并发 `load()` 调用共享同一份飞行中 Promise，避免重复网络请求。
-      `.finally()` 确保无论加载成功还是失败都清理 `pendingLoads`，失败后允许自动重试，避免永久阻塞。
-    - LRU 淘汰策略（上限 500 条目），`evictLRU()` 遍历全 Map 找最旧条目（O(n)，500 规模可接受）。
-    - `clear()` 同时清理缓存与 `pendingLoads`；`invalidatePrefix(prefix)` 支持按前缀批量失效。
-    - 导出独立函数 `gameAssetKey(gameId, version, field)` / `gameAssetPrefix(gameId, version)` 封装 key 生成规则（
-      `<id>@<version>@<field>`），与 composable 核心逻辑解耦。
-    - 导出独立函数 `invalidateGameAssetCache(gameId)`：接收 gameId，按前缀 `gameId@` 清除该游戏的所有 asset 缓存。从 Pinia
-      store（`addGame`/`removeGame`）和 `AppContent`（市场安装完成事件）直接调用，无需 Vue setup 上下文。
-    - 消费者：`GameCover.vue`（cover/video，`ttlMs=0` 永不过期）、`GameIcon.vue`（icon，`ttlMs=0` 永不过期）、`CachedImg.vue`（远程
-      URL，`ttlMs=60*60*1000` 即 1 小时，由组件内部 `MARKET_IMAGE_TTL_MS` 常量管理）。
+  - 模块级 `Map<string, CacheEntry>` 跨所有组件共享，一份 data URL 在整个渲染进程中只加载一次，消除视图切换导致的重复
+    IPC
+    调用与磁盘 I/O。
+  - `load(key, loader, ttlMs)` 采用**策略模式**：缓存层不关心数据来源，通过 `loader` 闭包注入；TTL 由调用方通过 `ttlMs`
+    参数自行管理（`ttlMs <= 0` 永不过期，`ttlMs > 0` 超时后重新拉取）。
+  - 内置 `pendingLoads` Map 防止缓存击穿：同一 key 的并发 `load()` 调用共享同一份飞行中 Promise，避免重复网络请求。
+    `.finally()` 确保无论加载成功还是失败都清理 `pendingLoads`，失败后允许自动重试，避免永久阻塞。
+  - LRU 淘汰策略（上限 500 条目），`evictLRU()` 遍历全 Map 找最旧条目（O(n)，500 规模可接受）。
+  - `clear()` 同时清理缓存与 `pendingLoads`；`invalidatePrefix(prefix)` 支持按前缀批量失效。
+  - 导出独立函数 `gameAssetKey(gameId, version, field)` / `gameAssetPrefix(gameId, version)` 封装 key 生成规则（
+    `<id>@<version>@<field>`），与 composable 核心逻辑解耦。
+  - 导出独立函数 `invalidateGameAssetCache(gameId)`：接收 gameId，按前缀 `gameId@` 清除该游戏的所有 asset 缓存。从 Pinia
+    store（`addGame`/`removeGame`）和 `AppContent`（市场安装完成事件）直接调用，无需 Vue setup 上下文。
+  - 消费者：`GameCover.vue`（cover/video，`ttlMs=0` 永不过期）、`GameIcon.vue`（icon，`ttlMs=0` 永不过期）、`CachedImg.vue`（远程
+    URL，`ttlMs=60*60*1000` 即 1 小时，由组件内部 `MARKET_IMAGE_TTL_MS` 常量管理）。
 - **应用入口 OSS 拦截**：`index.ts` 在 `app.whenReady` 中调用 `requestInterceptor.registerSessionHandler(session.defaultSession)`，统一注册 Electron 全局请求拦截器（Referer 防盗链）。
 - **RequestInterceptor 统一请求头注入**：
-    - 提取至 `src/main/utils/requestInterceptor.ts`，作为独立单例导出（`export const requestInterceptor`），替代原先散落在 `MarketService.ts` 和 `index.ts` 中的 header 拼接代码。
-    - 构造函数注入 `getTokenFn` 回调（惰性读取 `settings.githubToken`），避免静态导入 `StoreService` 造成循环依赖。
-    - `buildHeaders(url, extra)` 方法为 fetch 请求构建 headers：CDN/OSS 域名自动加 `Referer`、GitHub API/Raw 域名检测 `githubToken` 并注入 `Authorization: Bearer <token>`、中继服务器域名自动注入 `x-relay-token`。
-    - `buildWebSocketUrl(url)` 方法为 WebSocket 连接 URL 自动追加 `relayToken` 查询参数，供 `RoomClient` 连接中继服务器时鉴权。
-    - `registerSessionHandler(session)` 方法在 `app.whenReady` 中注册 Electron 全局拦截器，覆盖 `<img>` 标签等非 fetch 请求。
-    - 提供 `normalizeHttpBase()` 和 `normalizeWebSocketBase()` 工具函数，用于 ws/wss/http/https 协议互转。
-    - `AppConstants.ts` 集中定义 CDN/OSS/GitHub/Referer、官方中继及 Manifest 加密种子等构建期常量，供主进程服务共享；私有值只能进入主进程构建产物。
+  - 提取至 `src/main/utils/requestInterceptor.ts`，作为独立单例导出（`export const requestInterceptor`），替代原先散落在 `MarketService.ts` 和 `index.ts` 中的 header 拼接代码。
+  - 构造函数注入 `getTokenFn` 回调（惰性读取 `settings.githubToken`），避免静态导入 `StoreService` 造成循环依赖。
+  - `buildHeaders(url, extra)` 方法为 fetch 请求构建 headers：CDN/OSS 域名自动加 `Referer`、GitHub API/Raw 域名检测 `githubToken` 并注入 `Authorization: Bearer <token>`、中继服务器域名自动注入 `x-relay-token`。
+  - `buildWebSocketUrl(url)` 方法为 WebSocket 连接 URL 自动追加 `relayToken` 查询参数，供 `RoomClient` 连接中继服务器时鉴权。
+  - `registerSessionHandler(session)` 方法在 `app.whenReady` 中注册 Electron 全局拦截器，覆盖 `<img>` 标签等非 fetch 请求。
+  - 提供 `normalizeHttpBase()` 和 `normalizeWebSocketBase()` 工具函数，用于 ws/wss/http/https 协议互转。
+  - `AppConstants.ts` 集中定义 CDN/OSS/GitHub/Referer、官方中继及 Manifest 加密种子等构建期常量，供主进程服务共享；私有值只能进入主进程构建产物。
 - **CalendarHeatmap 日历热力图组件**：
-    - 纯 Vue 3 + CSS Grid 实现，不依赖第三方图表库，渲染 GitHub 贡献墙风格的 7×53+ 格子日历。
-    - 颜色渐变 5 档（空 → `#39d353` → `#26a641` → `#006d32` → `#0e4429`），图例标注"少 ↔ 多"。
-    - 通过 IPC `stats:getDailyPlayDurations(365)` 从 `PlaySessionDatabaseService`（内部查询 `bz_games.db`）加载近一年每日游玩时长。起始日期为当前日期向前 364 天并回退到周日，确保覆盖最近约 52 周（365 天数据点）。
-    - `dayLabels`、`monthNames`、`formatDurationMs` 均通过 `useI18n()` 实现三语切换，
-      使用逗号分隔字符串 `t('statistics.weekDays')` / `t('statistics.monthNames')` 存储数组数据，`t('statistics.hour/minute')` 存储时间单位。
-    - 每个格子通过 `n-tooltip` 展示日期和当天游玩时长。底部显示近一年总游玩时长。
-    - 统计页可用 `html2canvas` 在内存中生成包含玩家信息、总时长和热力图的 PNG 分享图，再通过 `system:savePng` 保存。插入 HTML 的玩家字段必须转义，头像仅接受 HTTPS 或有界的 raster base64 Data URL。
-    - 统计页默认不自动加载热力图数据，用户点击「加载热力图」按钮后按需加载（`hasLoadedHeatmap` 状态守卫防重复请求）。加载期间通过 `await nextTick()` 先提交 DOM 更新（确保 loading 状态渲染）再发起异步 IPC；异步操作保证至少 180ms 延迟（`Promise.all` + `setTimeout`），防止数据瞬间返回导致的 loading 闪烁。
-    - 日期点击弹出会话详情弹窗时：先清空 `selectedDateSessions`、设置 `isLoadingSessions = true` 并 `await nextTick()` 确保弹窗以 loading 态打开，再发起 IPC 查询。会话加载中展示居中的 `n-spin` 旋转指示器（最小高度 160px），替代骨架屏，视觉上更轻量且无布局抖动。
-    - ResizeObserver 使用 `requestAnimationFrame` 节流 + 同值跳过，避免热力图容器宽度频繁变化引起的布局抖动。
+  - 纯 Vue 3 + CSS Grid 实现，不依赖第三方图表库，渲染 GitHub 贡献墙风格的 7×53+ 格子日历。
+  - 颜色渐变 5 档（空 → `#39d353` → `#26a641` → `#006d32` → `#0e4429`），图例标注"少 ↔ 多"。
+  - 通过 IPC `stats:getDailyPlayDurations(365)` 从 `PlaySessionDatabaseService`（内部查询 `bz_games.db`）加载近一年每日游玩时长。起始日期为当前日期向前 364 天并回退到周日，确保覆盖最近约 52 周（365 天数据点）。
+  - `dayLabels`、`monthNames`、`formatDurationMs` 均通过 `useI18n()` 实现三语切换，
+    使用逗号分隔字符串 `t('statistics.weekDays')` / `t('statistics.monthNames')` 存储数组数据，`t('statistics.hour/minute')` 存储时间单位。
+  - 每个格子通过 `n-tooltip` 展示日期和当天游玩时长。底部显示近一年总游玩时长。
+  - 统计页可用 `html2canvas` 在内存中生成包含玩家信息、总时长和热力图的 PNG 分享图，再通过 `system:savePng` 保存。插入 HTML 的玩家字段必须转义，头像仅接受 HTTPS 或有界的 raster base64 Data URL。
+  - 统计页默认不自动加载热力图数据，用户点击「加载热力图」按钮后按需加载（`hasLoadedHeatmap` 状态守卫防重复请求）。加载期间通过 `await nextTick()` 先提交 DOM 更新（确保 loading 状态渲染）再发起异步 IPC；异步操作保证至少 180ms 延迟（`Promise.all` + `setTimeout`），防止数据瞬间返回导致的 loading 闪烁。
+  - 日期点击弹出会话详情弹窗时：先清空 `selectedDateSessions`、设置 `isLoadingSessions = true` 并 `await nextTick()` 确保弹窗以 loading 态打开，再发起 IPC 查询。会话加载中展示居中的 `n-spin` 旋转指示器（最小高度 160px），替代骨架屏，视觉上更轻量且无布局抖动。
+  - ResizeObserver 使用 `requestAnimationFrame` 节流 + 同值跳过，避免热力图容器宽度频繁变化引起的布局抖动。
 - **头像框系统（Avatar Frame）**：
-    - **数据定义**：`src/shared/avatar-frames.ts` 导出 `AVATAR_FRAMES` 常量数组（8 款头像框），每款定义 `id`、`name`、`imageFileName`、`rarity`、`unlockMethod`（playtime/consecutive_checkin/total_checkin/bzcoin）、`unlockValue`。同时导出 `getFrameImageFileName(id)` 工具函数。
-    - **类型定义**：`AvatarFrameDef` 和 `AvatarFrameUnlockMethod` 定义在 `src/shared/types/store.types.ts`，通过 `shared/types/index.ts` 统一导出。
-    - **渲染组件**：`AvatarWithFrame.vue` 使用 CSS absolute 叠加方案：底层 `n-avatar` (z=0)，上层 `<img>` overlay (z=1, `pointer-events: none`)。
-      - **算法**：`FRAME_MARGIN = 60`（帧图留白像素），`contentSize = w - 2*MARGIN`，`scale = w / contentSize`，`offsetPercent = -50*(scale-1)`。通过 `naturalWidth` 获取帧图原始尺寸后计算 scale/offset，适配任意帧图。
-      - **中心对称原则**：只要帧图的中心镂空区域与图片几何中心对齐，不同 margin 的帧图均可正确叠加，无需调整算法。
-      - **帧图加载**：通过 IPC `system:getAvatarFrameImage` 从 `resources/avatar-frames/` 读取 PNG → base64 Data URL，组件内 `Image()` 解码获取 `naturalWidth`。
-    - **主进程原子操作**（`StoreService`）：
-        - `performBuyFrame(frameId)`：主进程按 `AVATAR_FRAMES` 解析并校验 BZ 币价格，不信任渲染进程传入价格；校验已拥有 / BZ 币余额 → 扣币 → 写入 `ownedFrames[]` → 自动装备 → 返回结果对象。
-        - `performEquipFrame(frameId)`：仅校验 `ownedFrames[]` 含此 frame → `equippedFrame = frameId`。
-        - `performUnequipFrame(frameId)`：仅当 `equippedFrame === frameId` 时 → `equippedFrame = undefined`。
-        - `performSaveNicknameStyle(style, coinCost)`：校验 BZ 币余额 → 扣币 → `saveSettings({ nicknameStyle: style })`。余额不足返回 `{ success: false, code: "insufficient_coins" }`。
-    - **自动解锁**：`tryUnlockPlaytimeFrames()` 和 `tryUnlockCheckInFrames()` 为 `StoreService` 私有方法，分别在 `addPlayTime()` 和 `performCheckIn()` 写盘前调用。扫描 `AVATAR_FRAMES` 数组，满足条件且不在 `ownedFrames[]` 中时自动 push 并记录日志。
-    - **单一真相源**：`ownedFrames[]` 是头像框解锁状态的唯一权威数据源。所有解锁逻辑（签到/时长/BZ币购买）均在主进程中写入此数组，前端 `isUnlocked()` **仅检查 `ownedFrames.includes(frameId)`**，不做任何条件比较。
-    - **个性化页面**（`PersonalizationView.vue`）：网格布局展示 8 款头像框卡片，每张卡片包含预览（`AvatarWithFrame` 96px）、名称、解锁条件文字+图标、操作按钮（装备/卸下/购买/未解锁）。购买成功后自动装备并刷新用户数据。路由 `/personalization`。
-    - **应用入口展示**：`AppContent.vue` 顶栏头像使用 `AvatarWithFrame`（28px）替代原始 `n-avatar`，绑定 `userData.equippedFrame`。
-    - **设置页展示**：`SettingsView.vue` 头像上传区小头像（40px）和头像预览弹窗（280px）均使用 `AvatarWithFrame`。
-    - **联机传递**：`RoomJoinPayload` 和 `PlayerInRoom` 包含 `playerAvatarFrame` / `avatarFrame` 字段。房主 `RoomServer` 创建玩家对象时写入，客机 `RoomClient` 加入时携带。`PlayerCard.vue` 使用 `AvatarWithFrame` 渲染。
-    - **签到累计天数**：`UserData.checkIn.totalDays` 记录累计签到总天数，在 `performCheckIn` 中自增。签到弹窗展示"累计签到 N 天"。
+  - **数据定义**：`src/shared/avatar-frames.ts` 导出 `AVATAR_FRAMES` 常量数组（8 款头像框），每款定义 `id`、`name`、`imageFileName`、`rarity`、`unlockMethod`（playtime/consecutive_checkin/total_checkin/bzcoin）、`unlockValue`。同时导出 `getFrameImageFileName(id)` 工具函数。
+  - **类型定义**：`AvatarFrameDef` 和 `AvatarFrameUnlockMethod` 定义在 `src/shared/types/store.types.ts`，通过 `shared/types/index.ts` 统一导出。
+  - **渲染组件**：`AvatarWithFrame.vue` 使用 CSS absolute 叠加方案：底层 `n-avatar` (z=0)，上层 `<img>` overlay (z=1, `pointer-events: none`)。
+    - **算法**：`FRAME_MARGIN = 60`（帧图留白像素），`contentSize = w - 2*MARGIN`，`scale = w / contentSize`，`offsetPercent = -50*(scale-1)`。通过 `naturalWidth` 获取帧图原始尺寸后计算 scale/offset，适配任意帧图。
+    - **中心对称原则**：只要帧图的中心镂空区域与图片几何中心对齐，不同 margin 的帧图均可正确叠加，无需调整算法。
+    - **帧图加载**：通过 IPC `system:getAvatarFrameImage` 从 `resources/avatar-frames/` 读取 PNG → base64 Data URL，组件内 `Image()` 解码获取 `naturalWidth`。
+  - **主进程原子操作**（`StoreService`）：
+    - `performBuyFrame(frameId)`：主进程按 `AVATAR_FRAMES` 解析并校验 BZ 币价格，不信任渲染进程传入价格；校验已拥有 / BZ 币余额 → 扣币 → 写入 `ownedFrames[]` → 自动装备 → 返回结果对象。
+    - `performEquipFrame(frameId)`：仅校验 `ownedFrames[]` 含此 frame → `equippedFrame = frameId`。
+    - `performUnequipFrame(frameId)`：仅当 `equippedFrame === frameId` 时 → `equippedFrame = undefined`。
+    - `performSaveNicknameStyle(style, coinCost)`：校验 BZ 币余额 → 扣币 → `saveSettings({ nicknameStyle: style })`。余额不足返回 `{ success: false, code: "insufficient_coins" }`。
+  - **自动解锁**：`tryUnlockPlaytimeFrames()` 和 `tryUnlockCheckInFrames()` 为 `StoreService` 私有方法，分别在 `addPlayTime()` 和 `performCheckIn()` 写盘前调用。扫描 `AVATAR_FRAMES` 数组，满足条件且不在 `ownedFrames[]` 中时自动 push 并记录日志。
+  - **单一真相源**：`ownedFrames[]` 是头像框解锁状态的唯一权威数据源。所有解锁逻辑（签到/时长/BZ币购买）均在主进程中写入此数组，前端 `isUnlocked()` **仅检查 `ownedFrames.includes(frameId)`**，不做任何条件比较。
+  - **个性化页面**（`PersonalizationView.vue`）：网格布局展示 8 款头像框卡片，每张卡片包含预览（`AvatarWithFrame` 96px）、名称、解锁条件文字+图标、操作按钮（装备/卸下/购买/未解锁）。购买成功后自动装备并刷新用户数据。路由 `/personalization`。
+  - **应用入口展示**：`AppContent.vue` 顶栏头像使用 `AvatarWithFrame`（28px）替代原始 `n-avatar`，绑定 `userData.equippedFrame`。
+  - **设置页展示**：`SettingsView.vue` 头像上传区小头像（40px）和头像预览弹窗（280px）均使用 `AvatarWithFrame`。
+  - **联机传递**：`RoomJoinPayload` 和 `PlayerInRoom` 包含 `playerAvatarFrame` / `avatarFrame` 字段。房主 `RoomServer` 创建玩家对象时写入，客机 `RoomClient` 加入时携带。`PlayerCard.vue` 使用 `AvatarWithFrame` 渲染。
+  - **签到累计天数**：`UserData.checkIn.totalDays` 记录累计签到总天数，在 `performCheckIn` 中自增。签到弹窗展示"累计签到 N 天"。
 
 - **官方中继联机系统**：
-    - **公网入口模型**：房间模式仅允许 `lan` 与 `relay` 两种。`RoomServer` 优先监听 `settings.defaultRoomPort`（默认 38080）；若该端口已被其他进程占用，则原子回退到系统分配端口，并由房间创建结果和局域网发现统一使用实际监听端口。无论房主当前选择局域网还是官方服务器模式，本地物理局域网 IP、虚拟局域网 IP 和用户自备 frp 地址都仍然可以直连；官方服务器模式只是在此基础上额外注册一个短地址入口。
-    - **中继服务职责**：`relay-server/src/index.js` 处理 `relay:host`、`relay:join`、`relay:leave`、`relay:latency:ping`、`relay:latency:probe`、`relay:latency:pong` 等控制信令；RoomMessage、Game API v1 JSON 和 Game API v2 binary frame 均透明转发。中继服务端使用 `roomId` 管理内部房间，只发送和识别 `roomCode`。
-    - **中继聊天内容安全**：中继服务器对转发的聊天消息执行内容安全过滤，作为独立于客户端过滤的第二道防线：
-        - **敏感词过滤**：`sensitive-word-service.js` 从 `vocabulary/` 目录加载 15 个分类词库文件，按长度降序排序后使用 Unicode 安全算法（`Array.from()` + code-unit→char-index 映射表）对 `contentType` 为 `text` 或 `mixed` 的聊天消息执行字符级掩码替换（敏感词 → `*`）。词库文件缺失时 `hasWords()` 返回 `false`，`message-router.js` 通过 `canFilterRelayChatMessage()` 门控静默丢弃无法过滤的文字消息（fail-closed 安全设计）。
-        - **图片拦截**：`isBlockedRelayChatMessage()` 拦截并静默丢弃以下三类聊天消息：① `contentType === "image"` 的纯图片消息；② content 字段为 `data:image/` base64 的嵌入式图片；③ `images[]` 数组非空的带图消息。拦截在消息级执行，不等同于逐图片扫描。
-        - **透传放行**：`contentType === "audio"` 的语音消息不经过滤直接转发。
-        - **游戏消息不受影响**：`game:message:relay`、`game:broadcast:relay`、`game:message:ack` 等游戏中继消息不经过上述过滤管线。
-    - **短地址加入**：房主注册成功后服务端返回 `roomCode`；平台按 `DEFAULT_RELAY_PUBLIC_HOST + roomCode` 拼接短地址。平台展示、复制、服务器 Tab 和手动输入统一使用短地址；客机 `RoomClient` 识别短地址后提取 `roomCode`，连接 `DEFAULT_RELAY_SERVER_URL` 并发送 `relay:join`，收到 `relay:join:ack` 后再发送标准 `room:join`。
-    - **加入入口统一**：服务器 Tab、局域网卡片加入和游戏详情页手动地址加入共用 `useRoomJoin.ts`，地址标准化、短地址识别、加入调用、错误提示保持一致；列表按钮状态仅用于展示，真实连接结果由 `RoomClient` / `RoomServer` / relay-server 联合决定。
-    - **密码模型**：房间密码只保存在房主本地 `RoomServer.roomPassword` 与 relay-server 内存中，房间状态与发现结果只暴露 `hasPassword`，绝不广播真实密码。
-    - **密码探测与前置拦截**：`RoomPasswordProbeService` 负责加入前探测目标房间是否设置密码。物理局域网/虚拟局域网直连先向房主发送 `room:password:probe`；官方短地址先向中继发送 `relay:room:password:probe`。仅在 `hasPassword=true` 时才弹出密码输入框。
-    - **校验集中化**：官方短地址加入先由 relay-server 在 `relay:join` 阶段执行房间存在、房主在线、已开始、满员、密码必填/错误等准入校验，再转发到房主；物理局域网/虚拟局域网直连由 `RoomServer.handleJoin()` 统一执行密码、kickedPlayers、人数、房间状态、gameId、gameVersion 校验。
-    - **relay bridge**：`RelayRoomService` 将中继收到的原始 text/binary 帧交给 `RoomServer.handleRelayRawMessage()`，房主返回给 relay 客机的消息追加 `__relayTo` 路由字段；binary frame 只重封 header，body 原样保留。
-    - **中继延迟测量**：房主每 15 秒通过 `RelayRoomService` 发送 `relay:latency:ping` 到中继服务器，服务器立即回复 `relay:latency:pong` 计算单向 RTT（`RELAY_LATENCY_REFRESH_INTERVAL_MS` = 15s，`RELAY_LATENCY_TIMEOUT_MS` = 5s 超时）。客机同样每 15 秒发送 `relay:latency:probe` → 中继转发至房主 → 房主回复 `relay:latency:pong` → 中继转发回客机，计算总往返延迟。延迟测量同时承担保活功能（`touchRoom` 刷新 TTL），已移除冗余的 `relay:heartbeat`（25s）定时器。房间内右上角 WiFi 风格 UI 显示延迟：房主显示到中继的延迟，客机显示经中继到房主的总延迟；发现页 Server Tab 描述横幅显示到中继服务器的 HTTP 延迟（通过 `/health` 端点测量）。发现页手动刷新使用 5 秒冷却，但 Tab 切换不受冷却限制且不会重复请求。
-    - **状态同步与幽灵房间防护**：`RoomServer.broadcastState()` 触发 `RelayRoomService.syncRoomState()`；中继服务端根据房主发送的无目标 `room:state:sync` 更新 `/rooms` 中的状态、人数、游戏名、版本、`hasPassword` 等元信息；带 `__relayTo` 的 `room:state:sync` 继续按目标转发给对应玩家。房主断开、房主解散、房间 60s 无活动（`ROOM_TTL_MS`）时通过 `closeRoom()` 清理房间和连接。WebSocket 层 30s ping/pong 检测死连接。
-    - **密码同步**：房主更新密码时，`room.ipc.ts` 先更新本地 `RoomServer`，再调用 `RelayRoomService.syncRoomPassword()` 将密码同步给 relay-server，保证短地址准入规则与房主本地保持一致。
-    - **容量保护**：官方中继通过 `MAX_ROOMS`、`MAX_CLIENTS`、`MAX_CLIENTS_PER_ROOM`、`MAX_EVENT_LOOP_DELAY_MS` 控制新房间与新玩家接入。
-    - **切换安全**：房主切换 `lan` / `relay` 模式前必须先通知当前其他玩家离开并清理连接；官方服务器注册失败时 UI 回退到 `lan` 状态。
-    - **WebSocket 关闭错误映射**：`RelayRoomService`、`RoomClient`、`RoomPasswordProbeService` 均实现了 `mapRelayCloseError(code, reason)` 私有方法，将 WebSocket 关闭帧中的 `1008` + `"unauthorized"` reason 映射为 `"unauthorized"` 错误码供上层展示。三处均使用 `settled` 守卫模式防止 Promise 多重 resolve（timeout / error / close 竞态）。
+  - **公网入口模型**：房间模式仅允许 `lan` 与 `relay` 两种。`RoomServer` 优先监听 `settings.defaultRoomPort`（默认 38080）；若该端口已被其他进程占用，则原子回退到系统分配端口，并由房间创建结果和局域网发现统一使用实际监听端口。无论房主当前选择局域网还是官方服务器模式，本地物理局域网 IP、虚拟局域网 IP 和用户自备 frp 地址都仍然可以直连；官方服务器模式只是在此基础上额外注册一个短地址入口。
+  - **中继服务职责**：`relay-server/src/index.js` 处理 `relay:host`、`relay:join`、`relay:leave`、`relay:latency:ping`、`relay:latency:probe`、`relay:latency:pong` 等控制信令；RoomMessage、Game API v1 JSON 和 Game API v2 binary frame 均透明转发。中继服务端使用 `roomId` 管理内部房间，只发送和识别 `roomCode`。
+  - **中继聊天内容安全**：中继服务器对转发的聊天消息执行内容安全过滤，作为独立于客户端过滤的第二道防线：
+    - **敏感词过滤**：`sensitive-word-service.js` 从 `vocabulary/` 目录加载 15 个分类词库文件，按长度降序排序后使用 Unicode 安全算法（`Array.from()` + code-unit→char-index 映射表）对 `contentType` 为 `text` 或 `mixed` 的聊天消息执行字符级掩码替换（敏感词 → `*`）。词库文件缺失时 `hasWords()` 返回 `false`，`message-router.js` 通过 `canFilterRelayChatMessage()` 门控静默丢弃无法过滤的文字消息（fail-closed 安全设计）。
+    - **图片拦截**：`isBlockedRelayChatMessage()` 拦截并静默丢弃以下三类聊天消息：① `contentType === "image"` 的纯图片消息；② content 字段为 `data:image/` base64 的嵌入式图片；③ `images[]` 数组非空的带图消息。拦截在消息级执行，不等同于逐图片扫描。
+    - **透传放行**：`contentType === "audio"` 的语音消息不经过滤直接转发。
+    - **游戏消息不受影响**：`game:message:relay`、`game:broadcast:relay`、`game:message:ack` 等游戏中继消息不经过上述过滤管线。
+  - **短地址加入**：房主注册成功后服务端返回 `roomCode`；平台按 `DEFAULT_RELAY_PUBLIC_HOST + roomCode` 拼接短地址。平台展示、复制、服务器 Tab 和手动输入统一使用短地址；客机 `RoomClient` 识别短地址后提取 `roomCode`，连接 `DEFAULT_RELAY_SERVER_URL` 并发送 `relay:join`，收到 `relay:join:ack` 后再发送标准 `room:join`。
+  - **加入入口统一**：服务器 Tab、局域网卡片加入和游戏详情页手动地址加入共用 `useRoomJoin.ts`，地址标准化、短地址识别、加入调用、错误提示保持一致；列表按钮状态仅用于展示，真实连接结果由 `RoomClient` / `RoomServer` / relay-server 联合决定。
+  - **密码模型**：房间密码只保存在房主本地 `RoomServer.roomPassword` 与 relay-server 内存中，房间状态与发现结果只暴露 `hasPassword`，绝不广播真实密码。
+  - **密码探测与前置拦截**：`RoomPasswordProbeService` 负责加入前探测目标房间是否设置密码。物理局域网/虚拟局域网直连先向房主发送 `room:password:probe`；官方短地址先向中继发送 `relay:room:password:probe`。响应必须同时返回 `hasPassword` 与 `hostId`：前者决定是否弹出密码输入框，后者用于房主切换到其他房间前确认目标不是自己的当前房间；探测失败或缺少 `hostId` 时不得关闭当前房间。
+  - **校验集中化**：官方短地址加入先由 relay-server 在 `relay:join` 阶段执行房间存在、房主在线、已开始、满员、密码必填/错误等准入校验，再转发到房主；物理局域网/虚拟局域网直连由 `RoomServer.handleJoin()` 统一执行密码、kickedPlayers、人数、房间状态、gameId、gameVersion 校验。
+  - **relay bridge**：`RelayRoomService` 将中继收到的原始 text/binary 帧交给 `RoomServer.handleRelayRawMessage()`，房主返回给 relay 客机的消息追加 `__relayTo` 路由字段；binary frame 只重封 header，body 原样保留。
+  - **中继延迟测量**：房主每 15 秒通过 `RelayRoomService` 发送 `relay:latency:ping` 到中继服务器，服务器立即回复 `relay:latency:pong` 计算单向 RTT（`RELAY_LATENCY_REFRESH_INTERVAL_MS` = 15s，`RELAY_LATENCY_TIMEOUT_MS` = 5s 超时）。客机同样每 15 秒发送 `relay:latency:probe` → 中继转发至房主 → 房主回复 `relay:latency:pong` → 中继转发回客机，计算总往返延迟。延迟测量同时承担保活功能（`touchRoom` 刷新 TTL），已移除冗余的 `relay:heartbeat`（25s）定时器。房间内右上角 WiFi 风格 UI 显示延迟：房主显示到中继的延迟，客机显示经中继到房主的总延迟；发现页 Server Tab 描述横幅显示到中继服务器的 HTTP 延迟（通过 `/health` 端点测量）。发现页手动刷新使用 5 秒冷却，但 Tab 切换不受冷却限制且不会重复请求。
+  - **状态同步与幽灵房间防护**：`RoomServer.broadcastState()` 触发 `RelayRoomService.syncRoomState()`；中继服务端根据房主发送的无目标 `room:state:sync` 更新 `/rooms` 中的状态、人数、游戏名、版本、`hasPassword` 等元信息；带 `__relayTo` 的 `room:state:sync` 继续按目标转发给对应玩家。房主断开、房主解散、房间 60s 无活动（`ROOM_TTL_MS`）时通过 `closeRoom()` 清理房间和连接。WebSocket 层 30s ping/pong 检测死连接。
+  - **密码同步**：房主更新密码时，`room.ipc.ts` 先更新本地 `RoomServer`，再调用 `RelayRoomService.syncRoomPassword()` 将密码同步给 relay-server，保证短地址准入规则与房主本地保持一致。
+  - **容量保护**：官方中继通过 `MAX_ROOMS`、`MAX_CLIENTS`、`MAX_CLIENTS_PER_ROOM`、`MAX_EVENT_LOOP_DELAY_MS` 控制新房间与新玩家接入。
+  - **切换安全**：房主切换 `lan` / `relay` 模式前必须先通知当前其他玩家离开并清理连接；官方服务器注册失败时 UI 回退到 `lan` 状态。
+  - **WebSocket 关闭错误映射**：`RelayRoomService`、`RoomClient`、`RoomPasswordProbeService` 均实现了 `mapRelayCloseError(code, reason)` 私有方法，将 WebSocket 关闭帧中的 `1008` + `"unauthorized"` reason 映射为 `"unauthorized"` 错误码供上层展示。三处均使用 `settled` 守卫模式防止 Promise 多重 resolve（timeout / error / close 竞态）。
 
 - **下载悬浮球系统（Float Ball）**：
-    - **独立窗口架构**：悬浮球运行在独立的 `BrowserWindow` 中（透明无边框、置顶、72×72px），通过 `/float-ball` 路由加载 `FloatBallView.vue` 组件。`AppContent` 将其识别为弹窗窗口（`isPopupWindow`），跳过主菜单渲染。
-    - **窗口生命周期**：`createFloatBallWindow()` 在用户开启"下载悬浮球"设置时调用（应用启动时检查设置、保存设置时同步开关）。`destroyFloatBallWindow()` 在关闭设置时调用。窗口关闭时自动保存最后位置到 `floatBallPosition`。
-    - **位置管理**：创建时从 `settings.floatBallPosition` 恢复上次位置（默认主屏右下角），`clampFloatBallToScreen()` 确保悬浮球在多显示器环境下始终可见。拖动时通过 300ms 节流的 `saveFloatBallPositionThrottled()` 持久化位置。注册 `display-metrics-changed` 监听器，显示器配置变更时自动校验并修正位置。
-    - **拖拽状态**：`will-move` 事件触发时推送 `floatBall:dragState=true`，停止移动后 150ms 防抖推送 `false`。前端根据拖拽状态应用缩放/透明度动画。
-    - **进度数据流**：挂载时通过 `market:getAllTaskStates` IPC 获取所有任务状态快照并计算初始进度，之后通过 `market:floatBall:event` 实时接收主进程 `MarketService.emitFloatBallProgress()` 推送的合并进度（`FloatBallProgress`：`totalProgress`、`activeTaskCount`、`completedTaskCount`、`totalTaskCount`）。有活跃任务时自动显示，全部完成后自动隐藏。
-    - **进度环渲染**：使用 CSS `conic-gradient` 绘制环形进度条，颜色根据进度分段（<30% 蓝色 → <70% 橙色 → 高绿色）。`will-change: transform, opacity` 优化渲染性能。
-    - **交互行为**：双击悬浮球打开主窗口（`system:openUrl` 传入空字符串即恢复主窗口）。`-webkit-app-region: drag` 支持拖动。`active`/`dragging` 伪状态应用缩放和阴影效果。
-    - **类型定义**：`FloatBallProgress` 接口定义在 `src/shared/types/market.types.ts`，包含 `totalProgress`、`activeTaskCount`、`completedTaskCount`、`totalTaskCount`。
+  - **独立窗口架构**：悬浮球运行在独立的 `BrowserWindow` 中（透明无边框、置顶、72×72px），通过 `/float-ball` 路由加载 `FloatBallView.vue` 组件。`AppContent` 将其识别为弹窗窗口（`isPopupWindow`），跳过主菜单渲染。
+  - **窗口生命周期**：`createFloatBallWindow()` 在用户开启"下载悬浮球"设置时调用（应用启动时检查设置、保存设置时同步开关）。`destroyFloatBallWindow()` 在关闭设置时调用。窗口关闭时自动保存最后位置到 `floatBallPosition`。
+  - **位置管理**：创建时从 `settings.floatBallPosition` 恢复上次位置（默认主屏右下角），`clampFloatBallToScreen()` 确保悬浮球在多显示器环境下始终可见。拖动时通过 300ms 节流的 `saveFloatBallPositionThrottled()` 持久化位置。注册 `display-metrics-changed` 监听器，显示器配置变更时自动校验并修正位置。
+  - **拖拽状态**：`will-move` 事件触发时推送 `floatBall:dragState=true`，停止移动后 150ms 防抖推送 `false`。前端根据拖拽状态应用缩放/透明度动画。
+  - **进度数据流**：挂载时通过 `market:getAllTaskStates` IPC 获取所有任务状态快照并计算初始进度，之后通过 `market:floatBall:event` 实时接收主进程 `MarketService.emitFloatBallProgress()` 推送的合并进度（`FloatBallProgress`：`totalProgress`、`activeTaskCount`、`completedTaskCount`、`totalTaskCount`）。有活跃任务时自动显示，全部完成后自动隐藏。
+  - **进度环渲染**：使用 CSS `conic-gradient` 绘制环形进度条，颜色根据进度分段（<30% 蓝色 → <70% 橙色 → 高绿色）。`will-change: transform, opacity` 优化渲染性能。
+  - **交互行为**：双击悬浮球打开主窗口（`system:openUrl` 传入空字符串即恢复主窗口）。`-webkit-app-region: drag` 支持拖动。`active`/`dragging` 伪状态应用缩放和阴影效果。
+  - **类型定义**：`FloatBallProgress` 接口定义在 `src/shared/types/market.types.ts`，包含 `totalProgress`、`activeTaskCount`、`completedTaskCount`、`totalTaskCount`。
 
 - **昵称样式系统（Nickname Style）**：
-    - **功能范围**：玩家可在个性化页面自定义昵称的显示样式，包括文字颜色、渐变（起点+终点）、字体、字重和特效动画，保存需消耗 30 BZ 币。
-    - **类型定义**：`NicknameStyle` 接口定义在 `src/shared/types/store.types.ts`，包含 `color`、`gradientStart`、`gradientEnd`、`font`（`system`/`rounded`/`serif`/`mono`/`fantasy`）、`effect`（`none`/`glow`/`sparkle`/`flame`/`neon`/`rainbow`/`aurora`/`stardust`/`crystal`/`comet`/`heartbeat`）、`weight`（`normal`/`semibold`/`bold`）。默认样式 `DEFAULT_NICKNAME_STYLE` 的 `color` 为 `"#000000"`。
-    - **渲染组件**：`NicknameText.vue` 使用 CSS 自定义属性（`--nickname-color`/`--nickname-gradient-start`/`--nickname-gradient-end`）驱动样式，通过 `NicknameEffect` 值动态激活对应的 CSS class 和 @keyframes 动画。渐变特效（neon/flame/aurora 等）使用 `background-clip: text` + `color: transparent` 实现渐变文字。粒子特效（sparkle/stardust/comet）通过绝对定位的 `<span>` 粒子元素 + CSS 动画实现。光环特效（aurora/crystal/heartbeat）通过绝对定位的背景层实现。
-    - **主题色自适应**：`nicknameColor.ts` 使用 WCAG 相对亮度公式计算颜色亮度。亮色主题下禁止偏白色（luminance > 0.72），暗色主题下禁止偏黑色（luminance < 0.28），不满足时自动取对称色。`adaptNicknameStyleForTheme()` 接收 `NicknameStyle` 和 `EffectiveTheme`（`useSettingsStore.effectiveTheme`），返回适配后的样式。`NicknameText` 组件接收 `effectiveTheme` prop 后自动调用适配。
-    - **保存与消费**：`performSaveNicknameStyle(style, 30)` 在主进程原子执行：校验 BZ 币余额 → 扣除 30 BZ 币 → 写入 `userData.bzCoins` → 调用 `saveSettings({ nicknameStyle: style })` 持久化到 `settings`。余额不足返回 `{ success: false, code: "insufficient_coins" }`。
-    - **UI 面板**：`PersonalizationView.vue` 新增双栏布局（`.nickname-style-panel`）：左侧预览卡片展示 `NicknameText` 实际效果（含单人/Room 两场景），右侧表单配置颜色/渐变/字体/字重/特效。保存前通过 `isNicknameColorAllowedForTheme` 检验对比度，不通过弹出警告。支持重置为默认样式（`resetNicknameStyle()`）。
-    - **联机传递**：`RoomJoinPayload` 新增 `playerNicknameStyle` 字段，`PlayerInRoom` 新增 `nicknameStyle` 字段，`DiscoveredRoom` 新增 `hostStyle` 字段，`ChatPayload` 新增 `senderStyle` 字段。`RoomServer`/`RoomClient` 创建玩家对象时写入，`PlayerCard.vue` 和 `RoomChat.vue` 使用 `NicknameText` 渲染。房间发现页（`RoomDiscoveryView.vue`）房间名称使用 `NicknameText` 展示房主昵称样式。
-    - **`effectiveTheme` 响应式**：`useSettingsStore` 新增 `effectiveTheme` computed（跟随 `settings.theme` 和 `prefersDark` 系统偏好），新增 `setPrefersDark()` 方法供 `App.vue` 的 `matchMedia` 监听器调用。`PersonalizationView` 中 watch `effectiveTheme` 自动适配预览颜色。
+  - **功能范围**：玩家可在个性化页面自定义昵称的显示样式，包括文字颜色、渐变（起点+终点）、字体、字重和特效动画，保存需消耗 30 BZ 币。
+  - **类型定义**：`NicknameStyle` 接口定义在 `src/shared/types/store.types.ts`，包含 `color`、`gradientStart`、`gradientEnd`、`font`（`system`/`rounded`/`serif`/`mono`/`fantasy`）、`effect`（`none`/`glow`/`sparkle`/`flame`/`neon`/`rainbow`/`aurora`/`stardust`/`crystal`/`comet`/`heartbeat`）、`weight`（`normal`/`semibold`/`bold`）。默认样式 `DEFAULT_NICKNAME_STYLE` 的 `color` 为 `"#000000"`。
+  - **渲染组件**：`NicknameText.vue` 使用 CSS 自定义属性（`--nickname-color`/`--nickname-gradient-start`/`--nickname-gradient-end`）驱动样式，通过 `NicknameEffect` 值动态激活对应的 CSS class 和 @keyframes 动画。渐变特效（neon/flame/aurora 等）使用 `background-clip: text` + `color: transparent` 实现渐变文字。粒子特效（sparkle/stardust/comet）通过绝对定位的 `<span>` 粒子元素 + CSS 动画实现。光环特效（aurora/crystal/heartbeat）通过绝对定位的背景层实现。
+  - **主题色自适应**：`nicknameColor.ts` 使用 WCAG 相对亮度公式计算颜色亮度。亮色主题下禁止偏白色（luminance > 0.72），暗色主题下禁止偏黑色（luminance < 0.28），不满足时自动取对称色。`adaptNicknameStyleForTheme()` 接收 `NicknameStyle` 和 `EffectiveTheme`（`useSettingsStore.effectiveTheme`），返回适配后的样式。`NicknameText` 组件接收 `effectiveTheme` prop 后自动调用适配。
+  - **保存与消费**：`performSaveNicknameStyle(style, 30)` 在主进程原子执行：校验 BZ 币余额 → 扣除 30 BZ 币 → 写入 `userData.bzCoins` → 调用 `saveSettings({ nicknameStyle: style })` 持久化到 `settings`。余额不足返回 `{ success: false, code: "insufficient_coins" }`。
+  - **UI 面板**：`PersonalizationView.vue` 新增双栏布局（`.nickname-style-panel`）：左侧预览卡片展示 `NicknameText` 实际效果（含单人/Room 两场景），右侧表单配置颜色/渐变/字体/字重/特效。保存前通过 `isNicknameColorAllowedForTheme` 检验对比度，不通过弹出警告。支持重置为默认样式（`resetNicknameStyle()`）。
+  - **联机传递**：`RoomJoinPayload` 新增 `playerNicknameStyle` 字段，`PlayerInRoom` 新增 `nicknameStyle` 字段，`DiscoveredRoom` 新增 `hostStyle` 字段，`ChatPayload` 新增 `senderStyle` 字段。`RoomServer`/`RoomClient` 创建玩家对象时写入，`PlayerCard.vue` 和 `RoomChat.vue` 使用 `NicknameText` 渲染。房间发现页（`RoomDiscoveryView.vue`）房间名称使用 `NicknameText` 展示房主昵称样式。
+  - **`effectiveTheme` 响应式**：`useSettingsStore` 新增 `effectiveTheme` computed（跟随 `settings.theme` 和 `prefersDark` 系统偏好），新增 `setPrefersDark()` 方法供 `App.vue` 的 `matchMedia` 监听器调用。`PersonalizationView` 中 watch `effectiveTheme` 自动适配预览颜色。
 
 - **反馈系统设计（FeedbackService）**：
-    - **图片选择与验证**：主进程 `FeedbackService.selectImages()` 通过 `dialog.showOpenDialog` 限制 PNG/JPEG/WebP，上限 4 张、单张 ≤5 MiB。读取文件后通过魔法字节检测实际 MIME，再经 `nativeImage.createFromBuffer` 验证图形有效性。通过后将 Buffer 与 base64 预览 URL 存入进程内存 Map（`selectionId` 为键），供后续 multipart 上传引用。选中图片 30 分钟后自动清理。
-    - **释放语义**：`releaseImages(selectionId, imageId?)` 支持单张移除或整组释放；单张移除后若 selection 为空则自动删除 Map 条目。
-    - **提交管线**：`submit()` 先在主进程侧校验 content ≤ 5000 字、selectionId 有效性、文字或图片至少存在一种。通过 `FormData` 构造 multipart，注入 `appVersion` 与 `platform`，通过 `RequestInterceptor.buildHeaders()` 自动注入 relayToken 和可选的 GitHub Bearer Token。POST `/api/v1/feedback` 超时 45 秒。服务端返回 401 时自动清除本地云同步会话。
-    - **反馈历史**：`getFeedbackHistory()` / `addFeedbackHistory(id)` 通过 `StoreService` 读写 `AppSettings.feedbackHistory[]`，记录反馈编号和提交时间戳，去重并保留最近条目。历史随 `config.json` 正常云同步。
-    - **IPC 边界**：渲染进程仅通过 `FeedbackModal.vue` → `electronAPI.settings.selectFeedbackImages / releaseFeedbackImages / submitFeedback / getFeedbackHistory` 与主进程交互，不直接接触文件路径或服务端 relayToken / GitHub 会话。
-    - **服务端并联**：中继侧 `feedback-service.js` 执行 busboy 流式 multipart 解析、魔法字节图片校验、PNG 容器/JPEG SOF/WebP 尺寸验证、匿名 IP 冷却（48h）与 GitHub 登录冷却（6h）、MySQL 事务写入 `feedback` + `feedback_images` 表、GridFS 图片存储。管理 API（`/api/admin/v1/feedback/*`）每次校验 `ADMIN_GITHUB_IDS` 白名单。
-    - **管理前端**：`bz-games-admin/` 为独立 Vue 3 + Vite + Pinia 项目，构建为 `/admin/` 同源静态站点。中继侧 `admin-static-service.js` 提供 SPA fallback、路径穿越防护、CSP/`nosniff`/`DENY` iframe 等安全响应头。路由守卫在 `beforeEach` 中校验 `/api/admin/v1/me` 管理员身份。
+  - **图片选择与验证（v3.1.3 追加模式）**：`selectImages(existingSelectionId?)` 支持传入已有选区 ID 时以追加模式在现有图片上叠加新图片。读取文件后：① 魔术字节检测实际 MIME；② 比对实际格式与扩展名声明是否一致（`getDeclaredContentType`）；③ `nativeImage.createFromBuffer` 验证图形有效性；④ 每张图片生成 SHA-256 哈希用于跨批次去重（同一选区中哈希重复的图片被拒绝，前端弹出 `duplicate_image` 提示）。追加时若原选区已满 4 张或总图片数超限则返回 `too_many_images`；传入已过期选区 ID 返回 `feedback_images_expired`。通过后将 Buffer 与哈希存入进程内存 Map（`selectionId` 为键），供后续 multipart 上传引用。整组图片 30 分钟后自动清理；单张移除后刷新 `createdAt`。
+  - **释放语义**：`releaseImages(selectionId, imageId?)` 支持单张移除或整组释放；单张移除后若 selection 为空则自动删除 Map 条目，否则刷新 `createdAt` 时间戳。
+  - **提交管线**：`submit()` 先在主进程侧校验 content ≤ 5000 字、selectionId 有效性、文字或图片至少存在一种。通过 `FormData` 构造 multipart，注入 `appVersion` 与 `platform`，通过 `RequestInterceptor.buildHeaders()` 自动注入 relayToken 和可选的 GitHub Bearer Token。POST `/api/v1/feedback` 超时 45 秒。通过 `cloudSyncService.handleAuthFailure(body.error)` 统一处理登录失效——仅 `session_expired` / `session_invalid` 时清除本地云会话。
+  - **反馈历史**：`getFeedbackHistory()` / `addFeedbackHistory(id)` 仅由主进程通过 `StoreService` 读写 `AppSettings.feedbackHistory[]`，设置页不得提交或覆盖该字段；本地只保存反馈编号和提交时间戳并去重。历史随 `config.json` 正常云同步；展开条目时调用 `getFeedbackDetail(id)` 从服务端查询正文、状态、回复与图片，收起后再次展开会重新查询，不设定时刷新。
+  - **反馈详情查询**：`getDetail(feedbackId)` 通过 `/api/v1/feedback/:id` 获取用户可见详情。主进程校验 UUID 格式反馈 ID，然后校验响应结构（id、content、status、reply、imageCount、createdAt、updatedAt 及 images 数组的每个元素的类型与大小）。随后逐个通过 `/api/v1/feedback/:id/images/:imageId` 下载图片，校验实际 Content-Type 与 MySQL 记录的 MIME 一致、实际 body 长度与声明 size 一致、不超 MAX_IMAGE_BYTES。任一步不通过返回 `feedback_invalid_response`。通过 auth 失败或权限不足由 `handleAuthFailure` 统一收口。
+  - **IPC 边界**：渲染进程仅通过 `FeedbackModal.vue` → `electronAPI.settings.selectFeedbackImages / releaseFeedbackImages / submitFeedback / getFeedbackHistory / getFeedbackDetail` 与主进程交互，不直接接触文件路径或服务端 relayToken / GitHub 会话。主进程必须校验反馈详情结构、图片数量、大小、MIME 和实际响应长度后再生成 Data URL。
+  - **服务端并联（v3.1.3 用户详情接口）**：`/api/v1/feedback/:id`（GET）返回用户可见详情：`id/content/status/reply/imageCount/createdAt/updatedAt/images`，不含 `adminNote`。GitHub 反馈要求 Bearer Token 并校验所有者；匿名反馈仅需发行版 relayToken，以随机 UUID 作为访问凭据。`/api/v1/feedback/:id/images/:imageId` 返回单张图片原始流。管理 API 详情额外包含 `adminNote`，更新接口接受 `status/adminNote/reply`，备注与回复均不超过 5000 字符。其他逻辑同前：busboy 流式 multipart、魔法字节校验、IP/GitHub ID 双层冷却、MySQL 事务 + GridFS。
+  - **管理前端**：`bz-games-admin/` 为独立 Vue 3 + Vite + Pinia 项目，构建为 `/admin/` 同源静态站点。详情页双栏布局（左栏展示反馈内容与图片，右栏编辑表单含状态/回复/备注），图片使用 `n-image object-fit="contain"` 预览。中继侧 `admin-static-service.js` 提供 SPA fallback、路径穿越防护、CSP/`nosniff`/`DENY` iframe 等安全响应头。路由守卫在 `beforeEach` 中校验 `/api/admin/v1/me` 管理员身份。
 - **卸载系统设计（UninstallService）**：
-    - **状态互斥**：`running` 布尔标志防止重复卸载调用。
-    - **游戏进程收口**：`shutdownForUninstall()` 设置 `shuttingDownForUninstall = true` 拒新启，等待 `launchingGames` 清空（5s 超时），然后通过 `taskkill /PID /T /F` 批量终止所有已托管游戏进程树，最后调用 `GameManager.stop()` 清理窗口和服务注册。
-    - **GameManager 联动**：`launch()` 增加 `shuttingDownForUninstall` 前置检查，卸载期间直接拒绝新启动请求。
-    - **路径安全校验**：`normalizeUninstallStorageRoots()` 对每个游戏库路径执行 `path.resolve` 并校验：① 不是盘符根；② 不包含安装目录；③ 不与系统保护路径（home/appData/userData/temp）相同或为符号链接。任一项不满足时拒绝卸载，返回 `unsafe_game_storage_path` 错误。
-    - **兜底防御**：`removeStorageRoots()` 删除前额外检查目标路径是否为符号链接；`fs.rmSync` 使用 `maxRetries: 5` + `retryDelay: 250` 重试防御，删除后再次 `existsSync` 核验。
-    - **前置拦截**：活跃市场下载任务时返回 `uninstall_market_tasks_active` 错误，不进入卸载流程。
-    - **自删除语义**：卸载器启动成功后 `setTimeout(() => app.quit(), 500)` 延迟退出 Electron 进程。禁止使用依赖父进程退出后继续运行的临时 PowerShell/批处理辅助链路。
+  - **状态互斥**：`running` 布尔标志防止重复卸载调用。
+  - **游戏进程收口**：`shutdownForUninstall()` 设置 `shuttingDownForUninstall = true` 拒新启，等待 `launchingGames` 清空（5s 超时），然后通过 `taskkill /PID /T /F` 批量终止所有已托管游戏进程树，最后调用 `GameManager.stop()` 清理窗口和服务注册。
+  - **GameManager 联动**：`launch()` 增加 `shuttingDownForUninstall` 前置检查，卸载期间直接拒绝新启动请求。
+  - **路径安全校验**：`normalizeUninstallStorageRoots()` 对每个游戏库路径执行 `path.resolve` 并校验：① 不是盘符根；② 不包含安装目录；③ 不与系统保护路径（home/appData/userData/temp）相同或为符号链接。任一项不满足时拒绝卸载，返回 `unsafe_game_storage_path` 错误。
+  - **兜底防御**：`removeStorageRoots()` 删除前额外检查目标路径是否为符号链接；`fs.rmSync` 使用 `maxRetries: 5` + `retryDelay: 250` 重试防御，删除后再次 `existsSync` 核验。
+  - **前置拦截**：活跃市场下载任务时返回 `uninstall_market_tasks_active` 错误，不进入卸载流程。
+  - **自删除语义**：卸载器启动成功后 `setTimeout(() => app.quit(), 500)` 延迟退出 Electron 进程。禁止使用依赖父进程退出后继续运行的临时 PowerShell/批处理辅助链路。
 - **默认封面/图标回退**：
-    - `GameCover.vue` 在无自定义 cover 且无 video 时，使用构建期 `import defaultCoverUrl from "resources/default_cover.png"` 提供的静态回退图片（16:9）。
-    - `GameIcon.vue` 在无自定义 icon 时，使用构建期 `import defaultIconUrl from "resources/default_icon.png"` 提供的静态回退图片（1:1），不再渲染文本首字符。
-    - 两组件移除了文本占位逻辑（"暂无封面"/"?"），改为静态图片回退，`GameIcon` 的 `gameName` prop 已移除。
+  - `GameCover.vue` 在无自定义 cover 且无 video 时，使用构建期 `import defaultCoverUrl from "resources/default_cover.png"` 提供的静态回退图片（16:9）。
+  - `GameIcon.vue` 在无自定义 icon 时，使用构建期 `import defaultIconUrl from "resources/default_icon.png"` 提供的静态回退图片（1:1），不再渲染文本首字符。
+  - 两组件移除了文本占位逻辑（"暂无封面"/"?"），改为静态图片回退，`GameIcon` 的 `gameName` prop 已移除。
 
 ### 5.6 CSS 变量主题系统
 
@@ -1062,7 +1087,7 @@ interface AppSettings {
   `nativeTheme.shouldUseDarkColors`），注入到 `NotificationView` 组件。`NotificationView` 独立导入 `theme.css` 获取 CSS 变量。
   `GameDetailView` 的灯光秀金色边框统一使用 `--bz-gold` 变量。
 
-***
+---
 
 ## 六、开发规范与约束
 
@@ -1094,11 +1119,11 @@ interface AppSettings {
 - **市场安装包 platformVersion 校验**：`installGame` 对 manifest 的 `platformVersion`（支持 string 和 tuple `[min, max]`
   两种格式）使用 `semver` 做语义化兼容性检查。
 - **市场幂等性保护**：
-    - **前端**：`pendingDownloads` / `pendingCancels` / `pendingPauses` / `pendingResumes` 四个 `Set` 追踪飞行中的请求。
-      `handleDownload` 覆盖 `paused`/`interrupted` 防重复（暂停态按钮 disabled + 后端状态机守卫）。`handleCancel` 覆盖
-      active + paused + interrupted 全态。`finally` 块清理 Set。
-    - **后端**：`downloadAndInstall` 覆盖 `ACTIVE_STATUSES` + `paused` + `interrupted` 所有非终态。`transition()`
-      状态机守卫终态不可再转换、paused 不可被 cancel 覆盖。`startPipeline().catch()` 通过 `signal.aborted` 静默返回，不覆写已设置的状态。
+  - **前端**：`pendingDownloads` / `pendingCancels` / `pendingPauses` / `pendingResumes` 四个 `Set` 追踪飞行中的请求。
+    `handleDownload` 覆盖 `paused`/`interrupted` 防重复（暂停态按钮 disabled + 后端状态机守卫）。`handleCancel` 覆盖
+    active + paused + interrupted 全态。`finally` 块清理 Set。
+  - **后端**：`downloadAndInstall` 覆盖 `ACTIVE_STATUSES` + `paused` + `interrupted` 所有非终态。`transition()`
+    状态机守卫终态不可再转换、paused 不可被 cancel 覆盖。`startPipeline().catch()` 通过 `signal.aborted` 静默返回，不覆写已设置的状态。
 - **市场内存管理**：`finalize()` 在终态（completed/error/canceled）时删除临时下载文件与解压目录，延迟 30 秒清理 `tasks` Map
   条目。
 - **市场下载背压处理**：`downloadArchive` 写入流检查 `writer.write()` 返回值，返回 `false` 时 await `drain`
@@ -1114,14 +1139,14 @@ interface AppSettings {
   恢复持久化快照。终态通知由 `AppContent` 统一处理并确保不重复。
 - **重复版本处理**：本地已安装相同 `id` 与 `version` 时，市场页展示"已安装"状态并阻止重复安装。**网页游戏（`networkgame`）例外**：仅以 `id` 判断是否已安装，忽略版本号。
 - **表单约束**：
-    - `id` 需实时检测重复并校验反向域名格式。
-    - `platformVersion` 固定为当前平台版本。
-    - `type` 使用下拉框；仅当 `type` 为 `multiplayer` 或 `singlemultiple` 时展示 `minPlayers/maxPlayers`。
-    - 所有游戏类型的 `version` 均必须通过完整 SemVer 校验；预发布标识也必须符合 SemVer 规则。
-    - `entry` 会自动探测并允许用户手动修改；探测支持 `.html`、`.htm`、`.exe`、`.bat`、`.cmd`，优先匹配常见入口名并排除安装器、卸载器、崩溃处理器等误判可执行文件。
-    - `entry=.html/.htm` 时校验入口文件存在，`entry=.exe/.bat/.cmd` 由游戏启动流程执行存在性校验，`entry=serve` 或 `entry=url` 时跳过入口文件存在性校验。
-    - `entry=url` 时必须提供 `web_url`（合法 URL）。
-    - `icon/cover` 若填写则必须是游戏目录内存在的相对路径。
+  - `id` 需实时检测重复并校验反向域名格式。
+  - `platformVersion` 固定为当前平台版本。
+  - `type` 使用下拉框；仅当 `type` 为 `multiplayer` 或 `singlemultiple` 时展示 `minPlayers/maxPlayers`。
+  - 所有游戏类型的 `version` 均必须通过完整 SemVer 校验；预发布标识也必须符合 SemVer 规则。
+  - `entry` 会自动探测并允许用户手动修改；探测支持 `.html`、`.htm`、`.exe`、`.bat`、`.cmd`，优先匹配常见入口名并排除安装器、卸载器、崩溃处理器等误判可执行文件。
+  - `entry=.html/.htm` 时校验入口文件存在，`entry=.exe/.bat/.cmd` 由游戏启动流程执行存在性校验，`entry=serve` 或 `entry=url` 时跳过入口文件存在性校验。
+  - `entry=url` 时必须提供 `web_url`（合法 URL）。
+  - `icon/cover` 若填写则必须是游戏目录内存在的相对路径。
 
 ### 6.1.1 NSIS 多语言安装程序
 
@@ -1205,6 +1230,18 @@ interface AppSettings {
 - `system:getSettings`：读取当前应用设置。
 - `system:getAppVersion`：获取当前平台版本号（供渲染进程进行平台兼容性判断）。
 - `system:getSensitiveWords`：从 `resources/vocabulary/` 加载并返回去重排序后的敏感词列表（按长度降序），结果缓存在主进程模块级变量中。
+- `system:cloud:getLocalStatus`：从本地 `config.json` 读取云同步状态（同步返回，不发起网络请求）。
+- `system:cloud:getSnapshotMeta`：按需从服务端查询当前平台快照的元信息（版本、大小、sha256、更新时间）。
+- `system:cloud:loginGithub`：触发 GitHub OAuth 登录流程。
+- `system:cloud:upload`：上传脱敏加密配置与 SQL dump 组成的单一平台快照。
+- `system:cloud:download`：下载云端平台快照，合并 JSON 配置后在 SQLite 事务中幂等导入。
+- `system:cloud:sync:event`：主进程 → 渲染进程推送云端同步进度事件（stage + percentage）。
+- `system:cloud:authChanged`：主进程 → 渲染进程推送登录/会话过期/会话失效事件（含 `LocalCloudStatus`）。仅在 OAuth 登录成功或接收到 `session_expired` / `session_invalid` 时触发。
+- `system:feedback:selectImages`：打开文件对话框选择反馈图片（支持传入 `selectionId` 追加模式），主进程侧执行 MIME 声明与实际格式一致性校验、SHA-256 去重。
+- `system:feedback:releaseImages`：释放单张或全部已选反馈图片。
+- `system:feedback:submit`：文本 ≤ 5000 字 + 可选图片 multipart 上传。
+- `system:feedback:getHistory`：读取本地反馈历史记录（仅保存编号与提交时间戳）。
+- `system:feedback:getDetail`：从服务端查询反馈详情（正文、处理状态、回复、图片），主进程侧校验响应结构后再返回 Data URL。
 - `system:saveSettings`：保存应用设置并应用相关系统行为。
 - `system:savePartialSettings`：保存部分应用设置（合并写入，不会覆盖未传入的字段）。
 - `system:uploadAvatar`：选择图片并返回原始 data URL（JPEG/PNG/WebP），不做缩放，裁切由前端 Crop 弹窗完成。
@@ -1274,54 +1311,52 @@ interface AppSettings {
 - **房间入口**：顶部导航的“房间”按钮进入 `/rooms`，包含“局域网”“服务器”两个 Tab；顶部头像与玩家名点击进入个性化页面。
 - **局域网始终可用**：房主页面的模式切换仅控制是否启用官方短地址；`RoomServer` 的本地监听持续存在，物理局域网、虚拟局域网和用户自备 frp 地址直连始终可用。
 - **官方服务器模式**：房主开启官方服务器模式后展示 `<relay-public-host>:随机数字` 短地址和复制按钮；切换入口前必须先通知其他玩家离开，注册失败自动回退到 `lan` 状态。
-- **房间发现校验**：局域网/服务器卡片加入前必须校验本地是否安装对应游戏、版本是否匹配、房间是否等待中、人数是否已满、是否为自己的房间；自己的房间点击加入时必须给出友好提示。
+- **房间发现校验**：局域网/服务器卡片加入前必须校验本地是否安装对应游戏、版本是否匹配、房间是否等待中、人数是否已满、是否为自己的房间。加入目标房间前必须通过密码探测响应中的 `hostId` 判断目标是否确为本机房间；只有目标 `hostId === localPlayerId` 才返回 `own_room`。若本机正在开房但目标属于其他房主，必须依次断开房主本地 `RoomClient`、注销官方中继房间、`await roomServer.stop()`，成功后再连接目标；关闭失败返回 `close_current_room_failed`，不得误报 `own_room`。
 - **房间密码交互**：房间页右上角提供密码按钮；发现页卡片加入前必须先探测 `hasPassword`，仅在目标房间有密码时再弹出密码输入框。
 - **服务器卡片展示**：服务器房间卡片展示官方短地址；游戏名称显示游戏本身名称，优先本地 Manifest，其次中继返回的 `gameName`，最后兜底 `gameId`。
 - **游戏库展示**：
-    - 游戏封面展示区域统一使用 **16:9** 比例，图片模式为 `contain`（完整显示）或 `cover`（填满）。
-    - 支持 **长按** 游戏封面进入编辑模式，此时可拖动调整游戏排序。
-    - 支持将任意游戏文件夹直接拖拽到游戏库窗口导入；缺少 `game.json` 时弹出补录表单。
-    - 排序结果需持久化存储。
-    - 聊天消息：当前用户发送的消息，名字显示为绿色，使用 `--bz-green` CSS 变量。文字使用 `white-space: pre-wrap` 保留换行符。
-    - 语音消息：录制采用 Opus 编码（`audio/webm;codecs=opus`），采样率 24kHz、码率 32kbps，通过 `MediaRecorder` API 实现。语音消息最长
-      10 秒，过短（<0.5s）不予发送。
-    - 语音播放：点击语音消息气泡触发播放，文字切换为"播放中..."带三个依次闪烁的圆点动画（`dot-blink` @keyframes，
-      `animation-delay` 错位 0s/0.2s/0.4s）。再次点击停止播放（`audio.pause()` + 状态清除）。`audio.onended` 自动恢复文字。
-      `currentAudio` 引用确保停止行为确实终止音频播放。
-    - 收藏游戏：特别喜欢的游戏在封面右上角展示爱心图标。
+  - 游戏封面展示区域统一使用 **16:9** 比例，图片模式为 `contain`（完整显示）或 `cover`（填满）。
+  - 支持 **长按** 游戏封面进入编辑模式，此时可拖动调整游戏排序。
+  - 支持将任意游戏文件夹直接拖拽到游戏库窗口导入；缺少 `game.json` 时弹出补录表单。
+  - 排序结果需持久化存储。
+  - 聊天消息：当前用户发送的消息，名字显示为绿色，使用 `--bz-green` CSS 变量。文字使用 `white-space: pre-wrap` 保留换行符。
+  - 语音消息：录制采用 Opus 编码（`audio/webm;codecs=opus`），采样率 24kHz、码率 32kbps，通过 `MediaRecorder` API 实现。语音消息最长
+    10 秒，过短（<0.5s）不予发送。
+  - 语音播放：点击语音消息气泡触发播放，文字切换为"播放中..."带三个依次闪烁的圆点动画（`dot-blink` @keyframes，
+    `animation-delay` 错位 0s/0.2s/0.4s）。再次点击停止播放（`audio.pause()` + 状态清除）。`audio.onended` 自动恢复文字。
+    `currentAudio` 引用确保停止行为确实终止音频播放。
+  - 收藏游戏：特别喜欢的游戏在封面右上角展示爱心图标。
 - **聊天弹窗窗口**：
-    - 房间聊天支持弹出为独立窗口，点击 RoomChat 标题栏右侧展开按钮触发。
-    - 弹窗窗口尺寸和位置自动持久化到 `config.json`（`chatWindowBounds`），下次打开恢复。
-    - 弹窗关闭时自动通知主窗口恢复聊天显示；主窗口显示"聊天已弹出到独立窗口"提示与收回按钮。
-    - 弹窗窗口通过加载同一 Vue 应用的路由 `/chat-popout` 渲染，`AppContent` 通过 `isPopupWindow` 判断跳过主菜单渲染。
-    - 主进程 `sendRoomEventToChat()` 统一转发所有房间事件（聊天消息、状态同步、连接状态等）给弹窗。
-    - 弹窗输入框使用原生 `<textarea>` 替代 `<n-input>`，支持 Shift+Enter 换行、Enter 发送。
-    - 输入框底部拖动条（`.chat-resize-handle`）可调整输入区高度（60px~260px），高度持久化到 `chatInputHeight`。
-    - **中继房间图片限制**：当房间处于官方中继模式（`hostConnectionMode === 'relay'`）时，弹窗关闭图片发送功能：① 发送图片按钮 disabled + hover 提示；② `handleSend` 跳过 pending images；③ `addImageFromFile` / `handlePaste` / `handleDrop` / `handleImportImage` 均通过 `isRelayRoom` 门控直接返回；④ 切换至中继房间时立即清空 `pendingImages` 并重置拖拽状态。`isRelayRoom` 从 `room:state:sync` 事件中的 `hostConnectionMode` 字段派生。
+  - 房间聊天支持弹出为独立窗口，点击 RoomChat 标题栏右侧展开按钮触发。
+  - 弹窗窗口尺寸和位置自动持久化到 `config.json`（`chatWindowBounds`），下次打开恢复。
+  - 弹窗关闭时自动通知主窗口恢复聊天显示；主窗口显示"聊天已弹出到独立窗口"提示与收回按钮。
+  - 弹窗窗口通过加载同一 Vue 应用的路由 `/chat-popout` 渲染，`AppContent` 通过 `isPopupWindow` 判断跳过主菜单渲染。
+  - 主进程 `sendRoomEventToChat()` 统一转发所有房间事件（聊天消息、状态同步、连接状态等）给弹窗。
+  - 弹窗输入框使用原生 `<textarea>` 替代 `<n-input>`，支持 Shift+Enter 换行、Enter 发送。
+  - 输入框底部拖动条（`.chat-resize-handle`）可调整输入区高度（60px~260px），高度持久化到 `chatInputHeight`。
+  - **中继房间图片限制**：当房间处于官方中继模式（`hostConnectionMode === 'relay'`）时，弹窗关闭图片发送功能：① 发送图片按钮 disabled + hover 提示；② `handleSend` 跳过 pending images；③ `addImageFromFile` / `handlePaste` / `handleDrop` / `handleImportImage` 均通过 `isRelayRoom` 门控直接返回；④ 切换至中继房间时立即清空 `pendingImages` 并重置拖拽状态。`isRelayRoom` 从 `room:state:sync` 事件中的 `hostConnectionMode` 字段派生。
 - **聊天图片消息**：
-    - 弹窗聊天框支持 Ctrl+V 粘贴图片、拖拽图片文件和点击"发送图片"按钮选择图片发送，单张限制 5MB。
-    - 点击"发送图片"按钮（📷 图标）触发隐藏的 `<input type="file" accept="image/*" multiple>`，支持批量选择。选择后和粘贴/拖拽统一走 `addImageFromFile()` 处理。
-    - 录音过程中图片发送按钮禁用。
-    - 图片以缩略图（max 240×200px）展示在输入框上方预览区，发送前可删除。
-    - 文字和图片打包为一条消息（`images[]` 数组），消息展示时图片在上、文字在下。
-    - 消息列表中图片使用自定义放大镜光标（黑色 SVG data URI），点击弹出全屏预览。
+  - 弹窗聊天框支持 Ctrl+V 粘贴图片、拖拽图片文件和点击"发送图片"按钮选择图片发送，单张限制 5MB。
+  - 点击"发送图片"按钮（📷 图标）触发隐藏的 `<input type="file" accept="image/*" multiple>`，支持批量选择。选择后和粘贴/拖拽统一走 `addImageFromFile()` 处理。
+  - 录音过程中图片发送按钮禁用。
+  - 图片以缩略图（max 240×200px）展示在输入框上方预览区，发送前可删除。
+  - 文字和图片打包为一条消息（`images[]` 数组），消息展示时图片在上、文字在下。
+  - 消息列表中图片使用自定义放大镜光标（黑色 SVG data URI），点击弹出全屏预览。
 - **图片预览器**：
-    - `ImageViewer.vue` 组件使用 `<teleport to="body">` 渲染全屏半透明蒙层（z-index: 9999）。
-    - 无边框、无关闭按钮、无 NaiveUI Modal 依赖；点击蒙层空白处退出。
-    - 图片最大 92vw×92vh，`object-fit: contain`。
-    - 蒙层使用自定义缩小光标（白色 SVG data URI），图片区域 `cursor: default`。
+  - `ImageViewer.vue` 是房间内嵌聊天、独立聊天窗口和待发送图片共用的薄封装，内部统一使用 Naive UI `NImagePreview`。
+  - 预览保留 Naive UI 原生的旋转、复位、缩放、下载与关闭工具栏；缩略图尺寸仍由聊天组件控制，放大预览按原图比例完整显示。
 - **内嵌聊天自适应高度**：
-    - RoomChat 使用完整 flex 布局链，`.chat-messages` 为 `flex:1; min-height:200px`，随窗口大小自动调整。
+  - RoomChat 使用完整 flex 布局链，`.chat-messages` 为 `flex:1; min-height:200px`，随窗口大小自动调整。
 - **聊天消息统一组件**：
-    - `ChatMessageList.vue` 为 RoomChat 与 ChatPopoutView 提供统一的聊天消息渲染（文本、图片、语音、GameReportCard），消除两处重复代码。
-    - 组件通过 props 接收消息列表、玩家 ID、播放状态、敏感词过滤开关与词库，通过 emits 向外传递图片预览和语音播放事件。
+  - `ChatMessageList.vue` 为 RoomChat 与 ChatPopoutView 提供统一的聊天消息渲染（文本、图片、语音、GameReportCard），消除两处重复代码。
+  - 组件通过 props 接收消息列表、玩家 ID、播放状态、敏感词过滤开关与词库，通过 emits 向外传递图片预览和语音播放事件。
 - **敏感词过滤**：
-    - **客户端侧**（第一道防线）：功能默认开启；由 `SettingsView` 中的 `sensitiveWordFilter` 开关控制，持久化于 `AppSettings.sensitiveWordFilter`。词库存储在 `resources/vocabulary/*.txt`，主进程 `system:getSensitiveWords` 加载并缓存，渲染进程通过 `sensitiveWordFilter.ts` 的 `filterSensitiveText()` 对消息文本进行字符级掩码替换（敏感词替换为 `*`）。用户可以关闭。设置项旁提供帮助按钮（?），hover 展示说明：中继服务器房间由服务端自动过滤与本地开关无关，局域网/虚拟局域网房间由本地开关控制。
-    - **中继服务器侧**（第二道防线）：对所有经中继转发的聊天消息强制执行，用户不可关闭。图片消息被拦截丢弃，文字/混合消息经敏感词过滤后转发。词库文件缺失时自动丢弃所有文字消息（fail-closed），确保中继链路不会成为未过滤内容的通道。详见「官方中继联机系统 → 中继聊天内容安全」。
-    - 双端共用同一套 Unicode 安全算法（`Array.from()` + code-unit→char-index 映射表定位，词库按长度降序排序后逐词扫描，被命中的字符位置标记后批量替换为 `*`）。
+  - **客户端侧**（第一道防线）：功能默认开启；由 `SettingsView` 中的 `sensitiveWordFilter` 开关控制，持久化于 `AppSettings.sensitiveWordFilter`。词库存储在 `resources/vocabulary/*.txt`，主进程 `system:getSensitiveWords` 加载并缓存，渲染进程通过 `sensitiveWordFilter.ts` 的 `filterSensitiveText()` 对消息文本进行字符级掩码替换（敏感词替换为 `*`）。用户可以关闭。设置项旁提供帮助按钮（?），hover 展示说明：中继服务器房间由服务端自动过滤与本地开关无关，局域网/虚拟局域网房间由本地开关控制。
+  - **中继服务器侧**（第二道防线）：对所有经中继转发的聊天消息强制执行，用户不可关闭。图片消息被拦截丢弃，文字/混合消息经敏感词过滤后转发。词库文件缺失时自动丢弃所有文字消息（fail-closed），确保中继链路不会成为未过滤内容的通道。详见「官方中继联机系统 → 中继聊天内容安全」。
+  - 双端共用同一套 Unicode 安全算法（`Array.from()` + code-unit→char-index 映射表定位，词库按长度降序排序后逐词扫描，被命中的字符位置标记后批量替换为 `*`）。
 - **游戏详情页**：
-    - 删除游戏功能使用模态框，支持多选版本进行删除，默认选中当前版本。
-    - 若 Manifest 配置了 `video` 字段，详情页进入后自动播放预览视频；视频结束后自动回退显示封面。
+  - 删除游戏功能使用模态框，支持多选版本进行删除，默认选中当前版本。
+  - 若 Manifest 配置了 `video` 字段，详情页进入后自动播放预览视频；视频结束后自动回退显示封面。
 - **加入房间地址**：加入房间输入框需要回填最近一次成功地址（持久化于设置），减少重复输入。
 - **房间连接状态可视化**：房间页需展示 `connecting / reconnecting / failed / disconnected` 状态，以及重连倒计时与失败原因。
 - **统计/成就搜索**：右上角默认展示搜索图标，点击后展开输入框并支持按游戏名或游戏 ID 模糊搜索。
@@ -1329,7 +1364,7 @@ interface AppSettings {
 - **客机重连按钮**：客机游戏进程意外退出后，由 `RoomServer` 将 `playerId` 加入 `RoomInfo.reconnectPlayerIds` 并广播状态同步。前端 `isReconnectMode` 从该数组派生，无需手动管理。重连状态下 Ready/Unready 按钮位替换为"重连"按钮。点击后重新 `launch()` 同一游戏版本。`room:game:start` 或 `playing→waiting` 时 `reconnectPlayerIds` 被清空，按钮恢复原状。
 - **统计界面**：卡片右上角需展示该游戏的所有版本号，使用自动换行布局。
 - **设置页更新入口**：设置页需提供「检查更新」按钮，点击后弹出更新状态弹层，显示下载进度与安装按钮。
-- **玩家昵称校验**：昵称输入框限制 16 个字符（`maxlength="16" show-count`），表单校验规则包含三个维度：① 非空（`required`）；② 最长 16 字符（`max: 16`）；③ 禁止 `< > " ' \` & \\ /` 等特殊字符（正则 `/^[^<>\"'\`&\\\\/]+$/`）。`canSave` computed 通过 `nicknameValid` 门控：空名或包含非法字符时保存按钮 disabled。所有 6 种语言均提供 `nameTooLong` / `nameInvalidChars` 错误提示。
+- **玩家昵称校验**：昵称输入框限制 16 个字符（`maxlength="16" show-count`），表单校验规则包含三个维度：① 非空（`required`）；② 最长 16 字符（`max: 16`）；③ 禁止 `< > " ' \` & \\ /`等特殊字符（正则`/^[^<>\"'\`&\\\\/]+$/`）。`canSave`computed 通过`nicknameValid`门控：空名或包含非法字符时保存按钮 disabled。所有 6 种语言均提供`nameTooLong`/`nameInvalidChars` 错误提示。
 - **设置页卸载入口**：设置页底部（与保存按钮同行，`justify-content: space-between`）提供"卸载客户端"按钮（
   `type="error" secondary`），右侧提供"清除缓存"按钮。点击卸载弹出 NaiveUI 自定义确认弹窗，包含不可撤销的警告文案、是否同时删除所有游戏库目录的勾选项、以及删除路径列表预览。确认后调用
   `system:uninstall` IPC 执行卸载。卸载准备期间锁定弹窗并显示加载状态；市场任务活跃、游戏库被占用、路径不安全、辅助进程或卸载器不可用时不得静默继续，必须保留客户端并展示对应错误。
@@ -1341,23 +1376,23 @@ interface AppSettings {
   `--bz-text-on-placeholder` CSS 变量适配暗/亮主题）。
 - **设置页主题跟随系统**：主题选择器提供"跟随系统"选项（`themeAuto`）。当选择 `auto` 时，平台自动跟随操作系统亮/暗模式切换。
 - **设置页官网链接**：设置页需展示官方网址，使用 NaiveUI `n-a` 组件渲染为可点击链接，`
-  @click.prevent` 拦截默认跳转后通过 `system:openUrl` IPC 调用 `shell.openExternal` 打开系统默认浏览器。
-- **设置页建言献策**：底部入口打开独立 `FeedbackModal`。文字最多 5,000 字，可选最多 4 张 PNG/JPEG/WebP（单张 5 MiB）；渲染进程只持有主进程生成的预览和选择 ID，不接触文件路径、发行版中继令牌或 GitHub 会话令牌。未登录提示为每 48 小时一次，登录后提示为每 6 小时一次；成功后不展示下一次时间；触发限制时只展示服务端 `resetAt` 对应的一条提示。操作区提供“历史记录”入口，在 `settings.feedbackHistory` 中保存全部成功提交的反馈编号和时间，为后续按编号查询预留界面；该历史跟随 `config.json` 正常双向云同步。
+@click.prevent` 拦截默认跳转后通过 `system:openUrl` IPC 调用 `shell.openExternal` 打开系统默认浏览器。
+- **设置页建言献策**：底部入口打开固定 72vw × 72vh 的 `FeedbackModal`，使用“建言献策 / 历史记录”两个 Tab，不再打开第二层历史弹窗。文字最多 5,000 字，可选最多 4 张 PNG/JPEG/WebP（单张 5 MiB）；重复选择通过顶部 message 提示，新增图片追加到当前选择，缩略图按最长边 `contain`，文件名完整换行显示。渲染进程只持有主进程生成的预览和选择 ID，不接触文件路径、发行版中继令牌或 GitHub 会话令牌。未登录提示为每 48 小时一次，登录后提示为每 6 小时一次；触发限制时只展示服务端 `resetAt` 对应的一条提示。历史列表默认全部收起，右侧只显示展开按钮；展开时从服务端查询正文、图片、处理状态和回复，详情区内部显示状态，历史较多时在固定弹窗内容区滚动。
 - **GitHub Token 设置**：设置页提供 `githubToken` 字段（`n-input type="password"`，`@copy.prevent` + `@cut.prevent` 防剪贴板泄漏）。填写有效的 GitHub Personal Access Token 后，平台所有 GitHub API 请求自动携带 `Authorization: Bearer <token>`，将 API 限流从 60 次/小时提升至 5000 次/小时（用于 Release Asset 解析）。
 - **云端同步说明**：设置页 GitHub 登录区域在上传/下载按钮旁提供 `?` 帮助按钮，hover 展示 `cloudSyncHelp` tooltip，说明上传会排除 GitHub Token 与登录会话字段、下载 config.json 仅更新云端存在的字段。
 - **设置页数据自检**：设置页需提供“数据自检”按钮。清单检查必须复用 `GameManifestFileService`，在不迁移或覆盖原文件的前提下识别明文/密文、验证密文信封/密钥/认证标签和最新 `GameManifestSchema`，并核对游戏 ID/版本、平台兼容范围、入口及图标/封面/视频/成就图标文件。明文为警告，解密、格式、密钥或 Schema 问题为错误；主进程返回稳定错误码和参数，渲染层使用六语 i18n 展示，不直接显示主进程硬编码文案。
 - **更新错误诊断**：更新失败时前端展示归类后的错误码文案与技术摘要。
 - **设置页游戏库列表管理**：
-    - 支持维护多个游戏库路径，并为每个项提供默认游戏库切换、打开路径和删除入口。
-    - 默认游戏库影响新导入或市场下载安装的游戏，已导入游戏所在目录保持不变。
-    - 删除游戏库时必须阻止删除最后一个路径，并通过 i18n 展示结构化错误文案。
-    - 迁移游戏库时先选择源游戏库，再选择新的空目录；迁移源目录中的全部文件，成功后删除源目录，并同步更新游戏记录和游戏库列表。
-    - 支持展示“当前 + 历史”路径列表、打开路径、删除路径。
-    - 删除路径时只删除该路径中平台可识别的游戏版本目录，并更新本地记录；用户自行放入的非游戏文件必须保留。
+  - 支持维护多个游戏库路径，并为每个项提供默认游戏库切换、打开路径和删除入口。
+  - 默认游戏库影响新导入或市场下载安装的游戏，已导入游戏所在目录保持不变。
+  - 删除游戏库时必须阻止删除最后一个路径，并通过 i18n 展示结构化错误文案。
+  - 迁移游戏库时先选择源游戏库，再选择新的空目录；迁移源目录中的全部文件，成功后删除源目录，并同步更新游戏记录和游戏库列表。
+  - 支持展示“当前 + 历史”路径列表、打开路径、删除路径。
+  - 删除路径时只删除该路径中平台可识别的游戏版本目录，并更新本地记录；用户自行放入的非游戏文件必须保留。
 - **房间管理增强**：
-    - Host 可在玩家列表中踢人，被踢玩家收到弹窗并自动离开房间。
-    - 被踢玩家在同一房间生命周期内禁止重新加入。
-    - 房主解散房间后，所有客户端需稳定收到 `room:disbanded` 并退出房间页。
+  - Host 可在玩家列表中踢人，被踢玩家收到弹窗并自动离开房间。
+  - 被踢玩家在同一房间生命周期内禁止重新加入。
+  - 房主解散房间后，所有客户端需稳定收到 `room:disbanded` 并退出房间页。
 - **成就弹窗版本一致性**：成就弹窗读取 Manifest 时使用当前运行版本。
 - **经济系统前端同步**：游戏结束事件后需刷新用户数据，确保每 10 分钟时长奖励的 BZ 币能即时反映在 UI。
 
@@ -1384,22 +1419,23 @@ interface AppSettings {
 - **版本策略**：发布前需先提升 `package.json` 版本号，并使用对应 Tag 创建 Release。
 - **生效条件**：自动更新在打包后的生产环境可用；开发模式（`pnpm dev`）下提示不支持。
 - **本地数据保护**：
-    - 在下载更新与安装更新前，`UpdateService` 必须创建数据快照目录（`.update-snapshots/<timestamp-stage>`）。
-    - 快照至少包含 `config.json` 备份文件、SQLite `db/` 目录副本与所有游戏保存根目录副本（支持多路径）。
-    - 快照写入失败时记录日志并保留现有 `config.json` 与所有游戏目录。
+  - 在下载更新与安装更新前，`UpdateService` 必须创建数据快照目录（`.update-snapshots/<timestamp-stage>`）。
+  - 快照至少包含 `config.json` 备份文件、SQLite `db/` 目录副本与所有游戏保存根目录副本（支持多路径）。
+  - 快照写入失败时记录日志并保留现有 `config.json` 与所有游戏目录。
 
 ### 6.6 建言献策、管理后台与配置安全
 
 - **客户端边界**：`FeedbackService` 在主进程完成图片读取、实际格式校验、multipart 构造、发行版中继令牌和可选 GitHub Bearer Token 注入；IPC 输入必须视为不可信并进行运行时校验。
 - **反馈限制**：服务端仅使用 `req.socket.remoteAddress` 规范化后的 IP作为匿名身份；不得读取 `X-Forwarded-For`，不得保存 IP、`playerId` 或客户端 ID。匿名用户按 IP在进程内 Map限制 48 小时，登录用户按 GitHub ID在独立的进程内 Map限制 6 小时；待处理占位必须持续到成功提交或失败释放，防止并发穿透，两类状态均在服务重启后清空。
 - **上传安全**：服务端使用 busboy 流式解析，总请求、字段、文件数量及单文件大小都必须设限；图片必须同时校验声明 MIME、文件签名、容器结构和合理尺寸。MySQL 失败时尽力删除本次 GridFS 文件，临时目录始终清理。
+- **会话错误协议**：受保护 HTTP 接口统一区分 `authenticated / missing / expired / invalid`。缺少令牌返回 `401 unauthorized`，过期返回 `401 session_expired`，无效、撤销或未知令牌返回 `401 session_invalid`，并同时返回稳定 `error` 与可读 `message`。过期会话默认保留 7 天以便识别，由 `AUTH_EXPIRED_SESSION_RETENTION_MS` 配置；普通 `unauthorized` 不触发客户端清理登录。
 - **管理权限**：管理 API 每次请求都校验 GitHub 会话及 `ADMIN_GITHUB_IDS`。管理 OAuth 只允许与 `ADMIN_PUBLIC_URL` 完全相等的回跳，使用 HttpOnly、SameSite=Lax Cookie；管理员会话不得写入 URL fragment。管理静态文件必须阻止路径穿越和符号链接越界，并发送 CSP、`nosniff`、拒绝 iframe 等安全响应头。
 - **数据初始化**：`feedback` 与 `feedback_images` 只能在 `mysql-service.js` 的 `ensureSchema()` 中用幂等 `CREATE TABLE IF NOT EXISTS` 定义；不得增加过程性迁移 SQL。图片复用现有 GridFS Bucket。
-- **三端接口**：提交成功仅返回 `{ ok, id }`；匿名限制返回 `429 + error + retryAfterSeconds + resetAt`。管理列表、详情、图片和更新字段以 `relay-server/API.md` 为准，服务端测试与管理端 TypeScript 类型必须同步。
+- **三端接口**：提交成功仅返回 `{ ok, id }`；匿名限制返回 `429 + error + retryAfterSeconds + resetAt`。用户详情返回 `id/content/status/reply/imageCount/createdAt/updatedAt/images`，不得包含 `adminNote`；用户图片接口复用同一所有权规则。管理详情额外返回 `adminNote`，更新接受 `status/adminNote/reply`。所有字段以 `relay-server/API.md` 为准，服务端测试、客户端共享类型、预加载声明与管理端 TypeScript 类型必须同步。
 - **配置唯一来源**：客户端真实关键配置只允许出现在被 Git 忽略的 `private-build.config.json`；服务端真实关键配置只允许存在于服务器 `/etc/systemd/system/bz-games-relay.service`，权限必须为 `root:root 0600`；管理端生产环境使用同源 `/api` 与 `/auth`，当前无环境字段。
 - **示例同步**：`private-build.config.example.json`、`relay-server/bz-games-relay.service.example` 和 `bz-games-admin/.env.example` 分别对应三端。新增或删除配置字段后必须运行 `npm run check:config`（对应 `scripts/check-config-examples.mjs`，自动校验三端配置字段一致性、`.gitignore` 敏感路径覆盖及 SERVICE 示例完整性），禁止在源码或文档写入真实公网地址、管理员 ID、令牌、数据库连接串或 OAuth Secret。
 
-***
+---
 
 ## 七、联机系统详解
 
@@ -1409,58 +1445,58 @@ interface AppSettings {
 2. **房主即服务端**：Room Server 运行在房主机器上，其他玩家的平台作为 Room Client 连接。
 3. **内网穿透工具无关**：平台只使用固定本地端口（可配置），用户选用任何内网穿透工具均可。
 4. **两层 WebSocket 服务**：
-    - **Room Server/Client**：平台之间互联，处理房间状态与游戏消息中继。
-    - **Game API Server**：平台与本机游戏进程互联，提供平台能力给游戏。
-    - **Host 本地投递优化**：当客机消息目标是房主本机游戏进程时，`RoomServer` 应直接调用 `GameApiServer.sendEvent()`
-      投递，跳过房主本地 `RoomClient` WebSocket 回环。
-    - **Host 聊天本地投递**：房主发送聊天消息时，直接通过 `mainWindow.webContents.send` + `roomServer.broadcast`
-      （排除自己）推送，不经过 WebSocket 本地回环。
-    - **游戏中继 UI 隔离**：`game:message:relay` / `game:broadcast:relay` / `game:message:ack` 进入 `GameManager.relayToGame()`，不转发到房间 UI 或聊天窗口 IPC。
-    - **中继幂等缓存**：`RoomServer` 和 `RoomClient` 使用最近 `messageId` 缓存过滤重复游戏中继消息，默认缓存最近 1000 条。
+   - **Room Server/Client**：平台之间互联，处理房间状态与游戏消息中继。
+   - **Game API Server**：平台与本机游戏进程互联，提供平台能力给游戏。
+   - **Host 本地投递优化**：当客机消息目标是房主本机游戏进程时，`RoomServer` 应直接调用 `GameApiServer.sendEvent()`
+     投递，跳过房主本地 `RoomClient` WebSocket 回环。
+   - **Host 聊天本地投递**：房主发送聊天消息时，直接通过 `mainWindow.webContents.send` + `roomServer.broadcast`
+     （排除自己）推送，不经过 WebSocket 本地回环。
+   - **游戏中继 UI 隔离**：`game:message:relay` / `game:broadcast:relay` / `game:message:ack` 进入 `GameManager.relayToGame()`，不转发到房间 UI 或聊天窗口 IPC。
+   - **中继幂等缓存**：`RoomServer` 和 `RoomClient` 使用最近 `messageId` 缓存过滤重复游戏中继消息，默认缓存最近 1000 条。
 5. **游戏结束语义**：
-    - `game.end` API：游戏主动调用，平台回复 `{success: true}`；房间状态和进程生命周期由 Host 进程退出事件驱动。
-    - `game.report` API：游戏完成一局后提交战绩报告（纯文本 / 结构化 / 自定义 HTML），以系统消息形式展示在房间聊天中，由 `GameReportCard.vue` 渲染。
-    - 游戏真正结束仅由 **Host 进程退出** 触发：`handleProcessExit` → `notifyRoomGameEnd` → state 变 `"waiting"` + 清空 `reconnectPlayerIds` + 广播 `room:game:end` + `room:state:sync`。客机 `RoomClient` 收到 `room:game:end` 后调用 `onGameStop` → `stop()` 杀死所有客机进程。
-    - 前端通过 `room:state:sync` 检测 `playing→waiting` 态变化来显示"游戏已结束"聊天消息。
+   - `game.end` API：游戏主动调用，平台回复 `{success: true}`；房间状态和进程生命周期由 Host 进程退出事件驱动。
+   - `game.report` API：游戏完成一局后提交战绩报告（纯文本 / 结构化 / 自定义 HTML），以系统消息形式展示在房间聊天中，由 `GameReportCard.vue` 渲染。
+   - 游戏真正结束仅由 **Host 进程退出** 触发：`handleProcessExit` → `notifyRoomGameEnd` → state 变 `"waiting"` + 清空 `reconnectPlayerIds` + 广播 `room:game:end` + `room:state:sync`。客机 `RoomClient` 收到 `room:game:end` 后调用 `onGameStop` → `stop()` 杀死所有客机进程。
+   - 前端通过 `room:state:sync` 检测 `playing→waiting` 态变化来显示"游戏已结束"聊天消息。
 
 ### 7.2 联机完整流程
 
 #### 房主（Host）操作流程
 
 1. **创建房间**：
-    - 用户在游戏详情页点击「创建房间」。
-    - 主进程 `RoomServer` 启动，优先监听 `settings.defaultRoomPort`（默认 38080），端口占用时使用系统分配端口，并向客户端返回实际端口。
-    - 房主平台内部 `RoomClient` 连接本地 `RoomServer`。
+   - 用户在游戏详情页点击「创建房间」。
+   - 主进程 `RoomServer` 启动，优先监听 `settings.defaultRoomPort`（默认 38080），端口占用时使用系统分配端口，并向客户端返回实际端口。
+   - 房主平台内部 `RoomClient` 连接本地 `RoomServer`。
 2. **选择对外入口**：
-    - 房主可直接分享物理局域网 IP、虚拟局域网 IP 或用户自备 frp 公网地址。
-    - 若开启官方服务器模式，平台额外向 relay-server 注册一个短地址供好友使用。
+   - 房主可直接分享物理局域网 IP、虚拟局域网 IP 或用户自备 frp 公网地址。
+   - 若开启官方服务器模式，平台额外向 relay-server 注册一个短地址供好友使用。
 3. **玩家加入**：
-    - 房主等待玩家连接。
-    - 玩家列表实时更新（通过 `room:player:joined` / `room:state:sync`）。
+   - 房主等待玩家连接。
+   - 玩家列表实时更新（通过 `room:player:joined` / `room:state:sync`）。
 4. **开始游戏**：
-    - 当所有玩家准备就绪（Host 无需准备），房主点击「开始游戏」。
-    - `RoomServer` 广播 `room:game:start`。
-    - 房主平台启动本地游戏进程，注入 `BZ_IS_HOST=1` 和 `BZ_ROOM_ID`。
+   - 当所有玩家准备就绪（Host 无需准备），房主点击「开始游戏」。
+   - `RoomServer` 广播 `room:game:start`。
+   - 房主平台启动本地游戏进程，注入 `BZ_IS_HOST=1` 和 `BZ_ROOM_ID`。
 
 #### 玩家（Client）操作流程
 
 1. **加入房间**：
-    - 用户点击「加入房间」，输入房主提供的短地址、局域网地址、虚拟局域网地址或公网映射地址。
-    - 若从房间发现页点击卡片加入，平台会先探测该房间是否设置密码。
-    - 平台 `RoomClient` 尝试建立 WebSocket 连接。
-    - 官方短地址模式先发送 `relay:join` 做前置准入校验；直连模式连接成功后直接发送 `room:join` 握手消息，携带 `gameId`、`gameVersion` 与可选密码。
+   - 用户点击「加入房间」，输入房主提供的短地址、局域网地址、虚拟局域网地址或公网映射地址。
+   - 若从房间发现页点击卡片加入，平台会先探测该房间是否设置密码。
+   - 平台 `RoomClient` 尝试建立 WebSocket 连接。
+   - 官方短地址模式先发送 `relay:join` 做前置准入校验；直连模式连接成功后直接发送 `room:join` 握手消息，携带 `gameId`、`gameVersion` 与可选密码。
 2. **握手与同步**：
-    - relay-server 会在短地址模式下先校验房间是否存在、房主是否在线、游戏是否已开始、房间是否已满、密码是否缺失或错误。
-    - `RoomServer` 对所有直连/最终加入请求统一校验密码、游戏 ID、版本、黑名单和人数。
-    - 收到 `room:join:ack` 表示加入成功，同步房间状态。
-    - 若收到 `room:join:refused` 或 relay 错误，则提示对应原因（如“房间已满”“版本不匹配”“密码错误”）。
-    - `RoomClient` 在异常断线后会自动重连并重新发送 `room:join`（最多 5 次，递增退避），减少临时网络抖动造成的掉房。
+   - relay-server 会在短地址模式下先校验房间是否存在、房主是否在线、游戏是否已开始、房间是否已满、密码是否缺失或错误。
+   - `RoomServer` 对所有直连/最终加入请求统一校验密码、游戏 ID、版本、黑名单和人数。
+   - 收到 `room:join:ack` 表示加入成功，同步房间状态。
+   - 若收到 `room:join:refused` 或 relay 错误，则提示对应原因（如“房间已满”“版本不匹配”“密码错误”）。
+   - `RoomClient` 在异常断线后会自动重连并重新发送 `room:join`（最多 5 次，递增退避），减少临时网络抖动造成的掉房。
 3. **准备与等待**：
-    - 在房间内点击「准备」 (`room:ready`)。
-    - 等待房主开始游戏。
+   - 在房间内点击「准备」 (`room:ready`)。
+   - 等待房主开始游戏。
 4. **游戏启动**：
-    - 收到 `room:game:start` 信号。
-    - 平台自动启动本地游戏进程，注入 `BZ_IS_HOST=0` 和 `BZ_ROOM_ID`。
+   - 收到 `room:game:start` 信号。
+   - 平台自动启动本地游戏进程，注入 `BZ_IS_HOST=0` 和 `BZ_ROOM_ID`。
 
 #### 客机重连流程
 
@@ -1481,30 +1517,30 @@ Room Server 与 Room Client 之间使用 **WebSocket + JSON** 通信。
 
 #### 消息类型 (RoomMessageType)
 
-| 类型                     | 方向              | 说明                                                              |
-|:-----------------------|:----------------|:----------------------------------------------------------------|
-| `room:join`            | Client → Server | 请求加入房间，携带玩家信息与游戏版本                                              |
-| `room:join:ack`        | Server → Client | 加入成功，返回房间信息                                                     |
-| `room:join:refused`    | Server → Client | 拒绝加入（房间满、版本不匹配等）                                                |
-| `room:password:probe`  | Client → Server | 加入前探测直连房间是否设置密码                                                |
-| `room:password:probe:ack` | Server → Client | 返回直连房间是否设置密码                                                   |
-| `room:player:joined`   | Server → All    | 通知有新玩家加入                                                        |
-| `room:player:left`     | Server → All    | 通知玩家离开                                                          |
-| `room:player:ready`    | Client → Server | 玩家标记为已准备                                                        |
-| `room:player:unready`  | Client → Server | 玩家取消准备                                                          |
-| `room:state:sync`      | Server → All    | 房间状态全量同步                                                        |
-| `room:game:start`      | Server → All    | 游戏开始信号                                                          |
-| `room:game:end`        | Server → All    | 游戏结束信号（仅 Host 方触发，`notifyRoomGameEnd` / `RoomServer` broadcast） |
-| `room:disbanded`       | Server → All    | 房间已解散                                                           |
-| `room:disconnected`   | Server → Client | 连接断开通知                                                         |
-| `room:player:reconnect-needed` | Client → Server | 客机游戏进程退出后通知服务端标记重连需求                                       |
-| `room:kicked`          | Server → Target | 被踢通知（仅目标玩家）                                                     |
-| `room:player:kicked`   | Server → All    | 广播玩家被踢事件                                                        |
-| `room:chat`            | Bidirectional   | 聊天消息（支持文字、语音、图片，文字和图片可打包为一条消息）                          |
-| `room:chat:history:sync`| Server → ChatWin| 主进程向聊天弹窗同步历史消息                                              |
-| `game:message:relay`   | Bidirectional   | 游戏内单播消息中继                                                       |
-| `game:broadcast:relay` | Bidirectional   | 游戏内广播消息中继                                                       |
-| `game:message:ack`     | Bidirectional   | 可靠游戏消息的中继确认                                                     |
+| 类型                           | 方向             | 说明                                                                         |
+| :----------------------------- | :--------------- | :--------------------------------------------------------------------------- |
+| `room:join`                    | Client → Server  | 请求加入房间，携带玩家信息与游戏版本                                         |
+| `room:join:ack`                | Server → Client  | 加入成功，返回房间信息                                                       |
+| `room:join:refused`            | Server → Client  | 拒绝加入（房间满、版本不匹配等）                                             |
+| `room:password:probe`          | Client → Server  | 加入前探测直连房间是否设置密码                                               |
+| `room:password:probe:ack`      | Server → Client  | 返回直连房间的 `hasPassword` 与 `hostId`                                     |
+| `room:player:joined`           | Server → All     | 通知有新玩家加入                                                             |
+| `room:player:left`             | Server → All     | 通知玩家离开                                                                 |
+| `room:player:ready`            | Client → Server  | 玩家标记为已准备                                                             |
+| `room:player:unready`          | Client → Server  | 玩家取消准备                                                                 |
+| `room:state:sync`              | Server → All     | 房间状态全量同步                                                             |
+| `room:game:start`              | Server → All     | 游戏开始信号                                                                 |
+| `room:game:end`                | Server → All     | 游戏结束信号（仅 Host 方触发，`notifyRoomGameEnd` / `RoomServer` broadcast） |
+| `room:disbanded`               | Server → All     | 房间已解散                                                                   |
+| `room:disconnected`            | Server → Client  | 连接断开通知                                                                 |
+| `room:player:reconnect-needed` | Client → Server  | 客机游戏进程退出后通知服务端标记重连需求                                     |
+| `room:kicked`                  | Server → Target  | 被踢通知（仅目标玩家）                                                       |
+| `room:player:kicked`           | Server → All     | 广播玩家被踢事件                                                             |
+| `room:chat`                    | Bidirectional    | 聊天消息（支持文字、语音、图片，文字和图片可打包为一条消息）                 |
+| `room:chat:history:sync`       | Server → ChatWin | 主进程向聊天弹窗同步历史消息                                                 |
+| `game:message:relay`           | Bidirectional    | 游戏内单播消息中继                                                           |
+| `game:broadcast:relay`         | Bidirectional    | 游戏内广播消息中继                                                           |
+| `game:message:ack`             | Bidirectional    | 可靠游戏消息的中继确认                                                       |
 
 #### 消息中继约束
 
@@ -1526,7 +1562,7 @@ Room Server 与 Room Client 之间使用 **WebSocket + JSON** 通信。
 - **房间结束消息双重源**：`room:game:end` 由 Host 广播（`notifyRoomGameEnd`）触发前端 `isReconnectMode=false`；"游戏已结束"
   聊天消息由前端 `room:state:sync` 检测 `playing→waiting` 态变化产生。
 
-***
+---
 
 ## 八、平台 API 规范（面向游戏开发者）
 
@@ -1537,30 +1573,30 @@ Room Server 与 Room Client 之间使用 **WebSocket + JSON** 通信。
 
 ```javascript
 // 示例：Node.js 游戏连接平台（游戏侧代码）
-const WebSocket = require('ws');
+const WebSocket = require("ws");
 
 const port = process.env.BZ_API_PORT;
 const token = process.env.BZ_API_TOKEN;
 
 if (!port || !token) {
-    console.error('[Game] 未检测到平台环境，请通过 BZ-Games 启动');
-    process.exit(1);
+  console.error("[Game] 未检测到平台环境，请通过 BZ-Games 启动");
+  process.exit(1);
 }
 
 const ws = new WebSocket(`ws://127.0.0.1:${port}`);
 
-ws.on('open', () => {
-    // Step 1：认证 (必须在连接后立即发送)
-    send({
-        id: crypto.randomUUID(),
-        type: 'request',
-        action: 'auth',
-        payload: {token}
-    });
+ws.on("open", () => {
+  // Step 1：认证 (必须在连接后立即发送)
+  send({
+    id: crypto.randomUUID(),
+    type: "request",
+    action: "auth",
+    payload: { token },
+  });
 });
 
 function send(msg) {
-    ws.send(JSON.stringify(msg));
+  ws.send(JSON.stringify(msg));
 }
 ```
 
@@ -1571,30 +1607,30 @@ v1 是稳定兼容层，已有游戏应优先按 v1 接入。
 **请求格式**：`{ id, type: 'request', action, payload }`
 **响应格式**：`{ id, type: 'response', action, payload, error? }`
 
-| Action               | Payload (Request)                               | Returns (Response Payload)                           | Description                                   |
-|:---------------------|:------------------------------------------------|:-----------------------------------------------------|:----------------------------------------------|
-| `auth`               | `{ token: string }`                             | `{ success: boolean, player: { id, name, isHost } }` | **必须**。连接后首个请求，用于鉴权。                          |
-| `player.getInfo`     | -                                               | `{ id, name }`                                       | 获取当前玩家信息。                                     |
-| `room.getInfo`       | -                                               | `{ id, hostId, players, ... }`                       | 获取当前房间信息（若在房间中）。                              |
-| `game.ready`         | -                                               | `{ acknowledged: true }`                             | 告知平台游戏已准备就绪（平台会广播给其他玩家）。                      |
-| `game.end`           | -                                               | `{ success: true }`                                  | 告知平台游戏结束（通常由 Host 调用）。                        |
+| Action               | Payload (Request)                                     | Returns (Response Payload)                           | Description                                                                                             |
+| :------------------- | :---------------------------------------------------- | :--------------------------------------------------- | :------------------------------------------------------------------------------------------------------ |
+| `auth`               | `{ token: string }`                                   | `{ success: boolean, player: { id, name, isHost } }` | **必须**。连接后首个请求，用于鉴权。                                                                    |
+| `player.getInfo`     | -                                                     | `{ id, name }`                                       | 获取当前玩家信息。                                                                                      |
+| `room.getInfo`       | -                                                     | `{ id, hostId, players, ... }`                       | 获取当前房间信息（若在房间中）。                                                                        |
+| `game.ready`         | -                                                     | `{ acknowledged: true }`                             | 告知平台游戏已准备就绪（平台会广播给其他玩家）。                                                        |
+| `game.end`           | -                                                     | `{ success: true }`                                  | 告知平台游戏结束（通常由 Host 调用）。                                                                  |
 | `game.report`        | `GameReportPayload`（联合类型，见 `report.types.ts`） | `{ success: true }`                                  | 提交战绩报告。支持纯文本、结构化（计分板/对决）和自定义 HTML 三种模式，报告以系统消息展示在房间聊天中。 |
-| `message.send`       | `{ to?: string, targetPlayerId?: string, ... }` | `{ success: true }`                                  | 发送单播消息给指定玩家（必须包含 `to` 或 `targetPlayerId` 之一）。 |
-| `message.broadcast`  | `{ ... }`                                       | `{ success: true }`                                  | 广播消息给所有玩家（平台中继）。                              |
-| `achievement.list`   | -                                               | `[{ id, title, description, unlocked, unlockedAt }]` | 获取当前游戏版本的成就列表及解锁状态。                           |
-| `achievement.unlock` | `{ achievementId, playerId }`                   | `{ success: true, new: boolean }`                    | 解锁成就。`playerId` 必须为当前玩家 ID。                   |
-| `stats.report`       | `Record<string, number>`                        | `{ success: true }`                                  | 上报统计数据；平台根据 Manifest 配置按增量/全量写入。              |
+| `message.send`       | `{ to?: string, targetPlayerId?: string, ... }`       | `{ success: true }`                                  | 发送单播消息给指定玩家（必须包含 `to` 或 `targetPlayerId` 之一）。                                      |
+| `message.broadcast`  | `{ ... }`                                             | `{ success: true }`                                  | 广播消息给所有玩家（平台中继）。                                                                        |
+| `achievement.list`   | -                                                     | `[{ id, title, description, unlocked, unlockedAt }]` | 获取当前游戏版本的成就列表及解锁状态。                                                                  |
+| `achievement.unlock` | `{ achievementId, playerId }`                         | `{ success: true, new: boolean }`                    | 解锁成就。`playerId` 必须为当前玩家 ID。                                                                |
+| `stats.report`       | `Record<string, number>`                              | `{ success: true }`                                  | 上报统计数据；平台根据 Manifest 配置按增量/全量写入。                                                   |
 
 ### 8.3 v2 API 列表
 
 v2 是增强层，适合实时同步、频道过滤和可靠确认。游戏应先读取 `auth` 响应中的 `capabilities` 再使用 v2 API。
 
-| Action               | Payload (Request)                               | Returns (Response Payload)                           | Description                                   |
-|:---------------------|:------------------------------------------------|:-----------------------------------------------------|:----------------------------------------------|
-| `message.publish`    | `{ channel?, seq?, reliable?, data, ... }`      | `{ success: true }`                                  | 频道化广播消息，适合实时状态/输入流。                           |
-| `message.batch`      | `{ channel?, messages: [] }`                    | `{ success: true }`                                  | 批量广播消息，平台拆分为多条 `event.message` 投递。              |
-| `message.subscribe`  | `{ channel?: string, channels?: string[] }`     | `{ success: true, channels: string[] }`              | 订阅指定消息频道。                                      |
-| `message.unsubscribe`| `{ channel?: string, channels?: string[] }`     | `{ success: true, channels: string[] }`              | 取消订阅指定消息频道。                                    |
+| Action                | Payload (Request)                           | Returns (Response Payload)              | Description                                         |
+| :-------------------- | :------------------------------------------ | :-------------------------------------- | :-------------------------------------------------- |
+| `message.publish`     | `{ channel?, seq?, reliable?, data, ... }`  | `{ success: true }`                     | 频道化广播消息，适合实时状态/输入流。               |
+| `message.batch`       | `{ channel?, messages: [] }`                | `{ success: true }`                     | 批量广播消息，平台拆分为多条 `event.message` 投递。 |
+| `message.subscribe`   | `{ channel?: string, channels?: string[] }` | `{ success: true, channels: string[] }` | 订阅指定消息频道。                                  |
+| `message.unsubscribe` | `{ channel?: string, channels?: string[] }` | `{ success: true, channels: string[] }` | 取消订阅指定消息频道。                              |
 
 重连恢复或最新状态缓存由游戏自身协议实现。
 
