@@ -175,6 +175,8 @@ export default {
     empty: "暫無可用市集",
     official: "官方",
     searchPlaceholder: "搜尋市集名稱或ID",
+    gameHosting: "遊戲託管",
+    gameHostingOpenFailed: "無法開啟遊戲託管，請稍後重試",
   },
   market: {
     title: "遊戲市集",

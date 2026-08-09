@@ -21,6 +21,7 @@ export const IPC = {
 
   // ── 游戏市场 ──
   MARKET_GET_SOURCES: "market:getSources",
+  MARKET_OPEN_GAME_HOSTING: "market:openGameHosting",
   MARKET_GET_INDEX: "market:getIndex",
   MARKET_GET_CACHED_IMAGE: "market:getCachedImage",
   MARKET_DOWNLOAD_AND_INSTALL: "market:downloadAndInstall",

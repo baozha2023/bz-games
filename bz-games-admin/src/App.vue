@@ -14,8 +14,8 @@
         <n-layout>
           <n-layout-header bordered class="app-header">
             <div>
-              <strong>建言献策</strong>
-              <div class="header-note">查看和处理玩家反馈</div>
+              <strong>{{ pageTitle }}</strong>
+              <div class="header-note">{{ pageDescription }}</div>
             </div>
             <n-space align="center">
               <n-avatar
@@ -24,6 +24,7 @@
                 :src="auth.user.avatarUrl || undefined"
               />
               <span>{{ auth.user.login }}</span>
+              <n-button size="small" @click="logout">退出登录</n-button>
             </n-space>
           </n-layout-header>
           <n-layout-content content-style="padding: 24px;">
@@ -38,16 +39,35 @@
 
 <script setup lang="ts">
 import { computed, h } from "vue";
-import { RouterLink, useRoute } from "vue-router";
+import { RouterLink, useRoute, useRouter } from "vue-router";
 
 import { useAuthStore } from "./stores/auth";
+import type { PortalCapability } from "./rbac";
 
 const route = useRoute();
+const router = useRouter();
 const auth = useAuthStore();
-const menuOptions = computed(() => [
-  {
-    label: () => h(RouterLink, { to: "/" }, { default: () => "建言献策" }),
-    key: "feedback",
-  },
-]);
+const menuDefinitions: Array<{ key: string; path: string; label: string; capability: PortalCapability }> = [
+  { key: "feedback", path: "/feedback", label: "建言献策", capability: "feedback.read" },
+  { key: "users", path: "/users", label: "用户列表", capability: "users.read" },
+  { key: "game-hosting", path: "/game-hosting", label: "游戏托管", capability: "hosting.view" },
+];
+const menuOptions = computed(() => menuDefinitions
+  .filter((item) => auth.can(item.capability))
+  .map((item) => ({
+    key: item.key,
+    label: () => h(RouterLink, { to: item.path }, { default: () => item.label }),
+  })));
+const pageTitle = computed(() =>
+  route.name === "game-hosting" ? "游戏托管" : route.name === "users" ? "用户列表" : "建言献策",
+);
+const pageDescription = computed(() =>
+  route.name === "game-hosting"
+    ? "上传和管理游戏市场安装包"
+    : route.name === "users" ? "查看平台注册用户与 RBAC 角色" : "查看和处理玩家反馈",
+);
+async function logout() {
+  await auth.logout();
+  await router.replace({ name: "login" });
+}
 </script>

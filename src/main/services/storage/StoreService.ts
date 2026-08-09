@@ -357,6 +357,11 @@ class StoreService {
     this.gamesCache = await bzGamesDatabase.getGames();
   }
 
+  private async persistGamesAndRefresh(games: GameRecord[]): Promise<void> {
+    await bzGamesDatabase.saveGames(games);
+    await this.refreshGameDerivedData();
+  }
+
   getUserData(): UserData {
     return this.getStore().get("userData") || defaultUserData;
   }
@@ -577,13 +582,11 @@ class StoreService {
       games.push(game);
     }
 
-    await bzGamesDatabase.saveGames(games);
-    this.gamesCache = games;
+    await this.persistGamesAndRefresh(games);
   }
 
   async saveGames(games: GameRecord[]): Promise<void> {
-    await bzGamesDatabase.saveGames(games);
-    this.gamesCache = games;
+    await this.persistGamesAndRefresh(games);
   }
 
   async unlockAchievement(
@@ -795,9 +798,8 @@ class StoreService {
 
     if (remaining.length === 0) {
       await this.removeGameRootByVersionPath(game.versions[0]?.path);
-      const newGames = games.filter((g) => g.id !== id);
       await bzGamesDatabase.softDelete(id);
-      this.gamesCache = newGames;
+      await this.refreshGameDerivedData();
       return;
     }
 
@@ -805,7 +807,7 @@ class StoreService {
     this.ensureLatestVersion(game);
     games[entry.index] = game;
     await bzGamesDatabase.softDelete(id, requestedVersions);
-    this.gamesCache = games;
+    await this.refreshGameDerivedData();
   }
 
   getSettings(): AppSettings {
@@ -1307,8 +1309,7 @@ class StoreService {
       normalizedTarget,
     );
 
-    await bzGamesDatabase.saveGames(games);
-    this.gamesCache = games;
+    await this.persistGamesAndRefresh(games);
     store.set("settings", {
       ...currentSettings,
       gameStoragePath: nextStoragePath,
@@ -1400,8 +1401,7 @@ class StoreService {
         : currentPath;
     const nextHistory = this.toStorageHistory(filteredHistory, nextStoragePath);
 
-    await bzGamesDatabase.saveGames(nextGames);
-    this.gamesCache = nextGames;
+    await this.persistGamesAndRefresh(nextGames);
     store.set("settings", {
       ...currentSettings,
       gameStoragePath: nextStoragePath,

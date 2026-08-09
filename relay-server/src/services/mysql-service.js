@@ -14,6 +14,7 @@ export function createMySqlService({ config }) {
         avatar_url TEXT NOT NULL,
         profile_url TEXT NOT NULL,
         email VARCHAR(255) NOT NULL DEFAULT '',
+        role ENUM('player', 'creator', 'administrator') NOT NULL DEFAULT 'player',
         created_at DATETIME(3) NOT NULL,
         updated_at DATETIME(3) NOT NULL,
         last_login_at DATETIME(3) NOT NULL,
@@ -103,6 +104,90 @@ export function createMySqlService({ config }) {
         created_at DATETIME(3) NOT NULL,
         PRIMARY KEY (id),
         KEY idx_feedback_images_feedback_id (feedback_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS hosted_games (
+        game_id VARCHAR(200) NOT NULL,
+        published_metadata_json JSON NULL,
+        latest_version VARCHAR(100) NULL,
+        owner_user_id BIGINT UNSIGNED NOT NULL,
+        owner_github_login VARCHAR(255) NOT NULL DEFAULT '',
+        updated_by_user_id BIGINT UNSIGNED NOT NULL,
+        updated_by_github_login VARCHAR(255) NOT NULL DEFAULT '',
+        created_at DATETIME(3) NOT NULL,
+        updated_at DATETIME(3) NOT NULL,
+        PRIMARY KEY (game_id),
+        KEY idx_hosted_games_updated_at (updated_at)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS hosted_game_metadata_revisions (
+        id CHAR(36) NOT NULL,
+        game_id VARCHAR(200) NOT NULL,
+        metadata_json JSON NOT NULL,
+        status ENUM('pending', 'approved', 'rejected') NOT NULL DEFAULT 'pending',
+        review_reason TEXT NOT NULL,
+        submitter_user_id BIGINT UNSIGNED NOT NULL,
+        submitter_github_login VARCHAR(255) NOT NULL DEFAULT '',
+        reviewer_user_id BIGINT UNSIGNED NULL,
+        reviewer_github_login VARCHAR(255) NOT NULL DEFAULT '',
+        reviewed_at DATETIME(3) NULL,
+        created_at DATETIME(3) NOT NULL,
+        updated_at DATETIME(3) NOT NULL,
+        PRIMARY KEY (id),
+        KEY idx_hosted_game_revisions_game_status (game_id, status),
+        KEY idx_hosted_game_revisions_updated_at (updated_at),
+        CONSTRAINT fk_hosted_game_revisions_game
+          FOREIGN KEY (game_id) REFERENCES hosted_games (game_id)
+          ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS hosted_game_versions (
+        id CHAR(36) NOT NULL,
+        game_id VARCHAR(200) NOT NULL,
+        version VARCHAR(100) NOT NULL,
+        metadata_json JSON NOT NULL,
+        status ENUM('pending', 'approved', 'rejected') NOT NULL DEFAULT 'pending',
+        initial_revision_id CHAR(36) NULL,
+        review_reason TEXT NOT NULL,
+        uploader_user_id BIGINT UNSIGNED NOT NULL,
+        uploader_github_login VARCHAR(255) NOT NULL DEFAULT '',
+        reviewer_user_id BIGINT UNSIGNED NULL,
+        reviewer_github_login VARCHAR(255) NOT NULL DEFAULT '',
+        reviewed_at DATETIME(3) NULL,
+        created_at DATETIME(3) NOT NULL,
+        updated_at DATETIME(3) NOT NULL,
+        PRIMARY KEY (id),
+        UNIQUE KEY uniq_hosted_game_versions_game_version (game_id, version),
+        KEY idx_hosted_game_versions_game_status (game_id, status),
+        KEY idx_hosted_game_versions_created_at (created_at),
+        CONSTRAINT fk_hosted_game_versions_game
+          FOREIGN KEY (game_id) REFERENCES hosted_games (game_id)
+          ON DELETE CASCADE,
+        CONSTRAINT fk_hosted_game_versions_initial_revision
+          FOREIGN KEY (initial_revision_id) REFERENCES hosted_game_metadata_revisions (id)
+          ON DELETE SET NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS hosted_game_assets (
+        id CHAR(36) NOT NULL,
+        version_id CHAR(36) NOT NULL,
+        role ENUM('package', 'icon', 'cover') NOT NULL,
+        original_name VARCHAR(255) NOT NULL,
+        storage_name VARCHAR(64) NOT NULL,
+        content_type VARCHAR(64) NOT NULL,
+        size BIGINT UNSIGNED NOT NULL,
+        sha256 CHAR(64) NOT NULL,
+        created_at DATETIME(3) NOT NULL,
+        PRIMARY KEY (id),
+        UNIQUE KEY uniq_hosted_game_assets_version_role (version_id, role),
+        KEY idx_hosted_game_assets_created_at (created_at),
+        CONSTRAINT fk_hosted_game_assets_version
+          FOREIGN KEY (version_id) REFERENCES hosted_game_versions (id)
+          ON DELETE CASCADE
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
   }

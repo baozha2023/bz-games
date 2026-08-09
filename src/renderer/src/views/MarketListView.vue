@@ -17,6 +17,9 @@
             <n-icon><SearchOutline /></n-icon>
           </template>
         </n-button>
+        <n-button @click="openGameHosting">
+          {{ t("marketList.gameHosting") }}
+        </n-button>
         <n-button :loading="isLoading" @click="loadSources(true)">
           {{ t("market.refresh") }}
         </n-button>
@@ -155,6 +158,15 @@ const loadError = ref("");
 const sources = ref<DisplaySource[]>([]);
 const keyword = ref("");
 const isSearchExpanded = ref(false);
+
+async function openGameHosting() {
+  try {
+    const opened = await window.electronAPI.market.openGameHosting();
+    if (!opened) loadError.value = t("marketList.gameHostingOpenFailed");
+  } catch {
+    loadError.value = t("marketList.gameHostingOpenFailed");
+  }
+}
 
 const displayedSources = computed(() => {
   const text = keyword.value.trim().toLowerCase();

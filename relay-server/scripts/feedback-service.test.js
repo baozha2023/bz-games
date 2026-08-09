@@ -88,7 +88,6 @@ test("feedback endpoint applies separate anonymous and authenticated cooldowns",
     MAX_FEEDBACK_IMAGE_BYTES: 5 * 1024 * 1024,
     FEEDBACK_ANONYMOUS_COOLDOWN_MS: 48 * 60 * 60 * 1000,
     FEEDBACK_AUTHENTICATED_COOLDOWN_MS: 6 * 60 * 60 * 1000,
-    ADMIN_GITHUB_IDS: [],
     SESSION_COOKIE_NAME: "bz_games_session",
   };
   const mySqlService = {
@@ -321,7 +320,6 @@ test("admin endpoints validate pagination and keep response fields aligned", asy
       MAX_FEEDBACK_IMAGE_BYTES: 5 * 1024 * 1024,
       FEEDBACK_ANONYMOUS_COOLDOWN_MS: 86_400_000,
       FEEDBACK_AUTHENTICATED_COOLDOWN_MS: 21_600_000,
-      ADMIN_GITHUB_IDS: ["123456789"],
       SESSION_COOKIE_NAME: "bz_games_session",
     },
     mySqlService,
@@ -351,6 +349,12 @@ test("admin endpoints validate pagination and keep response fields aligned", asy
         res.writeHead(401, { "content-type": "application/json" });
         res.end(JSON.stringify({ error: status }));
       },
+    },
+    accessControlService: {
+      requireAdmin: async () => ({
+        user: { id: 42, github_id: "123456789", login: "test-admin", avatar_url: "" },
+        isAdmin: true,
+      }),
     },
   });
   const server = http.createServer(async (req, res) => {

@@ -175,6 +175,8 @@ export const electronAPI = {
     },
   },
   market: {
+    openGameHosting: (): Promise<boolean> =>
+      ipcRenderer.invoke(IPC.MARKET_OPEN_GAME_HOSTING),
     getSources: (forceRefresh?: boolean): Promise<MarketDirectory> =>
       ipcRenderer.invoke(IPC.MARKET_GET_SOURCES, forceRefresh),
     getIndex: (

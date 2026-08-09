@@ -48,17 +48,16 @@ function serializeUser(user) {
     avatarUrl: user.avatar_url || "",
     profileUrl: user.profile_url || "",
     email: user.email || "",
+    role: user.role,
     createdAt: user.created_at,
     updatedAt: user.updated_at,
     lastLoginAt: user.last_login_at,
   };
 }
 
-export function resolveReturnTo(rawValue, adminPublicUrl = "") {
+export function resolveReturnTo(rawValue, portalPublicUrl = "") {
   if (typeof rawValue !== "string" || !rawValue.trim()) return "";
   const value = rawValue.trim();
-  if (adminPublicUrl && value === adminPublicUrl) return value;
-
   let parsed;
   try {
     parsed = new URL(value);
@@ -66,6 +65,7 @@ export function resolveReturnTo(rawValue, adminPublicUrl = "") {
     return "";
   }
   if (parsed.username || parsed.password) return "";
+  if (isPortalReturnTo(value, portalPublicUrl)) return value;
   if (parsed.protocol === "bzgames:" && value.startsWith("bzgames://")) {
     return value;
   }
@@ -77,6 +77,29 @@ export function resolveReturnTo(rawValue, adminPublicUrl = "") {
     return value;
   }
   return "";
+}
+
+export function isPortalReturnTo(returnTo, portalPublicUrl = "") {
+  if (!returnTo || !portalPublicUrl) return false;
+  try {
+    const target = new URL(returnTo);
+    const portal = new URL(portalPublicUrl);
+    const portalPrefix = portal.pathname.endsWith("/")
+      ? portal.pathname
+      : `${portal.pathname}/`;
+    return (
+      target.origin === portal.origin &&
+      (target.pathname === portal.pathname ||
+        target.pathname.startsWith(portalPrefix)) &&
+      !target.hash
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function loginRoleForReturnTo(returnTo, portalPublicUrl = "") {
+  return isPortalReturnTo(returnTo, portalPublicUrl) ? "creator" : "player";
 }
 
 async function fetchGitHubJson(url, accessToken) {
@@ -149,7 +172,7 @@ export function createAuthService({ config, mySqlService }) {
     return record;
   }
 
-  async function upsertGitHubUser(accessToken) {
+  async function upsertGitHubUser(accessToken, loginRole) {
     await mySqlService.ensureReady();
     const profile = await fetchGitHubJson(GITHUB_USER_API_URL, accessToken);
     let email = typeof profile.email === "string" ? profile.email : "";
@@ -170,14 +193,19 @@ export function createAuthService({ config, mySqlService }) {
 
     const now = new Date();
     await mySqlService.query(
-      `INSERT INTO users (github_id, login, name, avatar_url, profile_url, email, created_at, updated_at, last_login_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO users (github_id, login, name, avatar_url, profile_url, email, role, created_at, updated_at, last_login_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE
          login = VALUES(login),
          name = VALUES(name),
          avatar_url = VALUES(avatar_url),
          profile_url = VALUES(profile_url),
          email = VALUES(email),
+         role = CASE
+           WHEN role = 'administrator' THEN 'administrator'
+           WHEN VALUES(role) = 'creator' THEN 'creator'
+           ELSE role
+         END,
          updated_at = VALUES(updated_at),
          last_login_at = VALUES(last_login_at)`,
       [
@@ -187,6 +215,7 @@ export function createAuthService({ config, mySqlService }) {
         profile.avatar_url || "",
         profile.html_url || "",
         email,
+        loginRole,
         now,
         now,
         now,
@@ -231,7 +260,7 @@ export function createAuthService({ config, mySqlService }) {
     if (!sessionToken) return { status: "missing" };
 
     const [rows] = await mySqlService.query(
-      `SELECT s.*, u.id AS user_id_value, u.github_id, u.login, u.name, u.avatar_url, u.profile_url, u.email,
+      `SELECT s.*, u.id AS user_id_value, u.github_id, u.login, u.name, u.avatar_url, u.profile_url, u.email, u.role,
               u.created_at AS user_created_at, u.updated_at AS user_updated_at, u.last_login_at
        FROM auth_sessions s
        INNER JOIN users u ON u.id = s.user_id
@@ -267,6 +296,7 @@ export function createAuthService({ config, mySqlService }) {
           avatar_url: row.avatar_url,
           profile_url: row.profile_url,
           email: row.email,
+          role: row.role,
           created_at: row.user_created_at,
           updated_at: row.user_updated_at,
           last_login_at: row.last_login_at,
@@ -287,7 +317,7 @@ export function createAuthService({ config, mySqlService }) {
     }
     const returnTo = resolveReturnTo(
       url.searchParams.get("returnTo"),
-      config.ADMIN_PUBLIC_URL,
+      config.PORTAL_PUBLIC_URL,
     );
     const stateToken = await createState(returnTo);
     const authorizeUrl = new URL(GITHUB_AUTHORIZE_URL);
@@ -339,17 +369,14 @@ export function createAuthService({ config, mySqlService }) {
       return true;
     }
 
-    const user = await upsertGitHubUser(tokenPayload.access_token);
-    const isAdminReturn =
-      Boolean(config.ADMIN_PUBLIC_URL) &&
-      state.return_to === config.ADMIN_PUBLIC_URL;
-    if (
-      isAdminReturn &&
-      !config.ADMIN_GITHUB_IDS.includes(String(user.github_id))
-    ) {
-      sendJson(res, 403, { error: "forbidden" });
-      return true;
-    }
+    const isPortalReturn = isPortalReturnTo(
+      state.return_to,
+      config.PORTAL_PUBLIC_URL,
+    );
+    const user = await upsertGitHubUser(
+      tokenPayload.access_token,
+      loginRoleForReturnTo(state.return_to, config.PORTAL_PUBLIC_URL),
+    );
     const { token, expiresAt } = await createSession(user.id);
     const secureCookie = config.GITHUB_CALLBACK_URL.startsWith("https://");
     setCookie(res, config.SESSION_COOKIE_NAME, token, {
@@ -358,7 +385,7 @@ export function createAuthService({ config, mySqlService }) {
     });
 
     if (state.return_to) {
-      if (isAdminReturn) {
+      if (isPortalReturn) {
         redirect(res, state.return_to);
         return true;
       }
@@ -418,6 +445,7 @@ export function createAuthService({ config, mySqlService }) {
     sendJson(res, 200, {
       user: serializeUser(auth.user),
       expiresAt: auth.session.expiresAt,
+      role: auth.user.role,
     });
     return true;
   }

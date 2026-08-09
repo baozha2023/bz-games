@@ -35,11 +35,12 @@
 - 经济系统（签到、BZ 币、累计游玩时长、头像框解锁与装备）
 - Game API Server（本地 `ws://127.0.0.1`，向游戏进程提供平台能力，v2 支持 JSON 控制帧与二进制实时帧）
 - 游戏市场（远程发现、详情展示、下载并安装到默认游戏库，GitHub Release Asset 自动补齐 sha256/size）
+- 游戏托管（管理员上传 ZIP 到官方服务器，市场通过逻辑地址下载）
 - 个性化系统（头像框解锁、装备、预览，支持多场景展示）
 - 系统设置（玩家信息、主题、端口、语言、更新、游戏库列表、GitHub Token）
 - 官方登录与云同步服务（GitHub OAuth 登录；脱敏配置与三张业务表 SQL 逻辑备份组成单一平台快照，原子发布并在本地幂等合并）
 - 建言献策（可选文字与图片；未登录每 48 小时一次，GitHub 登录后每 6 小时一次）
-- 反馈管理后台（GitHub 管理员白名单、反馈筛选/详情/图片/状态、用户回复与管理备注；Vue 3 + Vite 独立构建，中继服务 `/admin/` 同源提供）
+- 创作者中心（所有 GitHub 用户可登录；数据库 RBAC 控制反馈管理、游戏投稿、审核和发布；Vue 3 + Vite 独立构建，中继服务 `/admin/` 同源提供）
 - 客户端卸载系统（游戏进程批量收口、游戏库可选择删除、路径安全校验、符号链接防护）
 - 默认封面/图标静态回退（`GameCover.vue` / `GameIcon.vue` 在无自定义资源时使用内置静态图片）
 
@@ -99,6 +100,9 @@ bz-games/
 │   │   ├── cloud-data-service.test.js     # 单一平台快照原子发布与旧端点收口测试
 │   │   ├── feedback-service.test.js       # 反馈限流、上传与管理接口测试
 │   │   ├── auth-service.test.js           # OAuth 回跳白名单测试
+│   │   ├── access-control-service.test.js # Portal RBAC 与 Cookie 写请求同源校验测试
+│   │   ├── game-hosting-service.test.js   # 游戏托管、审核、容量与文件回滚测试
+│   │   ├── portal-user-service.test.js    # Portal 激活与管理员用户列表测试
 │   │   └── admin-static-service.test.js   # 管理静态站点与路径安全测试
 │   └── src/
 │       ├── index.js                       # 中继服务器入口（HTTP + WebSocket 统一启动）
@@ -108,12 +112,15 @@ bz-games/
 │       ├── ws-server.js                   # WebSocket 服务创建与鉴权
 │       ├── services/
 │       │   ├── auth-service.js            # GitHub OAuth 认证与会话管理
+│       │   ├── access-control-service.js  # Portal 认证、RBAC、所有权与同源写入校验
 │       │   ├── admin-static-service.js     # `/admin/` 静态资源、SPA fallback 与安全响应头
 │       │   ├── cloud-data-service.js      # 单一平台快照上传、下载与原子指针发布
 │       │   ├── feedback-service.js        # 反馈上传、匿名限流、GridFS 图片与管理 API
+│       │   ├── game-hosting-service.js    # 游戏投稿、审核、托管资源与市场配置导出
 │       │   ├── message-router.js          # WebSocket 消息路由分发（含中继侧敏感词过滤与图片拦截）
 │       │   ├── mongo-service.js           # MongoDB GridFS 连接管理
-│       │   ├── mysql-service.js           # MySQL 连接池与建表
+│       │   ├── mysql-service.js           # MySQL 连接池与最新完整建表结构
+│       │   ├── portal-user-service.js     # Portal 创作者激活与管理员用户查询
 │       │   ├── room-service.js            # 房间创建、加入、密码、清理
 │       │   └── sensitive-word-service.js  # 中继侧敏感词过滤服务（词库加载 + Unicode 安全字符级掩码）
 │       ├── vocabulary/                    # 敏感词词库目录（15 个分类 .txt 文件）
@@ -544,6 +551,7 @@ bz-games/
 - **一致性校验**：平台安装前校验下载包的 `size`、`game.json.id`、`game.json.version`。`sha256` 在校验值存在时执行比对；未提供 sha256 时跳过哈希校验。`size` 为 GitHub Release 直链时可由平台下载阶段自动补齐。`game.json.platformVersion` 使用 `semver` 做语义化兼容性检查（支持 string 和 tuple 两种 manifest 格式）。
 - **安全约束**：压缩包内出现绝对路径、盘符路径或 `../` 路径穿越条目时拒绝安装。
 - **覆盖策略**：本地已存在相同 `id + version` 时视为"已安装"。**网页游戏（`networkgame`）仅以 `id` 判断**，同一 `id` 的更新通过删除旧版本后重新导入完成。
+- **托管地址**：`games.bzgames.top/<gameId>/<version>/<role>/<encodedFileName>` 是不依赖 DNS 的市场逻辑地址，`role` 仅允许 `package/icon/cover`。客户端严格校验规范编码后，将安装包与市场图片统一改写到构建配置 `relayServerUrl` 下的 `/api/v1/game-hosting/assets/*`，并由主进程附加 Relay Token；普通 HTTP(S) 地址保持原行为，不兼容旧 UUID 托管地址。
 - **落盘路径**：市场安装目标目录必须通过 `StoreService.getDefaultGameStoragePath()` 获取当前默认游戏库；若列表为空，`StoreService.getSettings()` 会初始化 exe 同级 `games/` 作为首个游戏库。
 
 #### 市场任务状态与错误码类型
@@ -888,6 +896,7 @@ interface AppSettings {
 - **SQLite 异步架构**：
   - **AsyncSqliteDatabase**：通过 `worker_threads` 隔离数据库访问，连接后先设置 ChaCha20 和密钥再读取 schema，支持 `run`/`get`/`all`/`exec`/`batch`/`close`。
   - **BzGamesDatabase**：唯一数据库工厂和当前数据仓储，维护游戏、版本、会话、成就与统计事件；不包含旧 schema、旧路径或兼容分支，表之间只使用逻辑关联，不声明物理外键。
+  - **卸载重装数据语义**：删除游戏只软删除本机 `games` / `game_versions` 实体，必须保留同一 `gameId + version` 的游玩会话、成就和统计事件；重新扫描、导入或安装后，`StoreService` 必须从 `BzGamesDatabase.getGames()` 重建完整缓存，禁止用新建记录中的空派生字段覆盖数据库结果。渲染进程读取游戏记录前必须先等待磁盘扫描同步完成，确保重装后立即恢复历史数据；成就重复解锁继续保持幂等。
   - **数据库加密边界**：`databaseEncryptionSeed` 是离线生成一次后固定使用的规范 Base64，解码结果必须恰好为 32 个随机字节；运行时禁止生成、替换或修复种子，缺失或无效时开发启动和构建必须直接失败。种子由私有构建配置注入主进程，运行时经 SHA-256 派生 ChaCha20 密钥。种子编译在桌面客户端中，只用于提高本地文件直接读取门槛，不能抵御能够逆向客户端的攻击者。
   - **PlaySessionDatabaseService**：只封装会话启动、结束和统计查询；云同步导入导出由统一数据库负责。
   - SQLite WAL 模式：`journal_mode = WAL` 提升并发读写性能（在 Worker 初始化时设置）。
@@ -1060,7 +1069,7 @@ interface AppSettings {
   - **反馈详情查询**：`getDetail(feedbackId)` 通过 `/api/v1/feedback/:id` 获取用户可见详情。主进程校验 UUID 格式反馈 ID，然后校验响应结构（id、content、status、reply、imageCount、createdAt、updatedAt 及 images 数组的每个元素的类型与大小）。随后逐个通过 `/api/v1/feedback/:id/images/:imageId` 下载图片，校验实际 Content-Type 与 MySQL 记录的 MIME 一致、实际 body 长度与声明 size 一致、不超 MAX_IMAGE_BYTES。任一步不通过返回 `feedback_invalid_response`。通过 auth 失败或权限不足由 `handleAuthFailure` 统一收口。
   - **IPC 边界**：渲染进程仅通过 `FeedbackModal.vue` → `electronAPI.settings.selectFeedbackImages / releaseFeedbackImages / submitFeedback / getFeedbackHistory / getFeedbackDetail` 与主进程交互，不直接接触文件路径或服务端 relayToken / GitHub 会话。主进程必须校验反馈详情结构、图片数量、大小、MIME 和实际响应长度后再生成 Data URL。
   - **服务端并联（v3.1.3 用户详情接口）**：`/api/v1/feedback/:id`（GET）返回用户可见详情：`id/content/status/reply/imageCount/createdAt/updatedAt/images`，不含 `adminNote`。GitHub 反馈要求 Bearer Token 并校验所有者；匿名反馈仅需发行版 relayToken，以随机 UUID 作为访问凭据。`/api/v1/feedback/:id/images/:imageId` 返回单张图片原始流。管理 API 详情额外包含 `adminNote`，更新接口接受 `status/adminNote/reply`，备注与回复均不超过 5000 字符。其他逻辑同前：busboy 流式 multipart、魔法字节校验、IP/GitHub ID 双层冷却、MySQL 事务 + GridFS。
-  - **管理前端**：`bz-games-admin/` 为独立 Vue 3 + Vite + Pinia 项目，构建为 `/admin/` 同源静态站点。详情页双栏布局（左栏展示反馈内容与图片，右栏编辑表单含状态/回复/备注），图片使用 `n-image object-fit="contain"` 预览。中继侧 `admin-static-service.js` 提供 SPA fallback、路径穿越防护、CSP/`nosniff`/`DENY` iframe 等安全响应头。路由守卫在 `beforeEach` 中校验 `/api/admin/v1/me` 管理员身份。
+  - **Portal 前端**：`bz-games-admin/` 为独立 Vue 3 + Vite + Pinia 项目，构建为 `/admin/` 同源静态站点。所有角色复用相同布局、路由、`GameHostingView` 和 `GameHostingForm`；`rbac.ts` 将数据库角色映射为能力，菜单、路由和按钮按能力呈现。管理员可使用用户列表分页检索平台注册用户，普通创作者无菜单、路由或 API 权限。服务端仍执行角色、所有权和状态授权。中继侧 `admin-static-service.js` 提供 SPA fallback、路径穿越防护、CSP/`nosniff`/`DENY` iframe 等安全响应头。
 - **卸载系统设计（UninstallService）**：
   - **状态互斥**：`running` 布尔标志防止重复卸载调用。
   - **游戏进程收口**：`shutdownForUninstall()` 设置 `shuttingDownForUninstall = true` 拒新启，等待 `launchingGames` 清空（5s 超时），然后通过 `taskkill /PID /T /F` 批量终止所有已托管游戏进程树，最后调用 `GameManager.stop()` 清理窗口和服务注册。
@@ -1429,9 +1438,11 @@ interface AppSettings {
 - **反馈限制**：服务端仅使用 `req.socket.remoteAddress` 规范化后的 IP作为匿名身份；不得读取 `X-Forwarded-For`，不得保存 IP、`playerId` 或客户端 ID。匿名用户按 IP在进程内 Map限制 48 小时，登录用户按 GitHub ID在独立的进程内 Map限制 6 小时；待处理占位必须持续到成功提交或失败释放，防止并发穿透，两类状态均在服务重启后清空。
 - **上传安全**：服务端使用 busboy 流式解析，总请求、字段、文件数量及单文件大小都必须设限；图片必须同时校验声明 MIME、文件签名、容器结构和合理尺寸。MySQL 失败时尽力删除本次 GridFS 文件，临时目录始终清理。
 - **会话错误协议**：受保护 HTTP 接口统一区分 `authenticated / missing / expired / invalid`。缺少令牌返回 `401 unauthorized`，过期返回 `401 session_expired`，无效、撤销或未知令牌返回 `401 session_invalid`，并同时返回稳定 `error` 与可读 `message`。过期会话默认保留 7 天以便识别，由 `AUTH_EXPIRED_SESSION_RETENTION_MS` 配置；普通 `unauthorized` 不触发客户端清理登录。
-- **管理权限**：管理 API 每次请求都校验 GitHub 会话及 `ADMIN_GITHUB_IDS`。管理 OAuth 只允许与 `ADMIN_PUBLIC_URL` 完全相等的回跳，使用 HttpOnly、SameSite=Lax Cookie；管理员会话不得写入 URL fragment。管理静态文件必须阻止路径穿越和符号链接越界，并发送 CSP、`nosniff`、拒绝 iframe 等安全响应头。
-- **数据初始化**：`feedback` 与 `feedback_images` 只能在 `mysql-service.js` 的 `ensureSchema()` 中用幂等 `CREATE TABLE IF NOT EXISTS` 定义；不得增加过程性迁移 SQL。图片复用现有 GridFS Bucket。
+- **Portal RBAC**：`users.role` 是唯一角色来源，只允许 `player`、`creator`、`administrator`。客户端首次 OAuth 登录创建玩家；管理端 OAuth 登录或使用同源 Cookie 进入 Portal 时只将玩家提升为创作者；创作者和管理员永不因客户端登录降级。玩家不能调用 Portal 业务接口。禁止通过环境变量、GitHub ID 白名单、Bearer Token 或前端条件授予 Portal 权限。`/api/auth/me` 返回角色，统一访问控制服务负责认证、创作者/管理员能力、所有权及 Cookie 写请求同源校验。GitHub OAuth 的 Portal 回跳只允许 `PORTAL_PUBLIC_URL` 同源 `/admin/` 路径，使用 HttpOnly、SameSite=Lax Cookie；Portal 激活必须同时校验 Cookie 和精确 Origin。管理静态文件必须阻止路径穿越和符号链接越界，并发送 CSP、`nosniff`、拒绝 iframe 等安全响应头。
+- **MySQL schema 生命周期**：仓库代码只在 `mysql-service.js` 的 `ensureSchema()` 中维护最新、完整、幂等的 `CREATE TABLE IF NOT EXISTS` 初始化结构，不加入 `ALTER TABLE`、迁移脚本或自动补列逻辑。已发布表新增或改变列、索引、约束时，必须在部署前检查线上实际结构，并通过单独审核的手工 SQL 完成变更；部署文档需说明目标结构、执行顺序、历史数据默认值、管理员角色赋值和验证查询。反馈图片继续复用现有 GridFS Bucket。
 - **三端接口**：提交成功仅返回 `{ ok, id }`；匿名限制返回 `429 + error + retryAfterSeconds + resetAt`。用户详情返回 `id/content/status/reply/imageCount/createdAt/updatedAt/images`，不得包含 `adminNote`；用户图片接口复用同一所有权规则。管理详情额外返回 `adminNote`，更新接受 `status/adminNote/reply`。所有字段以 `relay-server/API.md` 为准，服务端测试、客户端共享类型、预加载声明与管理端 TypeScript 类型必须同步。
+- **托管接口对齐**：逻辑地址的 `gameId/version/role/encodedFileName` 规则、市场导出结构、Portal 请求/响应类型和服务端校验必须保持同一字段语义；新增、替换、审核、设为最新、删除及下载分别使用最小职责接口，写接口由服务端执行角色、所有权、状态机和精确 Origin 校验，不能依赖前端隐藏按钮。客户端仅可把规范逻辑地址改写到配置的 Relay `origin`。
+- **令牌注入边界**：客户端附加 GitHub Token、Relay Token 或专用 Referer 前，必须使用 `URL` 解析并精确校验协议、`origin` 与允许的路径边界；禁止使用字符串 `startsWith` 判断可信主机，禁止向相似前缀域名、用户信息段、重定向后的第三方地址或任意市场 URL 发送凭据。
 - **配置唯一来源**：客户端真实关键配置只允许出现在被 Git 忽略的 `private-build.config.json`；服务端真实关键配置只允许存在于服务器 `/etc/systemd/system/bz-games-relay.service`，权限必须为 `root:root 0600`；管理端生产环境使用同源 `/api` 与 `/auth`，当前无环境字段。
 - **示例同步**：`private-build.config.example.json`、`relay-server/bz-games-relay.service.example` 和 `bz-games-admin/.env.example` 分别对应三端。新增或删除配置字段后必须运行 `npm run check:config`（对应 `scripts/check-config-examples.mjs`，自动校验三端配置字段一致性、`.gitignore` 敏感路径覆盖及 SERVICE 示例完整性），禁止在源码或文档写入真实公网地址、管理员 ID、令牌、数据库连接串或 OAuth Secret。
 

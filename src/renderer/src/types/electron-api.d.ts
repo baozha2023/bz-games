@@ -171,6 +171,7 @@ declare global {
         onEvent: (callback: (event: RoomEvent) => void) => () => void;
       };
       market: {
+        openGameHosting: () => Promise<boolean>;
         getSources: (forceRefresh?: boolean) => Promise<MarketDirectory>;
         getIndex: (
           sourceIdx: number,

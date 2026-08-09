@@ -187,6 +187,8 @@ export default {
     empty: "利用可能な市場はありません",
     official: "公式",
     searchPlaceholder: "市場名またはIDで検索",
+    gameHosting: "ゲームホスティング",
+    gameHostingOpenFailed: "ゲームホスティングを開けません。後でもう一度お試しください。",
   },
   market: {
     title: "ゲーム市場",

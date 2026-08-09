@@ -23,6 +23,7 @@
 **用途**
 
 - 保存 GitHub 登录后的用户基础资料
+- 保存 Portal RBAC 角色，权限不依赖部署配置白名单
 - 一个平台账号对应一条记录
 
 **主要字段**
@@ -36,9 +37,12 @@
 | `avatar_url`    | `TEXT`            | GitHub 头像地址       |
 | `profile_url`   | `TEXT`            | GitHub 主页地址       |
 | `email`         | `VARCHAR(255)`    | GitHub 邮箱，可能为空 |
+| `role`          | `ENUM`            | `player`、`creator` 或 `administrator` |
 | `created_at`    | `DATETIME(3)`     | 首次创建时间          |
 | `updated_at`    | `DATETIME(3)`     | 最近资料更新时间      |
 | `last_login_at` | `DATETIME(3)`     | 最近一次登录时间      |
+
+角色采用单向升级规则：客户端首次登录为 `player`，进入 Portal 后升级为 `creator`，`administrator` 只能由受控数据库管理流程授予；客户端登录不会降低已有角色。历史 `creator` 原样保留。
 
 **示例数据**
 
@@ -50,6 +54,7 @@ name: "Baozha"
 avatar_url: "https://avatars.githubusercontent.com/u/123456789?v=4"
 profile_url: "https://github.com/example-user"
 email: "demo@example.com"
+role: "administrator"
 created_at: 2026-06-11 21:08:30.125
 updated_at: 2026-06-11 21:08:30.125
 last_login_at: 2026-06-11 21:08:30.125
@@ -164,3 +169,16 @@ The SQL dump omits the local autoincrement implementation column `stats_reports.
 
 图片复用 `MONGODB_BUCKET_NAME` 指定的现有 Bucket，metadata 标记为
 `kind=feedback-image`。GridFS集合由 MongoDB驱动自动维护。
+
+# 游戏托管元数据
+
+托管元数据使用所有权、修订、版本、资源结构：
+
+- `hosted_games`：以 `game_id` 为主键，保存所有者、已发布公共配置和已通过最新版本；首次投稿审核前发布字段可为空。
+- `hosted_game_metadata_revisions`：保存公共信息修订、投稿人、审核人、驳回原因和审核时间。
+- `hosted_game_versions`：以 UUID 为主键，唯一键为 `game_id + version`，保存投稿/审核信息；状态只能是 `pending`、`approved`、`rejected`。
+- `hosted_game_assets`：保存版本的 `package/icon/cover` 资源；同一版本每种角色最多一个。
+
+首个普通用户投稿会原子建立游戏所有权、初始公共信息修订、首版本及资源。待审核资源不进入公开下载；管理员批准首版本时同时发布初始公共信息。已发布公共信息的普通用户修改只创建修订，审核通过前不影响市场配置。
+
+物理文件存放于 `GAME_HOSTING_STORAGE_DIR/files/<gameId>/<version>/`，使用 `package.zip`、`icon.<ext>`、`cover.<ext>` 固定名称。UTF-8 原文件名仅用于展示、逻辑地址和 Content-Disposition，绝不参与磁盘路径拼接。大小、MIME 和 SHA-256 均由上传流计算；删除和失败回滚必须同时覆盖数据库与整个版本目录。

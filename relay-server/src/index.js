@@ -3,6 +3,7 @@ import { WebSocketServer } from "ws";
 import { config } from "./config.js";
 import { createHttpServer } from "./http-server.js";
 import { createAuthService } from "./services/auth-service.js";
+import { createAccessControlService } from "./services/access-control-service.js";
 import { createCloudDataService } from "./services/cloud-data-service.js";
 import { createRoomService } from "./services/room-service.js";
 import { createMessageRouter } from "./services/message-router.js";
@@ -11,6 +12,8 @@ import { createMongoService } from "./services/mongo-service.js";
 import { createMySqlService } from "./services/mysql-service.js";
 import { createSensitiveWordService } from "./services/sensitive-word-service.js";
 import { createFeedbackService } from "./services/feedback-service.js";
+import { createGameHostingService } from "./services/game-hosting-service.js";
+import { createPortalUserService } from "./services/portal-user-service.js";
 import { createRelayState } from "./state.js";
 import { send } from "./utils/ws.js";
 import { registerWebSocketHandlers } from "./ws-server.js";
@@ -19,27 +22,50 @@ const state = createRelayState();
 const mongoService = createMongoService({ config });
 const mySqlService = createMySqlService({ config });
 const authService = createAuthService({ config, mySqlService });
-const cloudDataService = createCloudDataService({ config, authService, mongoService, mySqlService });
+const accessControlService = createAccessControlService({ config, authService });
+const cloudDataService = createCloudDataService({
+  config,
+  authService,
+  mongoService,
+  mySqlService,
+});
 const feedbackService = createFeedbackService({
   config,
   mySqlService,
   mongoService,
   authService,
+  accessControlService,
 });
+const gameHostingService = createGameHostingService({
+  config,
+  mySqlService,
+  accessControlService,
+});
+const portalUserService = createPortalUserService({ mySqlService, accessControlService });
 const adminStaticService = createAdminStaticService({ config });
 const roomService = createRoomService({ config, state, send });
 const sensitiveWordService = createSensitiveWordService();
-const messageRouter = createMessageRouter({ config, roomService, send, sensitiveWordService });
+const messageRouter = createMessageRouter({
+  config,
+  roomService,
+  send,
+  sensitiveWordService,
+});
 const server = createHttpServer({
   config,
   state,
   roomService,
   authService,
   cloudDataService,
+  gameHostingService,
   feedbackService,
+  portalUserService,
   adminStaticService,
 });
-const wss = new WebSocketServer({ server, maxPayload: config.MAX_BINARY_BYTES });
+const wss = new WebSocketServer({
+  server,
+  maxPayload: config.MAX_BINARY_BYTES,
+});
 
 registerWebSocketHandlers({ wss, config, roomService, messageRouter });
 

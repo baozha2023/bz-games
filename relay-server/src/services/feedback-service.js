@@ -569,6 +569,7 @@ export function createFeedbackService({
   mySqlService,
   mongoService,
   authService,
+  accessControlService,
 }) {
   const anonymousLimiter = createFeedbackRateLimiter(
     config.FEEDBACK_ANONYMOUS_COOLDOWN_MS,
@@ -576,7 +577,7 @@ export function createFeedbackService({
   const authenticatedLimiter = createFeedbackRateLimiter(
     config.FEEDBACK_AUTHENTICATED_COOLDOWN_MS,
   );
-  const adminGitHubIds = new Set(config.ADMIN_GITHUB_IDS);
+  const adminAccess = accessControlService;
 
   async function getOptionalAuth(req, res) {
     const bearerToken = readBearerToken(req);
@@ -590,20 +591,6 @@ export function createFeedbackService({
       return { auth: null, valid: false };
     }
     return { auth: resolution.auth, valid: true };
-  }
-
-  async function requireAdmin(req, res) {
-    const resolution = await authService.getSessionFromRequest(req);
-    if (resolution.status !== "authenticated") {
-      authService.sendAuthFailure(res, resolution.status);
-      return null;
-    }
-    const auth = resolution.auth;
-    if (!adminGitHubIds.has(String(auth.user.github_id))) {
-      sendJson(res, 403, { error: "forbidden" });
-      return null;
-    }
-    return auth;
   }
 
   async function requireFeedbackOwner(req, res, userId) {
@@ -752,19 +739,8 @@ export function createFeedbackService({
     return true;
   }
 
-  async function handleAdminMe(req, res) {
-    const auth = await requireAdmin(req, res);
-    if (!auth) return;
-    sendJson(res, 200, {
-      user: {
-        login: auth.user.login,
-        avatarUrl: auth.user.avatar_url || "",
-      },
-    });
-  }
-
   async function handleList(req, res, url) {
-    if (!(await requireAdmin(req, res))) return;
+    if (!(await adminAccess.requireAdmin(req, res))) return;
     const rawPage = Number(url.searchParams.get("page") || 1);
     const rawPageSize = Number(url.searchParams.get("pageSize") || 20);
     if (
@@ -820,7 +796,7 @@ export function createFeedbackService({
   }
 
   async function handleDetail(req, res, feedbackId) {
-    if (!(await requireAdmin(req, res))) return;
+    if (!(await adminAccess.requireAdmin(req, res))) return;
     const [rows] = await mySqlService.query(
       `SELECT id, content, status, admin_note, reply, submitter_type, github_login,
               app_version, platform, image_count, created_at, updated_at
@@ -850,7 +826,7 @@ export function createFeedbackService({
   }
 
   async function handleImage(req, res, feedbackId, imageId) {
-    if (!(await requireAdmin(req, res))) return;
+    if (!(await adminAccess.requireAdmin(req, res))) return;
     if (!mongoService.isEnabled()) {
       sendJson(res, 503, { error: "image_storage_not_configured" });
       return;
@@ -955,7 +931,7 @@ export function createFeedbackService({
   }
 
   async function handleUpdate(req, res, feedbackId) {
-    if (!(await requireAdmin(req, res))) return;
+    if (!(await adminAccess.requireAdmin(req, res))) return;
     const body = await readJson(req, 64 * 1024);
     const status = cleanText(body?.status, 32);
     if (!ALLOWED_STATUSES.has(status)) {
@@ -1021,10 +997,6 @@ export function createFeedbackService({
     if (!url.pathname.startsWith("/api/admin/v1/")) return false;
     if (!mySqlService.isEnabled()) {
       sendJson(res, 503, { error: "feedback_storage_not_configured" });
-      return true;
-    }
-    if (req.method === "GET" && url.pathname === "/api/admin/v1/me") {
-      await handleAdminMe(req, res);
       return true;
     }
     if (req.method === "GET" && url.pathname === "/api/admin/v1/feedback") {

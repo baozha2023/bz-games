@@ -21,25 +21,25 @@ async function main() {
       outfile: serviceTestBundle,
       bundle: true,
       platform: "node",
-    format: "cjs",
-    external: ["better-sqlite3-multiple-ciphers"],
-    define: {
-      __BZ_CDN_BASE__: JSON.stringify(""),
-      __BZ_OSS_BASE__: JSON.stringify(""),
-      __BZ_MARKET_FALLBACK_INDEX_URL__: JSON.stringify(""),
-      __BZ_REFERER__: JSON.stringify(""),
-      __BZ_RELAY_SERVER_URL__: JSON.stringify(""),
-      __BZ_RELAY_PUBLIC_HOST__: JSON.stringify(""),
-      __BZ_RELAY_TOKEN__: JSON.stringify(""),
-      __BZ_CONFIG_ENCRYPTION_SEED__: JSON.stringify(""),
-      __BZ_DATABASE_ENCRYPTION_SEED__: JSON.stringify(
-        "database-service-test",
-      ),
-      __BZ_GAME_MANIFEST_ENCRYPTION_SEED__: JSON.stringify(
-        "game-manifest-service-test",
-      ),
-      __BZ_OAUTH_RETURN_URL__: JSON.stringify(""),
-    },
+      format: "cjs",
+      external: ["better-sqlite3-multiple-ciphers"],
+      define: {
+        __BZ_CDN_BASE__: JSON.stringify(""),
+        __BZ_OSS_BASE__: JSON.stringify(""),
+        __BZ_MARKET_FALLBACK_INDEX_URL__: JSON.stringify(""),
+        __BZ_REFERER__: JSON.stringify(""),
+        __BZ_RELAY_SERVER_URL__: JSON.stringify("https://relay.example.com"),
+        __BZ_RELAY_PUBLIC_HOST__: JSON.stringify(""),
+        __BZ_RELAY_TOKEN__: JSON.stringify("hosted-game-test-token"),
+        __BZ_CONFIG_ENCRYPTION_SEED__: JSON.stringify(""),
+        __BZ_DATABASE_ENCRYPTION_SEED__: JSON.stringify(
+          "database-service-test",
+        ),
+        __BZ_GAME_MANIFEST_ENCRYPTION_SEED__: JSON.stringify(
+          "game-manifest-service-test",
+        ),
+        __BZ_OAUTH_RETURN_URL__: JSON.stringify(""),
+      },
       plugins: [
         {
           name: "electron-test-stub",
@@ -52,7 +52,7 @@ async function main() {
               { filter: /.*/, namespace: "electron-test-stub" },
               () => ({
                 contents:
-                  "export const app = { isPackaged: false, getPath: () => process.cwd(), on: () => {} };",
+                  "export const app = { isPackaged: false, getPath: () => process.cwd(), on: () => {} }; export default { app };",
                 loader: "js",
               }),
             );

@@ -1,6 +1,6 @@
 # BZ-Games 游戏平台
 
-[![Electron](https://img.shields.io/badge/Electron-v40+-blue)](https://www.electronjs.org/)
+[![Electron](https://img.shields.io/badge/Electron-v43+-blue)](https://www.electronjs.org/)
 [![Vue](https://img.shields.io/badge/Vue-v3.5-green)](https://vuejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-v5-blue)](https://www.typescriptlang.org/)
 [![SQLite](https://img.shields.io/badge/SQLite-multiple--ciphers-orange)](https://www.npmjs.com/package/better-sqlite3-multiple-ciphers)
@@ -40,7 +40,7 @@
 
 ## 🛠️ 技术栈
 
-- **Core**: Electron 40, TypeScript 5
+- **Core**: Electron 43, TypeScript 5
 - **Frontend**: Vue 3.5, Naive UI, Pinia, Vue Router, Vue I18n
 - **Build**: Electron-Vite, Electron-Builder
 - **Database**: better-sqlite3-multiple-ciphers（ChaCha20 加密 SQLite）

@@ -1,6 +1,6 @@
 {
   "name": "bz-launcher",
-  "version": "3.1.3",
+  "version": "3.2.0",
   "description": "BZ-Games game platform",
   "main": "./out/main/index.js",
   "author": "BZ-Games",
@@ -52,17 +52,17 @@
     "@types/semver": "^7.7.1",
     "@types/serve-static": "^1.15.10",
     "@types/ws": "^8.5.12",
-    "@vitejs/plugin-vue": "^5.1.4",
+    "@vitejs/plugin-vue": "^6.0.8",
     "@vue/eslint-config-prettier": "^9.0.0",
     "@vue/eslint-config-typescript": "^13.0.0",
-    "electron": "^40.10.6",
+    "electron": "^43.3.0",
     "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
     "eslint": "^8.57.0",
     "eslint-plugin-vue": "^9.26.0",
     "prettier": "^3.3.2",
     "typescript": "^5.5.2",
-    "vite": "^5.4.8",
+    "vite": "^7.3.6",
     "vue-tsc": "^2.1.6"
   },
   "build": {
@@ -129,7 +129,9 @@
     }
   },
   "overrides": {
-    "fast-uri": "3.1.4"
+    "fast-uri": "3.1.5",
+    "js-yaml": "4.3.1",
+    "nanoid": "3.3.18"
   },
   "packageManager": "pnpm@11.3.0+sha512.2c403d6594527287672b1f7056343a1f7c3634036a67ffabfcc2b3d7595d843768f8787148d1b57cf7956c90606bbd192857c363af19e96d2d0ec9ec5741d215"
 }

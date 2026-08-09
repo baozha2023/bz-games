@@ -192,6 +192,8 @@ export default {
     empty: "Keine Märkte verfügbar",
     official: "Offiziell",
     searchPlaceholder: "Marktname oder ID suchen",
+    gameHosting: "Spiel-Hosting",
+    gameHostingOpenFailed: "Das Spiel-Hosting konnte nicht geöffnet werden. Bitte später erneut versuchen.",
   },
   market: {
     title: "Spielemarkt",

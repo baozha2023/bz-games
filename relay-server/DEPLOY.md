@@ -528,5 +528,27 @@ MySQL已配置时，服务启动会执行统一 Schema 初始化并自动创建�
 管理前端生产构建产物放入 `ADMIN_STATIC_DIR`，随后访问 `/admin/`。
 匿名反馈按 Socket IP冷却 48 小时，登录反馈按 GitHub ID冷却 6 小时。两类冷却都只存在于当前 Node进程，重启后清空；对应配置以 `bz-games-relay.service.example` 为准。
 
-示例中的值均不是生产配置。真实管理员 ID、域名、数据库连接串、OAuth Secret和
+示例中的值均不是生产配置。真实域名、数据库连接串、OAuth Secret和
 中继令牌只能写入服务器的 `/etc/systemd/system/bz-games-relay.service`，不得提交到仓库。
+
+# 游戏托管部署补充
+
+生产 systemd 单元必须配置：
+
+```ini
+Environment=GAME_HOSTING_STORAGE_DIR=/var/lib/bz-games-hosting
+Environment=MAX_GAME_HOSTING_FILE_BYTES=104857600
+Environment=MAX_GAME_HOSTING_IMAGE_BYTES=5242880
+Environment=MAX_GAME_HOSTING_TOTAL_BYTES=5368709120
+```
+
+首次部署创建独立目录并限制权限：
+
+```bash
+install -d -m 0750 /var/lib/bz-games-hosting/files
+install -d -m 0700 /var/lib/bz-games-hosting/tmp
+```
+
+服务启动时初始化 `hosted_games`、`hosted_game_metadata_revisions`、`hosted_game_versions`、`hosted_game_assets` 四张表。`users.role` 固定为 `player/creator/administrator` 并作为 RBAC 唯一角色来源：客户端新用户为玩家，访问管理端后只升级为创作者，管理员不变，任何登录都不会造成角色降级。仓库只维护 `mysql-service.js` 中的最新初始化定义，不保存 `ALTER TABLE` 或迁移脚本。
+
+逻辑前缀 `games.bzgames.top/` 不需要 DNS 或 Nginx 配置。ZIP 与市场图片均由客户端解析到 `relayServerUrl`，并要求 `RELAY_TOKEN`。

@@ -186,6 +186,8 @@ export default {
     empty: "No markets available",
     official: "Official",
     searchPlaceholder: "Search market name or ID",
+    gameHosting: "Game Hosting",
+    gameHostingOpenFailed: "Unable to open game hosting. Please try again later.",
   },
   market: {
     title: "Game Market",

@@ -9,11 +9,16 @@ export function createHttpServer({
   roomService,
   authService,
   cloudDataService,
+  gameHostingService,
   feedbackService,
+  portalUserService,
   adminStaticService,
 }) {
   return http.createServer(async (req, res) => {
-    const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+    const url = new URL(
+      req.url || "/",
+      `http://${req.headers.host || "localhost"}`,
+    );
     try {
       if (req.method === "OPTIONS") {
         sendJson(res, 204, null);
@@ -22,7 +27,13 @@ export function createHttpServer({
       if (await authService.handleRequest(req, res, url)) {
         return;
       }
+      if (await gameHostingService.handleRequest(req, res, url)) {
+        return;
+      }
       if (await feedbackService.handleRequest(req, res, url)) {
+        return;
+      }
+      if (await portalUserService.handleRequest(req, res, url)) {
         return;
       }
       if (adminStaticService.handleRequest(req, res, url)) {
@@ -53,7 +64,11 @@ export function createHttpServer({
       }
       if (req.method === "GET" && url.pathname === "/rooms") {
         roomService.cleanupExpiredRooms();
-        sendJson(res, 200, Array.from(state.rooms.values()).map(roomService.toPublicRoom));
+        sendJson(
+          res,
+          200,
+          Array.from(state.rooms.values()).map(roomService.toPublicRoom),
+        );
         return;
       }
       sendJson(res, 404, { error: "not_found" });

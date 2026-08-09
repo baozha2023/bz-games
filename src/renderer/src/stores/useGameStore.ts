@@ -1,7 +1,11 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
 import type { GameManifest } from "../../../shared/game-manifest";
-import type { GameRecord, GameType, UnlockedAchievement } from "../../../shared/types";
+import type {
+  GameRecord,
+  GameType,
+  UnlockedAchievement,
+} from "../../../shared/types";
 import { useSettingsStore } from "./useSettingsStore";
 import { invalidateGameAssetCache } from "../composables/useImageCache";
 
@@ -17,10 +21,10 @@ export const useGameStore = defineStore("game", () => {
   async function loadGames() {
     isLoading.value = true;
     try {
-      const [manifests, recs] = await Promise.all([
-        window.electronAPI.game.getAll(),
-        window.electronAPI.game.getAllRecords(),
-      ]);
+      // getAll() performs disk reconciliation and rebuilds the main-process
+      // record cache, so records must be read only after it completes.
+      const manifests = await window.electronAPI.game.getAll();
+      const recs = await window.electronAPI.game.getAllRecords();
       games.value = manifests;
       records.value = recs;
     } finally {
@@ -55,7 +59,10 @@ export const useGameStore = defineStore("game", () => {
       maxPlayers?: number;
     },
   ) {
-    const res = await window.electronAPI.game.loadWithManifest(sourcePath, draft);
+    const res = await window.electronAPI.game.loadWithManifest(
+      sourcePath,
+      draft,
+    );
     if (res.success && res.manifest) {
       invalidateGameAssetCache(draft.id);
       await loadGames();

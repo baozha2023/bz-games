@@ -175,6 +175,8 @@ export default {
     empty: "暂无可用市场",
     official: "官方",
     searchPlaceholder: "搜索市场名或ID",
+    gameHosting: "游戏托管",
+    gameHostingOpenFailed: "无法打开游戏托管，请稍后重试",
   },
   market: {
     title: "游戏市场",

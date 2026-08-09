@@ -6,6 +6,58 @@ import {
   PlatformVersionRangeSchema,
 } from "../game-manifest";
 
+export const HOSTED_GAME_LOGICAL_PREFIX = "games.bzgames.top/";
+
+const HOSTED_GAME_PATH_PATTERN =
+  /^([^/?#]+)\/([^/?#]+)\/(package|icon|cover)\/([^/?#]+)$/;
+
+export type HostedGameAssetRole = "package" | "icon" | "cover";
+
+export interface HostedGameLogicalUrl {
+  gameId: string;
+  version: string;
+  role: HostedGameAssetRole;
+  encodedFileName: string;
+}
+
+export function parseHostedGameLogicalUrl(
+  value: string,
+): HostedGameLogicalUrl | null {
+  if (!value.startsWith(HOSTED_GAME_LOGICAL_PREFIX)) return null;
+  const match = HOSTED_GAME_PATH_PATTERN.exec(
+    value.slice(HOSTED_GAME_LOGICAL_PREFIX.length),
+  );
+  if (!match) return null;
+  try {
+    const gameId = decodeURIComponent(match[1]).normalize("NFC");
+    const version = decodeURIComponent(match[2]).normalize("NFC");
+    const fileName = decodeURIComponent(match[4]).normalize("NFC");
+    if (
+      !/^[a-z0-9]+(\.[a-z0-9\-]+)+$/.test(gameId) ||
+      !GameVersionSchema.safeParse(version).success ||
+      !fileName ||
+      fileName.length > 255 ||
+      fileName.includes("/") ||
+      fileName.includes("\\") ||
+      /[\u0000-\u001f\u007f]/.test(fileName) ||
+      (match[3] === "package" && !fileName.toLowerCase().endsWith(".zip")) ||
+      encodeURIComponent(gameId) !== match[1] ||
+      encodeURIComponent(version) !== match[2] ||
+      encodeURIComponent(fileName) !== match[4]
+    ) {
+      return null;
+    }
+    return {
+      gameId,
+      version,
+      role: match[3] as HostedGameAssetRole,
+      encodedFileName: match[4],
+    };
+  } catch {
+    return null;
+  }
+}
+
 export const GameManifestOverrideSchema = GameManifestBaseSchema.omit({
   $schema: true,
   id: true,
@@ -16,7 +68,7 @@ export const MarketGameVersionSchema = z.object({
   version: GameVersionSchema,
   description: z.string().min(1),
   platformVersion: PlatformVersionRangeSchema,
-  downloadUrl: z.string(),
+  downloadUrl: z.string().refine(isValidDownloadUrl, "Invalid download URL"),
   sha256: z.string().optional(),
   size: z.number().int().nonnegative().optional(),
   publishedAt: z.string().datetime().optional(),
@@ -27,7 +79,16 @@ export const MarketGameVersionSchema = z.object({
 
 /** 校验下载链接格式 */
 export function isValidDownloadUrl(url: string): boolean {
-  return /^https?:\/\/.+/.test(url);
+  if (/^https?:\/\/.+/.test(url)) return true;
+  return parseHostedGameLogicalUrl(url)?.role === "package";
+}
+
+export function isValidMarketImageUrl(
+  url: string,
+  role: "icon" | "cover",
+): boolean {
+  if (/^https?:\/\/.+/.test(url)) return true;
+  return parseHostedGameLogicalUrl(url)?.role === role;
 }
 
 /** 校验 sha256 格式（64 位 hex），允许为空 */
@@ -71,8 +132,14 @@ export const MarketGameSchema = z.object({
   type: z.nativeEnum(GameType),
   summary: z.string().min(1).max(200),
   tags: z.array(z.string().min(1)).optional(),
-  iconUrl: z.string().url().optional(),
-  coverUrl: z.string().url().optional(),
+  iconUrl: z
+    .string()
+    .refine((url) => isValidMarketImageUrl(url, "icon"), "Invalid icon URL")
+    .optional(),
+  coverUrl: z
+    .string()
+    .refine((url) => isValidMarketImageUrl(url, "cover"), "Invalid cover URL")
+    .optional(),
   screenshots: z.array(z.string().url()).optional(),
   featured: z.boolean().optional(),
   visibility: z.enum(["public", "hidden", "deprecated"]).optional(),

@@ -174,6 +174,8 @@ export default {
     empty: "暂无可用市集",
     official: "官坊",
     searchPlaceholder: "搜市集名或ID",
+    gameHosting: "游戏托管",
+    gameHostingOpenFailed: "游戏托管未能开启，请稍后再试",
   },
   market: {
     title: "游戏市集",

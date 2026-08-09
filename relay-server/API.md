@@ -167,7 +167,7 @@ Host: 127.0.0.1:38090
 
 | 参数       | 类型   | 必填 | 说明                                                                                             |
 | ---------- | ------ | ---- | ------------------------------------------------------------------------------------------------ |
-| `returnTo` | string | 否   | 登录成功后跳回客户端的 URL，仅允许 `bzgames://`、`http://127.0.0.1:` 或 `http://localhost:` 前缀 |
+| `returnTo` | string | 否   | 登录成功后的回跳 URL，仅允许配置的 Portal `/admin/` 路径、`bzgames://`、带端口的 `http://127.0.0.1` 或 `http://localhost` |
 
 响应：`302` 跳转到 `https://github.com/login/oauth/authorize`，携带 `client_id`、`redirect_uri`、`scope`、`state`。
 
@@ -184,7 +184,8 @@ GET /auth/github/callback?code=<authorization_code>&state=<state_token> HTTP/1.1
 响应（成功）：
 
 - 未传 `returnTo`：`200` HTML 登录成功页面，并写入 Session Cookie。
-- 传入合法 `returnTo`：`302` 跳转到该地址，URL hash 中携带 `session_token`、`expires_at`、`login`，同时写入 Session Cookie。
+- 传入合法客户端 `returnTo`：`302` 跳转到该地址，URL hash 中携带 `session_token`、`expires_at`、`login`，同时写入 Session Cookie。
+- 传入合法 Portal `returnTo`：只写入 Session Cookie 并同源跳转，不在 URL 中暴露 Session Token。
 
 响应（失败）：
 
@@ -789,14 +790,15 @@ sequenceDiagram
 
 ### 管理接口
 
-- `GET /api/admin/v1/me`
+- `GET /api/auth/me`：返回当前 GitHub 用户及数据库角色 `player`、`creator` 或 `administrator`。客户端首次 OAuth 登录创建 `player`；管理端 OAuth 登录创建或提升为 `creator`；`creator` 和 `administrator` 不会因客户端登录降级。
+- `POST /api/portal/v1/activate`：管理端启动时使用同源 Session Cookie 激活创作者身份。仅将 `player` 原子提升为 `creator`，拒绝 Bearer Token，且不会改变 `creator` 或 `administrator`。
 - `GET /api/admin/v1/feedback`
 - `GET /api/admin/v1/feedback/:id`
 - `GET /api/admin/v1/feedback/:id/images/:imageId`
 - `PATCH /api/admin/v1/feedback/:id`
 
-管理接口使用 GitHub会话 Cookie或 Bearer Token，并在服务端校验
-`ADMIN_GITHUB_IDS` 白名单。非管理员返回 `403`。
+反馈管理接口使用 GitHub 会话 Cookie 或 Bearer Token，并要求 `users.role=administrator`。
+普通创作者返回 `403`。
 
 管理详情包含仅管理员可见的 `adminNote` 以及面向用户的 `reply`。更新接口接受
 `status`、`adminNote` 和 `reply`，备注和回复均不得超过 5,000 个字符。
@@ -811,3 +813,35 @@ sequenceDiagram
   "reply": "用户可见，最多 5,000 个字符"
 }
 ```
+
+# 游戏托管 API
+
+托管资源使用逻辑地址 `games.bzgames.top/<gameId>/<version>/<role>/<encodedFileName>`，其中 `role` 只能是 `package`、`icon` 或 `cover`。该名称不依赖 DNS，桌面客户端会将地址严格解析到构建配置中的中继服务。
+
+## Portal 接口
+
+- `GET /api/portal/v1/game-hosting/tree`：管理员查看全部，创作者只查看本人游戏。
+- `POST /api/portal/v1/game-hosting/games`：创建游戏和首版本；管理员直接发布，创作者进入待审核。
+- `POST /api/portal/v1/game-hosting/games/:gameId/versions`：所有者或管理员新增版本。
+- `PUT /api/portal/v1/game-hosting/games/:gameId`：管理员立即更新；创作者创建或更新公共信息修订。
+- `PUT|DELETE /api/portal/v1/game-hosting/games/:gameId/versions/:version`：管理员可维护全部；创作者仅可维护本人的 `pending/rejected` 版本。
+- `GET /api/portal/v1/game-hosting/games/:gameId/config`：管理员或所有者下载规范 `MarketGame` JSON。
+- `PUT /api/portal/v1/game-hosting/games/:gameId/latest`：管理员设置已通过的最新版本。
+- `PUT /api/portal/v1/game-hosting/reviews/versions/:id`：管理员审核版本，首版本同时审核初始公共信息。
+- `PUT /api/portal/v1/game-hosting/reviews/revisions/:id`：管理员审核已发布游戏的公共信息修订。
+- `DELETE /api/portal/v1/game-hosting/revisions/:id`：管理员或所有者删除可维护修订。
+- `DELETE /api/portal/v1/game-hosting/games/:gameId`：仅管理员递归删除游戏。
+
+审核请求包含 `decision`、`expectedUpdatedAt`，驳回时必须包含 `reason`；版本通过时可传 `setLatest`。投稿在审核期间变化会返回 `409 submission_changed`。所有 Cookie 写请求必须来自 `PORTAL_PUBLIC_URL` 的同源 `Origin`。同一 `gameId + version` 唯一，大小、MIME、SHA-256 和逻辑地址均由服务端计算。
+
+## 下载接口
+
+- `GET|HEAD /api/v1/game-hosting/assets/:gameId/:version/:role/:encodedFileName`
+
+资源请求要求 `X-Relay-Token`，只提供 `approved` 版本，支持单段 `Range`、`206 Partial Content`、`416 Range Not Satisfiable`、`ETag`、`If-None-Match`、`Accept-Ranges` 和 `X-File-Sha256`。
+
+# Portal 用户 API
+
+- `GET /api/portal/v1/users?page=1&pageSize=20&q=`：仅 `administrator` 可访问，按最近登录时间返回用户分页列表。
+
+搜索覆盖 GitHub ID、登录名、名称和邮箱；响应包含数据库 RBAC 角色、注册时间、更新时间与最近登录时间。普通创作者访问返回 `403`。

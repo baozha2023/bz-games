@@ -20,17 +20,25 @@ export const config = {
   MAX_FEEDBACK_IMAGE_BYTES: Number(
     process.env.MAX_FEEDBACK_IMAGE_BYTES || 5 * 1024 * 1024,
   ),
+  GAME_HOSTING_STORAGE_DIR: (
+    process.env.GAME_HOSTING_STORAGE_DIR || "/var/lib/bz-games-hosting"
+  ).trim(),
+  MAX_GAME_HOSTING_FILE_BYTES: Number(
+    process.env.MAX_GAME_HOSTING_FILE_BYTES || 100 * 1024 * 1024,
+  ),
+  MAX_GAME_HOSTING_IMAGE_BYTES: Number(
+    process.env.MAX_GAME_HOSTING_IMAGE_BYTES || 5 * 1024 * 1024,
+  ),
+  MAX_GAME_HOSTING_TOTAL_BYTES: Number(
+    process.env.MAX_GAME_HOSTING_TOTAL_BYTES || 5 * 1024 * 1024 * 1024,
+  ),
   FEEDBACK_ANONYMOUS_COOLDOWN_MS: Number(
     process.env.FEEDBACK_ANONYMOUS_COOLDOWN_MS || 48 * 60 * 60 * 1000,
   ),
   FEEDBACK_AUTHENTICATED_COOLDOWN_MS: Number(
     process.env.FEEDBACK_AUTHENTICATED_COOLDOWN_MS || 6 * 60 * 60 * 1000,
   ),
-  ADMIN_GITHUB_IDS: (process.env.ADMIN_GITHUB_IDS || "")
-    .split(",")
-    .map((value) => value.trim())
-    .filter(Boolean),
-  ADMIN_PUBLIC_URL: (process.env.ADMIN_PUBLIC_URL || "").trim(),
+  PORTAL_PUBLIC_URL: (process.env.PORTAL_PUBLIC_URL || "").trim(),
   ADMIN_STATIC_DIR: (process.env.ADMIN_STATIC_DIR || "").trim(),
   RELAY_TOKEN: (process.env.RELAY_TOKEN || "").trim(),
   MAX_ROOMS: Number(process.env.MAX_ROOMS || 80),

@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   createAuthService,
+  loginRoleForReturnTo,
   resolveReturnTo,
 } from "../src/services/auth-service.js";
 
@@ -87,13 +88,36 @@ test("rejects external, credential-bearing, and lookalike return URLs", () => {
     "http://localhost:43120@evil.example/callback",
     "http://127.0.0.1:43120@evil.example/callback",
     "http://localhost.evil.example:43120/callback",
+    "https://relay.example.com/admin-lookalike",
     "bzgames://user:password@oauth-complete",
     "not-a-url",
   ];
 
   for (const value of rejected) {
-    assert.equal(resolveReturnTo(value), "", value);
+    assert.equal(
+      resolveReturnTo(value, "https://relay.example.com/admin/"),
+      "",
+      value,
+    );
   }
+});
+
+test("assigns creator only to the configured portal login flow", () => {
+  const portalUrl = "https://relay.example.com/admin/";
+  assert.equal(loginRoleForReturnTo(portalUrl, portalUrl), "creator");
+  assert.equal(
+    loginRoleForReturnTo("https://relay.example.com/admin/game-hosting", portalUrl),
+    "creator",
+  );
+  assert.equal(
+    loginRoleForReturnTo("bzgames://oauth-complete", portalUrl),
+    "player",
+  );
+  assert.equal(
+    loginRoleForReturnTo("http://127.0.0.1:43120/callback", portalUrl),
+    "player",
+  );
+  assert.equal(loginRoleForReturnTo("", portalUrl), "player");
 });
 
 test("resolves missing, invalid, expired, and authenticated sessions", async () => {

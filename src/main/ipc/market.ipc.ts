@@ -1,8 +1,13 @@
 import { ipcMain } from "electron";
 import { IPC } from "../../shared/ipc-channels";
 import { marketService } from "../services/market/MarketService";
+import { resolveGameHostingPortalUrl } from "../services/market/HostedGameUrl";
+import { openExternalHttpUrl } from "../utils/externalUrl";
 
 export function registerMarketIpc() {
+  ipcMain.handle(IPC.MARKET_OPEN_GAME_HOSTING, async () => {
+    return await openExternalHttpUrl(resolveGameHostingPortalUrl());
+  });
   ipcMain.handle(IPC.MARKET_GET_SOURCES, async (_, forceRefresh?: boolean) => {
     return await marketService.getSources(!!forceRefresh);
   });
