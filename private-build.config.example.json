@@ -1,7 +1,7 @@
 {
   "cdnBase": "",
   "ossBase": "",
-  "marketFallbackIndexUrl": "",
+  "marketOssIndexUrl": "",
   "referer": "",
   "relayServerUrl": "",
   "relayPublicHost": "",

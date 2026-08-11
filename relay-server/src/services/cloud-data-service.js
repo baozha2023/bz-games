@@ -39,7 +39,7 @@ export function createCloudDataService({
       sendJson(res, 503, { error: "cloud_not_configured" });
       return null;
     }
-    const resolution = await authService.getSessionFromRequest(req);
+    const resolution = await authService.getClientSessionFromRequest(req);
     if (resolution.status !== "authenticated") {
       authService.sendAuthFailure(res, resolution.status);
       return null;

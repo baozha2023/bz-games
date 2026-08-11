@@ -188,7 +188,8 @@ export default {
     official: "公式",
     searchPlaceholder: "市場名またはIDで検索",
     gameHosting: "ゲームホスティング",
-    gameHostingOpenFailed: "ゲームホスティングを開けません。後でもう一度お試しください。",
+    gameHostingOpenFailed:
+      "ゲームホスティングを開けません。後でもう一度お試しください。",
   },
   market: {
     title: "ゲーム市場",
@@ -826,15 +827,15 @@ export default {
     weightBold: "太字",
     effectNone: "なし",
     effectGlow: "グロー",
-    effectSparkle: "きらめき粒子",
     effectFlame: "炎",
     effectNeon: "ネオン流光",
-    effectRainbow: "虹色流光",
     effectAurora: "オーロラヴェール",
-    effectStardust: "星屑",
     effectCrystal: "クリスタルプリズム",
     effectComet: "彗星の尾",
     effectHeartbeat: "鼓動パルス",
+    effectHologram: "ホログラムシフト",
+    effectInkflow: "墨流",
+    effectEclipse: "日食の光輪",
     resetNicknameStyle: "初期化",
     saveNicknameStyleCost: "保存（{coins} BZコイン）",
     nicknameStyleSaved:

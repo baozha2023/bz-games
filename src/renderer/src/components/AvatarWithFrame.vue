@@ -17,6 +17,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { NAvatar } from 'naive-ui'
+import { normalizeAvatarFrameFileName } from '../../../shared/avatar-frames'
 
 const FRAME_MARGIN = 60
 
@@ -29,33 +30,45 @@ const props = defineProps<{
 
 const frameDataUrl = ref<string | null>(null)
 const frameNaturalWidth = ref<number>(0)
+let frameLoadRequestId = 0
 
-async function loadFrame(fileName: string) {
+async function loadFrame(value: unknown) {
+  const requestId = ++frameLoadRequestId
+  const fileName = normalizeAvatarFrameFileName(value)
+  if (!fileName) {
+    frameDataUrl.value = null
+    frameNaturalWidth.value = 0
+    return
+  }
+
   try {
     const dataUrl = await window.electronAPI.settings.getAvatarFrameImage?.(fileName)
-    if (!dataUrl) return
+    if (requestId !== frameLoadRequestId) return
+    if (!dataUrl) {
+      frameDataUrl.value = null
+      frameNaturalWidth.value = 0
+      return
+    }
     frameDataUrl.value = dataUrl
     const img = new Image()
     img.onload = () => {
+      if (requestId !== frameLoadRequestId) return
       frameNaturalWidth.value = img.naturalWidth
     }
-    img.src = dataUrl
-  } catch {
-    // ignore
-  }
-}
-
-watch(
-  () => props.frameFileName,
-  (name) => {
-    if (name) loadFrame(name)
-    else {
+    img.onerror = () => {
+      if (requestId !== frameLoadRequestId) return
       frameDataUrl.value = null
       frameNaturalWidth.value = 0
     }
-  },
-  { immediate: true },
-)
+    img.src = dataUrl
+  } catch {
+    if (requestId !== frameLoadRequestId) return
+    frameDataUrl.value = null
+    frameNaturalWidth.value = 0
+  }
+}
+
+watch(() => props.frameFileName, loadFrame, { immediate: true })
 
 const wrapperStyle = computed(() => ({
   width: `${props.size}px`,

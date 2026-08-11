@@ -10,6 +10,7 @@ import {
   setCookie,
 } from "../utils/http.js";
 import { sendJson } from "../utils/ws.js";
+import { getCapabilities } from "./portal-authorization.js";
 
 const GITHUB_AUTHORIZE_URL = "https://github.com/login/oauth/authorize";
 const GITHUB_ACCESS_TOKEN_URL = "https://github.com/login/oauth/access_token";
@@ -98,10 +99,6 @@ export function isPortalReturnTo(returnTo, portalPublicUrl = "") {
   }
 }
 
-export function loginRoleForReturnTo(returnTo, portalPublicUrl = "") {
-  return isPortalReturnTo(returnTo, portalPublicUrl) ? "creator" : "player";
-}
-
 async function fetchGitHubJson(url, accessToken) {
   const response = await fetch(url, {
     headers: {
@@ -172,7 +169,7 @@ export function createAuthService({ config, mySqlService }) {
     return record;
   }
 
-  async function upsertGitHubUser(accessToken, loginRole) {
+  async function upsertGitHubUser(accessToken) {
     await mySqlService.ensureReady();
     const profile = await fetchGitHubJson(GITHUB_USER_API_URL, accessToken);
     let email = typeof profile.email === "string" ? profile.email : "";
@@ -201,11 +198,6 @@ export function createAuthService({ config, mySqlService }) {
          avatar_url = VALUES(avatar_url),
          profile_url = VALUES(profile_url),
          email = VALUES(email),
-         role = CASE
-           WHEN role = 'administrator' THEN 'administrator'
-           WHEN VALUES(role) = 'creator' THEN 'creator'
-           ELSE role
-         END,
          updated_at = VALUES(updated_at),
          last_login_at = VALUES(last_login_at)`,
       [
@@ -215,7 +207,7 @@ export function createAuthService({ config, mySqlService }) {
         profile.avatar_url || "",
         profile.html_url || "",
         email,
-        loginRole,
+        "player",
         now,
         now,
         now,
@@ -250,13 +242,10 @@ export function createAuthService({ config, mySqlService }) {
     ]);
   }
 
-  async function getSessionFromRequest(req) {
+  async function getSessionByToken(sessionToken) {
     if (!mySqlService.isEnabled()) return { status: "invalid" };
     await mySqlService.ensureReady();
     await cleanupExpiredAuthRecords();
-    const cookies = parseCookies(req);
-    const sessionToken =
-      readBearerToken(req) || cookies[config.SESSION_COOKIE_NAME] || "";
     if (!sessionToken) return { status: "missing" };
 
     const [rows] = await mySqlService.query(
@@ -303,6 +292,18 @@ export function createAuthService({ config, mySqlService }) {
         },
       },
     };
+  }
+
+  async function getPortalSessionFromRequest(req) {
+    if (req.headers.authorization) return { status: "invalid" };
+    const sessionToken =
+      parseCookies(req)[config.SESSION_COOKIE_NAME] || "";
+    return getSessionByToken(sessionToken);
+  }
+
+  async function getClientSessionFromRequest(req) {
+    if (req.headers.cookie) return { status: "invalid" };
+    return getSessionByToken(readBearerToken(req));
   }
 
   function sendAuthFailure(res, status) {
@@ -373,10 +374,7 @@ export function createAuthService({ config, mySqlService }) {
       state.return_to,
       config.PORTAL_PUBLIC_URL,
     );
-    const user = await upsertGitHubUser(
-      tokenPayload.access_token,
-      loginRoleForReturnTo(state.return_to, config.PORTAL_PUBLIC_URL),
-    );
+    const user = await upsertGitHubUser(tokenPayload.access_token);
     const { token, expiresAt } = await createSession(user.id);
     const secureCookie = config.GITHUB_CALLBACK_URL.startsWith("https://");
     setCookie(res, config.SESSION_COOKIE_NAME, token, {
@@ -431,12 +429,12 @@ export function createAuthService({ config, mySqlService }) {
     return true;
   }
 
-  async function handleAuthMe(req, res) {
+  async function handlePortalSession(req, res) {
     if (!mySqlService.isEnabled()) {
       sendJson(res, 503, { error: "auth_not_configured" });
       return true;
     }
-    const resolution = await getSessionFromRequest(req);
+    const resolution = await getPortalSessionFromRequest(req);
     if (resolution.status !== "authenticated") {
       sendAuthFailure(res, resolution.status);
       return true;
@@ -444,8 +442,8 @@ export function createAuthService({ config, mySqlService }) {
     const auth = resolution.auth;
     sendJson(res, 200, {
       user: serializeUser(auth.user),
+      capabilities: getCapabilities(auth.user.role),
       expiresAt: auth.session.expiresAt,
-      role: auth.user.role,
     });
     return true;
   }
@@ -455,9 +453,19 @@ export function createAuthService({ config, mySqlService }) {
       sendJson(res, 503, { error: "auth_not_configured" });
       return true;
     }
-    const cookies = parseCookies(req);
-    const token =
-      readBearerToken(req) || cookies[config.SESSION_COOKIE_NAME] || "";
+    if (req.headers.authorization) {
+      sendJson(res, 403, { error: "portal_cookie_required" });
+      return true;
+    }
+    let portalOrigin = "";
+    try {
+      portalOrigin = new URL(config.PORTAL_PUBLIC_URL).origin;
+    } catch {}
+    if (!portalOrigin || String(req.headers.origin || "") !== portalOrigin) {
+      sendJson(res, 403, { error: "invalid_origin" });
+      return true;
+    }
+    const token = parseCookies(req)[config.SESSION_COOKIE_NAME] || "";
     if (token) {
       await deleteSessionByToken(token);
     }
@@ -475,8 +483,11 @@ export function createAuthService({ config, mySqlService }) {
     if (req.method === "GET" && url.pathname === "/auth/github/callback") {
       return handleGitHubCallback(req, res, url);
     }
-    if (req.method === "GET" && url.pathname === "/api/auth/me") {
-      return handleAuthMe(req, res);
+    if (
+      req.method === "GET" &&
+      url.pathname === "/api/portal/v1/session"
+    ) {
+      return handlePortalSession(req, res);
     }
     if (req.method === "POST" && url.pathname === "/api/auth/logout") {
       return handleAuthLogout(req, res);
@@ -485,7 +496,8 @@ export function createAuthService({ config, mySqlService }) {
   }
 
   return {
-    getSessionFromRequest,
+    getPortalSessionFromRequest,
+    getClientSessionFromRequest,
     sendAuthFailure,
     handleRequest,
     isConfigured,

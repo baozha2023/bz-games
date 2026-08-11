@@ -1,0 +1,360 @@
+import { z } from "zod";
+import {
+  GitHubRepositoryUrlSchema,
+  MarketDirectorySchema,
+  MarketGameSchema,
+  MarketGameVersionSchema,
+  parseGitHubRepositoryUrl,
+  type MarketDirectory,
+  type MarketGame,
+  type MarketGameVersion,
+  type MarketIndex,
+  type MarketSource,
+} from "../../../shared/types";
+import {
+  GITHUB_RAW_BASE,
+  MARKET_GITHUB_INDEX_URL,
+  MARKET_OSS_INDEX_URL,
+} from "../../../shared/AppConstants";
+import { logger } from "../../utils/logger";
+import { requestInterceptor } from "../../utils/requestInterceptor";
+
+const OSS_TIMEOUT_MS = 5_000;
+const GITHUB_TIMEOUT_MS = 8_000;
+const GITHUB_RETRY_DELAY_MS = 1_000;
+
+type MarketCatalogErrorKind =
+  | "timeout"
+  | "network"
+  | "http"
+  | "json"
+  | "schema"
+  | "business";
+
+type MarketSourceName = "oss" | "github";
+
+export class MarketCatalogError extends Error {
+  constructor(
+    readonly kind: MarketCatalogErrorKind,
+    readonly source: MarketSourceName,
+    readonly url: string,
+    readonly status?: number,
+    options?: ErrorOptions,
+  ) {
+    super(`market_catalog_${kind}`, options);
+    this.name = "MarketCatalogError";
+  }
+}
+
+export interface OfficialMarketCatalog {
+  directory: MarketDirectory;
+  index: MarketIndex;
+  fetchedAt: number;
+}
+
+interface MarketCatalogClientOptions {
+  fetchImpl?: typeof fetch;
+  buildHeaders?: typeof requestInterceptor.buildHeaders;
+  sleep?: (milliseconds: number) => Promise<void>;
+  ossUrl?: string;
+  githubUrl?: string;
+}
+
+const MarketIndexTopLevelSchema = z.object({
+  schemaVersion: z.string().min(1),
+  marketId: z.string().min(1),
+  marketName: z.string().min(1),
+  generatedAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+  author: z.string().min(1).max(100).optional(),
+  repository: GitHubRepositoryUrlSchema.optional(),
+  games: z.array(z.unknown()),
+});
+
+const MarketGameMetadataSchema = MarketGameSchema.omit({
+  versions: true,
+}).extend({
+  versions: z.array(z.unknown()),
+});
+
+export function getMarketSourceKey(source: MarketSource): string {
+  return `${source.marketId}\u0000${source.repository}\u0000${source.branch}`;
+}
+
+function gitToRawUrl(repository: string, branch: string): string {
+  const parsed = parseGitHubRepositoryUrl(repository);
+  if (!parsed) {
+    throw new Error(`market_unsupported_repo:${repository}`);
+  }
+  const encodedBranch = branch.split("/").map(encodeURIComponent).join("/");
+  return `${GITHUB_RAW_BASE}${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repository)}/${encodedBranch}/market.json`;
+}
+
+function issuePaths(error: z.ZodError): string[] {
+  return error.issues.map((issue) => issue.path.join(".") || "(root)");
+}
+
+function parseGameTolerant(rawGame: unknown): MarketGame | null {
+  const fullResult = MarketGameSchema.safeParse(rawGame);
+  if (fullResult.success) return fullResult.data;
+
+  const rawRecord =
+    rawGame && typeof rawGame === "object"
+      ? (rawGame as Record<string, unknown>)
+      : null;
+  const gameId =
+    rawRecord && typeof rawRecord.id === "string" ? rawRecord.id : "(unknown)";
+  const metadataResult = MarketGameMetadataSchema.safeParse(rawGame);
+  if (!metadataResult.success) {
+    logger.warn(
+      `[MarketCatalogClient] Skipping game "${gameId}": invalid metadata`,
+      issuePaths(metadataResult.error),
+    );
+    return null;
+  }
+
+  const validVersions: MarketGameVersion[] = [];
+  for (const rawVersion of metadataResult.data.versions) {
+    const versionResult = MarketGameVersionSchema.safeParse(rawVersion);
+    if (versionResult.success) {
+      validVersions.push(versionResult.data);
+      continue;
+    }
+    const version =
+      rawVersion &&
+      typeof rawVersion === "object" &&
+      "version" in rawVersion &&
+      typeof rawVersion.version === "string"
+        ? rawVersion.version
+        : "(unknown)";
+    logger.warn(
+      `[MarketCatalogClient] Skipping invalid version "${version}" for game "${gameId}"`,
+      issuePaths(versionResult.error),
+    );
+  }
+
+  if (validVersions.length === 0) {
+    logger.warn(
+      `[MarketCatalogClient] Skipping game "${gameId}": no valid versions`,
+    );
+    return null;
+  }
+
+  const latestVersion =
+    validVersions.find(
+      (version) => version.version === metadataResult.data.latestVersion,
+    )?.version ?? validVersions[0].version;
+
+  return {
+    ...metadataResult.data,
+    latestVersion,
+    versions: validVersions,
+  };
+}
+
+function parseIndex(raw: unknown): MarketIndex {
+  const top = MarketIndexTopLevelSchema.parse(raw);
+  const games = top.games
+    .map(parseGameTolerant)
+    .filter((game): game is MarketGame => game !== null)
+    .filter((game) => game.visibility !== "hidden");
+  return { ...top, games };
+}
+
+function toCatalogError(
+  error: unknown,
+  kind: MarketCatalogErrorKind,
+  source: MarketSourceName,
+  url: string,
+): MarketCatalogError {
+  if (error instanceof MarketCatalogError) return error;
+  return new MarketCatalogError(kind, source, url, undefined, {
+    cause: error,
+  });
+}
+
+function isRetryable(error: MarketCatalogError): boolean {
+  if (error.kind === "timeout" || error.kind === "network") return true;
+  return (
+    error.kind === "http" &&
+    (error.status === 408 ||
+      error.status === 429 ||
+      (error.status !== undefined && error.status >= 500))
+  );
+}
+
+export class MarketCatalogClient {
+  private readonly fetchImpl: typeof fetch;
+  private readonly buildHeaders: typeof requestInterceptor.buildHeaders;
+  private readonly sleep: (milliseconds: number) => Promise<void>;
+  private readonly ossUrl: string;
+  private readonly githubUrl: string;
+
+  constructor(options: MarketCatalogClientOptions = {}) {
+    this.fetchImpl = options.fetchImpl ?? fetch;
+    this.buildHeaders =
+      options.buildHeaders ??
+      requestInterceptor.buildHeaders.bind(requestInterceptor);
+    this.sleep =
+      options.sleep ??
+      ((milliseconds) =>
+        new Promise((resolve) => setTimeout(resolve, milliseconds)));
+    this.ossUrl = options.ossUrl ?? MARKET_OSS_INDEX_URL;
+    this.githubUrl = options.githubUrl ?? MARKET_GITHUB_INDEX_URL;
+  }
+
+  async fetchOfficialCatalog(): Promise<OfficialMarketCatalog> {
+    try {
+      return await this.fetchAttempt(
+        "oss",
+        this.ossUrl,
+        OSS_TIMEOUT_MS,
+        (raw) => this.parseOfficialCatalog(raw, "oss", this.ossUrl),
+      );
+    } catch (error) {
+      this.logFailure(error, 1, "switching_to_github");
+      return await this.fetchFromGitHub(this.githubUrl, (raw) =>
+        this.parseOfficialCatalog(raw, "github", this.githubUrl),
+      );
+    }
+  }
+
+  async fetchExternalIndex(source: MarketSource): Promise<MarketIndex> {
+    let url: string;
+    try {
+      url = gitToRawUrl(source.repository, source.branch);
+    } catch (error) {
+      throw new MarketCatalogError(
+        "business",
+        "github",
+        source.repository,
+        undefined,
+        { cause: error },
+      );
+    }
+    return await this.fetchFromGitHub(url, parseIndex);
+  }
+
+  private parseOfficialCatalog(
+    raw: unknown,
+    source: MarketSourceName,
+    url: string,
+  ): OfficialMarketCatalog {
+    let directory: MarketDirectory;
+    let index: MarketIndex;
+    try {
+      directory = MarketDirectorySchema.parse(raw);
+      index = parseIndex(raw);
+    } catch (error) {
+      throw toCatalogError(error, "schema", source, url);
+    }
+    if (directory.sources[0].marketId !== index.marketId) {
+      throw new MarketCatalogError("business", source, url);
+    }
+    return { directory, index, fetchedAt: Date.now() };
+  }
+
+  private async fetchFromGitHub<T>(
+    url: string,
+    parse: (raw: unknown) => T,
+  ): Promise<T> {
+    const execute = async (attempt: 1 | 2): Promise<T> => {
+      try {
+        return await this.fetchAttempt("github", url, GITHUB_TIMEOUT_MS, parse);
+      } catch (error) {
+        const catalogError = toCatalogError(error, "network", "github", url);
+        const retry = attempt === 1 && isRetryable(catalogError);
+        this.logFailure(catalogError, attempt, retry ? "retrying" : "failed");
+        if (!retry) throw catalogError;
+        await this.sleep(GITHUB_RETRY_DELAY_MS);
+        return await execute(2);
+      }
+    };
+    return await execute(1);
+  }
+
+  private async fetchAttempt<T>(
+    source: MarketSourceName,
+    url: string,
+    timeoutMs: number,
+    parse: (raw: unknown) => T,
+  ): Promise<T> {
+    const controller = new AbortController();
+    let timedOut = false;
+    const timeoutId = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, timeoutMs);
+    try {
+      let response: Response;
+      try {
+        response = await this.fetchImpl(url, {
+          headers: this.buildHeaders(url, {
+            Accept: "application/json",
+            "Cache-Control": "no-cache",
+          }),
+          signal: controller.signal,
+        });
+      } catch (error) {
+        throw new MarketCatalogError(
+          timedOut ? "timeout" : "network",
+          source,
+          url,
+          undefined,
+          { cause: error },
+        );
+      }
+      if (!response.ok) {
+        throw new MarketCatalogError("http", source, url, response.status);
+      }
+
+      let raw: unknown;
+      try {
+        raw = await response.json();
+      } catch (error) {
+        throw new MarketCatalogError(
+          timedOut ? "timeout" : "json",
+          source,
+          url,
+          undefined,
+          { cause: error },
+        );
+      }
+
+      try {
+        return parse(raw);
+      } catch (error) {
+        throw toCatalogError(error, "schema", source, url);
+      }
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  private logFailure(
+    error: unknown,
+    attempt: number,
+    action: "switching_to_github" | "retrying" | "failed",
+  ): void {
+    const catalogError = toCatalogError(
+      error,
+      "network",
+      "github",
+      this.githubUrl,
+    );
+    const details = {
+      source: catalogError.source,
+      kind: catalogError.kind,
+      status: catalogError.status,
+      attempt,
+      action,
+    };
+    if (action === "failed") {
+      logger.error("[MarketCatalogClient] Request failed", details);
+    } else {
+      logger.warn("[MarketCatalogClient] Request failed", details);
+    }
+  }
+}
+
+export const marketCatalogClient = new MarketCatalogClient();

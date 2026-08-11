@@ -10,7 +10,7 @@ import vue from "@vitejs/plugin-vue";
 type PrivateBuildConfig = {
   cdnBase?: string;
   ossBase?: string;
-  marketFallbackIndexUrl?: string;
+  marketOssIndexUrl?: string;
   referer?: string;
   relayServerUrl?: string;
   relayPublicHost?: string;
@@ -62,8 +62,8 @@ const gameManifestEncryptionSeed = requireEncryptionSeed(
 const injectedPrivateConfig = {
   __BZ_CDN_BASE__: JSON.stringify(privateBuildConfig.cdnBase || ""),
   __BZ_OSS_BASE__: JSON.stringify(privateBuildConfig.ossBase || ""),
-  __BZ_MARKET_FALLBACK_INDEX_URL__: JSON.stringify(
-    privateBuildConfig.marketFallbackIndexUrl || "",
+  __BZ_MARKET_OSS_INDEX_URL__: JSON.stringify(
+    privateBuildConfig.marketOssIndexUrl || "",
   ),
   __BZ_REFERER__: JSON.stringify(privateBuildConfig.referer || ""),
   __BZ_RELAY_SERVER_URL__: JSON.stringify(

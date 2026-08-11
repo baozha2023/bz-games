@@ -16,7 +16,10 @@ import type {
   UserData,
   NicknameStyle,
 } from "../../../shared/types";
-import { DEFAULT_NICKNAME_STYLE } from "../../../shared/types";
+import {
+  DEFAULT_NICKNAME_STYLE,
+  normalizeNicknameEffect,
+} from "../../../shared/types";
 import { getAppRoot } from "../../utils/appPath";
 import { logger } from "../../utils/logger";
 import { AVATAR_FRAMES } from "../../../shared/avatar-frames";
@@ -824,6 +827,14 @@ class StoreService {
     };
     const defaultGamesPath = path.join(getAppRoot(), "games");
     let shouldPersist = false;
+
+    const normalizedNicknameEffect = normalizeNicknameEffect(
+      merged.nicknameStyle.effect,
+    );
+    if (normalizedNicknameEffect !== merged.nicknameStyle.effect) {
+      merged.nicknameStyle.effect = normalizedNicknameEffect;
+      shouldPersist = true;
+    }
 
     if (!merged.gameStorageHistory?.length) {
       merged.gameStoragePath = defaultGamesPath;

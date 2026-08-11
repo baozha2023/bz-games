@@ -13,6 +13,7 @@ declare module "vue-router" {
 const FeedbackView = () => import("./views/FeedbackView.vue");
 const GameHostingView = () => import("./views/GameHostingView.vue");
 const LoginView = () => import("./views/LoginView.vue");
+const ReleaseUploadView = () => import("./views/ReleaseUploadView.vue");
 const UserListView = () => import("./views/UserListView.vue");
 
 export const router = createRouter({
@@ -23,13 +24,19 @@ export const router = createRouter({
       path: "/feedback",
       name: "feedback",
       component: FeedbackView,
-      meta: { requiresAuth: true, capability: "feedback.read" },
+      meta: { requiresAuth: true, capability: "feedback.view" },
     },
     {
       path: "/users",
       name: "users",
       component: UserListView,
-      meta: { requiresAuth: true, capability: "users.read" },
+      meta: { requiresAuth: true, capability: "users.view" },
+    },
+    {
+      path: "/desktop-release",
+      name: "desktop-release",
+      component: ReleaseUploadView,
+      meta: { requiresAuth: true, capability: "release.view" },
     },
     {
       path: "/game-hosting",
@@ -48,10 +55,19 @@ router.beforeEach(async (to) => {
   if (to.meta.requiresAuth && !auth.user) {
     return { name: "login", query: { redirect: to.fullPath } };
   }
-  if (to.meta.capability && !auth.can(to.meta.capability)) return { name: "game-hosting" };
+  if (to.meta.capability && !auth.can(to.meta.capability)) {
+    return auth.can("hosting.view")
+      ? { name: "game-hosting" }
+      : { name: "login" };
+  }
   if (to.name === "login" && auth.user) {
-    const redirect = typeof to.query.redirect === "string" && to.query.redirect.startsWith("/")
-      ? to.query.redirect : auth.can("feedback.read") ? "/feedback" : "/game-hosting";
+    if (!auth.can("hosting.view")) return true;
+    const redirect =
+      typeof to.query.redirect === "string" && to.query.redirect.startsWith("/")
+        ? to.query.redirect
+        : auth.can("feedback.view")
+          ? "/feedback"
+          : "/game-hosting";
     return redirect;
   }
   return true;

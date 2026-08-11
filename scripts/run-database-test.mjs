@@ -26,7 +26,7 @@ async function main() {
       define: {
         __BZ_CDN_BASE__: JSON.stringify(""),
         __BZ_OSS_BASE__: JSON.stringify(""),
-        __BZ_MARKET_FALLBACK_INDEX_URL__: JSON.stringify(""),
+        __BZ_MARKET_OSS_INDEX_URL__: JSON.stringify(""),
         __BZ_REFERER__: JSON.stringify(""),
         __BZ_RELAY_SERVER_URL__: JSON.stringify("https://relay.example.com"),
         __BZ_RELAY_PUBLIC_HOST__: JSON.stringify(""),

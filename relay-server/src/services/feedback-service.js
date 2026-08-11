@@ -10,8 +10,9 @@ import Busboy from "busboy";
 import { ObjectId } from "mongodb";
 
 import { requireHttpRelayToken } from "../utils/relay-auth.js";
-import { parseCookies, readBearerToken } from "../utils/http.js";
+import { readBearerToken } from "../utils/http.js";
 import { sendJson } from "../utils/ws.js";
+import { PORTAL_CAPABILITIES } from "./portal-authorization.js";
 
 const ALLOWED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
 const ALLOWED_STATUSES = new Set([
@@ -581,11 +582,10 @@ export function createFeedbackService({
 
   async function getOptionalAuth(req, res) {
     const bearerToken = readBearerToken(req);
-    const sessionCookie = parseCookies(req)[config.SESSION_COOKIE_NAME] || "";
-    if (!bearerToken && !sessionCookie) {
+    if (!bearerToken) {
       return { auth: null, valid: true };
     }
-    const resolution = await authService.getSessionFromRequest(req);
+    const resolution = await authService.getClientSessionFromRequest(req);
     if (resolution.status !== "authenticated") {
       authService.sendAuthFailure(res, resolution.status);
       return { auth: null, valid: false };
@@ -740,7 +740,7 @@ export function createFeedbackService({
   }
 
   async function handleList(req, res, url) {
-    if (!(await adminAccess.requireAdmin(req, res))) return;
+    if (!(await adminAccess.requireCapability(req, res, PORTAL_CAPABILITIES.FEEDBACK_VIEW))) return;
     const rawPage = Number(url.searchParams.get("page") || 1);
     const rawPageSize = Number(url.searchParams.get("pageSize") || 20);
     if (
@@ -796,7 +796,7 @@ export function createFeedbackService({
   }
 
   async function handleDetail(req, res, feedbackId) {
-    if (!(await adminAccess.requireAdmin(req, res))) return;
+    if (!(await adminAccess.requireCapability(req, res, PORTAL_CAPABILITIES.FEEDBACK_VIEW))) return;
     const [rows] = await mySqlService.query(
       `SELECT id, content, status, admin_note, reply, submitter_type, github_login,
               app_version, platform, image_count, created_at, updated_at
@@ -826,7 +826,7 @@ export function createFeedbackService({
   }
 
   async function handleImage(req, res, feedbackId, imageId) {
-    if (!(await adminAccess.requireAdmin(req, res))) return;
+    if (!(await adminAccess.requireCapability(req, res, PORTAL_CAPABILITIES.FEEDBACK_VIEW))) return;
     if (!mongoService.isEnabled()) {
       sendJson(res, 503, { error: "image_storage_not_configured" });
       return;
@@ -931,7 +931,7 @@ export function createFeedbackService({
   }
 
   async function handleUpdate(req, res, feedbackId) {
-    if (!(await adminAccess.requireAdmin(req, res))) return;
+    if (!(await adminAccess.requireCapability(req, res, PORTAL_CAPABILITIES.FEEDBACK_MANAGE, { requireOrigin: true }))) return;
     const body = await readJson(req, 64 * 1024);
     const status = cleanText(body?.status, 32);
     if (!ALLOWED_STATUSES.has(status)) {

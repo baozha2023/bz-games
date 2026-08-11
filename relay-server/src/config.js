@@ -32,6 +32,15 @@ export const config = {
   MAX_GAME_HOSTING_TOTAL_BYTES: Number(
     process.env.MAX_GAME_HOSTING_TOTAL_BYTES || 5 * 1024 * 1024 * 1024,
   ),
+  DESKTOP_RELEASE_STORAGE_DIR: (
+    process.env.DESKTOP_RELEASE_STORAGE_DIR || "/var/lib/bz-games-releases"
+  ).trim(),
+  MAX_DESKTOP_RELEASE_FILE_BYTES: Number(
+    process.env.MAX_DESKTOP_RELEASE_FILE_BYTES || 512 * 1024 * 1024,
+  ),
+  DESKTOP_RELEASE_BANDWIDTH_BPS: Number(
+    process.env.DESKTOP_RELEASE_BANDWIDTH_BPS || 50_000_000,
+  ),
   FEEDBACK_ANONYMOUS_COOLDOWN_MS: Number(
     process.env.FEEDBACK_ANONYMOUS_COOLDOWN_MS || 48 * 60 * 60 * 1000,
   ),

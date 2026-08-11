@@ -14,7 +14,7 @@ export function createMySqlService({ config }) {
         avatar_url TEXT NOT NULL,
         profile_url TEXT NOT NULL,
         email VARCHAR(255) NOT NULL DEFAULT '',
-        role ENUM('player', 'creator', 'administrator') NOT NULL DEFAULT 'player',
+        role ENUM('player', 'creator', 'administrator', 'super_administrator') NOT NULL DEFAULT 'player',
         created_at DATETIME(3) NOT NULL,
         updated_at DATETIME(3) NOT NULL,
         last_login_at DATETIME(3) NOT NULL,
@@ -22,6 +22,25 @@ export function createMySqlService({ config }) {
         UNIQUE KEY uniq_users_github_id (github_id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
+    const bootstrapTime = new Date();
+    await pool.query(
+      `INSERT INTO users
+         (github_id, login, name, avatar_url, profile_url, email, role,
+          created_at, updated_at, last_login_at)
+       VALUES (?, ?, '', '', ?, '', 'super_administrator', ?, ?, ?)
+       ON DUPLICATE KEY UPDATE
+         updated_at = IF(role = 'super_administrator', updated_at, ?),
+         role = 'super_administrator'`,
+      [
+        "208792845",
+        "baozha2023",
+        "https://github.com/baozha2023",
+        bootstrapTime,
+        bootstrapTime,
+        bootstrapTime,
+        bootstrapTime,
+      ],
+    );
     await pool.query(`
       CREATE TABLE IF NOT EXISTS auth_sessions (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,

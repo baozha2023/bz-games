@@ -35,7 +35,7 @@
 - 经济系统（签到、BZ 币、累计游玩时长、头像框解锁与装备）
 - Game API Server（本地 `ws://127.0.0.1`，向游戏进程提供平台能力，v2 支持 JSON 控制帧与二进制实时帧）
 - 游戏市场（远程发现、详情展示、下载并安装到默认游戏库，GitHub Release Asset 自动补齐 sha256/size）
-- 游戏托管（管理员上传 ZIP 到官方服务器，市场通过逻辑地址下载）
+- 游戏托管（创作者、管理员和超级管理员上传 ZIP 到官方服务器；创作者提交后需审核，管理员与超级管理员直接发布，市场通过逻辑地址下载）
 - 个性化系统（头像框解锁、装备、预览，支持多场景展示）
 - 系统设置（玩家信息、主题、端口、语言、更新、游戏库列表、GitHub Token）
 - 官方登录与云同步服务（GitHub OAuth 登录；脱敏配置与三张业务表 SQL 逻辑备份组成单一平台快照，原子发布并在本地幂等合并）
@@ -43,6 +43,8 @@
 - 创作者中心（所有 GitHub 用户可登录；数据库 RBAC 控制反馈管理、游戏投稿、审核和发布；Vue 3 + Vite 独立构建，中继服务 `/admin/` 同源提供）
 - 客户端卸载系统（游戏进程批量收口、游戏库可选择删除、路径安全校验、符号链接防护）
 - 默认封面/图标静态回退（`GameCover.vue` / `GameIcon.vue` 在无自定义资源时使用内置静态图片）
+- 官网最新安装包下载（正式 GitHub Release 原子同步到官方服务器，固定接口支持断点续传并对全部并发下载合计限速 50 Mbps）
+- 平台版本管理（管理员可查看当前版本，仅超级管理员可在管理端上传稳定版 EXE；Actions 与管理端统一经过暂存、SHA-256/PE/semver 校验、发布锁和 latest 原子切换）
 
 ---
 
@@ -102,7 +104,7 @@ bz-games/
 │   │   ├── auth-service.test.js           # OAuth 回跳白名单测试
 │   │   ├── access-control-service.test.js # Portal RBAC 与 Cookie 写请求同源校验测试
 │   │   ├── game-hosting-service.test.js   # 游戏托管、审核、容量与文件回滚测试
-│   │   ├── portal-user-service.test.js    # Portal 激活与管理员用户列表测试
+│   │   ├── portal-user-service.test.js    # Portal 会话、角色调整与管理员用户列表测试
 │   │   └── admin-static-service.test.js   # 管理静态站点与路径安全测试
 │   └── src/
 │       ├── index.js                       # 中继服务器入口（HTTP + WebSocket 统一启动）
@@ -189,7 +191,8 @@ bz-games/
 │   │   │   │   ├── RoomPasswordProbeService.ts # 加入前密码探测（直连/官方短地址）
 │   │   │   │   └── RoomServer.ts          # 房主房间服务与消息中继（支持 v2 二进制帧中继、ordered delivery）
 │   │   │   ├── market/
-│   │   │   │   └── MarketService.ts       # 游戏市场索引拉取、下载、校验、解压与安装
+│   │   │   │   ├── MarketCatalogClient.ts # 市场目录请求、来源切换与索引解析
+│   │   │   │   └── MarketService.ts       # 市场内存缓存、下载、校验、解压与安装
 │   │   │   └── system/
 │   │       ├── CloudSyncService.ts    # 云端数据同步（GitHub OAuth 登录 / 配置与数据库上传下载 / 哈希校验 / 进度事件 / 上传黑名单过滤敏感字段 / 下载选择性合并 config）
 │   │       ├── FeedbackService.ts     # 图片选择/验证、multipart 上传、历史详情查询与被动登录失效联动
@@ -279,7 +282,7 @@ bz-games/
 │   │           └── sound.ts                # 音效播放工具
 │   │
 │   └── shared/
-│       ├── avatar-frames.ts                # 头像框定义数据（8款头像框的解锁条件与图片文件名）
+│       ├── avatar-frames.ts                # 头像框定义数据（16款头像框的解锁条件、白名单归一化与图片文件名）
 │       ├── AppConstants.ts                 # 平台构建期常量（CDN/OSS/GitHub/官方中继/配置、数据库及 Manifest 加密种子等，由 electron.vite.config.ts 构建期注入）
 │       ├── RoomConstants.ts                # 房间通信与 Game API 常量（消息大小限制、心跳间隔、重连/延迟探测定时器等）
 │       ├── binary-protocol.ts              # v2 二进制帧编码/解码工具（4字节头长度 + JSON header + binary body）
@@ -297,7 +300,7 @@ bz-games/
 │
 ├── resources/
 │   ├── icon.png                            # 应用图标资源
-│   ├── avatar-frames/                      # 头像框图片资源（8款 PNG，平台运行时读取）
+│   ├── avatar-frames/                      # 头像框图片资源（16款透明 PNG，平台运行时读取）
 │   ├── default_cover.png                   # 默认游戏封面回退图片（16:9，GameCover.vue 在无自定义封面时使用）
 │   ├── default_icon.png                    # 默认游戏图标回退图片（1:1，GameIcon.vue 在无自定义图标时使用）
 │   └── vocabulary/                         # 客户端侧敏感词库（15 个分类 .txt 文件）
@@ -420,13 +423,11 @@ bz-games/
 
 ### 4.2 游戏市场索引 JSON 规范
 
-- **托管方式**：游戏市场索引文件由独立 GitHub 仓库维护，固定文件名为 `market.json`。平台优先读取 GitHub 原始地址
-  `https://raw.githubusercontent.com/baozha2023/bz-games-market/master/market.json`；若 GitHub 拉取失败，必须自动回退到构建期注入的私有镜像地址。
+- **托管方式**：游戏市场索引文件由独立 GitHub 仓库维护并同步到 OSS，固定文件名为 `market.json`。官方文件优先读取构建期 `marketOssIndexUrl` 指定的 OSS 镜像；OSS 单次请求包含响应体解析，最多等待 5 秒，任何失败均整份切换到 GitHub 原始地址 `https://raw.githubusercontent.com/baozha2023/bz-games-market/master/market.json`。GitHub 单次最多等待 8 秒，仅网络错误、超时、HTTP 408/429/5xx 在等待 1 秒后重试一次；确定性 4xx、JSON 或 Schema 错误不重试。
 - **两级市场架构**：顶层 `market.json` 作为**市场目录**，`sources` 数组列出所有可用市场源；每个市场源的仓库中有自己的
   `market.json`。顶层 `market.json` 同时保留 `games` 字段（对应 `sources[0]`）。外部市场源从其仓库 raw 地址直接加载。
-- **拉取时机**：用户首次进入"游戏市场"列表页面时拉取市场目录（`getSources`），进入具体市场时拉取该市场的游戏索引（`getIndex`
-  ）。均有 1 小时内存缓存。
-- **镜像同步**：市场仓库可通过 GitHub Actions 等自动化流程同步 OSS 镜像；平台按 GitHub 优先、OSS 回退顺序读取。
+- **拉取时机**：用户首次进入"游戏市场"列表页面时通过 `getSources` 拉取官方文件，进入具体市场时通过 `getIndex` 获取索引。官方一级目录与官方二级索引从同一响应原子解析并共用 1 小时内存缓存；相同的进行中请求会被合并。第三方索引按 `marketId + repository + branch` 缓存，直接请求 GitHub Raw 并使用相同的 GitHub 超时与重试策略。
+- **镜像同步**：市场仓库通过 GitHub Actions 等自动化流程同步 OSS 镜像；平台按 OSS 优先、GitHub 兜底顺序读取官方目录和官方索引。外部市场源仍从各自仓库的 raw 地址直接加载，不使用官方 OSS 镜像。
 - **展示目标**：索引文件必须同时满足“列表展示”“下载校验”“安装校验”三类需求，因此除基础元信息外，还需要包含封面、简介、标签、文件校验值、包大小等字段。
 - **安装原则**：市场下载安装本质上仍走统一导入流程；平台下载并解压版本包后，必须继续校验包内 `game.json` 与市场索引中的
   `id`、`version`、`platformVersion` 是否一致。
@@ -474,16 +475,16 @@ bz-games/
 
 #### 市场源对象 `MarketSource`
 
-| 字段          | 类型      | 必填 | 说明                               |
-| ------------- | --------- | ---- | ---------------------------------- |
-| `marketId`    | `string`  | 是   | 市场唯一标识。                     |
-| `marketName`  | `string`  | 是   | 市场显示名称。                     |
-| `coverUrl`    | `string`  | 否   | 市场封面图，用于一级界面卡片。     |
-| `generatedAt` | `string`  | 是   | 该市场索引的生成时间。             |
-| `repository`  | `string`  | 是   | GitHub 仓库地址（仅支持 GitHub）。 |
-| `branch`      | `string`  | 是   | 仓库分支。                         |
-| `featured`    | `boolean` | 否   | 是否重点推荐。                     |
-| `visibility`  | `string`  | 否   | `public` / `hidden`。              |
+| 字段          | 类型      | 必填 | 说明                                                                                  |
+| ------------- | --------- | ---- | ------------------------------------------------------------------------------------- |
+| `marketId`    | `string`  | 是   | 市场唯一标识。                                                                        |
+| `marketName`  | `string`  | 是   | 市场显示名称。                                                                        |
+| `coverUrl`    | `string`  | 否   | 市场封面图，用于一级界面卡片。                                                        |
+| `generatedAt` | `string`  | 是   | 该市场索引的生成时间。                                                                |
+| `repository`  | `string`  | 是   | 规范 HTTPS GitHub 仓库地址，只允许仓库根路径，不允许凭据、端口、查询参数或 fragment。 |
+| `branch`      | `string`  | 是   | 合法 Git 分支名，允许 `/` 分层，拒绝路径穿越与 Git 非法 ref 字符。                    |
+| `featured`    | `boolean` | 否   | 是否重点推荐。                                                                        |
+| `visibility`  | `string`  | 否   | `public` / `hidden`。                                                                 |
 
 #### 游戏对象 `MarketGame`
 
@@ -787,15 +788,15 @@ type NicknameFont = "system" | "rounded" | "serif" | "mono" | "fantasy";
 type NicknameEffect =
   | "none"
   | "glow"
-  | "sparkle"
   | "flame"
   | "neon"
-  | "rainbow"
   | "aurora"
-  | "stardust"
   | "crystal"
   | "comet"
-  | "heartbeat";
+  | "heartbeat"
+  | "hologram"
+  | "inkflow"
+  | "eclipse";
 
 interface NicknameStyle {
   color: string;
@@ -907,18 +908,15 @@ interface AppSettings {
   - **数据库范围**：SQL dump 只包含 `play_sessions`、`achievement_unlocks`、`stats_reports`，并排除本地自增字段 `stats_reports.event_sequence`；`games`、`game_versions` 及其 `path`、`is_present`、收藏和排序状态完全属于当前设备，不上传、不下载、不合并。当前按单设备日常使用、换机时整包恢复设计，不实现多设备并发合并；统计记录按 `reported_at`、`event_id` 的稳定顺序重建，不能使用新电脑上的本机自增序号决定 `full` 报告的覆盖顺序。
   - **下载应用顺序**：配置先在内存中解密确认可应用，SQL 在单一事务中完成幂等合并，随后从统一数据库刷新游戏缓存中的会话、成就和统计派生数据，最后才一次性提交配置；SQL 导入或缓存刷新失败时不得写入配置。
   - **同步黑名单**：`CLOUD_SETTINGS_SYNC_BLACKLIST` 在上传与下载合并时都排除 `githubToken`、云会话和云用户身份字段，并只合并 `userData` 与非敏感设置。
-  - **被动会话失效**：设置页只通过 `getLocalCloudStatus()` 读取 `config.json`，不轮询且不调用 `/api/auth/me` 主动探测。OAuth 成功以及业务接口返回 `session_expired` / `session_invalid` 时，主进程发送 `system:cloud:authChanged`；仅这两类稳定错误会清空 `cloudSessionToken` 与 `cloudSessionExpiresAt`。普通 `unauthorized`、网络错误、超时、限流和服务端错误不得清理本地令牌。快照元数据只在上传或下载成功后按需查询。
+  - **被动会话失效**：设置页只通过 `getLocalCloudStatus()` 读取 `config.json`，不轮询且不调用任何 Portal 会话或权限接口主动探测。OAuth 成功以及客户端业务接口返回 `session_expired` / `session_invalid` 时，主进程发送 `system:cloud:authChanged`；仅这两类稳定错误会清空 `cloudSessionToken` 与 `cloudSessionExpiresAt`。普通 `unauthorized`、网络错误、超时、限流和服务端错误不得清理本地令牌。快照元数据只在上传或下载成功后按需查询。
   - **设置写入隔离**：渲染进程提交完整或部分普通设置时，`system.ipc.ts` 必须按明确白名单提取允许渲染层维护的字段；`feedbackHistory`、`playerId`、云会话/云用户身份、存储迁移状态、更新时间和窗口位置等字段均由主进程或专用 IPC 独占写入，防止旧表单或陈旧状态覆盖后台更新的数据。
   - **未来边界**：游戏云存档不得加入 `PlatformCloudSnapshot`。未来必须使用独立的 `GameSaveCloudService`、`/api/cloud/game-saves/*`、引用表和 `kind=game-save` 对象。
 - **MarketService 设计**：
-  - **两级市场架构**：`getSources()` 拉取顶层市场目录（通过 `fetchDirectory()` 获取，主源 GitHub + 备源 OSS），
-    `getIndex(sourceIdx)` 拉取指定市场源的游戏索引。sourceIdx=0 使用 `fetchIndexInternal()`（主备双源），sourceIdx>0 使用
-    `fetchIndexForSource()`（通过 `gitToRawUrl()` 推导 raw URL 直接加载）。
-  - `fetchJson(url)` 为通用 HTTP JSON 获取器，内部使用 `withRetry(3, 1000)` 包裹 fetch（指数退避 1s→2s→4s）。请求头通过 `RequestInterceptor.buildHeaders()` 统一注入 `Referer` 防盗链和可选的 GitHub Token。`fetchDirectory()` 与
-    `fetchIndexFromUrl()` 均基于此构建：前者解析 `MarketDirectorySchema`，后者使用**容错解析**（`parseGameTolerant()`）逐游戏校验并过滤 `hidden` 游戏。单个游戏或版本数据异常时跳过无效数据并记录警告日志。
-  - `getSources()` 与 `getIndex(sourceIdx, forceRefresh)` 均内置 1 小时内存缓存，按 sourceIdx 独立缓存，
-    `forceRefresh=true` 或缓存过期时重新拉取，应用重启后自动失效。同时，`forceRefresh=true` 时一并清除全部图片缓存（
-    `cachedImages`），保证封面/图标数据与索引数据同步刷新。
+  - **职责分离**：`MarketCatalogClient` 负责官方 OSS→GitHub 来源切换、第三方 GitHub Raw 请求、结构化错误与索引解析；`MarketService` 只负责内存缓存、进行中请求合并及市场安装业务。目录请求不复用下载或 Release Asset 的通用重试逻辑。
+  - **官方原子目录**：官方 `market.json` 每轮只下载一次，同一原始对象同时解析 `MarketDirectory` 和官方 `MarketIndex`，并在写入缓存前校验 `sources[0].marketId === index.marketId`。目录或索引任一步失败时整份数据切换来源，禁止 OSS/GitHub 混用。
+  - **严格边界与条目隔离**：目录和索引顶层字段严格按当前 Schema 校验，不接受旧字段或别名；游戏和版本逐条校验，无效版本被跳过，过滤后没有有效版本的游戏被跳过，`hidden` 游戏不展示。
+  - **有界请求**：OSS 只请求一次且超时 5 秒。GitHub 单次超时 8 秒，仅网络错误、超时、HTTP 408/429/5xx 延迟 1 秒重试一次，最长约 17 秒；官方链路含 OSS 时最长约 22 秒。所有请求继续通过 `RequestInterceptor.buildHeaders()` 注入 Referer 和可选 GitHub Token。
+  - **缓存与刷新**：官方目录和官方索引共用 1 小时原子内存缓存；第三方索引以 `marketId + repository + branch` 为键缓存；相同远程请求共享 Promise。`forceRefresh=true` 绕过缓存并清除图片缓存，第三方刷新会先刷新官方目录。刷新失败明确报错但不覆盖此前有效缓存；应用重启后缓存自动失效，不落盘。
   - `getCachedImageDataUrl(url)` 为按需图片缓存方法，通过 `fetch(url)` 下载远程图片并转 base64 Data URL，缓存于
     `cachedImages` Map（1 小时 TTL）。15 秒超时 + `AbortController` 保护，`finally` 块必定清理定时器。**双重防线**：校验
     response body 非空和 `content-type` 必须以 `image/` 开头。
@@ -1001,9 +999,9 @@ interface AppSettings {
   - 日期点击弹出会话详情弹窗时：先清空 `selectedDateSessions`、设置 `isLoadingSessions = true` 并 `await nextTick()` 确保弹窗以 loading 态打开，再发起 IPC 查询。会话加载中展示居中的 `n-spin` 旋转指示器（最小高度 160px），替代骨架屏，视觉上更轻量且无布局抖动。
   - ResizeObserver 使用 `requestAnimationFrame` 节流 + 同值跳过，避免热力图容器宽度频繁变化引起的布局抖动。
 - **头像框系统（Avatar Frame）**：
-  - **数据定义**：`src/shared/avatar-frames.ts` 导出 `AVATAR_FRAMES` 常量数组（8 款头像框），每款定义 `id`、`name`、`imageFileName`、`rarity`、`unlockMethod`（playtime/consecutive_checkin/total_checkin/bzcoin）、`unlockValue`。同时导出 `getFrameImageFileName(id)` 工具函数。
+  - **数据定义**：`src/shared/avatar-frames.ts` 导出 `AVATAR_FRAMES` 常量数组（16 款头像框），每款定义 `id`、`name`、`imageFileName`、`rarity`、`unlockMethod`（playtime/consecutive_checkin/total_checkin/bzcoin）、`unlockValue`。新增星河罗盘、青竹流云、熔金机芯、霜华王冠、金缮月轮、像素跃迁、纸鸢春信和龙脊余烬。`normalizeAvatarFrameId()`、`normalizeAvatarFrameFileName()` 与 `getFrameImageFileName()` 共同提供统一白名单边界。
   - **类型定义**：`AvatarFrameDef` 和 `AvatarFrameUnlockMethod` 定义在 `src/shared/types/store.types.ts`，通过 `shared/types/index.ts` 统一导出。
-  - **渲染组件**：`AvatarWithFrame.vue` 使用 CSS absolute 叠加方案：底层 `n-avatar` (z=0)，上层 `<img>` overlay (z=1, `pointer-events: none`)。
+  - **渲染组件**：`AvatarWithFrame.vue` 使用 CSS absolute 叠加方案：底层 `n-avatar` (z=0)，上层 `<img>` overlay (z=1, `pointer-events: none`)。渲染入口必须先通过 `normalizeAvatarFrameFileName()` 校验文件名；旧客户端、联机载荷或异常值统一回落为无头像框，不生成资源请求。异步图片加载使用请求序号隔离，快速切换时旧请求不得覆盖新头像框。
     - **算法**：`FRAME_MARGIN = 60`（帧图留白像素），`contentSize = w - 2*MARGIN`，`scale = w / contentSize`，`offsetPercent = -50*(scale-1)`。通过 `naturalWidth` 获取帧图原始尺寸后计算 scale/offset，适配任意帧图。
     - **中心对称原则**：只要帧图的中心镂空区域与图片几何中心对齐，不同 margin 的帧图均可正确叠加，无需调整算法。
     - **帧图加载**：通过 IPC `system:getAvatarFrameImage` 从 `resources/avatar-frames/` 读取 PNG → base64 Data URL，组件内 `Image()` 解码获取 `naturalWidth`。
@@ -1014,7 +1012,7 @@ interface AppSettings {
     - `performSaveNicknameStyle(style, coinCost)`：校验 BZ 币余额 → 扣币 → `saveSettings({ nicknameStyle: style })`。余额不足返回 `{ success: false, code: "insufficient_coins" }`。
   - **自动解锁**：`tryUnlockPlaytimeFrames()` 和 `tryUnlockCheckInFrames()` 为 `StoreService` 私有方法，分别在 `addPlayTime()` 和 `performCheckIn()` 写盘前调用。扫描 `AVATAR_FRAMES` 数组，满足条件且不在 `ownedFrames[]` 中时自动 push 并记录日志。
   - **单一真相源**：`ownedFrames[]` 是头像框解锁状态的唯一权威数据源。所有解锁逻辑（签到/时长/BZ币购买）均在主进程中写入此数组，前端 `isUnlocked()` **仅检查 `ownedFrames.includes(frameId)`**，不做任何条件比较。
-  - **个性化页面**（`PersonalizationView.vue`）：网格布局展示 8 款头像框卡片，每张卡片包含预览（`AvatarWithFrame` 96px）、名称、解锁条件文字+图标、操作按钮（装备/卸下/购买/未解锁）。购买成功后自动装备并刷新用户数据。路由 `/personalization`。
+  - **个性化页面**（`PersonalizationView.vue`）：网格布局展示 16 款头像框卡片，每张卡片包含预览（`AvatarWithFrame` 96px）、名称、解锁条件文字+图标、操作按钮（装备/卸下/购买/未解锁）。购买成功后自动装备并刷新用户数据。路由 `/personalization`。
   - **应用入口展示**：`AppContent.vue` 顶栏头像使用 `AvatarWithFrame`（28px）替代原始 `n-avatar`，绑定 `userData.equippedFrame`。
   - **设置页展示**：`SettingsView.vue` 头像上传区小头像（40px）和头像预览弹窗（280px）均使用 `AvatarWithFrame`。
   - **联机传递**：`RoomJoinPayload` 和 `PlayerInRoom` 包含 `playerAvatarFrame` / `avatarFrame` 字段。房主 `RoomServer` 创建玩家对象时写入，客机 `RoomClient` 加入时携带。`PlayerCard.vue` 使用 `AvatarWithFrame` 渲染。
@@ -1053,8 +1051,8 @@ interface AppSettings {
 
 - **昵称样式系统（Nickname Style）**：
   - **功能范围**：玩家可在个性化页面自定义昵称的显示样式，包括文字颜色、渐变（起点+终点）、字体、字重和特效动画，保存需消耗 30 BZ 币。
-  - **类型定义**：`NicknameStyle` 接口定义在 `src/shared/types/store.types.ts`，包含 `color`、`gradientStart`、`gradientEnd`、`font`（`system`/`rounded`/`serif`/`mono`/`fantasy`）、`effect`（`none`/`glow`/`sparkle`/`flame`/`neon`/`rainbow`/`aurora`/`stardust`/`crystal`/`comet`/`heartbeat`）、`weight`（`normal`/`semibold`/`bold`）。默认样式 `DEFAULT_NICKNAME_STYLE` 的 `color` 为 `"#000000"`。
-  - **渲染组件**：`NicknameText.vue` 使用 CSS 自定义属性（`--nickname-color`/`--nickname-gradient-start`/`--nickname-gradient-end`）驱动样式，通过 `NicknameEffect` 值动态激活对应的 CSS class 和 @keyframes 动画。渐变特效（neon/flame/aurora 等）使用 `background-clip: text` + `color: transparent` 实现渐变文字。粒子特效（sparkle/stardust/comet）通过绝对定位的 `<span>` 粒子元素 + CSS 动画实现。光环特效（aurora/crystal/heartbeat）通过绝对定位的背景层实现。
+  - **类型定义**：`NicknameStyle` 接口定义在 `src/shared/types/store.types.ts`，包含 `color`、`gradientStart`、`gradientEnd`、`font`（`system`/`rounded`/`serif`/`mono`/`fantasy`）、`effect`（`none`/`glow`/`flame`/`neon`/`aurora`/`crystal`/`comet`/`heartbeat`/`hologram`/`inkflow`/`eclipse`）、`weight`（`normal`/`semibold`/`bold`）。`NICKNAME_EFFECTS` 是唯一有效值来源，读取设置时无效或已移除的特效统一归一为 `none`。默认样式 `DEFAULT_NICKNAME_STYLE` 的 `color` 为 `"#000000"`。
+  - **渲染组件**：`NicknameText.vue` 使用 CSS 自定义属性驱动样式。彗星使用单一粒子骨架；极光、冰晶、心跳、全息和日蚀使用背景层；墨韵使用双层径向/线性渐变。全息错位、墨韵流转、日蚀光环分别提供数字故障、东方水墨和环形掠光三种差异化视觉，并通过 `prefers-reduced-motion` 尊重系统减少动态效果设置。
   - **主题色自适应**：`nicknameColor.ts` 使用 WCAG 相对亮度公式计算颜色亮度。亮色主题下禁止偏白色（luminance > 0.72），暗色主题下禁止偏黑色（luminance < 0.28），不满足时自动取对称色。`adaptNicknameStyleForTheme()` 接收 `NicknameStyle` 和 `EffectiveTheme`（`useSettingsStore.effectiveTheme`），返回适配后的样式。`NicknameText` 组件接收 `effectiveTheme` prop 后自动调用适配。
   - **保存与消费**：`performSaveNicknameStyle(style, 30)` 在主进程原子执行：校验 BZ 币余额 → 扣除 30 BZ 币 → 写入 `userData.bzCoins` → 调用 `saveSettings({ nicknameStyle: style })` 持久化到 `settings`。余额不足返回 `{ success: false, code: "insufficient_coins" }`。
   - **UI 面板**：`PersonalizationView.vue` 新增双栏布局（`.nickname-style-panel`）：左侧预览卡片展示 `NicknameText` 实际效果（含单人/Room 两场景），右侧表单配置颜色/渐变/字体/字重/特效。保存前通过 `isNicknameColorAllowedForTheme` 检验对比度，不通过弹出警告。支持重置为默认样式（`resetNicknameStyle()`）。
@@ -1069,7 +1067,7 @@ interface AppSettings {
   - **反馈详情查询**：`getDetail(feedbackId)` 通过 `/api/v1/feedback/:id` 获取用户可见详情。主进程校验 UUID 格式反馈 ID，然后校验响应结构（id、content、status、reply、imageCount、createdAt、updatedAt 及 images 数组的每个元素的类型与大小）。随后逐个通过 `/api/v1/feedback/:id/images/:imageId` 下载图片，校验实际 Content-Type 与 MySQL 记录的 MIME 一致、实际 body 长度与声明 size 一致、不超 MAX_IMAGE_BYTES。任一步不通过返回 `feedback_invalid_response`。通过 auth 失败或权限不足由 `handleAuthFailure` 统一收口。
   - **IPC 边界**：渲染进程仅通过 `FeedbackModal.vue` → `electronAPI.settings.selectFeedbackImages / releaseFeedbackImages / submitFeedback / getFeedbackHistory / getFeedbackDetail` 与主进程交互，不直接接触文件路径或服务端 relayToken / GitHub 会话。主进程必须校验反馈详情结构、图片数量、大小、MIME 和实际响应长度后再生成 Data URL。
   - **服务端并联（v3.1.3 用户详情接口）**：`/api/v1/feedback/:id`（GET）返回用户可见详情：`id/content/status/reply/imageCount/createdAt/updatedAt/images`，不含 `adminNote`。GitHub 反馈要求 Bearer Token 并校验所有者；匿名反馈仅需发行版 relayToken，以随机 UUID 作为访问凭据。`/api/v1/feedback/:id/images/:imageId` 返回单张图片原始流。管理 API 详情额外包含 `adminNote`，更新接口接受 `status/adminNote/reply`，备注与回复均不超过 5000 字符。其他逻辑同前：busboy 流式 multipart、魔法字节校验、IP/GitHub ID 双层冷却、MySQL 事务 + GridFS。
-  - **Portal 前端**：`bz-games-admin/` 为独立 Vue 3 + Vite + Pinia 项目，构建为 `/admin/` 同源静态站点。所有角色复用相同布局、路由、`GameHostingView` 和 `GameHostingForm`；`rbac.ts` 将数据库角色映射为能力，菜单、路由和按钮按能力呈现。管理员可使用用户列表分页检索平台注册用户，普通创作者无菜单、路由或 API 权限。服务端仍执行角色、所有权和状态授权。中继侧 `admin-static-service.js` 提供 SPA fallback、路径穿越防护、CSP/`nosniff`/`DENY` iframe 等安全响应头。
+  - **Portal 前端**：`bz-games-admin/` 为独立 Vue 3 + Vite + Pinia 项目，构建为 `/admin/` 同源静态站点。服务端会话接口返回唯一 capability 集合，前端 `rbac.ts` 只校验能力契约，不维护角色到能力的映射；菜单、路由、按钮和提交前置检查均调用 `auth.can(capability)`。玩家只显示无权限页，创作者只显示游戏托管，管理员显示全部管理界面但不能修改角色或上传桌面客户端版本，超级管理员拥有全部界面与操作。服务端仍是唯一授权决策源，并独立执行 capability、资源所有权、状态机和精确 Origin 校验。中继侧 `admin-static-service.js` 提供 SPA fallback、路径穿越防护、CSP/`nosniff`/`DENY` iframe 等安全响应头。
 - **卸载系统设计（UninstallService）**：
   - **状态互斥**：`running` 布尔标志防止重复卸载调用。
   - **游戏进程收口**：`shutdownForUninstall()` 设置 `shuttingDownForUninstall = true` 拒新启，等待 `launchingGames` 清空（5s 超时），然后通过 `taskkill /PID /T /F` 批量终止所有已托管游戏进程树，最后调用 `GameManager.stop()` 清理窗口和服务注册。
@@ -1111,7 +1109,7 @@ interface AppSettings {
   比较），将拒绝导入并提示用户。
 - **拖拽路径解析统一**：游戏库拖拽导入路径统一使用 `webUtils.getPathForFile(file)` 获取。
 - **市场入口拉取策略**：进入"游戏市场"页面时，若缓存有效（1 小时内且未重启应用）则直接使用缓存数据；超过 1 小时或首次进入则自动请求远程
-  `market.json`。用户可点击"刷新"按钮强制重新拉取。应用重启后缓存自动失效（仅内存缓存，不落盘）。
+  `market.json`。用户可点击"刷新"按钮强制重新拉取；刷新失败会提示错误并保留原有效缓存，不将旧数据伪装成刷新结果。应用重启后缓存自动失效（仅内存缓存，不落盘）。
 - **市场索引更新时间展示**：`MarketView` 从 `index.updatedAt` 读取时间戳，在标题"游戏市场"右侧以小字展示（格式
   `YYYY-MM-DD HH:mm`），使用 `updatedAtLabel` computed 实现，三语 i18n 支持。
 - **私有资源防盗链 Referer**：所有指向私有 CDN/OSS 的请求均携带构建期注入的 Referer。实现分两层：`fetch` 请求通过 `RequestInterceptor.buildHeaders()` 统一注入；`<img>` 标签等渲染层请求由 `RequestInterceptor.registerSessionHandler()` 注册的 Electron 全局拦截器注入。
@@ -1438,7 +1436,7 @@ interface AppSettings {
 - **反馈限制**：服务端仅使用 `req.socket.remoteAddress` 规范化后的 IP作为匿名身份；不得读取 `X-Forwarded-For`，不得保存 IP、`playerId` 或客户端 ID。匿名用户按 IP在进程内 Map限制 48 小时，登录用户按 GitHub ID在独立的进程内 Map限制 6 小时；待处理占位必须持续到成功提交或失败释放，防止并发穿透，两类状态均在服务重启后清空。
 - **上传安全**：服务端使用 busboy 流式解析，总请求、字段、文件数量及单文件大小都必须设限；图片必须同时校验声明 MIME、文件签名、容器结构和合理尺寸。MySQL 失败时尽力删除本次 GridFS 文件，临时目录始终清理。
 - **会话错误协议**：受保护 HTTP 接口统一区分 `authenticated / missing / expired / invalid`。缺少令牌返回 `401 unauthorized`，过期返回 `401 session_expired`，无效、撤销或未知令牌返回 `401 session_invalid`，并同时返回稳定 `error` 与可读 `message`。过期会话默认保留 7 天以便识别，由 `AUTH_EXPIRED_SESSION_RETENTION_MS` 配置；普通 `unauthorized` 不触发客户端清理登录。
-- **Portal RBAC**：`users.role` 是唯一角色来源，只允许 `player`、`creator`、`administrator`。客户端首次 OAuth 登录创建玩家；管理端 OAuth 登录或使用同源 Cookie 进入 Portal 时只将玩家提升为创作者；创作者和管理员永不因客户端登录降级。玩家不能调用 Portal 业务接口。禁止通过环境变量、GitHub ID 白名单、Bearer Token 或前端条件授予 Portal 权限。`/api/auth/me` 返回角色，统一访问控制服务负责认证、创作者/管理员能力、所有权及 Cookie 写请求同源校验。GitHub OAuth 的 Portal 回跳只允许 `PORTAL_PUBLIC_URL` 同源 `/admin/` 路径，使用 HttpOnly、SameSite=Lax Cookie；Portal 激活必须同时校验 Cookie 和精确 Origin。管理静态文件必须阻止路径穿越和符号链接越界，并发送 CSP、`nosniff`、拒绝 iframe 等安全响应头。
+- **Portal RBAC 与认证边界**：`users.role` 是唯一角色来源，只允许 `player`、`creator`、`administrator`、`super_administrator`。服务端唯一授权模块把角色映射为固定 capability 集合，未知角色和未知能力默认拒绝；超级管理员拥有全部能力，管理员除修改用户角色和上传桌面客户端版本外拥有全部管理能力，创作者仅能托管自己的游戏且提交必须审核，玩家没有管理能力。`GET /api/portal/v1/session` 只通过同源 Session Cookie 返回当前用户、能力集合和过期时间，Portal 接口拒绝 Bearer 或混合凭据，写接口还必须校验精确 Origin；前端只消费能力集合，不得按角色推断授权。桌面客户端接口只接受 Bearer Session，需要登录的接口仅校验会话有效性，不读取角色或 capability。OAuth 只负责创建默认玩家、刷新 GitHub 资料和建立会话，永不自动修改已有角色。角色修改只允许超级管理员操作其他非超级管理员，且不能授予超级管理员。GitHub OAuth 的 Portal 回跳只允许 `PORTAL_PUBLIC_URL` 同源 `/admin/` 路径，Cookie 使用 HttpOnly、SameSite=Lax。管理静态文件必须阻止路径穿越和符号链接越界，并发送 CSP、`nosniff`、拒绝 iframe 等安全响应头。
 - **MySQL schema 生命周期**：仓库代码只在 `mysql-service.js` 的 `ensureSchema()` 中维护最新、完整、幂等的 `CREATE TABLE IF NOT EXISTS` 初始化结构，不加入 `ALTER TABLE`、迁移脚本或自动补列逻辑。已发布表新增或改变列、索引、约束时，必须在部署前检查线上实际结构，并通过单独审核的手工 SQL 完成变更；部署文档需说明目标结构、执行顺序、历史数据默认值、管理员角色赋值和验证查询。反馈图片继续复用现有 GridFS Bucket。
 - **三端接口**：提交成功仅返回 `{ ok, id }`；匿名限制返回 `429 + error + retryAfterSeconds + resetAt`。用户详情返回 `id/content/status/reply/imageCount/createdAt/updatedAt/images`，不得包含 `adminNote`；用户图片接口复用同一所有权规则。管理详情额外返回 `adminNote`，更新接受 `status/adminNote/reply`。所有字段以 `relay-server/API.md` 为准，服务端测试、客户端共享类型、预加载声明与管理端 TypeScript 类型必须同步。
 - **托管接口对齐**：逻辑地址的 `gameId/version/role/encodedFileName` 规则、市场导出结构、Portal 请求/响应类型和服务端校验必须保持同一字段语义；新增、替换、审核、设为最新、删除及下载分别使用最小职责接口，写接口由服务端执行角色、所有权、状态机和精确 Origin 校验，不能依赖前端隐藏按钮。客户端仅可把规范逻辑地址改写到配置的 Relay `origin`。

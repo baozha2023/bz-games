@@ -149,13 +149,72 @@ export const MarketGameSchema = z.object({
   versions: z.array(MarketGameVersionSchema).min(1),
 });
 
+export function parseGitHubRepositoryUrl(
+  value: string,
+): { owner: string; repository: string } | null {
+  try {
+    const url = new URL(value);
+    if (
+      url.protocol !== "https:" ||
+      url.hostname !== "github.com" ||
+      url.port ||
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash
+    ) {
+      return null;
+    }
+    const segments = url.pathname.split("/").filter(Boolean);
+    if (segments.length !== 2) return null;
+    const owner = segments[0];
+    const repository = segments[1].replace(/\.git$/, "");
+    if (
+      !/^[A-Za-z0-9_.-]+$/.test(owner) ||
+      !/^[A-Za-z0-9_.-]+$/.test(repository)
+    ) {
+      return null;
+    }
+    return { owner, repository };
+  } catch {
+    return null;
+  }
+}
+
+export function isValidGitBranch(value: string): boolean {
+  return (
+    value.length > 0 &&
+    value.length <= 255 &&
+    value !== "@" &&
+    !value.startsWith("/") &&
+    !value.endsWith("/") &&
+    !value.endsWith(".") &&
+    !value.includes("..") &&
+    !value.includes("//") &&
+    !value.includes("@{") &&
+    !/[\u0000-\u0020\u007f~^:?*[\\]/.test(value) &&
+    value
+      .split("/")
+      .every(
+        (segment) =>
+          segment.length > 0 &&
+          !segment.startsWith(".") &&
+          !segment.endsWith(".lock"),
+      )
+  );
+}
+
+export const GitHubRepositoryUrlSchema = z
+  .string()
+  .refine(parseGitHubRepositoryUrl, "Invalid GitHub repository URL");
+
 export const MarketSourceSchema = z.object({
   marketId: z.string().min(1),
   marketName: z.string().min(1),
   coverUrl: z.string().url().optional(),
   generatedAt: z.string().datetime(),
-  repository: z.string().url(),
-  branch: z.string().min(1),
+  repository: GitHubRepositoryUrlSchema,
+  branch: z.string().refine(isValidGitBranch, "Invalid Git branch"),
   featured: z.boolean().optional(),
   visibility: z.enum(["public", "hidden"]).optional(),
 });
@@ -171,7 +230,7 @@ export const MarketIndexSchema = z.object({
   marketName: z.string().min(1),
   generatedAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
-  repository: z.string().url().optional(),
+  repository: GitHubRepositoryUrlSchema.optional(),
   author: z.string().min(1).max(100).optional(),
   games: z.array(MarketGameSchema),
 });

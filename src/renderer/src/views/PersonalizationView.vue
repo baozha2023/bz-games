@@ -3,15 +3,34 @@
     <n-tabs v-model:value="activeTab" type="line" animated>
       <n-tab-pane name="avatarFrame" :tab="t('personalization.avatarFrame')">
         <div style="padding-top: 16px">
-          <n-empty v-if="frames.length === 0" :description="t('personalization.noFrames')" style="margin-top: 60px" />
-          <n-grid v-else :x-gap="16" :y-gap="16" :cols="'2 s:3 m:4 l:4 xl:5'" responsive="screen">
+          <n-empty
+            v-if="frames.length === 0"
+            :description="t('personalization.noFrames')"
+            style="margin-top: 60px"
+          />
+          <n-grid
+            v-else
+            :x-gap="16"
+            :y-gap="16"
+            :cols="'2 s:3 m:4 l:4 xl:5'"
+            responsive="screen"
+          >
             <n-grid-item v-for="frame in frames" :key="frame.id">
-              <div class="frame-card" :class="{ 'frame-equipped': isEquipped(frame.id) }">
+              <div
+                class="frame-card"
+                :class="{ 'frame-equipped': isEquipped(frame.id) }"
+              >
                 <div class="frame-preview" @click="handleEquipOrToggle(frame)">
                   <div class="frame-preview-badge" v-if="isEquipped(frame.id)">
                     <n-icon :size="18" :color="'#fff'">
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-                        <path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          fill="currentColor"
+                          d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"
+                        />
                       </svg>
                     </n-icon>
                   </div>
@@ -41,7 +60,7 @@
                       secondary
                       @click="handleUnequip(frame.id)"
                     >
-                      {{ t('personalization.unequip') }}
+                      {{ t("personalization.unequip") }}
                     </n-button>
                     <n-button
                       v-else-if="isUnlocked(frame)"
@@ -51,7 +70,7 @@
                       secondary
                       @click="handleEquip(frame.id)"
                     >
-                      {{ t('personalization.equip') }}
+                      {{ t("personalization.equip") }}
                     </n-button>
                     <n-button
                       v-else-if="frame.unlockMethod === 'bzcoin'"
@@ -74,7 +93,10 @@
           </n-grid>
         </div>
       </n-tab-pane>
-      <n-tab-pane name="nicknameStyle" :tab="t('personalization.nicknameStyle')">
+      <n-tab-pane
+        name="nicknameStyle"
+        :tab="t('personalization.nicknameStyle')"
+      >
         <div class="nickname-style-panel">
           <n-card class="nickname-preview-card" :bordered="false">
             <div class="nickname-preview-stage">
@@ -97,23 +119,40 @@
 
           <n-card :title="t('personalization.nicknameStyle')" :bordered="false">
             <n-alert type="info" class="nickname-style-tip">
-              {{ t('personalization.gradientHelp') }}
+              {{ t("personalization.gradientHelp") }}
             </n-alert>
             <n-form label-placement="left" label-width="120">
               <n-form-item :label="t('personalization.nicknameColor')">
-                <n-color-picker v-model:value="nicknameStyleForm.color" :show-alpha="false" :modes="['hex']" />
+                <n-color-picker
+                  v-model:value="nicknameStyleForm.color"
+                  :show-alpha="false"
+                  :modes="['hex']"
+                />
               </n-form-item>
-              <n-alert v-if="!canSaveNicknameStyle" type="warning" class="nickname-style-tip">
-                {{ t('personalization.nicknameColorContrastWarning') }}
+              <n-alert
+                v-if="!canSaveNicknameStyle"
+                type="warning"
+                class="nickname-style-tip"
+              >
+                {{ t("personalization.nicknameColorContrastWarning") }}
               </n-alert>
               <n-form-item :label="t('personalization.nicknameFont')">
-                <n-select v-model:value="nicknameStyleForm.font" :options="fontOptions" />
+                <n-select
+                  v-model:value="nicknameStyleForm.font"
+                  :options="fontOptions"
+                />
               </n-form-item>
               <n-form-item :label="t('personalization.nicknameWeight')">
-                <n-select v-model:value="nicknameStyleForm.weight" :options="weightOptions" />
+                <n-select
+                  v-model:value="nicknameStyleForm.weight"
+                  :options="weightOptions"
+                />
               </n-form-item>
               <n-form-item :label="t('personalization.nicknameEffect')">
-                <n-select v-model:value="nicknameStyleForm.effect" :options="effectOptions" />
+                <n-select
+                  v-model:value="nicknameStyleForm.effect"
+                  :options="effectOptions"
+                />
               </n-form-item>
               <template v-if="supportsGradient">
                 <n-form-item :label="t('personalization.gradientStart')">
@@ -124,14 +163,24 @@
                   />
                 </n-form-item>
                 <n-form-item :label="t('personalization.gradientEnd')">
-                  <n-color-picker v-model:value="nicknameStyleForm.gradientEnd" :show-alpha="false" :modes="['hex']" />
+                  <n-color-picker
+                    v-model:value="nicknameStyleForm.gradientEnd"
+                    :show-alpha="false"
+                    :modes="['hex']"
+                  />
                 </n-form-item>
               </template>
               <n-space justify="end">
-                <n-button @click="resetNicknameStyle">{{ t('personalization.resetNicknameStyle') }}</n-button>
-                <n-button type="primary" :disabled="!canSaveNicknameStyle" @click="saveNicknameStyle">
+                <n-button @click="resetNicknameStyle">{{
+                  t("personalization.resetNicknameStyle")
+                }}</n-button>
+                <n-button
+                  type="primary"
+                  :disabled="!canSaveNicknameStyle"
+                  @click="saveNicknameStyle"
+                >
                   {{
-                    t('personalization.saveNicknameStyleCost', {
+                    t("personalization.saveNicknameStyleCost", {
                       coins: NICKNAME_STYLE_SAVE_COST,
                     })
                   }}
@@ -146,92 +195,118 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
-import { useI18n } from 'vue-i18n'
-import { useMessage } from 'naive-ui'
-import { useSettingsStore } from '../stores/useSettingsStore'
-import { TimeOutline, CalendarOutline, TodayOutline, WalletOutline } from '@vicons/ionicons5'
-import AvatarWithFrame from '../components/AvatarWithFrame.vue'
-import NicknameText from '../components/NicknameText.vue'
-import { DEFAULT_NICKNAME_STYLE } from '../../../shared/types'
-import type { AvatarFrameDef, NicknameEffect, NicknameFont, NicknameStyle } from '../../../shared/types'
-import { AVATAR_FRAMES } from '../../../shared/avatar-frames'
+import { computed, onMounted, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
+import { useMessage } from "naive-ui";
+import { useSettingsStore } from "../stores/useSettingsStore";
+import {
+  TimeOutline,
+  CalendarOutline,
+  TodayOutline,
+  WalletOutline,
+} from "@vicons/ionicons5";
+import AvatarWithFrame from "../components/AvatarWithFrame.vue";
+import NicknameText from "../components/NicknameText.vue";
+import { DEFAULT_NICKNAME_STYLE } from "../../../shared/types";
+import type {
+  AvatarFrameDef,
+  NicknameEffect,
+  NicknameFont,
+  NicknameStyle,
+} from "../../../shared/types";
+import { AVATAR_FRAMES } from "../../../shared/avatar-frames";
 import {
   adaptNicknameStyleForTheme,
   isNicknameColorAllowedForTheme,
   normalizeNicknameHexColor,
-} from '../utils/nicknameColor'
+} from "../utils/nicknameColor";
 
-const { t } = useI18n()
-const settingsStore = useSettingsStore()
-const message = useMessage()
+const { t } = useI18n();
+const settingsStore = useSettingsStore();
+const message = useMessage();
 
-const activeTab = ref('avatarFrame')
-const frames = ref<AvatarFrameDef[]>(AVATAR_FRAMES)
-const nicknameStyleForm = ref<NicknameStyle>({ ...DEFAULT_NICKNAME_STYLE })
-const NICKNAME_STYLE_SAVE_COST = 30
+const activeTab = ref("avatarFrame");
+const frames = ref<AvatarFrameDef[]>(AVATAR_FRAMES);
+const nicknameStyleForm = ref<NicknameStyle>({ ...DEFAULT_NICKNAME_STYLE });
+const NICKNAME_STYLE_SAVE_COST = 30;
 
-const userData = computed(() => settingsStore.userData)
-const equippedFrame = computed(() => userData.value?.equippedFrame)
-const gradientEffects: NicknameEffect[] = ['flame', 'neon', 'aurora', 'stardust', 'crystal', 'comet']
-const supportsGradient = computed(() => gradientEffects.includes(nicknameStyleForm.value.effect))
+const userData = computed(() => settingsStore.userData);
+const equippedFrame = computed(() => userData.value?.equippedFrame);
+const gradientEffects: NicknameEffect[] = [
+  "flame",
+  "neon",
+  "aurora",
+  "crystal",
+  "comet",
+  "hologram",
+  "inkflow",
+  "eclipse",
+];
+const supportsGradient = computed(() =>
+  gradientEffects.includes(nicknameStyleForm.value.effect),
+);
 const canSaveNicknameStyle = computed(() =>
-  isNicknameColorAllowedForTheme(nicknameStyleForm.value.color, settingsStore.effectiveTheme),
-)
+  isNicknameColorAllowedForTheme(
+    nicknameStyleForm.value.color,
+    settingsStore.effectiveTheme,
+  ),
+);
 
 const fontOptions = computed(() => [
-  { label: t('personalization.fontSystem'), value: 'system' as NicknameFont },
-  { label: t('personalization.fontRounded'), value: 'rounded' as NicknameFont },
-  { label: t('personalization.fontSerif'), value: 'serif' as NicknameFont },
-  { label: t('personalization.fontMono'), value: 'mono' as NicknameFont },
-  { label: t('personalization.fontFantasy'), value: 'fantasy' as NicknameFont },
-])
+  { label: t("personalization.fontSystem"), value: "system" as NicknameFont },
+  { label: t("personalization.fontRounded"), value: "rounded" as NicknameFont },
+  { label: t("personalization.fontSerif"), value: "serif" as NicknameFont },
+  { label: t("personalization.fontMono"), value: "mono" as NicknameFont },
+  { label: t("personalization.fontFantasy"), value: "fantasy" as NicknameFont },
+]);
 
 const weightOptions = computed(() => [
-  { label: t('personalization.weightNormal'), value: 'normal' },
-  { label: t('personalization.weightSemibold'), value: 'semibold' },
-  { label: t('personalization.weightBold'), value: 'bold' },
-])
+  { label: t("personalization.weightNormal"), value: "normal" },
+  { label: t("personalization.weightSemibold"), value: "semibold" },
+  { label: t("personalization.weightBold"), value: "bold" },
+]);
 
 const effectOptions = computed(() => [
-  { label: t('personalization.effectNone'), value: 'none' as NicknameEffect },
-  { label: t('personalization.effectGlow'), value: 'glow' as NicknameEffect },
+  { label: t("personalization.effectNone"), value: "none" as NicknameEffect },
+  { label: t("personalization.effectGlow"), value: "glow" as NicknameEffect },
+  { label: t("personalization.effectFlame"), value: "flame" as NicknameEffect },
+  { label: t("personalization.effectNeon"), value: "neon" as NicknameEffect },
   {
-    label: t('personalization.effectSparkle'),
-    value: 'sparkle' as NicknameEffect,
-  },
-  { label: t('personalization.effectFlame'), value: 'flame' as NicknameEffect },
-  { label: t('personalization.effectNeon'), value: 'neon' as NicknameEffect },
-  {
-    label: t('personalization.effectRainbow'),
-    value: 'rainbow' as NicknameEffect,
+    label: t("personalization.effectAurora"),
+    value: "aurora" as NicknameEffect,
   },
   {
-    label: t('personalization.effectAurora'),
-    value: 'aurora' as NicknameEffect,
+    label: t("personalization.effectCrystal"),
+    value: "crystal" as NicknameEffect,
+  },
+  { label: t("personalization.effectComet"), value: "comet" as NicknameEffect },
+  {
+    label: t("personalization.effectHeartbeat"),
+    value: "heartbeat" as NicknameEffect,
   },
   {
-    label: t('personalization.effectStardust'),
-    value: 'stardust' as NicknameEffect,
+    label: t("personalization.effectHologram"),
+    value: "hologram" as NicknameEffect,
   },
   {
-    label: t('personalization.effectCrystal'),
-    value: 'crystal' as NicknameEffect,
+    label: t("personalization.effectInkflow"),
+    value: "inkflow" as NicknameEffect,
   },
-  { label: t('personalization.effectComet'), value: 'comet' as NicknameEffect },
   {
-    label: t('personalization.effectHeartbeat'),
-    value: 'heartbeat' as NicknameEffect,
+    label: t("personalization.effectEclipse"),
+    value: "eclipse" as NicknameEffect,
   },
-])
+]);
 
 function normalizeNicknameStyleHexColors(style: NicknameStyle): NicknameStyle {
   return {
     ...style,
     color: normalizeNicknameHexColor(style.color) || style.color,
-    gradientStart: normalizeNicknameHexColor(style.gradientStart) || style.gradientStart,
-    gradientEnd: normalizeNicknameHexColor(style.gradientEnd) || style.gradientEnd,
-  }
+    gradientStart:
+      normalizeNicknameHexColor(style.gradientStart) || style.gradientStart,
+    gradientEnd:
+      normalizeNicknameHexColor(style.gradientEnd) || style.gradientEnd,
+  };
 }
 
 function syncNicknameStyleForm() {
@@ -241,128 +316,131 @@ function syncNicknameStyleForm() {
       ...(settingsStore.settings?.nicknameStyle || {}),
     },
     settingsStore.effectiveTheme,
-  ) || { ...DEFAULT_NICKNAME_STYLE }
-  nicknameStyleForm.value = normalizeNicknameStyleHexColors(style)
+  ) || { ...DEFAULT_NICKNAME_STYLE };
+  nicknameStyleForm.value = normalizeNicknameStyleHexColors(style);
 }
 
 function isEquipped(frameId: string): boolean {
-  return equippedFrame.value === frameId
+  return equippedFrame.value === frameId;
 }
 
 function isUnlocked(frame: AvatarFrameDef): boolean {
-  if (!userData.value) return false
-  return (userData.value.ownedFrames || []).includes(frame.id)
+  if (!userData.value) return false;
+  return (userData.value.ownedFrames || []).includes(frame.id);
 }
 
 function unlockText(frame: AvatarFrameDef): string {
   switch (frame.unlockMethod) {
-    case 'playtime':
-      return t('personalization.unlockPlaytime', {
+    case "playtime":
+      return t("personalization.unlockPlaytime", {
         hours: Math.max(1, Math.floor(frame.unlockValue / 3600000)),
-      })
-    case 'consecutive_checkin':
-      return t('personalization.unlockConsecutiveCheckIn', {
+      });
+    case "consecutive_checkin":
+      return t("personalization.unlockConsecutiveCheckIn", {
         days: frame.unlockValue,
-      })
-    case 'total_checkin':
-      return t('personalization.unlockTotalCheckIn', {
+      });
+    case "total_checkin":
+      return t("personalization.unlockTotalCheckIn", {
         days: frame.unlockValue,
-      })
-    case 'bzcoin':
-      return t('personalization.unlockBzCoin', { coins: frame.unlockValue })
+      });
+    case "bzcoin":
+      return t("personalization.unlockBzCoin", { coins: frame.unlockValue });
     default:
-      return ''
+      return "";
   }
 }
 
 function unlockIcon(frame: AvatarFrameDef) {
   switch (frame.unlockMethod) {
-    case 'playtime':
-      return TimeOutline
-    case 'consecutive_checkin':
-      return TodayOutline
-    case 'total_checkin':
-      return CalendarOutline
-    case 'bzcoin':
-      return WalletOutline
+    case "playtime":
+      return TimeOutline;
+    case "consecutive_checkin":
+      return TodayOutline;
+    case "total_checkin":
+      return CalendarOutline;
+    case "bzcoin":
+      return WalletOutline;
     default:
-      return TimeOutline
+      return TimeOutline;
   }
 }
 
 function handleEquipOrToggle(frame: AvatarFrameDef) {
   if (isEquipped(frame.id)) {
-    handleUnequip(frame.id)
+    handleUnequip(frame.id);
   } else if (isUnlocked(frame)) {
-    handleEquip(frame.id)
+    handleEquip(frame.id);
   }
 }
 
 async function handleEquip(frameId: string) {
-  await window.electronAPI.user.equipFrame(frameId)
-  await settingsStore.loadUserData()
+  await window.electronAPI.user.equipFrame(frameId);
+  await settingsStore.loadUserData();
 }
 
 async function handleUnequip(frameId: string) {
-  await window.electronAPI.user.unequipFrame(frameId)
-  await settingsStore.loadUserData()
+  await window.electronAPI.user.unequipFrame(frameId);
+  await settingsStore.loadUserData();
 }
 
 async function handleBuy(frame: AvatarFrameDef) {
-  const result = await window.electronAPI.user.buyFrame(frame.id)
+  const result = await window.electronAPI.user.buyFrame(frame.id);
   if (result.success) {
-    await settingsStore.loadUserData()
+    await settingsStore.loadUserData();
   }
 }
 
 async function saveNicknameStyle() {
   if (!canSaveNicknameStyle.value) {
-    message.warning(t('personalization.nicknameColorContrastWarning'))
-    return
+    message.warning(t("personalization.nicknameColorContrastWarning"));
+    return;
   }
   const result = await window.electronAPI.settings.saveNicknameStyle({
     ...nicknameStyleForm.value,
-  })
+  });
   if (!result.success) {
-    if (result.code === 'insufficient_coins') {
+    if (result.code === "insufficient_coins") {
       message.error(
-        t('personalization.nicknameStyleInsufficientCoins', {
+        t("personalization.nicknameStyleInsufficientCoins", {
           coins: NICKNAME_STYLE_SAVE_COST,
         }),
-      )
+      );
     } else {
-      message.error(t('settings.saveFail'))
+      message.error(t("settings.saveFail"));
     }
-    return
+    return;
   }
-  await settingsStore.loadSettings()
-  await settingsStore.loadUserData()
-  syncNicknameStyleForm()
+  await settingsStore.loadSettings();
+  await settingsStore.loadUserData();
+  syncNicknameStyleForm();
   message.success(
-    t('personalization.nicknameStyleSaved', {
+    t("personalization.nicknameStyleSaved", {
       coins: NICKNAME_STYLE_SAVE_COST,
     }),
-  )
+  );
 }
 
 async function resetNicknameStyle() {
-  nicknameStyleForm.value = { ...DEFAULT_NICKNAME_STYLE }
-  await saveNicknameStyle()
+  nicknameStyleForm.value = { ...DEFAULT_NICKNAME_STYLE };
+  await saveNicknameStyle();
 }
 
 onMounted(async () => {
-  await settingsStore.loadSettings()
-  await settingsStore.loadUserData()
-  syncNicknameStyleForm()
-})
+  await settingsStore.loadSettings();
+  await settingsStore.loadUserData();
+  syncNicknameStyleForm();
+});
 
 watch(
   () => settingsStore.effectiveTheme,
   () => {
     nicknameStyleForm.value =
-      adaptNicknameStyleForTheme(nicknameStyleForm.value, settingsStore.effectiveTheme) || nicknameStyleForm.value
+      adaptNicknameStyleForTheme(
+        nicknameStyleForm.value,
+        settingsStore.effectiveTheme,
+      ) || nicknameStyleForm.value;
   },
-)
+);
 </script>
 
 <style scoped>
@@ -437,7 +515,10 @@ watch(
 
 .nickname-style-panel {
   display: grid;
-  grid-template-columns: minmax(min(100%, 18rem), 0.85fr) minmax(min(100%, 24rem), 1.55fr);
+  grid-template-columns: minmax(min(100%, 18rem), 0.85fr) minmax(
+      min(100%, 24rem),
+      1.55fr
+    );
   gap: clamp(12px, 2vw, 20px);
   padding-top: clamp(12px, 2vw, 18px);
   align-items: start;

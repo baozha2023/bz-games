@@ -1,6 +1,6 @@
 declare const __BZ_CDN_BASE__: string;
 declare const __BZ_OSS_BASE__: string;
-declare const __BZ_MARKET_FALLBACK_INDEX_URL__: string;
+declare const __BZ_MARKET_OSS_INDEX_URL__: string;
 declare const __BZ_REFERER__: string;
 declare const __BZ_RELAY_SERVER_URL__: string;
 declare const __BZ_RELAY_PUBLIC_HOST__: string;
@@ -14,10 +14,10 @@ export const CDN_BASE = __BZ_CDN_BASE__;
 
 export const OSS_BASE = __BZ_OSS_BASE__;
 
-export const MARKET_PRIMARY_INDEX_URL =
+export const MARKET_GITHUB_INDEX_URL =
   "https://raw.githubusercontent.com/baozha2023/bz-games-market/master/market.json";
 
-export const MARKET_FALLBACK_INDEX_URL = __BZ_MARKET_FALLBACK_INDEX_URL__;
+export const MARKET_OSS_INDEX_URL = __BZ_MARKET_OSS_INDEX_URL__;
 
 export const GITHUB_API_BASE = "https://api.github.com/";
 

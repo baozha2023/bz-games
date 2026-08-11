@@ -4,7 +4,7 @@
 
 BZ-Games 官方服务是独立 Node.js 服务，提供 HTTP 房间查询、GitHub OAuth 登录、用户云数据存储和 WebSocket 透明转发能力。
 
-- HTTP：`/health`、`/rooms`、`/auth/github/start`、`/auth/github/callback`、`/api/auth/me`、`/api/auth/logout`、`/api/cloud/platform-snapshot`。
+- HTTP：`/health`、`/rooms`、`/auth/github/start`、`/auth/github/callback`、`/api/portal/v1/session`、`/api/auth/logout`、`/api/cloud/platform-snapshot`。
 - WebSocket：`relay:host`、`relay:join`、`relay:leave`、`relay:heartbeat`。
 - 转发内容：RoomMessage、Game API v1 JSON 消息、Game API v2 binary frame。
 - 房间码：中继服务器生成、发送和识别 `roomCode`。
@@ -503,7 +503,7 @@ ufw status
 - `MYSQL_HOST` / `MYSQL_USER` / `MYSQL_PASSWORD` / `MYSQL_DATABASE` 是否可用。
 - `MONGODB_URI` 是否可用。
 - `MAX_PLATFORM_CLOUD_SNAPSHOT_BYTES` 是否过小。
-- 上传时是否携带登录会话 Cookie 或 Bearer Token。
+- 上传时是否携带有效的 Bearer Session；客户端云同步接口不接受 Cookie，也不按角色或 capability 授权。
 - 客户端下载 `bz_games.db` 对应 SQL dump 后，是否能按会话 ID、成就业务键和统计 `event_id` 幂等合并，且不会创建游戏实体。
 
 ## 上线验证流程
@@ -531,6 +531,58 @@ MySQL已配置时，服务启动会执行统一 Schema 初始化并自动创建�
 示例中的值均不是生产配置。真实域名、数据库连接串、OAuth Secret和
 中继令牌只能写入服务器的 `/etc/systemd/system/bz-games-relay.service`，不得提交到仓库。
 
+# 最新桌面版下载部署
+
+生产 systemd 必须配置：
+
+```ini
+Environment=DESKTOP_RELEASE_STORAGE_DIR=/var/lib/bz-games-releases
+Environment=MAX_DESKTOP_RELEASE_FILE_BYTES=536870912
+Environment=DESKTOP_RELEASE_BANDWIDTH_BPS=50000000
+```
+
+创建发布账号和目录，账号不授予 sudo：
+
+```bash
+useradd --create-home --shell /bin/bash bz-release-deploy
+install -d -o bz-release-deploy -g bz-release-deploy -m 0750 /var/lib/bz-games-releases
+install -d -o bz-release-deploy -g bz-release-deploy -m 0750 /var/lib/bz-games-releases/.incoming
+```
+
+GitHub Environment、SSH 专用密钥和主机指纹配置见
+[`docs/GITHUB_ACTIONS_RELEASE_DEPLOY.md`](../docs/GITHUB_ACTIONS_RELEASE_DEPLOY.md)。发布工作流先以非阻塞方式获取
+`flock /var/lib/bz-games-releases/.publish.lock`，持锁完成流式上传并调用 `scripts/publish-desktop-release.js`。发布程序校验稳定
+semver、规范文件名、大小、PE 文件头和 SHA-256，原子切换 `latest.json` 后删除旧安装器和备份。
+
+管理端超级管理员可通过“平台版本”页面上传 EXE，普通管理员只能查看当前版本。该入口调用 `/api/admin/v1/desktop-release`，使用相同发布目录、
+`flock` 和发布程序，不维护第二套版本切换逻辑。上传最大请求体由 Node 接口按
+`MAX_DESKTOP_RELEASE_FILE_BYTES + 1 MiB` 流式限制；若管理端经 Nginx 代理，精确路由还必须把 `client_max_body_size`
+设置为不小于 513 MiB。管理端同样在读取请求体前非阻塞取锁；已有上传时立即返回
+`409 desktop_release_upload_busy`，不会等待或暂存第二个文件。
+
+现有 IP 站点增加精确 Nginx 路由，不能复用已经代理给其他服务的 `/api/`：
+
+```nginx
+location = /bz-games/api/v1/releases/latest/download {
+    proxy_pass http://127.0.0.1:38090;
+    proxy_http_version 1.1;
+    proxy_buffering off;
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
+}
+```
+
+修改后先执行 `nginx -t`，通过后再 reload。Nginx 不配置 `limit_rate`；所有下载共享的 50 Mbps 总上限由单实例
+Relay 内的 `GlobalBandwidthLimiter` 统一执行。若未来运行多个 Relay 实例，必须把限流迁移到共享网关，不能把每个
+实例都配置成 50 Mbps。
+
+公网验证：
+
+```bash
+curl -I http://39.106.221.85/bz-games/api/v1/releases/latest/download
+curl -H 'Range: bytes=0-1023' -o /dev/null -D - http://39.106.221.85/bz-games/api/v1/releases/latest/download
+```
+
 # 游戏托管部署补充
 
 生产 systemd 单元必须配置：
@@ -549,6 +601,6 @@ install -d -m 0750 /var/lib/bz-games-hosting/files
 install -d -m 0700 /var/lib/bz-games-hosting/tmp
 ```
 
-服务启动时初始化 `hosted_games`、`hosted_game_metadata_revisions`、`hosted_game_versions`、`hosted_game_assets` 四张表。`users.role` 固定为 `player/creator/administrator` 并作为 RBAC 唯一角色来源：客户端新用户为玩家，访问管理端后只升级为创作者，管理员不变，任何登录都不会造成角色降级。仓库只维护 `mysql-service.js` 中的最新初始化定义，不保存 `ALTER TABLE` 或迁移脚本。
+服务启动时初始化 `hosted_games`、`hosted_game_metadata_revisions`、`hosted_game_versions`、`hosted_game_assets` 四张表。`users.role` 固定为 `player/creator/administrator/super_administrator`，服务端将角色映射为管理端 capability：管理员不能修改角色或上传桌面客户端版本，超级管理员拥有全部 capability。桌面客户端 Bearer 接口只校验是否登录，不读取角色。所有 OAuth 新用户为玩家，登录永不改变已有角色；GitHub ID `208792845` 由初始化定义幂等设为初始超级管理员。仓库只维护 `mysql-service.js` 中的最新初始化定义，不保存 `ALTER TABLE` 或迁移脚本。
 
 逻辑前缀 `games.bzgames.top/` 不需要 DNS 或 Nginx 配置。ZIP 与市场图片均由客户端解析到 `relayServerUrl`，并要求 `RELAY_TOKEN`。

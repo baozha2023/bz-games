@@ -103,7 +103,7 @@ function createHarness() {
       PLATFORM_SNAPSHOT_GC_GRACE_MS: 0,
     },
     authService: {
-      getSessionFromRequest: async () => ({
+      getClientSessionFromRequest: async () => ({
         status: "authenticated",
         auth: { user: { id: 1 } },
       }),

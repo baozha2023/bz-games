@@ -1,42 +1,9 @@
 import { sendJson } from "../utils/ws.js";
+import { getCapabilities, hasCapability } from "./portal-authorization.js";
 
 export function createAccessControlService({ config, authService }) {
-  function isAdmin(auth) {
-    return auth?.user?.role === "administrator";
-  }
-
-  async function requireAuthenticated(req, res) {
-    const resolution = await authService.getSessionFromRequest(req);
-    if (resolution.status !== "authenticated") {
-      authService.sendAuthFailure(res, resolution.status);
-      return null;
-    }
-    return { ...resolution.auth, isAdmin: isAdmin(resolution.auth) };
-  }
-
-  async function requireAdmin(req, res) {
-    const auth = await requireAuthenticated(req, res);
-    if (!auth) return null;
-    if (!auth.isAdmin) {
-      sendJson(res, 403, { error: "forbidden" });
-      return null;
-    }
-    return auth;
-  }
-
-  async function requireCreator(req, res) {
-    const auth = await requireAuthenticated(req, res);
-    if (!auth) return null;
-    if (!auth.isAdmin && auth.user.role !== "creator") {
-      sendJson(res, 403, { error: "forbidden" });
-      return null;
-    }
-    return auth;
-  }
-
   function requirePortalOrigin(req, res) {
     const origin = String(req.headers.origin || "");
-    if (!req.headers.cookie) return true;
     let allowedOrigin = "";
     try {
       allowedOrigin = new URL(config.PORTAL_PUBLIC_URL).origin;
@@ -48,11 +15,25 @@ export function createAccessControlService({ config, authService }) {
     return true;
   }
 
-  return {
-    isAdmin,
-    requireAuthenticated,
-    requireCreator,
-    requireAdmin,
-    requirePortalOrigin,
-  };
+  async function requireCapability(req, res, capability, options = {}) {
+    if (options.requireOrigin && !requirePortalOrigin(req, res)) return null;
+    const resolution = await authService.getPortalSessionFromRequest(req);
+    if (resolution.status !== "authenticated") {
+      authService.sendAuthFailure(res, resolution.status);
+      return null;
+    }
+    const role = resolution.auth.user.role;
+    if (!hasCapability(role, capability)) {
+      sendJson(res, 403, { error: "forbidden" });
+      return null;
+    }
+    const capabilities = getCapabilities(role);
+    return {
+      ...resolution.auth,
+      capabilities,
+      can: (candidate) => capabilities.includes(candidate),
+    };
+  }
+
+  return { requireCapability };
 }

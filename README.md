@@ -116,6 +116,6 @@ bz-launcher/
 └── electron.vite.config.ts
 ```
 
-> 市场索引数据由独立的 [bz-games-market](https://github.com/baozha2023/bz-games-market) 仓库维护，平台通过两级市场架构拉取展示。
+> 市场索引数据由独立的 [bz-games-market](https://github.com/baozha2023/bz-games-market) 仓库维护并同步到 OSS。官方 `market.json` 优先从 OSS 单次读取（5 秒超时），失败后切换 GitHub（8 秒超时，仅网络错误、超时、HTTP 408/429/5xx 重试一次）；同一响应同时生成一级目录和官方二级索引。第三方市场直接读取各自 GitHub Raw 地址，并采用相同的 GitHub 有界重试策略。
 
-更多开发规范请参考 `CLAUDE.md`，游戏开发者指南请参考 `DEVELOPER_GUIDE.md`，Game API 文档见 `docs/GAME_API_V1_V2_REFERENCE.md`，未来规划见 `docs/ROADMAP.md`。
+更多开发规范请参考 `CLAUDE.md`，游戏开发者指南请参考 `DEVELOPER_GUIDE.md`，Game API 文档见 `docs/GAME_API_V1_V2_REFERENCE.md`，GitHub Actions 最新安装包部署见 `docs/GITHUB_ACTIONS_RELEASE_DEPLOY.md`，未来规划见 `docs/ROADMAP.md`。

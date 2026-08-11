@@ -1,6 +1,6 @@
 {
   "name": "bz-launcher",
-  "version": "3.2.0",
+  "version": "3.2.1",
   "description": "BZ-Games game platform",
   "main": "./out/main/index.js",
   "author": "BZ-Games",
@@ -16,7 +16,10 @@
     "typecheck:web": "vue-tsc --noEmit -p tsconfig.web.json",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "check:config": "node scripts/check-config-examples.mjs",
-    "test": "npm run test:database && npm run test:all --prefix relay-server",
+    "test": "npm run test:market && npm run test:nickname && npm run test:avatar-frame && npm run test:database && npm run test:all --prefix relay-server",
+    "test:market": "vitest run src/main/services/market",
+    "test:nickname": "vitest run src/shared/types/store.types.test.ts",
+    "test:avatar-frame": "vitest run src/shared/avatar-frames.test.ts",
     "test:database": "node scripts/run-database-test.mjs",
     "start": "electron-vite preview",
     "dev": "electron-vite dev",
@@ -63,6 +66,7 @@
     "prettier": "^3.3.2",
     "typescript": "^5.5.2",
     "vite": "^7.3.6",
+    "vitest": "^3.2.7",
     "vue-tsc": "^2.1.6"
   },
   "build": {

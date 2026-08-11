@@ -13,6 +13,7 @@ import { createMySqlService } from "./services/mysql-service.js";
 import { createSensitiveWordService } from "./services/sensitive-word-service.js";
 import { createFeedbackService } from "./services/feedback-service.js";
 import { createGameHostingService } from "./services/game-hosting-service.js";
+import { createReleaseDownloadService } from "./services/release-download-service.js";
 import { createPortalUserService } from "./services/portal-user-service.js";
 import { createRelayState } from "./state.js";
 import { send } from "./utils/ws.js";
@@ -22,7 +23,10 @@ const state = createRelayState();
 const mongoService = createMongoService({ config });
 const mySqlService = createMySqlService({ config });
 const authService = createAuthService({ config, mySqlService });
-const accessControlService = createAccessControlService({ config, authService });
+const accessControlService = createAccessControlService({
+  config,
+  authService,
+});
 const cloudDataService = createCloudDataService({
   config,
   authService,
@@ -41,7 +45,14 @@ const gameHostingService = createGameHostingService({
   mySqlService,
   accessControlService,
 });
-const portalUserService = createPortalUserService({ mySqlService, accessControlService });
+const releaseDownloadService = createReleaseDownloadService({
+  config,
+  accessControlService,
+});
+const portalUserService = createPortalUserService({
+  mySqlService,
+  accessControlService,
+});
 const adminStaticService = createAdminStaticService({ config });
 const roomService = createRoomService({ config, state, send });
 const sensitiveWordService = createSensitiveWordService();
@@ -58,6 +69,7 @@ const server = createHttpServer({
   authService,
   cloudDataService,
   gameHostingService,
+  releaseDownloadService,
   feedbackService,
   portalUserService,
   adminStaticService,

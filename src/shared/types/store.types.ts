@@ -55,18 +55,27 @@ export interface GameRecord {
 
 export type NicknameFont = "system" | "rounded" | "serif" | "mono" | "fantasy";
 
-export type NicknameEffect =
-  | "none"
-  | "glow"
-  | "sparkle"
-  | "flame"
-  | "neon"
-  | "rainbow"
-  | "aurora"
-  | "stardust"
-  | "crystal"
-  | "comet"
-  | "heartbeat";
+export const NICKNAME_EFFECTS = [
+  "none",
+  "glow",
+  "flame",
+  "neon",
+  "aurora",
+  "crystal",
+  "comet",
+  "heartbeat",
+  "hologram",
+  "inkflow",
+  "eclipse",
+] as const;
+
+export type NicknameEffect = (typeof NICKNAME_EFFECTS)[number];
+
+export function normalizeNicknameEffect(value: unknown): NicknameEffect {
+  return NICKNAME_EFFECTS.includes(value as NicknameEffect)
+    ? (value as NicknameEffect)
+    : "none";
+}
 
 export interface NicknameStyle {
   color: string;

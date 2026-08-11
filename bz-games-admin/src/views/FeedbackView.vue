@@ -141,6 +141,7 @@
       <n-space justify="end">
         <n-button @click="showDetail = false">关闭</n-button>
         <n-button
+          v-if="auth.can('feedback.manage')"
           type="primary"
           :loading="saving"
           :disabled="!detail"
@@ -297,7 +298,7 @@ async function openDetail(row: FeedbackItem) {
 }
 
 async function saveDetail() {
-  if (!detail.value) return;
+  if (!detail.value || !auth.can("feedback.manage")) return;
   saving.value = true;
   try {
     await api<{ ok: true }>(

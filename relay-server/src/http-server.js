@@ -10,6 +10,7 @@ export function createHttpServer({
   authService,
   cloudDataService,
   gameHostingService,
+  releaseDownloadService,
   feedbackService,
   portalUserService,
   adminStaticService,
@@ -25,6 +26,9 @@ export function createHttpServer({
         return;
       }
       if (await authService.handleRequest(req, res, url)) {
+        return;
+      }
+      if (await releaseDownloadService.handleRequest(req, res, url)) {
         return;
       }
       if (await gameHostingService.handleRequest(req, res, url)) {

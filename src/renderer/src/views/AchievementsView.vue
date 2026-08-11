@@ -35,10 +35,7 @@
         v-for="(game, index) in achievementCards"
         :key="game.id"
         v-show="index < visibleCount"
-        :class="[
-          'stagger-card-enter',
-          { 'golden-card': game.progress.percentage === 100 },
-        ]"
+        class="stagger-card-enter"
       >
         <n-thing>
           <template #avatar>
@@ -304,42 +301,6 @@ function getGameAchievements(gameId: string) {
   to {
     opacity: 1;
     transform: translateY(0);
-  }
-}
-
-.golden-card {
-  position: relative;
-  border: 1px solid var(--bz-gold);
-  box-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
-  transition: all 0.3s ease;
-  border-radius: 4px;
-  animation: golden-burn 2s ease-in-out infinite alternate;
-}
-
-.golden-card :deep(.n-thing) {
-  z-index: 1;
-  position: relative;
-}
-
-.golden-card .game-icon-wrapper {
-  box-shadow: 0 0 8px rgba(255, 215, 0, 0.6);
-  border: 1px solid rgba(255, 215, 0, 0.5);
-}
-
-@keyframes golden-burn {
-  0% {
-    box-shadow:
-      0 0 5px var(--bz-gold),
-      0 0 10px rgba(255, 215, 0, 0.5),
-      inset 0 0 5px rgba(255, 215, 0, 0.2);
-    border-color: var(--bz-gold);
-  }
-  100% {
-    box-shadow:
-      0 0 15px var(--bz-gold),
-      0 0 25px rgba(255, 140, 0, 0.6),
-      inset 0 0 10px rgba(255, 215, 0, 0.4);
-    border-color: #ffaa00;
   }
 }
 

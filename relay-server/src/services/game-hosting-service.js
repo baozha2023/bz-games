@@ -10,6 +10,7 @@ import semver from "semver";
 
 import { requireHttpRelayToken } from "../utils/relay-auth.js";
 import { sendJson } from "../utils/ws.js";
+import { PORTAL_CAPABILITIES } from "./portal-authorization.js";
 
 export const HOSTED_GAME_LOGICAL_PREFIX = "games.bzgames.top/";
 
@@ -588,6 +589,12 @@ function serializeAsset(row, gameId, version) {
 }
 
 export function createGameHostingService({ config, mySqlService, accessControlService }) {
+  const canManageAll = (auth) => auth.can(PORTAL_CAPABILITIES.HOSTING_ALL_MANAGE);
+  const canPublishDirectly = (auth) => auth.can(PORTAL_CAPABILITIES.HOSTING_PUBLISH_DIRECT);
+  const canManageOwnedResource = (auth, ownerUserId) =>
+    canManageAll(auth) ||
+    (auth.can(PORTAL_CAPABILITIES.HOSTING_OWN_MANAGE) &&
+      String(ownerUserId) === String(auth.user.id));
   if (
     !Number.isSafeInteger(config.MAX_GAME_HOSTING_FILE_BYTES) || config.MAX_GAME_HOSTING_FILE_BYTES <= 0 ||
     !Number.isSafeInteger(config.MAX_GAME_HOSTING_IMAGE_BYTES) || config.MAX_GAME_HOSTING_IMAGE_BYTES <= 0 ||
@@ -637,9 +644,11 @@ export function createGameHostingService({ config, mySqlService, accessControlSe
   }
 
   async function createVersion(req, res, gameIdFromRoute) {
-    if (!accessControlService.requirePortalOrigin(req, res)) { req.resume(); return; }
-    const auth = await accessControlService.requireCreator(req, res);
+    const auth = gameIdFromRoute
+      ? await accessControlService.requireCapability(req, res, PORTAL_CAPABILITIES.HOSTING_VERSION_CREATE, { requireOrigin: true })
+      : await accessControlService.requireCapability(req, res, PORTAL_CAPABILITIES.HOSTING_GAME_CREATE, { requireOrigin: true });
     if (!auth) { req.resume(); return; }
+    const publishDirectly = canPublishDirectly(auth);
     await ensureStorage();
     const requestId = crypto.randomUUID();
     const tempDir = path.join(tempRoot, requestId);
@@ -657,7 +666,7 @@ export function createGameHostingService({ config, mySqlService, accessControlSe
         const [gameRows] = await mySqlService.query("SELECT game_id, published_metadata_json, latest_version, owner_user_id FROM hosted_games WHERE game_id = ? LIMIT 1", [gameId]);
         if (!gameIdFromRoute && gameRows[0]) throw new GameHostingError("hosted_game_exists", 409);
         if (gameIdFromRoute && !gameRows[0]) throw new GameHostingError("hosted_game_not_found", 404);
-        if (gameIdFromRoute && !auth.isAdmin && String(gameRows[0].owner_user_id) !== String(auth.user.id)) throw new GameHostingError("forbidden", 403);
+        if (gameIdFromRoute && !canManageOwnedResource(auth, gameRows[0].owner_user_id)) throw new GameHostingError("forbidden", 403);
         const [versionRows] = await mySqlService.query("SELECT id FROM hosted_game_versions WHERE game_id = ? AND version = ? LIMIT 1", [gameId, parsed.version.version]);
         if (versionRows[0]) throw new GameHostingError("hosted_game_version_exists", 409);
         if ((await directoryUsage(filesDir)) + totalBytes > config.MAX_GAME_HOSTING_TOTAL_BYTES) throw new GameHostingError("game_hosting_capacity_exceeded", 507);
@@ -665,8 +674,8 @@ export function createGameHostingService({ config, mySqlService, accessControlSe
 
         const versionId = crypto.randomUUID();
         let gameMetadata = parsed.game || (gameRows[0].published_metadata_json ? parseDatabaseJson(gameRows[0].published_metadata_json) : null);
-        if (!auth.isAdmin && parsed.game) assertCreatorImageReferences(parsed.game);
-        if (auth.isAdmin && gameMetadata) for (const asset of parsed.assets) {
+        if (!publishDirectly && parsed.game) assertCreatorImageReferences(parsed.game);
+        if (publishDirectly && gameMetadata) for (const asset of parsed.assets) {
           if (asset.role === "icon") gameMetadata = { ...gameMetadata, iconUrl: toLogicalUrl(gameId, parsed.version.version, asset.role, asset.originalName) };
           if (asset.role === "cover") gameMetadata = { ...gameMetadata, coverUrl: toLogicalUrl(gameId, parsed.version.version, asset.role, asset.originalName) };
         }
@@ -681,10 +690,10 @@ export function createGameHostingService({ config, mySqlService, accessControlSe
                   (game_id, published_metadata_json, latest_version, owner_user_id, owner_github_login,
                    updated_by_user_id, updated_by_github_login, created_at, updated_at)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [gameId, auth.isAdmin ? JSON.stringify(gameMetadata) : null, auth.isAdmin ? parsed.version.version : null,
+                [gameId, publishDirectly ? JSON.stringify(gameMetadata) : null, publishDirectly ? parsed.version.version : null,
                  auth.user.id, auth.user.login || "", auth.user.id, auth.user.login || "", now, now],
               );
-              if (!auth.isAdmin) {
+              if (!publishDirectly) {
                 initialRevisionId = crypto.randomUUID();
                 await connection.query(
                   `INSERT INTO hosted_game_metadata_revisions
@@ -695,7 +704,7 @@ export function createGameHostingService({ config, mySqlService, accessControlSe
                   [initialRevisionId, gameId, JSON.stringify(parsed.game), auth.user.id, auth.user.login || "", now, now],
                 );
               }
-            } else if (auth.isAdmin) {
+            } else if (publishDirectly) {
               const latestVersion = parsed.setLatest ? parsed.version.version : gameRows[0].latest_version;
               await connection.query(
                 `UPDATE hosted_games SET published_metadata_json = ?, latest_version = ?, updated_by_user_id = ?,
@@ -709,9 +718,9 @@ export function createGameHostingService({ config, mySqlService, accessControlSe
                  uploader_user_id, uploader_github_login, reviewer_user_id,
                  reviewer_github_login, reviewed_at, created_at, updated_at)
                VALUES (?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?)`,
-              [versionId, gameId, parsed.version.version, JSON.stringify(parsed.version), auth.isAdmin ? "approved" : "pending",
-               initialRevisionId, auth.user.id, auth.user.login || "", auth.isAdmin ? auth.user.id : null,
-               auth.isAdmin ? auth.user.login || "" : "", auth.isAdmin ? now : null, now, now],
+              [versionId, gameId, parsed.version.version, JSON.stringify(parsed.version), publishDirectly ? "approved" : "pending",
+               initialRevisionId, auth.user.id, auth.user.login || "", publishDirectly ? auth.user.id : null,
+               publishDirectly ? auth.user.login || "" : "", publishDirectly ? now : null, now, now],
             );
             for (const asset of parsed.assets) {
               await connection.query(
@@ -731,10 +740,10 @@ export function createGameHostingService({ config, mySqlService, accessControlSe
       });
       sendJson(res, 201, {
         ok: true,
-        status: auth.isAdmin ? "approved" : "pending",
+        status: publishDirectly ? "approved" : "pending",
         gameId,
         version: parsed.version.version,
-        ...(auth.isAdmin ? { game: await buildGameConfig(gameId) } : {}),
+        ...(publishDirectly ? { game: await buildGameConfig(gameId) } : {}),
       });
     } finally {
       await fs.rm(tempDir, { recursive: true, force: true });
@@ -742,9 +751,9 @@ export function createGameHostingService({ config, mySqlService, accessControlSe
   }
 
   async function replaceVersion(req, res, gameId, version) {
-    if (!accessControlService.requirePortalOrigin(req, res)) { req.resume(); return; }
-    const auth = await accessControlService.requireCreator(req, res);
+    const auth = await accessControlService.requireCapability(req, res, PORTAL_CAPABILITIES.HOSTING_VIEW, { requireOrigin: true });
     if (!auth) { req.resume(); return; }
+    const publishDirectly = canPublishDirectly(auth);
     if (!GAME_ID_PATTERN.test(gameId) || !SEMVER_PATTERN.test(version)) throw new GameHostingError("hosted_game_version_not_found", 404);
     await ensureStorage();
     const tempDir = path.join(tempRoot, crypto.randomUUID());
@@ -765,8 +774,8 @@ export function createGameHostingService({ config, mySqlService, accessControlSe
         );
         const existing = rows[0];
         if (!existing) throw new GameHostingError("hosted_game_version_not_found", 404);
-        if (!auth.isAdmin) {
-          if (String(existing.owner_user_id) !== String(auth.user.id)) throw new GameHostingError("forbidden", 403);
+        if (!canManageOwnedResource(auth, existing.owner_user_id)) throw new GameHostingError("forbidden", 403);
+        if (!canManageAll(auth)) {
           if (!['pending', 'rejected'].includes(existing.status)) throw new GameHostingError("approved_submission_read_only", 409);
         }
         const [oldAssets] = await mySqlService.query(
@@ -796,9 +805,9 @@ export function createGameHostingService({ config, mySqlService, accessControlSe
               `UPDATE hosted_game_versions SET metadata_json = ?, status = ?, review_reason = '',
                  reviewer_user_id = NULL, reviewer_github_login = '', reviewed_at = NULL, updated_at = ?
                WHERE id = ?`,
-              [JSON.stringify(parsed.version), auth.isAdmin ? existing.status : 'pending', now, existing.id],
+              [JSON.stringify(parsed.version), publishDirectly ? existing.status : 'pending', now, existing.id],
             );
-            if (!auth.isAdmin && existing.initial_revision_id && !existing.published_metadata_json) {
+            if (!publishDirectly && existing.initial_revision_id && !existing.published_metadata_json) {
               await connection.query(
                 `UPDATE hosted_game_metadata_revisions SET status = 'pending', review_reason = '',
                    reviewer_user_id = NULL, reviewer_github_login = '', reviewed_at = NULL, updated_at = ?
@@ -816,7 +825,7 @@ export function createGameHostingService({ config, mySqlService, accessControlSe
                  asset.contentType, asset.size, asset.sha256, now],
               );
             }
-            if (auth.isAdmin && existing.status === 'approved' && existing.published_metadata_json) {
+            if (publishDirectly && existing.status === 'approved' && existing.published_metadata_json) {
               const metadata = parseDatabaseJson(existing.published_metadata_json);
               for (const asset of parsed.assets) if (asset.role === 'icon' || asset.role === 'cover') {
                 metadata[`${asset.role}Url`] = toLogicalUrl(gameId, version, asset.role, asset.originalName);
@@ -837,7 +846,7 @@ export function createGameHostingService({ config, mySqlService, accessControlSe
         await fs.rm(quarantine, { recursive: true, force: true });
         moved = false;
       });
-      sendJson(res, 200, { ok: true, status: auth.isAdmin ? undefined : 'pending' });
+      sendJson(res, 200, { ok: true, status: publishDirectly ? undefined : 'pending' });
     } finally {
       if (moved) {
         await fs.rm(finalDirectory, { recursive: true, force: true }).catch(() => {});
@@ -886,7 +895,7 @@ export function createGameHostingService({ config, mySqlService, accessControlSe
   }
 
   async function handleTree(req, res, url) {
-    const auth = await accessControlService.requireCreator(req, res);
+    const auth = await accessControlService.requireCapability(req, res, PORTAL_CAPABILITIES.HOSTING_VIEW);
     if (!auth) return;
     const page = Number(url.searchParams.get("page") || 1);
     const pageSize = Number(url.searchParams.get("pageSize") || 20);
@@ -895,7 +904,7 @@ export function createGameHostingService({ config, mySqlService, accessControlSe
     const pattern = `%${query.replace(/[\\%_]/g, "\\$&")}%`;
     const clauses = [];
     const params = [];
-    if (!auth.isAdmin) { clauses.push("g.owner_user_id = ?"); params.push(auth.user.id); }
+    if (!canManageAll(auth)) { clauses.push("g.owner_user_id = ?"); params.push(auth.user.id); }
     if (query) {
       clauses.push(`(g.game_id LIKE ? ESCAPE '\\\\' OR g.owner_github_login LIKE ? ESCAPE '\\\\'
         OR COALESCE(JSON_UNQUOTE(JSON_EXTRACT(g.published_metadata_json, '$.name')), '') LIKE ? ESCAPE '\\\\'
@@ -986,8 +995,7 @@ export function createGameHostingService({ config, mySqlService, accessControlSe
   }
 
   async function updateGame(req, res, gameId) {
-    if (!accessControlService.requirePortalOrigin(req, res)) return;
-    const auth = await accessControlService.requireCreator(req, res);
+    const auth = await accessControlService.requireCapability(req, res, PORTAL_CAPABILITIES.HOSTING_VIEW, { requireOrigin: true });
     if (!auth) return;
     if (!GAME_ID_PATTERN.test(gameId)) throw new GameHostingError("hosted_game_not_found", 404);
     const metadata = validateGameMetadata(await readJson(req), gameId);
@@ -999,7 +1007,8 @@ export function createGameHostingService({ config, mySqlService, accessControlSe
         [gameId],
       );
       if (!games[0]) throw new GameHostingError("hosted_game_not_found", 404);
-      if (auth.isAdmin) {
+      if (!canManageOwnedResource(auth, games[0].owner_user_id)) throw new GameHostingError("forbidden", 403);
+      if (canPublishDirectly(auth)) {
         await connection.query(
           `UPDATE hosted_games SET published_metadata_json = ?, updated_by_user_id = ?,
              updated_by_github_login = ?, updated_at = ? WHERE game_id = ?`,
@@ -1045,12 +1054,11 @@ export function createGameHostingService({ config, mySqlService, accessControlSe
         [auth.user.id, auth.user.login || "", now, gameId],
       );
     });
-    sendJson(res, 200, { ok: true, status: auth.isAdmin ? "approved" : "pending", revisionId });
+    sendJson(res, 200, { ok: true, status: canPublishDirectly(auth) ? "approved" : "pending", revisionId });
   }
 
   async function updateVersion(req, res, gameId, version) {
-    if (!accessControlService.requirePortalOrigin(req, res)) return;
-    const auth = await accessControlService.requireCreator(req, res);
+    const auth = await accessControlService.requireCapability(req, res, PORTAL_CAPABILITIES.HOSTING_VIEW, { requireOrigin: true });
     if (!auth) return;
     if (!GAME_ID_PATTERN.test(gameId) || !SEMVER_PATTERN.test(version)) throw new GameHostingError("hosted_game_version_not_found", 404);
     const metadata = validateVersionMetadata(await readJson(req));
@@ -1065,22 +1073,22 @@ export function createGameHostingService({ config, mySqlService, accessControlSe
         [gameId, version],
       );
       if (!rows[0]) throw new GameHostingError("hosted_game_version_not_found", 404);
-      if (!auth.isAdmin) {
-        if (String(rows[0].owner_user_id) !== String(auth.user.id)) throw new GameHostingError("forbidden", 403);
+      if (!canManageOwnedResource(auth, rows[0].owner_user_id)) throw new GameHostingError("forbidden", 403);
+      if (!canManageAll(auth)) {
         if (!['pending', 'rejected'].includes(rows[0].status)) throw new GameHostingError("approved_submission_read_only", 409);
       }
       const [result] = await connection.query(
         `UPDATE hosted_game_versions SET metadata_json = ?, status = ?, review_reason = '',
            reviewer_user_id = ?, reviewer_github_login = ?, reviewed_at = ?, updated_at = ?
          WHERE game_id = ? AND version = ?`,
-        [JSON.stringify(metadata), auth.isAdmin ? rows[0].status : "pending",
-         auth.isAdmin ? rows[0].reviewer_user_id || null : null,
-         auth.isAdmin ? rows[0].reviewer_github_login || "" : "",
-         auth.isAdmin ? rows[0].reviewed_at || null : null,
+        [JSON.stringify(metadata), canPublishDirectly(auth) ? rows[0].status : "pending",
+         canPublishDirectly(auth) ? rows[0].reviewer_user_id || null : null,
+         canPublishDirectly(auth) ? rows[0].reviewer_github_login || "" : "",
+         canPublishDirectly(auth) ? rows[0].reviewed_at || null : null,
          now, gameId, version],
       );
       if (!result.affectedRows) throw new GameHostingError("hosted_game_version_not_found", 404);
-      if (!auth.isAdmin && rows[0].initial_revision_id && !rows[0].published_metadata_json) {
+      if (!canPublishDirectly(auth) && rows[0].initial_revision_id && !rows[0].published_metadata_json) {
         await connection.query(
           `UPDATE hosted_game_metadata_revisions SET status = 'pending', review_reason = '',
              reviewer_user_id = NULL, reviewer_github_login = '', reviewed_at = NULL, updated_at = ?
@@ -1093,12 +1101,11 @@ export function createGameHostingService({ config, mySqlService, accessControlSe
         [auth.user.id, auth.user.login || "", now, gameId],
       );
     });
-    sendJson(res, 200, { ok: true, status: auth.isAdmin ? undefined : "pending" });
+    sendJson(res, 200, { ok: true, status: canPublishDirectly(auth) ? undefined : "pending" });
   }
 
   async function setLatestVersion(req, res, gameId) {
-    if (!accessControlService.requirePortalOrigin(req, res)) return;
-    const auth = await accessControlService.requireAdmin(req, res);
+    const auth = await accessControlService.requireCapability(req, res, PORTAL_CAPABILITIES.HOSTING_ALL_MANAGE, { requireOrigin: true });
     if (!auth) return;
     const body = assertObject(await readJson(req, 4096), "invalid_json");
     assertKnownKeys(body, new Set(["version"]), "invalid_json");
@@ -1135,8 +1142,7 @@ export function createGameHostingService({ config, mySqlService, accessControlSe
   }
 
   async function deleteVersion(req, res, gameId, version) {
-    if (!accessControlService.requirePortalOrigin(req, res)) return;
-    const auth = await accessControlService.requireCreator(req, res);
+    const auth = await accessControlService.requireCapability(req, res, PORTAL_CAPABILITIES.HOSTING_VIEW, { requireOrigin: true });
     if (!auth) return;
     if (!GAME_ID_PATTERN.test(gameId) || !SEMVER_PATTERN.test(version)) throw new GameHostingError("hosted_game_version_not_found", 404);
     await ensureStorage();
@@ -1148,8 +1154,8 @@ export function createGameHostingService({ config, mySqlService, accessControlSe
         [gameId, version],
       );
       if (!rows[0]) throw new GameHostingError("hosted_game_version_not_found", 404);
-      if (!auth.isAdmin) {
-        if (String(rows[0].owner_user_id) !== String(auth.user.id)) throw new GameHostingError("forbidden", 403);
+      if (!canManageOwnedResource(auth, rows[0].owner_user_id)) throw new GameHostingError("forbidden", 403);
+      if (!canManageAll(auth)) {
         if (!['pending', 'rejected'].includes(rows[0].status)) throw new GameHostingError("approved_submission_read_only", 409);
       }
       const [gameRows] = await mySqlService.query("SELECT published_metadata_json, latest_version FROM hosted_games WHERE game_id = ? LIMIT 1", [gameId]);
@@ -1185,8 +1191,7 @@ export function createGameHostingService({ config, mySqlService, accessControlSe
   }
 
   async function deleteGame(req, res, gameId) {
-    if (!accessControlService.requirePortalOrigin(req, res)) return;
-    if (!(await accessControlService.requireAdmin(req, res))) return;
+    if (!(await accessControlService.requireCapability(req, res, PORTAL_CAPABILITIES.HOSTING_ALL_MANAGE, { requireOrigin: true }))) return;
     if (!GAME_ID_PATTERN.test(gameId)) throw new GameHostingError("hosted_game_not_found", 404);
     await ensureStorage();
     await withStorageLock(async () => {
@@ -1221,8 +1226,7 @@ export function createGameHostingService({ config, mySqlService, accessControlSe
   }
 
   async function reviewVersion(req, res, versionId) {
-    if (!accessControlService.requirePortalOrigin(req, res)) return;
-    const auth = await accessControlService.requireAdmin(req, res);
+    const auth = await accessControlService.requireCapability(req, res, PORTAL_CAPABILITIES.HOSTING_REVIEW, { requireOrigin: true });
     if (!auth) return;
     const review = parseReviewBody(await readJson(req, 16 * 1024), true);
     await mySqlService.transaction(async (connection) => {
@@ -1290,8 +1294,7 @@ export function createGameHostingService({ config, mySqlService, accessControlSe
   }
 
   async function reviewRevision(req, res, revisionId) {
-    if (!accessControlService.requirePortalOrigin(req, res)) return;
-    const auth = await accessControlService.requireAdmin(req, res);
+    const auth = await accessControlService.requireCapability(req, res, PORTAL_CAPABILITIES.HOSTING_REVIEW, { requireOrigin: true });
     if (!auth) return;
     const review = parseReviewBody(await readJson(req, 16 * 1024), false);
     await mySqlService.transaction(async (connection) => {
@@ -1322,8 +1325,7 @@ export function createGameHostingService({ config, mySqlService, accessControlSe
   }
 
   async function deleteRevision(req, res, revisionId) {
-    if (!accessControlService.requirePortalOrigin(req, res)) return;
-    const auth = await accessControlService.requireCreator(req, res);
+    const auth = await accessControlService.requireCapability(req, res, PORTAL_CAPABILITIES.HOSTING_VIEW, { requireOrigin: true });
     if (!auth) return;
     await mySqlService.transaction(async (connection) => {
       const [rows] = await connection.query(
@@ -1331,8 +1333,8 @@ export function createGameHostingService({ config, mySqlService, accessControlSe
          JOIN hosted_games g ON g.game_id = r.game_id WHERE r.id = ? FOR UPDATE`, [revisionId],
       );
       if (!rows[0]) throw new GameHostingError("hosted_game_revision_not_found", 404);
-      if (!auth.isAdmin) {
-        if (String(rows[0].owner_user_id) !== String(auth.user.id)) throw new GameHostingError("forbidden", 403);
+      if (!canManageOwnedResource(auth, rows[0].owner_user_id)) throw new GameHostingError("forbidden", 403);
+      if (!canManageAll(auth)) {
         if (!['pending', 'rejected'].includes(rows[0].status)) throw new GameHostingError("approved_submission_read_only", 409);
       }
       const [linked] = await connection.query("SELECT id FROM hosted_game_versions WHERE initial_revision_id = ? LIMIT 1", [revisionId]);
@@ -1403,12 +1405,12 @@ export function createGameHostingService({ config, mySqlService, accessControlSe
       else if (req.method === "POST" && versionsCollectionMatch) await createVersion(req, res, decodeCanonicalSegment(versionsCollectionMatch[1]));
       else if (req.method === "GET" && treeCollection) await handleTree(req, res, url);
       else if (req.method === "GET" && configMatch) {
-        const auth = await accessControlService.requireCreator(req, res);
+        const auth = await accessControlService.requireCapability(req, res, PORTAL_CAPABILITIES.HOSTING_VIEW);
         if (!auth) return true;
         const gameId = decodeCanonicalSegment(configMatch[1]);
         const [games] = await mySqlService.query("SELECT owner_user_id FROM hosted_games WHERE game_id = ? LIMIT 1", [gameId]);
         if (!games[0]) throw new GameHostingError("hosted_game_not_found", 404);
-        if (!auth.isAdmin && String(games[0].owner_user_id) !== String(auth.user.id)) throw new GameHostingError("forbidden", 403);
+        if (!canManageOwnedResource(auth, games[0].owner_user_id)) throw new GameHostingError("forbidden", 403);
         sendJson(res, 200, await buildGameConfig(gameId));
       }
       else if (req.method === "PUT" && gameMatch) await updateGame(req, res, decodeCanonicalSegment(gameMatch[1]));

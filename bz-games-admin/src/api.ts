@@ -7,6 +7,16 @@ export class ApiError extends Error {
   }
 }
 
+let forbiddenHandler: (() => void) | null = null;
+
+export function setForbiddenHandler(handler: () => void) {
+  forbiddenHandler = handler;
+}
+
+function notifyForbidden(status: number) {
+  if (status === 403) forbiddenHandler?.();
+}
+
 export async function api<T>(url: string, options?: RequestInit): Promise<T> {
   const isFormData = options?.body instanceof FormData;
   const response = await fetch(url, {
@@ -21,6 +31,7 @@ export async function api<T>(url: string, options?: RequestInit): Promise<T> {
   });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
+    notifyForbidden(response.status);
     throw new ApiError(
       response.status,
       body.error || `http_${response.status}`,
@@ -55,6 +66,7 @@ export function upload<T>(
         body = {};
       }
       if (request.status < 200 || request.status >= 300) {
+        notifyForbidden(request.status);
         reject(
           new ApiError(
             request.status,

@@ -2,7 +2,12 @@ import { defineStore } from "pinia";
 import { ref } from "vue";
 
 import { api } from "../api";
-import { hasCapability, type PortalCapability, type PortalRole } from "../rbac";
+import {
+  isPortalCapability,
+  isPortalRole,
+  type PortalCapability,
+  type PortalRole,
+} from "../rbac";
 
 interface AdminUser {
   id: string;
@@ -11,43 +16,71 @@ interface AdminUser {
   role: PortalRole;
 }
 
+interface PortalSession {
+  user: AdminUser;
+  capabilities: PortalCapability[];
+  expiresAt: string;
+}
+
+function parseSession(value: unknown): PortalSession | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const body = value as Record<string, unknown>;
+  const user = body.user;
+  if (!user || typeof user !== "object" || Array.isArray(user)) return null;
+  const record = user as Record<string, unknown>;
+  if (
+    typeof record.id !== "string" ||
+    typeof record.login !== "string" ||
+    typeof record.avatarUrl !== "string" ||
+    !isPortalRole(record.role) ||
+    typeof body.expiresAt !== "string" ||
+    !Array.isArray(body.capabilities) ||
+    !body.capabilities.every(isPortalCapability)
+  ) return null;
+  return body as unknown as PortalSession;
+}
+
 export const useAuthStore = defineStore("auth", () => {
   const user = ref<AdminUser | null>(null);
-  const role = ref<PortalRole>("player");
+  const capabilities = ref<ReadonlySet<PortalCapability>>(new Set());
   const checked = ref(false);
-  const can = (capability: PortalCapability) => hasCapability(role.value, capability);
+  let refreshPromise: Promise<void> | null = null;
+
+  const can = (capability: PortalCapability) => capabilities.value.has(capability);
+
+  function clear() {
+    user.value = null;
+    capabilities.value = new Set();
+  }
 
   async function refresh() {
-    try {
-      let body = await api<{ user: AdminUser; role: PortalRole }>("/api/auth/me");
-      if (body.role === "player") {
-        await api<{ ok: true; role: "creator" }>("/api/portal/v1/activate", {
-          method: "POST",
-        });
-        body = await api<{ user: AdminUser; role: PortalRole }>("/api/auth/me");
+    if (refreshPromise) return refreshPromise;
+    refreshPromise = (async () => {
+      try {
+        const session = parseSession(await api<unknown>("/api/portal/v1/session"));
+        if (!session) throw new Error("invalid_portal_session");
+        user.value = session.user;
+        capabilities.value = new Set(session.capabilities);
+      } catch {
+        clear();
+      } finally {
+        checked.value = true;
+        refreshPromise = null;
       }
-      user.value = body.user;
-      role.value = body.role;
-    } catch {
-      user.value = null;
-      role.value = "player";
-    } finally {
-      checked.value = true;
-    }
+    })();
+    return refreshPromise;
   }
 
   function login() {
-    const returnTo = window.location.href;
     window.location.assign(
-      `/auth/github/start?returnTo=${encodeURIComponent(returnTo)}`,
+      `/auth/github/start?returnTo=${encodeURIComponent(window.location.href)}`,
     );
   }
 
   async function logout() {
     await api("/api/auth/logout", { method: "POST" });
-    user.value = null;
-    role.value = "player";
+    clear();
   }
 
-  return { user, role, can, checked, refresh, login, logout };
+  return { user, can, checked, refresh, login, logout };
 });

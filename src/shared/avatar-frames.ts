@@ -73,8 +73,105 @@ export const AVATAR_FRAMES: AvatarFrameDef[] = [
     unlockMethod: "playtime",
     unlockValue: 72000000,
   },
+  {
+    id: "starry_compass",
+    name: "星河罗盘",
+    description: "深蓝星轨与鎏金罗盘交织，指引穿越群星的方向",
+    imageFileName: "Starry_Compass.png",
+    rarity: "epic",
+    unlockMethod: "playtime",
+    unlockValue: 360000000,
+  },
+  {
+    id: "jade_bamboo_clouds",
+    name: "青竹流云",
+    description: "青竹环翠，祥云舒卷，藏一份东方雅意",
+    imageFileName: "Jade_Bamboo_Clouds.png",
+    rarity: "rare",
+    unlockMethod: "consecutive_checkin",
+    unlockValue: 14,
+  },
+  {
+    id: "molten_gold_movement",
+    name: "熔金机芯",
+    description: "黄铜齿轮精密咬合，红晶映照不息的机械心脏",
+    imageFileName: "Molten_Gold_Movement.png",
+    rarity: "legendary",
+    unlockMethod: "bzcoin",
+    unlockValue: 500,
+  },
+  {
+    id: "frost_crown",
+    name: "霜华王冠",
+    description: "银蓝霜纹凝成冠冕，静候冬日荣光加冕",
+    imageFileName: "Frost_Crown.png",
+    rarity: "rare",
+    unlockMethod: "total_checkin",
+    unlockValue: 30,
+  },
+  {
+    id: "kintsugi_moon_ring",
+    name: "金缮月轮",
+    description: "素瓷历经裂变，以漆与金重新连缀成月",
+    imageFileName: "Kintsugi_Moon_Ring.png",
+    rarity: "epic",
+    unlockMethod: "total_checkin",
+    unlockValue: 60,
+  },
+  {
+    id: "pixel_warp",
+    name: "像素跃迁",
+    description: "霓虹像素构成跃迁通道，通往八比特之外的世界",
+    imageFileName: "Pixel_Warp.png",
+    rarity: "epic",
+    unlockMethod: "playtime",
+    unlockValue: 720000000,
+  },
+  {
+    id: "spring_kite_letter",
+    name: "纸鸢春信",
+    description: "纸鸢、流云与同心结，捎来一封明快春信",
+    imageFileName: "Spring_Kite_Letter.png",
+    rarity: "rare",
+    unlockMethod: "consecutive_checkin",
+    unlockValue: 30,
+  },
+  {
+    id: "ember_dragonspine",
+    name: "龙脊余烬",
+    description: "黑曜龙鳞封存熔火，余烬仍沿古老脊线流淌",
+    imageFileName: "Ember_Dragonspine.png",
+    rarity: "legendary",
+    unlockMethod: "bzcoin",
+    unlockValue: 800,
+  },
 ];
 
-export function getFrameImageFileName(frameId: string): string | undefined {
-  return AVATAR_FRAMES.find((f) => f.id === frameId)?.imageFileName;
+const AVATAR_FRAME_BY_ID = new Map(
+  AVATAR_FRAMES.map((frame) => [frame.id, frame] as const),
+);
+
+const AVATAR_FRAME_FILE_NAMES = new Set(
+  AVATAR_FRAMES.map((frame) => frame.imageFileName),
+);
+
+export function normalizeAvatarFrameId(value: unknown): string | undefined {
+  return typeof value === "string" && AVATAR_FRAME_BY_ID.has(value)
+    ? value
+    : undefined;
+}
+
+export function normalizeAvatarFrameFileName(
+  value: unknown,
+): string | undefined {
+  return typeof value === "string" && AVATAR_FRAME_FILE_NAMES.has(value)
+    ? value
+    : undefined;
+}
+
+export function getFrameImageFileName(frameId: unknown): string | undefined {
+  const normalizedFrameId = normalizeAvatarFrameId(frameId);
+  return normalizedFrameId
+    ? AVATAR_FRAME_BY_ID.get(normalizedFrameId)?.imageFileName
+    : undefined;
 }

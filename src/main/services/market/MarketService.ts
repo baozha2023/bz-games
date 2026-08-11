@@ -14,10 +14,6 @@ import {
 import {
   GameType,
   isGitHubReleaseUrl,
-  isValidMarketImageUrl,
-  MarketDirectorySchema,
-  MarketGameSchema,
-  MarketGameVersionSchema,
   type DownloadTaskSnapshot,
   type FloatBallProgress,
   type MarketErrorCode,
@@ -28,27 +24,21 @@ import {
   type MarketTaskState,
   type MarketTaskStatus,
 } from "../../../shared/types";
-import { z } from "zod";
 import { GameLoader } from "../game/GameLoader";
 import { logger } from "../../utils/logger";
 import { mainWindow, floatBallWindow } from "../../window";
-import {
-  GITHUB_API_BASE,
-  GITHUB_RAW_BASE,
-  MARKET_FALLBACK_INDEX_URL,
-  MARKET_PRIMARY_INDEX_URL,
-} from "../../../shared/AppConstants";
+import { GITHUB_API_BASE } from "../../../shared/AppConstants";
 import { requestInterceptor } from "../../utils/requestInterceptor";
 import {
   resolveMarketDownloadUrl,
   resolveMarketImageUrl,
 } from "./HostedGameUrl";
-
-function gitToRawUrl(repository: string, branch: string): string {
-  const match = repository.match(/github\.com\/(.+?)\/(.+?)(?:\.git)?$/);
-  if (!match) throw new Error(`market_unsupported_repo:${repository}`);
-  return `${GITHUB_RAW_BASE}${match[1]}/${match[2]}/${branch}/market.json`;
-}
+import {
+  getMarketSourceKey,
+  marketCatalogClient,
+  type MarketCatalogClient,
+  type OfficialMarketCatalog,
+} from "./MarketCatalogClient";
 
 interface TaskMeta {
   gameId: string;
@@ -322,10 +312,21 @@ async function resolveImportRoot(extractRoot: string): Promise<string> {
 }
 
 export class MarketService {
+  constructor(
+    private readonly catalogClient: Pick<
+      MarketCatalogClient,
+      "fetchOfficialCatalog" | "fetchExternalIndex"
+    > = marketCatalogClient,
+  ) {}
+
   private readonly tasks = new Map<string, ActiveTask>();
-  private cachedIndexes = new Map<number, { index: MarketIndex; at: number }>();
-  private cachedSources: MarketDirectory | null = null;
-  private cachedSourcesAt = 0;
+  private officialCatalogCache: OfficialMarketCatalog | null = null;
+  private officialCatalogInFlight: Promise<OfficialMarketCatalog> | null = null;
+  private externalIndexCache = new Map<
+    string,
+    { index: MarketIndex; at: number }
+  >();
+  private externalIndexInFlight = new Map<string, Promise<MarketIndex>>();
   private cachedImages = new Map<string, { dataUrl: string; at: number }>();
   private resolvedAssets = new Map<
     string,
@@ -895,288 +896,93 @@ export class MarketService {
     return state;
   }
 
-  private async fetchJson(url: string): Promise<unknown> {
-    const response = await withRetry(
-      () =>
-        fetch(url, {
-          headers: requestInterceptor.buildHeaders(url, {
-            Accept: "application/json",
-            "Cache-Control": "no-cache",
-          }),
-        }),
-      3,
-      1000,
+  private isFresh(timestamp: number): boolean {
+    return Date.now() - timestamp < MarketService.CACHE_TTL_MS;
+  }
+
+  private pruneExternalIndexCache(directory: MarketDirectory): void {
+    const activeKeys = new Set(
+      directory.sources.slice(1).map(getMarketSourceKey),
     );
-    if (!response.ok) {
-      throw new Error(`market_index_request_failed:${response.status}`);
+    for (const key of this.externalIndexCache.keys()) {
+      if (!activeKeys.has(key)) this.externalIndexCache.delete(key);
     }
-    return await response.json();
   }
 
-  private async fetchIndexFromUrl(url: string): Promise<MarketIndex> {
-    const raw = (await this.fetchJson(url)) as Record<string, unknown>;
-    const TopLevelSchema = z.object({
-      schemaVersion: z.string().min(1),
-      marketId: z.string().min(1),
-      marketName: z.string().min(1),
-      generatedAt: z.string().datetime(),
-      updatedAt: z.string().datetime(),
-      author: z.string().min(1).max(100).optional(),
-      repository: z.string().url().optional(),
-      games: z.array(z.unknown()),
-    });
-    const top = TopLevelSchema.parse(raw);
-    const rawGames = Array.isArray(raw.games) ? raw.games : [];
-
-    const validGames: z.infer<typeof MarketGameSchema>[] = [];
-    let skippedCount = 0;
-
-    for (const rawGame of rawGames) {
-      const parsed = this.parseGameTolerant(rawGame);
-      if (parsed) {
-        validGames.push(parsed);
-      } else {
-        skippedCount++;
-      }
+  private async getOfficialCatalog(
+    forceRefresh: boolean,
+  ): Promise<OfficialMarketCatalog> {
+    if (
+      !forceRefresh &&
+      this.officialCatalogCache &&
+      this.isFresh(this.officialCatalogCache.fetchedAt)
+    ) {
+      return this.officialCatalogCache;
     }
+    if (this.officialCatalogInFlight) return this.officialCatalogInFlight;
 
-    if (skippedCount > 0) {
-      logger.warn(
-        `[MarketService] Skipped ${skippedCount} invalid game(s) while loading market index from ${url}`,
-      );
-    }
-
-    return {
-      schemaVersion: top.schemaVersion,
-      marketId: top.marketId,
-      marketName: top.marketName,
-      generatedAt: top.generatedAt,
-      updatedAt: top.updatedAt,
-      author: top.author,
-      repository: top.repository,
-      games: validGames.filter((game) => game.visibility !== "hidden"),
-    };
-  }
-
-  private parseGameTolerant(
-    rawGame: unknown,
-  ): z.infer<typeof MarketGameSchema> | null {
-    const fullResult = MarketGameSchema.safeParse(rawGame);
-    if (fullResult.success) return fullResult.data;
-
-    if (!rawGame || typeof rawGame !== "object") return null;
-    const g = rawGame as Record<string, unknown>;
-    const gameId = typeof g.id === "string" ? g.id : "(unknown)";
-
-    const GameMetaSchema = z.object({
-      id: z.string().min(1),
-      name: z.string().min(1).max(100),
-      author: z.string().min(1).max(100),
-      author_url: z.string().url().optional(),
-      type: z.nativeEnum(GameType),
-      summary: z.string().min(1).max(200),
-      tags: z.array(z.string().min(1)).optional(),
-      iconUrl: z
-        .string()
-        .refine((url) => isValidMarketImageUrl(url, "icon"))
-        .optional(),
-      coverUrl: z
-        .string()
-        .refine((url) => isValidMarketImageUrl(url, "cover"))
-        .optional(),
-      screenshots: z.array(z.string().url()).optional(),
-      featured: z.boolean().optional(),
-      visibility: z.enum(["public", "hidden", "deprecated"]).optional(),
-      minPlayers: z.number().int().min(1).optional(),
-      maxPlayers: z.number().int().min(1).optional(),
-      latestVersion: z.string().min(1),
-      versions: z.array(z.unknown()),
-    });
-
-    const metaResult = GameMetaSchema.safeParse(rawGame);
-    if (!metaResult.success) {
-      logger.warn(
-        `[MarketService] Skipping game "${gameId}": invalid metadata`,
-        metaResult.error.issues.map((i) => i.path.join(".")),
-      );
-      return null;
-    }
-
-    const rawVersions = Array.isArray(metaResult.data.versions)
-      ? metaResult.data.versions
-      : [];
-    const validVersions: z.infer<typeof MarketGameVersionSchema>[] = [];
-    for (const rv of rawVersions) {
-      const vr = MarketGameVersionSchema.safeParse(rv);
-      if (vr.success) {
-        validVersions.push(vr.data);
-      } else if (rv && typeof rv === "object" && "version" in rv) {
-        logger.warn(
-          `[MarketService] Skipping invalid version "${rv.version}" for game "${gameId}"`,
-          vr.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`),
-        );
-      }
-    }
-
-    if (validVersions.length === 0) {
-      logger.warn(
-        `[MarketService] Skipping game "${gameId}": no valid versions`,
-      );
-      return null;
-    }
-
-    const latestVersion =
-      validVersions.find((v) => v.version === metaResult.data.latestVersion)
-        ?.version || validVersions[0].version;
-
-    return {
-      id: metaResult.data.id,
-      name: metaResult.data.name,
-      author: metaResult.data.author,
-      author_url: metaResult.data.author_url,
-      type: metaResult.data.type,
-      summary: metaResult.data.summary,
-      tags: metaResult.data.tags,
-      iconUrl: metaResult.data.iconUrl,
-      coverUrl: metaResult.data.coverUrl,
-      screenshots: metaResult.data.screenshots,
-      featured: metaResult.data.featured,
-      visibility: metaResult.data.visibility,
-      minPlayers: metaResult.data.minPlayers,
-      maxPlayers: metaResult.data.maxPlayers,
-      latestVersion,
-      versions: validVersions,
-    };
-  }
-
-  private async fetchDirectory(): Promise<MarketDirectory> {
+    const request = this.catalogClient.fetchOfficialCatalog();
+    this.officialCatalogInFlight = request;
     try {
-      const raw = await this.fetchJson(MARKET_PRIMARY_INDEX_URL);
-      return MarketDirectorySchema.parse(raw);
-    } catch (primaryError) {
-      logger.warn(
-        "[MarketService] Failed to load market directory from GitHub, falling back to OSS",
-        primaryError,
-      );
-      try {
-        const raw = await this.fetchJson(MARKET_FALLBACK_INDEX_URL);
-        return MarketDirectorySchema.parse(raw);
-      } catch (fallbackError) {
-        logger.error(
-          "[MarketService] Failed to load market directory from OSS fallback",
-          fallbackError,
-        );
-        const primaryMessage =
-          primaryError instanceof Error
-            ? primaryError.message
-            : String(primaryError);
-        const fallbackMessage =
-          fallbackError instanceof Error
-            ? fallbackError.message
-            : String(fallbackError);
-        throw new Error(
-          `market_directory_all_sources_failed:github=${primaryMessage};oss=${fallbackMessage}`,
-        );
+      const catalog = await request;
+      this.officialCatalogCache = catalog;
+      this.pruneExternalIndexCache(catalog.directory);
+      return catalog;
+    } finally {
+      if (this.officialCatalogInFlight === request) {
+        this.officialCatalogInFlight = null;
       }
     }
-  }
-
-  private async fetchIndexInternal(): Promise<MarketIndex> {
-    try {
-      return await this.fetchIndexFromUrl(MARKET_PRIMARY_INDEX_URL);
-    } catch (primaryError) {
-      logger.warn(
-        "[MarketService] Failed to load market index from GitHub, falling back to OSS",
-        primaryError,
-      );
-      try {
-        return await this.fetchIndexFromUrl(MARKET_FALLBACK_INDEX_URL);
-      } catch (fallbackError) {
-        logger.error(
-          "[MarketService] Failed to load market index from OSS fallback",
-          fallbackError,
-        );
-        const primaryMessage =
-          primaryError instanceof Error
-            ? primaryError.message
-            : String(primaryError);
-        const fallbackMessage =
-          fallbackError instanceof Error
-            ? fallbackError.message
-            : String(fallbackError);
-        throw new Error(
-          `market_index_all_sources_failed:github=${primaryMessage};oss=${fallbackMessage}`,
-        );
-      }
-    }
-  }
-
-  private async fetchIndexForSource(sourceIdx: number): Promise<MarketIndex> {
-    const sources = await this.getSources();
-    const source = sources.sources[sourceIdx];
-    if (!source) throw new Error("market_source_not_found");
-    const url = gitToRawUrl(source.repository, source.branch);
-    return await this.fetchIndexFromUrl(url);
   }
 
   async getSources(forceRefresh = false): Promise<MarketDirectory> {
-    if (forceRefresh) {
-      this.cachedImages.clear();
-    }
-    const now = Date.now();
-    if (
-      !forceRefresh &&
-      this.cachedSources &&
-      now - this.cachedSourcesAt < MarketService.CACHE_TTL_MS
-    ) {
-      return this.cachedSources;
-    }
-    const parsed = await this.fetchDirectory();
-    this.cachedSources = parsed;
-    this.cachedSourcesAt = now;
-    return parsed;
+    if (forceRefresh) this.cachedImages.clear();
+    return (await this.getOfficialCatalog(forceRefresh)).directory;
   }
 
   async getIndex(
     sourceIdx: number,
     forceRefresh = false,
   ): Promise<MarketIndex> {
-    if (forceRefresh) {
-      this.cachedImages.clear();
+    if (!Number.isInteger(sourceIdx) || sourceIdx < 0) {
+      throw new Error("market_source_not_found");
     }
-    const now = Date.now();
-    const cached = this.cachedIndexes.get(sourceIdx);
-    if (
-      !forceRefresh &&
-      cached &&
-      now - cached.at < MarketService.CACHE_TTL_MS
-    ) {
-      logger.info(
-        `[MarketService] Returning cached market index for source ${sourceIdx}`,
-      );
+    if (forceRefresh) this.cachedImages.clear();
+
+    const catalog = await this.getOfficialCatalog(forceRefresh);
+    const source = catalog.directory.sources[sourceIdx];
+    if (!source) throw new Error("market_source_not_found");
+    if (sourceIdx === 0) return catalog.index;
+
+    const key = getMarketSourceKey(source);
+    const cached = this.externalIndexCache.get(key);
+    if (!forceRefresh && cached && this.isFresh(cached.at)) {
       return cached.index;
     }
-    logger.info(
-      `[MarketService] Fetching fresh market index for source ${sourceIdx}`,
-    );
+    const inFlight = this.externalIndexInFlight.get(key);
+    if (inFlight) return inFlight;
 
-    const directory = await this.getSources();
-    const source = directory.sources[sourceIdx];
-    if (!source) throw new Error("market_source_not_found");
-
-    const index =
-      sourceIdx === 0
-        ? await this.fetchIndexInternal()
-        : await this.fetchIndexForSource(sourceIdx);
-
-    if (index.marketId !== source.marketId) {
-      throw new Error(
-        `market_id_mismatch:expected=${source.marketId};actual=${index.marketId}`,
-      );
+    const request = this.catalogClient.fetchExternalIndex(source);
+    this.externalIndexInFlight.set(key, request);
+    try {
+      const index = await request;
+      if (index.marketId !== source.marketId) {
+        throw new Error(
+          `market_id_mismatch:expected=${source.marketId};actual=${index.marketId}`,
+        );
+      }
+      const isCurrentSource = this.officialCatalogCache?.directory.sources
+        .slice(1)
+        .some((currentSource) => getMarketSourceKey(currentSource) === key);
+      if (isCurrentSource) {
+        this.externalIndexCache.set(key, { index, at: Date.now() });
+      }
+      return index;
+    } finally {
+      if (this.externalIndexInFlight.get(key) === request) {
+        this.externalIndexInFlight.delete(key);
+      }
     }
-
-    this.cachedIndexes.set(sourceIdx, { index, at: now });
-    return index;
   }
 
   async getCachedImageDataUrl(url: string): Promise<string> {

@@ -1,0 +1,94 @@
+name: Sync latest desktop release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Stable release tag, for example v3.2.0
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      tag:
+        description: Stable release tag, for example v3.2.0
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-desktop-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: production-download
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.tag }}
+      SSH_HOST: ${{ vars.RELEASE_SERVER_HOST }}
+      SSH_PORT: ${{ vars.RELEASE_SERVER_PORT }}
+      SSH_USER: ${{ vars.RELEASE_SERVER_USER }}
+      RELEASE_STORAGE_DIR: /var/lib/bz-games-releases
+    steps:
+      - name: Validate release and download installer
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]] || { echo "Tag must be a stable vX.Y.Z version" >&2; exit 1; }
+          version="${RELEASE_TAG#v}"
+          expected="BZ-Games-Setup-${version}.exe"
+          release_json="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}")"
+          [[ "$(jq -r '.draft' <<<"$release_json")" == "false" ]] || { echo "Draft releases cannot be deployed" >&2; exit 1; }
+          [[ "$(jq -r '.prerelease' <<<"$release_json")" == "false" ]] || { echo "Prereleases cannot be deployed" >&2; exit 1; }
+          mapfile -t asset_ids < <(jq -r --arg name "$expected" '.assets[] | select(.name == $name) | .id' <<<"$release_json")
+          [[ "${#asset_ids[@]}" -eq 1 ]] || { echo "Expected exactly one asset named $expected" >&2; exit 1; }
+          gh api "repos/${GITHUB_REPOSITORY}/releases/assets/${asset_ids[0]}" -H "Accept: application/octet-stream" > installer.exe
+          [[ "$(head -c 2 installer.exe)" == "MZ" ]] || { echo "Release asset is not a Windows executable" >&2; exit 1; }
+          size="$(stat -c %s installer.exe)"
+          [[ "$size" -gt 0 && "$size" -le 536870912 ]] || { echo "Release asset size is outside the allowed range" >&2; exit 1; }
+          sha256="$(sha256sum installer.exe | cut -d' ' -f1)"
+          staged="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.exe"
+          {
+            echo "version=$version"
+            echo "size=$size"
+            echo "sha256=$sha256"
+            echo "staged=$staged"
+          } >> "$GITHUB_ENV"
+
+      - name: Configure pinned SSH identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          install -d -m 0700 ~/.ssh
+          printf '%s\n' '${{ secrets.RELEASE_SERVER_SSH_PRIVATE_KEY }}' | tr -d '\r' > ~/.ssh/release_deploy
+          chmod 0600 ~/.ssh/release_deploy
+          printf '%s\n' '${{ secrets.RELEASE_SERVER_KNOWN_HOSTS }}' | tr -d '\r' > ~/.ssh/known_hosts
+          chmod 0644 ~/.ssh/known_hosts
+          [[ -n "$SSH_HOST" && -n "$SSH_PORT" && -n "$SSH_USER" ]] || { echo "Release server variables are incomplete" >&2; exit 1; }
+
+      - name: Lock, upload and atomically publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh_args=(-i ~/.ssh/release_deploy -p "$SSH_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
+          staged_path="$RELEASE_STORAGE_DIR/.incoming/$staged"
+          remote_command="flock -n -E 75 '$RELEASE_STORAGE_DIR/.publish.lock' /bin/bash -c 'set -euo pipefail; staged_path=\"$staged_path\"; trap \"rm -f -- \\\"\$staged_path\\\"\" EXIT; umask 077; cat > \"\$staged_path\"; /usr/bin/node /opt/bz-games-relay/scripts/publish-desktop-release.js --staged \"\$staged_path\" --version \"$version\" --sha256 \"$sha256\" --size \"$size\"'"
+          set +e
+          ssh "${ssh_args[@]}" "$SSH_USER@$SSH_HOST" "$remote_command" < installer.exe
+          publish_status=$?
+          set -e
+          if [[ "$publish_status" -eq 75 ]]; then
+            echo "Another desktop release upload is already running" >&2
+            exit 1
+          fi
+          [[ "$publish_status" -eq 0 ]] || exit "$publish_status"
+
+      - name: Remove runner credentials
+        if: always()
+        shell: bash
+        run: rm -f ~/.ssh/release_deploy installer.exe

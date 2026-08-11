@@ -1,7 +1,11 @@
 <template>
   <n-config-provider>
     <n-message-provider>
-      <n-layout v-if="auth.user" has-sider class="app-shell">
+      <n-layout
+        v-if="auth.user && auth.can('hosting.view')"
+        has-sider
+        class="app-shell"
+      >
         <n-layout-sider
           bordered
           :width="220"
@@ -47,24 +51,58 @@ import type { PortalCapability } from "./rbac";
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
-const menuDefinitions: Array<{ key: string; path: string; label: string; capability: PortalCapability }> = [
-  { key: "feedback", path: "/feedback", label: "建言献策", capability: "feedback.read" },
-  { key: "users", path: "/users", label: "用户列表", capability: "users.read" },
-  { key: "game-hosting", path: "/game-hosting", label: "游戏托管", capability: "hosting.view" },
+const menuDefinitions: Array<{
+  key: string;
+  path: string;
+  label: string;
+  capability: PortalCapability;
+}> = [
+  {
+    key: "feedback",
+    path: "/feedback",
+    label: "建言献策",
+    capability: "feedback.view",
+  },
+  { key: "users", path: "/users", label: "用户列表", capability: "users.view" },
+  {
+    key: "game-hosting",
+    path: "/game-hosting",
+    label: "游戏托管",
+    capability: "hosting.view",
+  },
+  {
+    key: "desktop-release",
+    path: "/desktop-release",
+    label: "平台版本",
+    capability: "release.view",
+  },
 ];
-const menuOptions = computed(() => menuDefinitions
-  .filter((item) => auth.can(item.capability))
-  .map((item) => ({
-    key: item.key,
-    label: () => h(RouterLink, { to: item.path }, { default: () => item.label }),
-  })));
+const menuOptions = computed(() =>
+  menuDefinitions
+    .filter((item) => auth.can(item.capability))
+    .map((item) => ({
+      key: item.key,
+      label: () =>
+        h(RouterLink, { to: item.path }, { default: () => item.label }),
+    })),
+);
 const pageTitle = computed(() =>
-  route.name === "game-hosting" ? "游戏托管" : route.name === "users" ? "用户列表" : "建言献策",
+  route.name === "desktop-release"
+    ? "平台版本"
+    : route.name === "game-hosting"
+      ? "游戏托管"
+      : route.name === "users"
+        ? "用户列表"
+        : "建言献策",
 );
 const pageDescription = computed(() =>
-  route.name === "game-hosting"
-    ? "上传和管理游戏市场安装包"
-    : route.name === "users" ? "查看平台注册用户与 RBAC 角色" : "查看和处理玩家反馈",
+  route.name === "desktop-release"
+    ? "上传并发布最新 Windows 安装程序"
+    : route.name === "game-hosting"
+      ? "上传和管理游戏市场安装包"
+      : route.name === "users"
+        ? "查看平台注册用户与 RBAC 角色"
+        : "查看和处理玩家反馈",
 );
 async function logout() {
   await auth.logout();

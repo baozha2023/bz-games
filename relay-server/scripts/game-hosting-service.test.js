@@ -186,17 +186,17 @@ async function createHarness(options = {}) {
     },
     mySqlService: database,
     accessControlService: {
-      requirePortalOrigin: () => true,
-      requireAuthenticated: async (req, res) => {
-        if (req.headers["x-test-admin"] === "yes") return { user: { id: 1, login: "admin" }, isAdmin: true };
-        res.writeHead(403, { "content-type": "application/json" }); res.end(JSON.stringify({ error: "forbidden" })); return null;
-      },
-      requireCreator: async (req, res) => {
-        if (req.headers["x-test-admin"] === "yes") return { user: { id: 1, login: "admin", role: "administrator" }, isAdmin: true };
-        res.writeHead(403, { "content-type": "application/json" }); res.end(JSON.stringify({ error: "forbidden" })); return null;
-      },
-      requireAdmin: async (req, res) => {
-        if (req.headers["x-test-admin"] === "yes") return { user: { id: 1, login: "admin" }, isAdmin: true };
+      requireCapability: async (req, res) => {
+        if (req.headers["x-test-admin"] === "yes") {
+          const capabilities = new Set([
+            "hosting.view", "hosting.game.create", "hosting.version.create",
+            "hosting.all.manage", "hosting.review", "hosting.publish.direct",
+          ]);
+          return {
+            user: { id: 1, login: "admin", role: "administrator" },
+            can: (capability) => capabilities.has(capability),
+          };
+        }
         res.writeHead(403, { "content-type": "application/json" }); res.end(JSON.stringify({ error: "forbidden" })); return null;
       },
     },

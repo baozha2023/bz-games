@@ -28,33 +28,33 @@
 
 **主要字段**
 
-| 字段            | 类型              | 说明                  |
-| --------------- | ----------------- | --------------------- |
-| `id`            | `BIGINT UNSIGNED` | 自增主键              |
-| `github_id`     | `VARCHAR(64)`     | GitHub 用户 ID，唯一  |
-| `login`         | `VARCHAR(255)`    | GitHub 登录名         |
-| `name`          | `VARCHAR(255)`    | GitHub 显示名         |
-| `avatar_url`    | `TEXT`            | GitHub 头像地址       |
-| `profile_url`   | `TEXT`            | GitHub 主页地址       |
-| `email`         | `VARCHAR(255)`    | GitHub 邮箱，可能为空 |
-| `role`          | `ENUM`            | `player`、`creator` 或 `administrator` |
-| `created_at`    | `DATETIME(3)`     | 首次创建时间          |
-| `updated_at`    | `DATETIME(3)`     | 最近资料更新时间      |
-| `last_login_at` | `DATETIME(3)`     | 最近一次登录时间      |
+| 字段            | 类型              | 说明                                                          |
+| --------------- | ----------------- | ------------------------------------------------------------- |
+| `id`            | `BIGINT UNSIGNED` | 自增主键                                                      |
+| `github_id`     | `VARCHAR(64)`     | GitHub 用户 ID，唯一                                          |
+| `login`         | `VARCHAR(255)`    | GitHub 登录名                                                 |
+| `name`          | `VARCHAR(255)`    | GitHub 显示名                                                 |
+| `avatar_url`    | `TEXT`            | GitHub 头像地址                                               |
+| `profile_url`   | `TEXT`            | GitHub 主页地址                                               |
+| `email`         | `VARCHAR(255)`    | GitHub 邮箱，可能为空                                         |
+| `role`          | `ENUM`            | `player`、`creator`、`administrator` 或 `super_administrator` |
+| `created_at`    | `DATETIME(3)`     | 首次创建时间                                                  |
+| `updated_at`    | `DATETIME(3)`     | 最近资料更新时间                                              |
+| `last_login_at` | `DATETIME(3)`     | 最近一次登录时间                                              |
 
-角色采用单向升级规则：客户端首次登录为 `player`，进入 Portal 后升级为 `creator`，`administrator` 只能由受控数据库管理流程授予；客户端登录不会降低已有角色。历史 `creator` 原样保留。
+所有 OAuth 新用户统一创建为 `player`，登录只更新 GitHub 资料，不改变已有角色。服务端是管理 capability 的唯一策略源；桌面客户端 Bearer 接口不读取角色。`administrator` 不能修改角色或上传桌面客户端版本，`super_administrator` 拥有全部 capability，并可把其他非超级管理员调整为 `player`、`creator` 或 `administrator`；不能修改自己、修改其他超级管理员或通过接口授予新的超级管理员。GitHub ID `208792845` 由最新数据库初始化定义幂等设为初始超级管理员。
 
 **示例数据**
 
 ```sql
 id: 1
-github_id: "123456789"
-login: "example-user"
+github_id: "208792845"
+login: "baozha2023"
 name: "Baozha"
 avatar_url: "https://avatars.githubusercontent.com/u/123456789?v=4"
-profile_url: "https://github.com/example-user"
-email: "demo@example.com"
-role: "administrator"
+profile_url: "https://github.com/baozha2023"
+email: ""
+role: "super_administrator"
 created_at: 2026-06-11 21:08:30.125
 updated_at: 2026-06-11 21:08:30.125
 last_login_at: 2026-06-11 21:08:30.125

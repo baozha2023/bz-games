@@ -165,8 +165,8 @@ Host: 127.0.0.1:38090
 
 查询参数：
 
-| 参数       | 类型   | 必填 | 说明                                                                                             |
-| ---------- | ------ | ---- | ------------------------------------------------------------------------------------------------ |
+| 参数       | 类型   | 必填 | 说明                                                                                                                      |
+| ---------- | ------ | ---- | ------------------------------------------------------------------------------------------------------------------------- |
 | `returnTo` | string | 否   | 登录成功后的回跳 URL，仅允许配置的 Portal `/admin/` 路径、`bzgames://`、带端口的 `http://127.0.0.1` 或 `http://localhost` |
 
 响应：`302` 跳转到 `https://github.com/login/oauth/authorize`，携带 `client_id`、`redirect_uri`、`scope`、`state`。
@@ -195,15 +195,15 @@ GET /auth/github/callback?code=<authorization_code>&state=<state_token> HTTP/1.1
 | `400`  | `invalid_oauth_state`          | state 无效或已过期             |
 | `502`  | `github_token_exchange_failed` | 用 code 换取 access token 失败 |
 
-### GET /api/auth/me
+### GET /api/portal/v1/session
 
-获取当前登录用户信息。
+获取 Web 管理端当前会话及由服务端计算的 capability。接口只接受 Session Cookie，携带 Bearer Token 时拒绝。
 
 请求：
 
 ```http
-GET /api/auth/me HTTP/1.1
-Authorization: Bearer <session_token>
+GET /api/portal/v1/session HTTP/1.1
+Cookie: bz_games_session=<session_token>
 ```
 
 响应（成功）：
@@ -218,10 +218,12 @@ Authorization: Bearer <session_token>
     "avatarUrl": "https://avatars.githubusercontent.com/u/12345678?v=4",
     "profileUrl": "https://github.com/player",
     "email": "player@example.com",
+    "role": "player",
     "createdAt": "2026-06-11T12:00:00.000Z",
     "updatedAt": "2026-06-11T12:00:00.000Z",
     "lastLoginAt": "2026-06-11T12:00:00.000Z"
   },
+  "capabilities": [],
   "expiresAt": "2026-07-11T12:00:00.000Z"
 }
 ```
@@ -241,7 +243,8 @@ Authorization: Bearer <session_token>
 
 ```http
 POST /api/auth/logout HTTP/1.1
-Authorization: Bearer <session_token>
+Cookie: bz_games_session=<session_token>
+Origin: https://relay.example.com
 ```
 
 响应：`200`
@@ -252,7 +255,7 @@ Authorization: Bearer <session_token>
 }
 ```
 
-无论是否提供有效 token 均返回 `200`（幂等）。
+接口只接受管理端 Cookie 并校验精确 Origin；Bearer Token 不作为退出凭据。
 
 ---
 
@@ -790,15 +793,13 @@ sequenceDiagram
 
 ### 管理接口
 
-- `GET /api/auth/me`：返回当前 GitHub 用户及数据库角色 `player`、`creator` 或 `administrator`。客户端首次 OAuth 登录创建 `player`；管理端 OAuth 登录创建或提升为 `creator`；`creator` 和 `administrator` 不会因客户端登录降级。
-- `POST /api/portal/v1/activate`：管理端启动时使用同源 Session Cookie 激活创作者身份。仅将 `player` 原子提升为 `creator`，拒绝 Bearer Token，且不会改变 `creator` 或 `administrator`。
+- `GET /api/portal/v1/session`：仅接受管理端 Session Cookie，返回用户角色及服务端计算的 capability。所有新用户统一创建为 `player`，OAuth 登录只刷新 GitHub 资料，永不修改已有角色。
 - `GET /api/admin/v1/feedback`
 - `GET /api/admin/v1/feedback/:id`
 - `GET /api/admin/v1/feedback/:id/images/:imageId`
 - `PATCH /api/admin/v1/feedback/:id`
 
-反馈管理接口使用 GitHub 会话 Cookie 或 Bearer Token，并要求 `users.role=administrator`。
-普通创作者返回 `403`。
+反馈管理接口只接受同源 Session Cookie，分别要求 `feedback.view` 或 `feedback.manage`；Bearer Token 不可访问管理接口。
 
 管理详情包含仅管理员可见的 `adminNote` 以及面向用户的 `reply`。更新接口接受
 `status`、`adminNote` 和 `reply`，备注和回复均不得超过 5,000 个字符。
@@ -813,6 +814,26 @@ sequenceDiagram
   "reply": "用户可见，最多 5,000 个字符"
 }
 ```
+
+# 最新桌面版下载 API
+
+### `GET|HEAD /bz-games/api/v1/releases/latest/download`
+
+公开下载当前正式版 Windows NSIS 安装器，不要求登录或 `X-Relay-Token`。接口使用固定地址，实际文件名由服务端
+`latest.json` 决定，支持单段 `Range`、`206 Partial Content`、`416 Range Not Satisfiable`、`ETag`、
+`If-None-Match`、`If-Range`、`Accept-Ranges` 和 `X-File-Sha256`。
+
+所有该接口的并发响应共享 `DESKTOP_RELEASE_BANDWIDTH_BPS` 总带宽，生产值固定为 `50000000` bit/s，即
+`6250000` byte/s。该限流不作用于其他 HTTP 或 WebSocket 接口。Manifest、文件大小或 PE 文件头异常时返回
+`503 { "error": "release_unavailable" }`；除 `GET/HEAD` 外的方法返回 `405`。
+
+### `GET|POST /api/admin/v1/desktop-release`
+
+`GET` 要求 `release.view`，`POST` 要求 `release.upload` 并通过 `PORTAL_PUBLIC_URL` 精确 Origin 校验。因此管理员可查看，只有超级管理员可上传。`POST` 接受 `multipart/form-data`，字段固定为稳定 semver `version` 和唯一 `.exe`
+文件 `installer`。文件流式写入 `.incoming`，随后复用同一发布锁和原子发布程序；成功后立即成为 latest 并删除旧安装器。
+旧版本返回 `409 desktop_release_older_version`，同版本不同文件返回 `409 desktop_release_version_conflict`，任何上传或
+校验失败都不会覆盖当前版本。管理端和 GitHub Actions 均在读取上传内容前以非阻塞方式获取同一发布锁；已有上传时立即返回
+`409 desktop_release_upload_busy`，不会排队或接收第二份安装器。
 
 # 游戏托管 API
 
@@ -842,6 +863,7 @@ sequenceDiagram
 
 # Portal 用户 API
 
-- `GET /api/portal/v1/users?page=1&pageSize=20&q=`：仅 `administrator` 可访问，按最近登录时间返回用户分页列表。
+- `GET /api/portal/v1/users?page=1&pageSize=20&q=`：仅 `administrator` 或 `super_administrator` 可访问，按最近登录时间返回用户分页列表。
+- `PATCH /api/portal/v1/users/:id/role`：仅 `super_administrator` 可使用同源 Session Cookie 调用，请求体只能是 `{ "role": "player" | "creator" | "administrator" }`。接口拒绝 Bearer Token，不能修改调用者本人、任何超级管理员或授予超级管理员。
 
-搜索覆盖 GitHub ID、登录名、名称和邮箱；响应包含数据库 RBAC 角色、注册时间、更新时间与最近登录时间。普通创作者访问返回 `403`。
+搜索覆盖 GitHub ID、登录名、名称和邮箱；响应包含数据库 RBAC 角色、注册时间、更新时间与最近登录时间。创作者和玩家访问返回 `403`，普通管理员调用角色更新接口返回 `403`。

@@ -105,7 +105,7 @@ test("feedback endpoint applies separate anonymous and authenticated cooldowns",
       }),
   };
   const authService = {
-    getSessionFromRequest: async (req) => {
+    getClientSessionFromRequest: async (req) => {
       const token =
         String(req.headers.authorization || "").replace(/^Bearer\s+/i, "") ||
         String(req.headers.cookie || "").replace(
@@ -334,7 +334,7 @@ test("admin endpoints validate pagination and keep response fields aligned", asy
       }),
     },
     authService: {
-      getSessionFromRequest: async () => ({
+      getClientSessionFromRequest: async () => ({
         status: "authenticated",
         auth: {
           user: {
@@ -351,9 +351,8 @@ test("admin endpoints validate pagination and keep response fields aligned", asy
       },
     },
     accessControlService: {
-      requireAdmin: async () => ({
+      requireCapability: async () => ({
         user: { id: 42, github_id: "123456789", login: "test-admin", avatar_url: "" },
-        isAdmin: true,
       }),
     },
   });

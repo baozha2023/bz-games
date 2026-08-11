@@ -1,6 +1,7 @@
 import { createApp } from "vue";
 import {
   create,
+  NAlert,
   NAvatar,
   NButton,
   NCard,
@@ -11,6 +12,8 @@ import {
   NDescriptionsItem,
   NDivider,
   NDynamicInput,
+  NEllipsis,
+  NEmpty,
   NDatePicker,
   NForm,
   NFormItem,
@@ -39,11 +42,14 @@ import {
 import { createPinia } from "pinia";
 
 import App from "./App.vue";
+import { setForbiddenHandler } from "./api";
 import { router } from "./router";
+import { useAuthStore } from "./stores/auth";
 import "./styles.css";
 
 const naive = create({
   components: [
+    NAlert,
     NAvatar,
     NButton,
     NCard,
@@ -54,6 +60,8 @@ const naive = create({
     NDescriptionsItem,
     NDivider,
     NDynamicInput,
+    NEllipsis,
+    NEmpty,
     NDatePicker,
     NForm,
     NFormItem,
@@ -81,4 +89,15 @@ const naive = create({
   ],
 });
 
-createApp(App).use(createPinia()).use(router).use(naive).mount("#app");
+const pinia = createPinia();
+const auth = useAuthStore(pinia);
+setForbiddenHandler(() => {
+  void auth.refresh().then(async () => {
+    const required = router.currentRoute.value.meta.capability;
+    if (required && !auth.can(required)) {
+      await router.replace(auth.can("hosting.view") ? "/game-hosting" : "/login");
+    }
+  });
+});
+
+createApp(App).use(pinia).use(router).use(naive).mount("#app");
