@@ -35,10 +35,19 @@ export interface UnlockedAchievement {
   unlockedAt: number;
 }
 
+export type GameInstallSource = "manual" | "market";
+
+export interface GameInstallProvenance {
+  installSource: GameInstallSource;
+  marketId: string | null;
+}
+
 export interface GameVersion {
   version: string;
   path: string;
   addedAt: number;
+  installSource: GameInstallSource;
+  marketId: string | null;
   stats: Record<string, number>;
   unlockedAchievements: UnlockedAchievement[];
   playtime: number;

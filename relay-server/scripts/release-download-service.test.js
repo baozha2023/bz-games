@@ -29,7 +29,13 @@ async function createHarness({
     DESKTOP_RELEASE_BANDWIDTH_BPS: bitsPerSecond,
   };
   await publishDesktopRelease(
-    { staged, version: "3.2.0", size: body.length, sha256 },
+    {
+      staged,
+      version: "3.2.0",
+      size: body.length,
+      sha256,
+      allowDowngrade: false,
+    },
     config,
   );
   const service = createReleaseDownloadService({ config });
@@ -174,7 +180,11 @@ test("publisher rejects rollback and same-version replacement", async () => {
     };
     await assert.rejects(
       publishDesktopRelease(
-        { ...(await makeStaged("old.exe", 1)), version: "3.1.9" },
+        {
+          ...(await makeStaged("old.exe", 1)),
+          version: "3.1.9",
+          allowDowngrade: false,
+        },
         {
           DESKTOP_RELEASE_STORAGE_DIR: harness.storageRoot,
           MAX_DESKTOP_RELEASE_FILE_BYTES: 2 * 1024 * 1024,
@@ -184,7 +194,11 @@ test("publisher rejects rollback and same-version replacement", async () => {
     );
     await assert.rejects(
       publishDesktopRelease(
-        { ...(await makeStaged("changed.exe", 2)), version: "3.2.0" },
+        {
+          ...(await makeStaged("changed.exe", 2)),
+          version: "3.2.0",
+          allowDowngrade: false,
+        },
         {
           DESKTOP_RELEASE_STORAGE_DIR: harness.storageRoot,
           MAX_DESKTOP_RELEASE_FILE_BYTES: 2 * 1024 * 1024,
@@ -207,6 +221,20 @@ test("super administrator upload publishes an executable through the shared publ
     MAX_DESKTOP_RELEASE_FILE_BYTES: 2 * 1024 * 1024,
     DESKTOP_RELEASE_BANDWIDTH_BPS: 8_000_000,
   };
+  const currentExecutable = Buffer.alloc(96, 2);
+  currentExecutable.write("MZ", 0, "ascii");
+  const currentStaged = path.join(storageRoot, ".incoming", "current.exe");
+  await fs.writeFile(currentStaged, currentExecutable);
+  await publishDesktopRelease(
+    {
+      staged: currentStaged,
+      version: "3.3.0",
+      size: currentExecutable.length,
+      sha256: createHash("sha256").update(currentExecutable).digest("hex"),
+      allowDowngrade: false,
+    },
+    config,
+  );
   const publishRelease = async ({ stagedPath, version, size }) => {
     const body = await fs.readFile(stagedPath);
     await publishDesktopRelease(
@@ -215,6 +243,7 @@ test("super administrator upload publishes an executable through the shared publ
         version,
         size,
         sha256: createHash("sha256").update(body).digest("hex"),
+        allowDowngrade: true,
       },
       config,
     );
@@ -242,17 +271,21 @@ test("super administrator upload publishes an executable through the shared publ
     const executable = Buffer.alloc(96, 3);
     executable.write("MZ", 0, "ascii");
     const form = new FormData();
-    form.set("version", "3.3.0");
-    form.set("installer", new Blob([executable]), "BZ-Games-Setup-3.3.0.exe");
+    form.set("version", "3.2.0");
+    form.set("installer", new Blob([executable]), "BZ-Games-Setup-3.2.0.exe");
     const response = await fetch(url, { method: "POST", body: form });
     assert.equal(response.status, 200);
     const body = await response.json();
-    assert.equal(body.release.version, "3.3.0");
+    assert.equal(body.release.version, "3.2.0");
     assert.equal(body.release.size, executable.length);
     const status = await (await fetch(url)).json();
     assert.equal(status.release.sha256, body.release.sha256);
     assert.deepEqual(capabilityChecks, [
-      { method: "POST", capability: "release.upload", options: { requireOrigin: true } },
+      {
+        method: "POST",
+        capability: "release.upload",
+        options: { requireOrigin: true },
+      },
       { method: "GET", capability: "release.view", options: undefined },
     ]);
   } finally {
@@ -308,6 +341,7 @@ test("a concurrent release upload is rejected before publishing", async () => {
           version,
           size,
           sha256: createHash("sha256").update(body).digest("hex"),
+          allowDowngrade: true,
         },
         config,
       );
@@ -339,10 +373,7 @@ test("a concurrent release upload is rejected before publishing", async () => {
       body: form("3.3.1"),
     });
     assert.equal(second.status, 409);
-    assert.equal(
-      (await second.json()).error,
-      "desktop_release_upload_busy",
-    );
+    assert.equal((await second.json()).error, "desktop_release_upload_busy");
     finishPublish();
     assert.equal((await first).status, 200);
   } finally {

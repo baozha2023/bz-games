@@ -12,8 +12,12 @@ function response() {
   return {
     status: 0,
     body: "",
-    writeHead(status) { this.status = status; },
-    end(body = "") { this.body = body; },
+    writeHead(status) {
+      this.status = status;
+    },
+    end(body = "") {
+      this.body = body;
+    },
   };
 }
 
@@ -44,7 +48,10 @@ test("the server owns the complete role capability matrix", () => {
   for (const [role, capabilities] of Object.entries(expected)) {
     assert.deepEqual(getCapabilities(role), capabilities);
     for (const capability of Object.values(PORTAL_CAPABILITIES)) {
-      assert.equal(hasCapability(role, capability), capabilities.includes(capability));
+      assert.equal(
+        hasCapability(role, capability),
+        capabilities.includes(capability),
+      );
     }
   }
   assert.deepEqual(getCapabilities("unknown"), []);
@@ -64,10 +71,17 @@ test("portal capability checks fail closed", async () => {
     },
   });
   const denied = response();
-  assert.equal(await service.requireCapability({ headers: {} }, denied, "hosting.view"), null);
+  assert.equal(
+    await service.requireCapability({ headers: {} }, denied, "hosting.view"),
+    null,
+  );
   assert.equal(denied.status, 403);
   role = "creator";
-  const auth = await service.requireCapability({ headers: {} }, response(), "hosting.view");
+  const auth = await service.requireCapability(
+    { headers: {} },
+    response(),
+    "hosting.view",
+  );
   assert.equal(auth.can("hosting.own.manage"), true);
   assert.equal(auth.can("hosting.all.manage"), false);
 });
@@ -83,18 +97,12 @@ test("portal writes require the exact configured origin", async () => {
       sendAuthFailure: () => {},
     },
   });
-  for (const headers of [
-    {},
-    { origin: "https://evil.example" },
-  ]) {
+  for (const headers of [{}, { origin: "https://evil.example" }]) {
     const denied = response();
     assert.equal(
-      await service.requireCapability(
-        { headers },
-        denied,
-        "feedback.manage",
-        { requireOrigin: true },
-      ),
+      await service.requireCapability({ headers }, denied, "feedback.manage", {
+        requireOrigin: true,
+      }),
       null,
     );
     assert.equal(denied.status, 403);
@@ -104,6 +112,14 @@ test("portal writes require the exact configured origin", async () => {
       { headers: { origin: "https://games.example" } },
       response(),
       "feedback.manage",
+      { requireOrigin: true },
+    ),
+    null,
+  );
+  assert.notEqual(
+    await service.requirePortalSession(
+      { headers: { origin: "https://games.example" } },
+      response(),
       { requireOrigin: true },
     ),
     null,

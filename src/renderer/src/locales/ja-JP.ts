@@ -5,13 +5,13 @@ export default {
     settings: "設定",
     personalization: "カスタマイズ",
     rooms: "部屋",
+    career: "ゲームキャリア",
     backToRoom: "部屋に戻る",
   },
   feedback: {
     button: "ご意見・ご提案",
     title: "ご意見・ご提案",
     loggedInHint: "ログイン中は、6 時間に 1 回送信できます。",
-    anonymousHint: "未ログインの場合、48 時間に 1 回送信できます。",
     placeholder: "ご意見、不具合、追加してほしい機能をご記入ください……",
     selectImages: "画像を選択",
     clearImages: "画像をクリア",
@@ -491,6 +491,16 @@ export default {
     failed: "サインイン失敗",
     error: "ネットワークまたはシステムエラー",
     bonus: "7日連続ボーナス！",
+  },
+  bzCoinGuide: {
+    title: "BZコインの獲得方法",
+    balance: "現在の残高",
+    checkInTitle: "デイリーサインイン",
+    checkInDescription:
+      "連続サインインの1～6日目は10、20、30、40、50、60 BZコイン、7日目は100 BZコインを獲得できます。その後、新しい7日間のサイクルが始まります。",
+    playtimeTitle: "ゲームをプレイ",
+    playtimeDescription:
+      "記録されたゲームプレイ時間が10分増えるごとに、10 BZコインを自動的に獲得します。手動で受け取る必要はありません。",
   },
   settings: {
     title: "設定",

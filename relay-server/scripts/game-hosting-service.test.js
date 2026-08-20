@@ -187,13 +187,23 @@ async function createHarness(options = {}) {
     mySqlService: database,
     accessControlService: {
       requireCapability: async (req, res) => {
-        if (req.headers["x-test-admin"] === "yes") {
+        if (["yes", "super"].includes(req.headers["x-test-admin"])) {
           const capabilities = new Set([
             "hosting.view", "hosting.game.create", "hosting.version.create",
             "hosting.all.manage", "hosting.review", "hosting.publish.direct",
           ]);
+          if (req.headers["x-test-admin"] === "super") {
+            capabilities.add("hosting.capacity.view");
+          }
           return {
-            user: { id: 1, login: "admin", role: "administrator" },
+            user: {
+              id: 1,
+              login: "admin",
+              role:
+                req.headers["x-test-admin"] === "super"
+                  ? "super_administrator"
+                  : "administrator",
+            },
             can: (capability) => capabilities.has(capability),
           };
         }
@@ -237,12 +247,23 @@ test("creates a full game tree, exports config, and serves UTF-8 named assets", 
     assert.equal(treeResponse.status, 200);
     const tree = await treeResponse.json();
     assert.equal(tree.total, 1);
+    assert.equal(tree.capacity, undefined);
     assert.equal(tree.games[0].versions[0].status, "approved");
     const packageAsset = tree.games[0].versions[0].assets.find((asset) => asset.role === "package");
     const iconAsset = tree.games[0].versions[0].assets.find((asset) => asset.role === "icon");
     assert.equal(packageAsset.fileName, "星轨守望.zip");
     assert.equal(iconAsset.fileName, "中文图标.png");
     assert.equal(tree.games[0].metadata.iconUrl, iconAsset.logicalUrl);
+
+    const superTree = await (
+      await fetch(`${harness.baseUrl}/api/portal/v1/game-hosting/tree`, {
+        headers: { "x-test-admin": "super" },
+      })
+    ).json();
+    assert.deepEqual(superTree.capacity, {
+      usedBytes: VALID_ZIP.length + VALID_PNG.length * 2,
+      maxTotalBytes: 4096,
+    });
 
     const configResponse = await fetch(`${harness.baseUrl}/api/portal/v1/game-hosting/games/com.example.game/config`, { headers: { "x-test-admin": "yes" } });
     const exported = await configResponse.json();

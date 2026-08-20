@@ -15,6 +15,7 @@ import { createFeedbackService } from "./services/feedback-service.js";
 import { createGameHostingService } from "./services/game-hosting-service.js";
 import { createReleaseDownloadService } from "./services/release-download-service.js";
 import { createPortalUserService } from "./services/portal-user-service.js";
+import { createSystemMonitorService } from "./services/system-monitor-service.js";
 import { createRelayState } from "./state.js";
 import { send } from "./utils/ws.js";
 import { registerWebSocketHandlers } from "./ws-server.js";
@@ -53,6 +54,11 @@ const portalUserService = createPortalUserService({
   mySqlService,
   accessControlService,
 });
+const systemMonitorService = createSystemMonitorService({
+  config,
+  state,
+  accessControlService,
+});
 const adminStaticService = createAdminStaticService({ config });
 const roomService = createRoomService({ config, state, send });
 const sensitiveWordService = createSensitiveWordService();
@@ -72,6 +78,7 @@ const server = createHttpServer({
   releaseDownloadService,
   feedbackService,
   portalUserService,
+  systemMonitorService,
   adminStaticService,
 });
 const wss = new WebSocketServer({

@@ -1,5 +1,6 @@
 import { app } from "electron";
 import { autoUpdater } from "electron-updater";
+import { createHash } from "crypto";
 import fs from "fs/promises";
 import path from "path";
 import { IPC } from "../../../shared/ipc-channels";
@@ -8,8 +9,9 @@ import { logger } from "../../utils/logger";
 import { getAppRoot } from "../../utils/appPath";
 import type { UpdateErrorCode, UpdateState } from "../../../shared/types";
 
-class UpdateService {
+export class UpdateService {
   private inited = false;
+  private snapshotPromises = new Map<string, Promise<string>>();
   private state: UpdateState = {
     status: "idle",
     currentVersion: app.getVersion(),
@@ -20,7 +22,9 @@ class UpdateService {
     this.inited = true;
 
     autoUpdater.autoDownload = false;
-    autoUpdater.autoInstallOnAppQuit = true;
+    // Installation is always explicit so snapshot creation cannot be bypassed
+    // by quitting the application while an update is ready.
+    autoUpdater.autoInstallOnAppQuit = false;
 
     autoUpdater.on("checking-for-update", () => {
       this.setState({ status: "checking", message: "" });
@@ -54,12 +58,17 @@ class UpdateService {
     });
 
     autoUpdater.on("update-downloaded", (info) => {
-      this.createDataSnapshot("update-downloaded").catch(() => {});
       this.setState({
         status: "downloaded",
         latestVersion: info.version,
         progress: 100,
         message: "",
+      });
+      this.ensureDataSnapshot(info.version).catch((error) => {
+        logger.warn(
+          `[UpdateService] Failed to create snapshot for ${info.version}`,
+          error,
+        );
       });
     });
 
@@ -111,7 +120,6 @@ class UpdateService {
       return this.state;
     }
     try {
-      await this.createDataSnapshot("before-download");
       await autoUpdater.downloadUpdate();
       return this.state;
     } catch (error: any) {
@@ -135,12 +143,25 @@ class UpdateService {
       });
       return;
     }
-    this.createDataSnapshot("before-install")
-      .catch((error) => {
-        logger.warn("[UpdateService] Failed to create snapshot before install", error);
-      })
-      .finally(() => {
+    const targetVersion = this.state.latestVersion;
+    const ensureSnapshot = targetVersion
+      ? this.ensureDataSnapshot(targetVersion)
+      : Promise.reject(new Error("update_target_version_missing"));
+    ensureSnapshot
+      .then(() => {
         autoUpdater.quitAndInstall();
+      })
+      .catch((error: unknown) => {
+        logger.error(
+          "[UpdateService] Failed to ensure snapshot before install",
+          error,
+        );
+        const message = error instanceof Error ? error.message : String(error);
+        this.setState({
+          status: "error",
+          errorCode: "unknown",
+          message,
+        });
       });
   }
 
@@ -155,58 +176,113 @@ class UpdateService {
       .replace(/^_+|_+$/g, "");
   }
 
-  private async createDataSnapshot(stage: string): Promise<void> {
+  private getSnapshotDir(targetVersion: string): string {
+    const readableVersion = targetVersion.replace(/[^0-9A-Za-z._-]/g, "_");
+    const versionHash = createHash("sha256")
+      .update(targetVersion)
+      .digest("hex")
+      .slice(0, 12);
+    return path.join(
+      this.getSnapshotBaseRoot(),
+      ".update-snapshots",
+      `version-${readableVersion}-${versionHash}`,
+    );
+  }
+
+  private async isCompletedSnapshot(
+    targetDir: string,
+    targetVersion: string,
+  ): Promise<boolean> {
+    try {
+      const raw = await fs.readFile(
+        path.join(targetDir, "snapshot-meta.json"),
+        "utf-8",
+      );
+      const metadata = JSON.parse(raw) as { targetVersion?: unknown };
+      return metadata.targetVersion === targetVersion;
+    } catch {
+      return false;
+    }
+  }
+
+  private ensureDataSnapshot(targetVersion: string): Promise<string> {
+    const normalizedVersion = targetVersion.trim();
+    if (!normalizedVersion) {
+      return Promise.reject(new Error("update_target_version_missing"));
+    }
+
+    const pending = this.snapshotPromises.get(normalizedVersion);
+    if (pending) return pending;
+
+    const promise = this.createDataSnapshot(normalizedVersion).finally(() => {
+      if (this.snapshotPromises.get(normalizedVersion) === promise) {
+        this.snapshotPromises.delete(normalizedVersion);
+      }
+    });
+    this.snapshotPromises.set(normalizedVersion, promise);
+    return promise;
+  }
+
+  private async createDataSnapshot(targetVersion: string): Promise<string> {
     const appRoot = getAppRoot();
-    const snapshotRoot = path.join(this.getSnapshotBaseRoot(), ".update-snapshots");
-    const stamp = `${Date.now()}-${stage}`;
-    const targetDir = path.join(snapshotRoot, stamp);
-    await fs.mkdir(targetDir, { recursive: true });
+    const targetDir = this.getSnapshotDir(targetVersion);
+    if (await this.isCompletedSnapshot(targetDir, targetVersion)) {
+      logger.info(`[UpdateService] Reusing snapshot: ${targetDir}`);
+      return targetDir;
+    }
+
+    const tempDir = `${targetDir}.tmp-${process.pid}-${Date.now()}`;
+    await fs.rm(tempDir, { recursive: true, force: true });
+    await fs.mkdir(tempDir, { recursive: true });
 
     const metadata: {
       createdAt: number;
-      stage: string;
+      targetVersion: string;
       appRoot: string;
       configPath?: string;
       gameRoots: string[];
     } = {
       createdAt: Date.now(),
-      stage,
+      targetVersion,
       appRoot,
       gameRoots: [],
     };
 
-    const configPath = path.resolve(path.join(appRoot, "config.json"));
-    const configLabel = this.toSnapshotLabel(configPath);
     try {
-      await fs.copyFile(configPath, path.join(targetDir, `config_${configLabel}.backup`));
+      const configPath = path.resolve(path.join(appRoot, "config.json"));
+      const configLabel = this.toSnapshotLabel(configPath);
+      await fs.copyFile(
+        configPath,
+        path.join(tempDir, `config_${configLabel}.backup`),
+      );
       metadata.configPath = configPath;
-    } catch {}
 
-    const defaultGamesRoot = path.resolve(path.join(appRoot, "games"));
-    const gamesLabel = this.toSnapshotLabel(defaultGamesRoot);
-    try {
-      await fs.cp(defaultGamesRoot, path.join(targetDir, `games_${gamesLabel}`), {
+      const defaultGamesRoot = path.resolve(path.join(appRoot, "games"));
+      const gamesLabel = this.toSnapshotLabel(defaultGamesRoot);
+      await fs.cp(defaultGamesRoot, path.join(tempDir, `games_${gamesLabel}`), {
         recursive: true,
       });
       metadata.gameRoots.push(defaultGamesRoot);
-    } catch {}
 
-    const dbPath = path.resolve(path.join(appRoot, "db"));
-    const dbLabel = this.toSnapshotLabel(dbPath);
-    try {
-      await fs.cp(dbPath, path.join(targetDir, `db_${dbLabel}`), {
+      const dbPath = path.resolve(path.join(appRoot, "db"));
+      const dbLabel = this.toSnapshotLabel(dbPath);
+      await fs.cp(dbPath, path.join(tempDir, `db_${dbLabel}`), {
         recursive: true,
       });
-    } catch {}
 
-    try {
       await fs.writeFile(
-        path.join(targetDir, "snapshot-meta.json"),
+        path.join(tempDir, "snapshot-meta.json"),
         JSON.stringify(metadata, null, 2),
         "utf-8",
       );
-    } catch {}
+      await fs.rm(targetDir, { recursive: true, force: true });
+      await fs.rename(tempDir, targetDir);
+    } catch (error) {
+      await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+      throw error;
+    }
     logger.info(`[UpdateService] Snapshot created: ${targetDir}`);
+    return targetDir;
   }
 
   private setState(patch: Partial<UpdateState>) {
@@ -235,7 +311,11 @@ class UpdateService {
     message: string;
   } {
     const message =
-      error instanceof Error ? error.message : typeof error === "string" ? error : String(error);
+      error instanceof Error
+        ? error.message
+        : typeof error === "string"
+          ? error
+          : String(error);
     const lower = message.toLowerCase();
 
     if (

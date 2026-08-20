@@ -748,16 +748,15 @@ sequenceDiagram
 
 ### `POST /api/v1/feedback`
 
-提交文字和图片。请求必须携带发行版 `X-Relay-Token`，可选携带
-`Authorization: Bearer <session token>`。
+提交文字和图片。请求必须同时携带发行版 `X-Relay-Token` 和当前登录用户的
+`Authorization: Bearer <session token>`；未登录、过期或无效会话均返回 `401`。
 
 - Content-Type：`multipart/form-data`
 - 字段：`content`、`appVersion`、`platform`
 - 文件字段：`images`，最多 4 个 PNG/JPEG/WebP 文件，单个最大 5 MiB
 - 文字和图片至少存在一种，文字最多 5,000 字
 
-匿名请求以 TCP Socket IP为键进行进程内 48 小时冷却；有效 GitHub
-会话以 GitHub ID为键进行进程内 6 小时冷却。两类冷却状态都不会跨服务重启或多实例共享。
+有效 GitHub 会话以 GitHub ID为键进行进程内 6 小时冷却。冷却状态不会跨服务重启或多实例共享。
 
 成功响应：
 
@@ -768,12 +767,11 @@ sequenceDiagram
 }
 ```
 
-匿名冷却响应为 `429`，包含 `retryAfterSeconds` 和 `resetAt`。
+冷却响应为 `429`，包含 `retryAfterSeconds` 和 `resetAt`。
 
 ### `GET /api/v1/feedback/:id`
 
-按反馈编号读取用户可见详情。请求必须携带发行版 `X-Relay-Token`。匿名反馈以随机
-反馈编号作为访问凭据；GitHub 用户提交的反馈还必须携带该用户当前有效的
+按反馈编号读取用户可见详情。请求必须携带发行版 `X-Relay-Token` 和该反馈所属用户当前有效的
 `Authorization: Bearer <session token>`。
 
 响应包含：
@@ -793,16 +791,19 @@ sequenceDiagram
 
 ### 管理接口
 
+- `POST /api/portal/v1/feedback`：玩家欢迎页直接留言。仅接受角色为 `player` 的管理端同源 Session Cookie，并校验 `Origin` 与 `PORTAL_PUBLIC_URL` 的源完全一致；其他角色返回 `403`。请求体为 JSON `{ "content": "留言内容" }`，内容不能为空且最长 5,000 个字符。留言复用 `feedback` 表，`platform` 记录为 `portal`，不接受图片；按已登录 GitHub 用户执行现有建言献策限流。该接口不授予反馈查看或管理权限。
 - `GET /api/portal/v1/session`：仅接受管理端 Session Cookie，返回用户角色及服务端计算的 capability。所有新用户统一创建为 `player`，OAuth 登录只刷新 GitHub 资料，永不修改已有角色。
 - `GET /api/admin/v1/feedback`
 - `GET /api/admin/v1/feedback/:id`
 - `GET /api/admin/v1/feedback/:id/images/:imageId`
 - `PATCH /api/admin/v1/feedback/:id`
+- `DELETE /api/admin/v1/feedback/:id`
 
 反馈管理接口只接受同源 Session Cookie，分别要求 `feedback.view` 或 `feedback.manage`；Bearer Token 不可访问管理接口。
 
 管理详情包含仅管理员可见的 `adminNote` 以及面向用户的 `reply`。更新接口接受
 `status`、`adminNote` 和 `reply`，备注和回复均不得超过 5,000 个字符。
+删除接口要求 `feedback.manage`，永久删除反馈、图片元数据和对应的 GridFS 图片对象。
 
 列表接口接受 `page`（1 到 1,000,000）、`pageSize`（1 到 100）、
 可选 `status` 和 `q`。更新接口 JSON 为：
@@ -815,6 +816,27 @@ sequenceDiagram
 }
 ```
 
+# 系统监控 API
+
+### `GET /api/portal/v1/system-monitor`
+
+只接受同源管理端 Session Cookie 并要求 `system.monitor.view`，该 capability 仅授予超级管理员。响应仅包含页面使用的 CPU 利用率、内存、磁盘、实时收发带宽、房间与连接数量及服务进程运行时间；网络速率由服务器网卡（不含回环接口）累计字节差值按采样间隔计算。
+
+```json
+{
+  "timestamp": "2026-08-13T00:00:00.000Z",
+  "cpu": { "usagePercent": 12.5 },
+  "memory": { "totalBytes": 1, "usedBytes": 1, "usagePercent": 50 },
+  "disk": { "totalBytes": 1, "usedBytes": 1, "usagePercent": 50 },
+  "network": {
+    "receiveBytesPerSecond": 1,
+    "transmitBytesPerSecond": 1
+  },
+  "rooms": { "count": 0, "clients": 0, "maxRooms": 80, "maxClients": 400 },
+  "runtime": { "processUptimeSeconds": 60 }
+}
+```
+
 # 最新桌面版下载 API
 
 ### `GET|HEAD /bz-games/api/v1/releases/latest/download`
@@ -823,15 +845,15 @@ sequenceDiagram
 `latest.json` 决定，支持单段 `Range`、`206 Partial Content`、`416 Range Not Satisfiable`、`ETag`、
 `If-None-Match`、`If-Range`、`Accept-Ranges` 和 `X-File-Sha256`。
 
-所有该接口的并发响应共享 `DESKTOP_RELEASE_BANDWIDTH_BPS` 总带宽，生产值固定为 `50000000` bit/s，即
-`6250000` byte/s。该限流不作用于其他 HTTP 或 WebSocket 接口。Manifest、文件大小或 PE 文件头异常时返回
+所有该接口的并发响应共享 `DESKTOP_RELEASE_BANDWIDTH_BPS` 总带宽，生产值固定为 `100000000` bit/s，即
+`12500000` byte/s。该限流不作用于其他 HTTP 或 WebSocket 接口。Manifest、文件大小或 PE 文件头异常时返回
 `503 { "error": "release_unavailable" }`；除 `GET/HEAD` 外的方法返回 `405`。
 
 ### `GET|POST /api/admin/v1/desktop-release`
 
 `GET` 要求 `release.view`，`POST` 要求 `release.upload` 并通过 `PORTAL_PUBLIC_URL` 精确 Origin 校验。因此管理员可查看，只有超级管理员可上传。`POST` 接受 `multipart/form-data`，字段固定为稳定 semver `version` 和唯一 `.exe`
 文件 `installer`。文件流式写入 `.incoming`，随后复用同一发布锁和原子发布程序；成功后立即成为 latest 并删除旧安装器。
-旧版本返回 `409 desktop_release_older_version`，同版本不同文件返回 `409 desktop_release_version_conflict`，任何上传或
+超级管理员手动上传允许版本号高于或低于当前版本；同版本不同文件返回 `409 desktop_release_version_conflict`，任何上传或
 校验失败都不会覆盖当前版本。管理端和 GitHub Actions 均在读取上传内容前以非阻塞方式获取同一发布锁；已有上传时立即返回
 `409 desktop_release_upload_busy`，不会排队或接收第二份安装器。
 
@@ -841,7 +863,7 @@ sequenceDiagram
 
 ## Portal 接口
 
-- `GET /api/portal/v1/game-hosting/tree`：管理员查看全部，创作者只查看本人游戏。
+- `GET /api/portal/v1/game-hosting/tree`：管理员查看全部，创作者只查看本人游戏；仅拥有 `hosting.capacity.view` 的超级管理员会收到 `capacity`（`usedBytes`、`maxTotalBytes`）。
 - `POST /api/portal/v1/game-hosting/games`：创建游戏和首版本；管理员直接发布，创作者进入待审核。
 - `POST /api/portal/v1/game-hosting/games/:gameId/versions`：所有者或管理员新增版本。
 - `PUT /api/portal/v1/game-hosting/games/:gameId`：管理员立即更新；创作者创建或更新公共信息修订。

@@ -23,6 +23,8 @@ export const PORTAL_CAPABILITIES = Object.freeze({
   HOSTING_ALL_MANAGE: "hosting.all.manage",
   HOSTING_REVIEW: "hosting.review",
   HOSTING_PUBLISH_DIRECT: "hosting.publish.direct",
+  HOSTING_CAPACITY_VIEW: "hosting.capacity.view",
+  SYSTEM_MONITOR_VIEW: "system.monitor.view",
   RELEASE_VIEW: "release.view",
   RELEASE_UPLOAD: "release.upload",
 });

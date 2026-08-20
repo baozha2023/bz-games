@@ -201,20 +201,15 @@
       </template>
 
       <template v-else>
-        <n-grid
+        <div
           v-if="!gameStore.isLoading"
-          :x-gap="layoutMode === 'icon' ? 12 : 24"
-          :y-gap="layoutMode === 'icon' ? 12 : 24"
-          :cols="
-            layoutMode === 'icon'
-              ? '4 s:6 m:8 l:10 xl:12'
-              : '2 s:3 m:4 l:5 xl:6'
-          "
-          responsive="screen"
+          class="library-game-grid"
+          :class="layoutMode === 'icon' ? 'is-icon' : 'is-card'"
         >
-          <n-grid-item
+          <div
             v-for="(game, index) in visibleDisplayedGames"
             :key="game.id"
+            class="library-game-grid-item"
             :draggable="isReorderMode"
             @dragstart="handleDragStart($event, index)"
             @dragover.prevent="handleDragOver($event, index)"
@@ -239,47 +234,36 @@
               />
               <div v-if="isReorderMode" class="reorder-overlay"></div>
             </div>
-          </n-grid-item>
-        </n-grid>
-        <n-grid
+          </div>
+        </div>
+        <div
           v-else
-          :x-gap="layoutMode === 'icon' ? 12 : 24"
-          :y-gap="layoutMode === 'icon' ? 12 : 24"
-          :cols="
-            layoutMode === 'icon'
-              ? '4 s:6 m:8 l:10 xl:12'
-              : '2 s:3 m:4 l:5 xl:6'
-          "
-          responsive="screen"
+          class="library-game-grid"
+          :class="layoutMode === 'icon' ? 'is-icon' : 'is-card'"
         >
-          <n-grid-item v-for="index in 8" :key="index">
+          <div v-for="index in 8" :key="index" class="library-game-grid-item">
             <n-card size="small" embedded>
               <n-skeleton height="180px" />
               <n-skeleton text style="margin-top: 12px" />
               <n-skeleton text :width="120" />
             </n-card>
-          </n-grid-item>
-        </n-grid>
+          </div>
+        </div>
       </template>
     </template>
 
     <n-space v-else vertical size="large">
       <n-skeleton text :width="120" />
       <n-skeleton text :repeat="2" />
-      <n-grid
-        :cols="'2 s:3 m:4 l:5 xl:6'"
-        :x-gap="24"
-        :y-gap="24"
-        responsive="screen"
-      >
-        <n-grid-item v-for="index in 6" :key="index">
+      <div class="library-game-grid is-card">
+        <div v-for="index in 6" :key="index" class="library-game-grid-item">
           <n-card size="small" embedded>
             <n-skeleton height="180px" />
             <n-skeleton text style="margin-top: 12px" />
             <n-skeleton text :width="120" />
           </n-card>
-        </n-grid-item>
-      </n-grid>
+        </div>
+      </div>
     </n-space>
 
     <div
@@ -1480,6 +1464,26 @@ const handleConfirmDraftImport = async () => {
 .game-card-wrapper {
   position: relative;
   transition: transform 0.2s;
+}
+
+.library-game-grid {
+  display: grid;
+  justify-content: start;
+  align-items: start;
+}
+
+.library-game-grid.is-icon {
+  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+  gap: 12px;
+}
+
+.library-game-grid.is-card {
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 24px;
+}
+
+.library-game-grid-item {
+  min-width: 0;
 }
 .drop-overlay {
   position: absolute;

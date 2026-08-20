@@ -5,14 +5,13 @@ export default {
     settings: "Einstellungen",
     personalization: "Anpassen",
     rooms: "Räume",
+    career: "Spielkarriere",
     backToRoom: "Zurück zum Raum",
   },
   feedback: {
     button: "Feedback",
     title: "Feedback und Vorschläge",
     loggedInHint: "Angemeldet kannst du einmal alle 6 Stunden Feedback senden.",
-    anonymousHint:
-      "Ohne Anmeldung kannst du einmal alle 48 Stunden Feedback senden.",
     placeholder:
       "Teile einen Vorschlag, ein Problem oder eine gewünschte Funktion mit…",
     selectImages: "Bilder auswählen",
@@ -501,6 +500,16 @@ export default {
     failed: "Check-in fehlgeschlagen",
     error: "Netzwerk- oder Systemfehler",
     bonus: "Bonus für 7 Tage in Folge!",
+  },
+  bzCoinGuide: {
+    title: "Wie erhalte ich BZ-Münzen?",
+    balance: "Aktueller Kontostand",
+    checkInTitle: "Täglicher Check-in",
+    checkInDescription:
+      "Beim täglichen Check-in gibt es an den Tagen 1–6 einer Serie 10, 20, 30, 40, 50 und 60 BZ-Münzen, am 7. Tag 100 BZ-Münzen. Danach beginnt ein neuer Sieben-Tage-Zyklus.",
+    playtimeTitle: "Spiele spielen",
+    playtimeDescription:
+      "Für jeweils 10 Minuten erfasste Spielzeit werden automatisch 10 BZ-Münzen gutgeschrieben. Eine manuelle Abholung ist nicht erforderlich.",
   },
   settings: {
     title: "Einstellungen",

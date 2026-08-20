@@ -494,6 +494,7 @@ ufw status
 - 客户端是否把 `oauthReturnUrl` 配成 `bzgames://oauth-complete`。
 - Windows 是否已将 `bzgames://` 重新注册到当前安装的 BZ-Games 程序。
 - 是否需要重启客户端，使 `app.setAsDefaultProtocolClient("bzgames")` 生效。
+- 开发模式必须按当前 Electron 启动入口注册协议，即 `electron.exe <path.resolve(process.argv[1])> "%1"`；不要把协议指向 `out/main/index.js`。
 - 授权返回地址是否被浏览器当作普通网页链接处理。
 
 ### 云数据上传 / 下载失败
@@ -526,7 +527,7 @@ ufw status
 
 MySQL已配置时，服务启动会执行统一 Schema 初始化并自动创建反馈表。
 管理前端生产构建产物放入 `ADMIN_STATIC_DIR`，随后访问 `/admin/`。
-匿名反馈按 Socket IP冷却 48 小时，登录反馈按 GitHub ID冷却 6 小时。两类冷却都只存在于当前 Node进程，重启后清空；对应配置以 `bz-games-relay.service.example` 为准。
+建言献策仅允许已登录用户提交，并按 GitHub ID冷却 6 小时。冷却只存在于当前 Node进程，重启后清空；对应配置以 `bz-games-relay.service.example` 为准。
 
 示例中的值均不是生产配置。真实域名、数据库连接串、OAuth Secret和
 中继令牌只能写入服务器的 `/etc/systemd/system/bz-games-relay.service`，不得提交到仓库。
@@ -538,7 +539,7 @@ MySQL已配置时，服务启动会执行统一 Schema 初始化并自动创建�
 ```ini
 Environment=DESKTOP_RELEASE_STORAGE_DIR=/var/lib/bz-games-releases
 Environment=MAX_DESKTOP_RELEASE_FILE_BYTES=536870912
-Environment=DESKTOP_RELEASE_BANDWIDTH_BPS=50000000
+Environment=DESKTOP_RELEASE_BANDWIDTH_BPS=100000000
 ```
 
 创建发布账号和目录，账号不授予 sudo：
@@ -554,7 +555,7 @@ GitHub Environment、SSH 专用密钥和主机指纹配置见
 `flock /var/lib/bz-games-releases/.publish.lock`，持锁完成流式上传并调用 `scripts/publish-desktop-release.js`。发布程序校验稳定
 semver、规范文件名、大小、PE 文件头和 SHA-256，原子切换 `latest.json` 后删除旧安装器和备份。
 
-管理端超级管理员可通过“平台版本”页面上传 EXE，普通管理员只能查看当前版本。该入口调用 `/api/admin/v1/desktop-release`，使用相同发布目录、
+管理端超级管理员可通过“平台版本”页面上传 EXE，允许将正式版切换到高于或低于当前版本的稳定版本；普通管理员只能查看当前版本。该入口调用 `/api/admin/v1/desktop-release`，使用相同发布目录、
 `flock` 和发布程序，不维护第二套版本切换逻辑。上传最大请求体由 Node 接口按
 `MAX_DESKTOP_RELEASE_FILE_BYTES + 1 MiB` 流式限制；若管理端经 Nginx 代理，精确路由还必须把 `client_max_body_size`
 设置为不小于 513 MiB。管理端同样在读取请求体前非阻塞取锁；已有上传时立即返回
@@ -572,9 +573,9 @@ location = /bz-games/api/v1/releases/latest/download {
 }
 ```
 
-修改后先执行 `nginx -t`，通过后再 reload。Nginx 不配置 `limit_rate`；所有下载共享的 50 Mbps 总上限由单实例
+修改后先执行 `nginx -t`，通过后再 reload。Nginx 不配置 `limit_rate`；所有下载共享的 100 Mbps 总上限由单实例
 Relay 内的 `GlobalBandwidthLimiter` 统一执行。若未来运行多个 Relay 实例，必须把限流迁移到共享网关，不能把每个
-实例都配置成 50 Mbps。
+实例都配置成 100 Mbps。
 
 公网验证：
 

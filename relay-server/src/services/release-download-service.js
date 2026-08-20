@@ -293,6 +293,8 @@ async function publishUploadedRelease({
     await calculateFileSha256(stagedPath),
     "--size",
     String(size),
+    "--allow-downgrade",
+    "true",
   ];
   await new Promise((resolve, reject) => {
     const child = spawn(process.execPath, args, {
@@ -310,15 +312,10 @@ async function publishUploadedRelease({
         ? resolve()
         : reject(
             new ReleaseUploadError(
-              stderr.includes("older release")
-                ? "desktop_release_older_version"
-                : stderr.includes("same version")
-                  ? "desktop_release_version_conflict"
-                  : "desktop_release_publish_failed",
-              stderr.includes("older release") ||
-                stderr.includes("same version")
-                ? 409
-                : 500,
+              stderr.includes("same version")
+                ? "desktop_release_version_conflict"
+                : "desktop_release_publish_failed",
+              stderr.includes("same version") ? 409 : 500,
             ),
           ),
     );

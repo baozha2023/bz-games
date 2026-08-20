@@ -77,7 +77,7 @@ jobs:
           set -euo pipefail
           ssh_args=(-i ~/.ssh/release_deploy -p "$SSH_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
           staged_path="$RELEASE_STORAGE_DIR/.incoming/$staged"
-          remote_command="flock -n -E 75 '$RELEASE_STORAGE_DIR/.publish.lock' /bin/bash -c 'set -euo pipefail; staged_path=\"$staged_path\"; trap \"rm -f -- \\\"\$staged_path\\\"\" EXIT; umask 077; cat > \"\$staged_path\"; /usr/bin/node /opt/bz-games-relay/scripts/publish-desktop-release.js --staged \"\$staged_path\" --version \"$version\" --sha256 \"$sha256\" --size \"$size\"'"
+          remote_command="flock -n -E 75 '$RELEASE_STORAGE_DIR/.publish.lock' /bin/bash -c 'set -euo pipefail; staged_path=\"$staged_path\"; trap \"rm -f -- \\\"\$staged_path\\\"\" EXIT; umask 077; cat > \"\$staged_path\"; /usr/bin/node /opt/bz-games-relay/scripts/publish-desktop-release.js --staged \"\$staged_path\" --version \"$version\" --sha256 \"$sha256\" --size \"$size\" --allow-downgrade false'"
           set +e
           ssh "${ssh_args[@]}" "$SSH_USER@$SSH_HOST" "$remote_command" < installer.exe
           publish_status=$?

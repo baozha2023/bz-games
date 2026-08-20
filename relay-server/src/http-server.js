@@ -13,6 +13,7 @@ export function createHttpServer({
   releaseDownloadService,
   feedbackService,
   portalUserService,
+  systemMonitorService,
   adminStaticService,
 }) {
   return http.createServer(async (req, res) => {
@@ -38,6 +39,9 @@ export function createHttpServer({
         return;
       }
       if (await portalUserService.handleRequest(req, res, url)) {
+        return;
+      }
+      if (await systemMonitorService.handleRequest(req, res, url)) {
         return;
       }
       if (adminStaticService.handleRequest(req, res, url)) {

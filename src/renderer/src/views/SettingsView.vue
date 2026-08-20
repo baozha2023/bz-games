@@ -348,7 +348,12 @@
         "
       >
         <n-space>
-          <n-button type="primary" secondary @click="showFeedbackModal = true">
+          <n-button
+            v-if="cloudStatus.authenticated"
+            type="primary"
+            secondary
+            @click="showFeedbackModal = true"
+          >
             {{ t("feedback.button") }}
           </n-button>
           <n-button type="error" secondary @click="showUninstallModal = true">
@@ -604,10 +609,7 @@
       </template>
     </n-modal>
 
-    <FeedbackModal
-      v-model:show="showFeedbackModal"
-      :authenticated="cloudStatus.authenticated"
-    />
+    <FeedbackModal v-model:show="showFeedbackModal" />
   </div>
 </template>
 
@@ -1131,6 +1133,13 @@ watch(cropZoom, () => {
   clampPan();
   drawCropCanvas();
 });
+
+watch(
+  () => cloudStatus.value.authenticated,
+  (authenticated) => {
+    if (!authenticated) showFeedbackModal.value = false;
+  },
+);
 
 const onCropMouseDown = (e: MouseEvent) => {
   cropDragging.value = true;

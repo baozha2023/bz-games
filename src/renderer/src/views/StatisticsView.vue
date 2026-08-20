@@ -1,32 +1,5 @@
 <template>
-  <div style="padding: 24px">
-    <n-page-header
-      :title="t('statistics.title')"
-      @back="$router.push({ name: 'Library' })"
-    >
-      <template #extra>
-        <n-space align="center" :size="8">
-          <n-input
-            v-if="isSearchExpanded"
-            v-model:value="searchKeyword"
-            clearable
-            autofocus
-            :placeholder="t('common.searchGame')"
-            style="width: 260px"
-            @blur="handleSearchBlur"
-          />
-          <n-button quaternary circle @click="toggleSearch">
-            <template #icon>
-              <n-icon>
-                <SearchOutline />
-              </n-icon>
-            </template>
-          </n-button>
-        </n-space>
-      </template>
-    </n-page-header>
-    <n-divider />
-
+  <div class="career-section">
     <n-card style="margin-bottom: 16px">
       <div class="heatmap-wrapper">
         <CalendarHeatmap
@@ -139,7 +112,6 @@
 import { ref, onMounted, computed, nextTick } from "vue";
 import { useI18n } from "vue-i18n";
 import { useMessage } from "naive-ui";
-import { SearchOutline } from "@vicons/ionicons5";
 import html2canvas from "html2canvas";
 import { useGameStore } from "../stores/useGameStore";
 import { useSettingsStore } from "../stores/useSettingsStore";
@@ -151,6 +123,7 @@ const { t } = useI18n();
 const gameStore = useGameStore();
 const settingsStore = useSettingsStore();
 const message = useMessage();
+const searchKeyword = defineModel<string>("searchKeyword", { default: "" });
 
 interface PlaySession {
   id: string;
@@ -173,18 +146,14 @@ const isSharing = ref(false);
 
 const games = computed(() => gameStore.games);
 const {
-  searchKeyword,
-  isSearchExpanded,
   selectedVersions,
   visibleCount,
   filteredItems: filteredGames,
-  toggleSearch,
-  handleSearchBlur,
   activateStaggerRendering,
   initializeManifestCache,
   handleVersionChange,
   getManifest,
-} = useGameListView(games);
+} = useGameListView(games, searchKeyword);
 
 async function loadStatsData() {
   if (isLoadingHeatmap.value || hasLoadedHeatmap.value) return;
@@ -662,6 +631,10 @@ function getLabel(gameId: string, key: string): string {
 </script>
 
 <style scoped>
+.career-section {
+  padding-top: 12px;
+}
+
 .stagger-card-enter {
   animation: stagger-fade-in 0.3s ease-out both;
 }

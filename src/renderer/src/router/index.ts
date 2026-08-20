@@ -1,6 +1,5 @@
 import { createRouter, createWebHashHistory } from "vue-router";
 import LibraryView from "../views/LibraryView.vue";
-import StatisticsView from "../views/StatisticsView.vue";
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -42,14 +41,9 @@ const router = createRouter({
       component: () => import("../views/SettingsView.vue"),
     },
     {
-      path: "/statistics",
-      name: "Statistics",
-      component: StatisticsView,
-    },
-    {
-      path: "/achievements",
-      name: "Achievements",
-      component: () => import("../views/AchievementsView.vue"),
+      path: "/career",
+      name: "Career",
+      component: () => import("../views/CareerView.vue"),
     },
     {
       path: "/notification",

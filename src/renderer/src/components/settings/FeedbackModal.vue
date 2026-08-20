@@ -24,13 +24,7 @@
     >
       <n-tab-pane name="submit" :tab="t('feedback.title')">
         <n-space vertical :size="16" class="feedback-tab-content">
-          <n-alert :type="authenticated ? 'success' : 'info'">
-            {{
-              authenticated
-                ? t("feedback.loggedInHint")
-                : t("feedback.anonymousHint")
-            }}
-          </n-alert>
+          <n-alert type="success">{{ t("feedback.loggedInHint") }}</n-alert>
 
           <template v-if="!successId">
             <n-input
@@ -276,7 +270,6 @@ interface FeedbackImage {
 
 const props = defineProps<{
   show: boolean;
-  authenticated: boolean;
 }>();
 
 const emit = defineEmits<{

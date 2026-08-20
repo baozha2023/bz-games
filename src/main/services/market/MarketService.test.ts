@@ -1,5 +1,40 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+const windowMocks = vi.hoisted(() => {
+  let floatBallVisible = false;
+  const mainSend = vi.fn();
+  const floatBallSend = vi.fn();
+
+  return {
+    mainSend,
+    floatBallSend,
+    mainWindow: {
+      isDestroyed: vi.fn(() => false),
+      webContents: {
+        isDestroyed: vi.fn(() => false),
+        send: mainSend,
+      },
+    },
+    floatBallWindow: {
+      isDestroyed: vi.fn(() => false),
+      isVisible: vi.fn(() => floatBallVisible),
+      showInactive: vi.fn(() => {
+        floatBallVisible = true;
+      }),
+      hide: vi.fn(() => {
+        floatBallVisible = false;
+      }),
+      webContents: {
+        isDestroyed: vi.fn(() => false),
+        send: floatBallSend,
+      },
+    },
+    reset: () => {
+      floatBallVisible = false;
+    },
+  };
+});
+
 vi.mock("electron", () => ({
   app: {
     getPath: () => "C:/tmp/bz-games-test",
@@ -12,8 +47,8 @@ vi.mock("../game/GameLoader", () => ({
   GameLoader: { loadGameFromPath: vi.fn() },
 }));
 vi.mock("../../window", () => ({
-  mainWindow: null,
-  floatBallWindow: null,
+  mainWindow: windowMocks.mainWindow,
+  floatBallWindow: windowMocks.floatBallWindow,
 }));
 vi.mock("../../utils/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -37,6 +72,8 @@ import type {
   MarketDirectory,
   MarketIndex,
   MarketSource,
+  MarketTaskState,
+  MarketTaskStatus,
 } from "../../../shared/types";
 import type { OfficialMarketCatalog } from "./MarketCatalogClient";
 
@@ -96,7 +133,41 @@ function deferred<T>() {
 afterEach(() => {
   vi.useRealTimers();
   vi.clearAllMocks();
+  windowMocks.reset();
 });
+
+function taskMeta() {
+  return {
+    gameId: "top.bzgames.test",
+    version: "1.0.0",
+    gameName: "Test Game",
+    downloadUrl: "https://example.com/game.zip",
+    catalogDownloadUrl: "https://example.com/game.zip",
+    sha256: undefined,
+    size: 1024,
+    downloadPath: "C:/tmp/game.zip",
+    archiveType: "zip",
+    sourceIdx: 0,
+    marketId: "official",
+  };
+}
+
+interface MarketServiceTestAccess {
+  startTask(
+    taskId: string,
+    meta: ReturnType<typeof taskMeta>,
+    initial?: Partial<MarketTaskState>,
+  ): MarketTaskState;
+  transition(
+    taskId: string,
+    status: MarketTaskStatus,
+    extra?: Partial<MarketTaskState>,
+  ): MarketTaskState | null;
+}
+
+function accessInternals(service: MarketService): MarketServiceTestAccess {
+  return service as unknown as MarketServiceTestAccess;
+}
 
 describe("MarketService catalog cache", () => {
   it("coalesces concurrent official directory and index requests", async () => {
@@ -192,5 +263,57 @@ describe("MarketService catalog cache", () => {
       "market_id_mismatch",
     );
     await expect(service.getIndex(1)).resolves.toBe(cached);
+  });
+});
+
+describe("MarketService progress events", () => {
+  it("hides the float ball immediately when the final task completes", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(10_000);
+    const service = new MarketService({
+      fetchOfficialCatalog: vi.fn(),
+      fetchExternalIndex: vi.fn(),
+    });
+    const internals = accessInternals(service);
+
+    internals.startTask("top.bzgames.test@1.0.0", taskMeta());
+    expect(windowMocks.floatBallWindow.showInactive).toHaveBeenCalledOnce();
+
+    internals.transition("top.bzgames.test@1.0.0", "completed", {
+      progress: 100,
+    });
+
+    expect(windowMocks.floatBallWindow.hide).toHaveBeenCalledOnce();
+    expect(windowMocks.floatBallSend).toHaveBeenLastCalledWith(
+      "market:floatBall:event",
+      expect.objectContaining({ activeTaskCount: 0 }),
+    );
+  });
+
+  it("coalesces high-frequency progress while retaining the trailing state", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(10_000);
+    const service = new MarketService({
+      fetchOfficialCatalog: vi.fn(),
+      fetchExternalIndex: vi.fn(),
+    });
+    const internals = accessInternals(service);
+    const taskId = "top.bzgames.test@1.0.0";
+
+    internals.startTask(taskId, taskMeta());
+    internals.transition(taskId, "downloading", { progress: 0 });
+    for (let progress = 1; progress <= 20; progress++) {
+      internals.transition(taskId, "downloading", { progress });
+    }
+
+    expect(windowMocks.mainSend).toHaveBeenCalledTimes(2);
+    vi.advanceTimersByTime(100);
+    expect(windowMocks.mainSend).toHaveBeenCalledTimes(3);
+    expect(windowMocks.mainSend).toHaveBeenLastCalledWith(
+      "market:event",
+      expect.objectContaining({
+        task: expect.objectContaining({ progress: 20 }),
+      }),
+    );
   });
 });

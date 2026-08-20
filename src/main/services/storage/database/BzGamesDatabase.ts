@@ -22,6 +22,8 @@ export const BZ_GAMES_SCHEMA_SQL = [
     version TEXT NOT NULL,
     path TEXT NOT NULL,
     added_at INTEGER NOT NULL,
+    install_source TEXT NOT NULL DEFAULT 'manual' CHECK (install_source IN ('manual', 'market')),
+    market_id TEXT,
     is_present INTEGER NOT NULL DEFAULT 1,
     PRIMARY KEY (game_id, version)
   )`,
@@ -79,6 +81,12 @@ type VersionRow = {
   version: string;
   path: string;
   added_at: number;
+  install_source: "manual" | "market";
+  market_id: string | null;
+};
+
+type TableInfoRow = {
+  name: string;
 };
 
 type AchievementRow = {
@@ -125,6 +133,19 @@ export class BzGamesDatabase {
   async initialize(): Promise<void> {
     this.database.init();
     await this.database.get("SELECT name FROM sqlite_master LIMIT 1");
+    const columns = new Set(
+      (await this.database.all<TableInfoRow>("PRAGMA table_info(game_versions)")).map(
+        (column) => column.name,
+      ),
+    );
+    if (!columns.has("install_source")) {
+      await this.database.run(
+        "ALTER TABLE game_versions ADD COLUMN install_source TEXT NOT NULL DEFAULT 'manual' CHECK (install_source IN ('manual', 'market'))",
+      );
+    }
+    if (!columns.has("market_id")) {
+      await this.database.run("ALTER TABLE game_versions ADD COLUMN market_id TEXT");
+    }
   }
 
   close(): Promise<void> {
@@ -154,7 +175,8 @@ export class BzGamesDatabase {
   async getGames(): Promise<GameRecord[]> {
     const [games, versions, achievements, stats, sessions] = await Promise.all([
       this.all<GameRow>("SELECT id, added_at, is_favorite, sort_order FROM games WHERE is_present = 1 ORDER BY sort_order, added_at"),
-      this.all<VersionRow>("SELECT game_id, version, path, added_at FROM game_versions WHERE is_present = 1"),
+      this.all<VersionRow>(`SELECT game_id, version, path, added_at, install_source, market_id
+        FROM game_versions WHERE is_present = 1`),
       this.all<AchievementRow>("SELECT game_id, version, achievement_id, unlocked_at FROM achievement_unlocks"),
       this.all<StatsRow>(`SELECT game_id, version, stat_id, reported_value, report_mode
         FROM stats_reports ORDER BY reported_at, event_id`),
@@ -181,6 +203,8 @@ export class BzGamesDatabase {
         version: row.version,
         path: row.path,
         addedAt: row.added_at,
+        installSource: row.install_source,
+        marketId: row.market_id,
         stats: {},
         unlockedAchievements: [],
         playtime: 0,
@@ -243,10 +267,20 @@ export class BzGamesDatabase {
       });
       for (const version of game.versions) {
         statements.push({
-          sql: `INSERT INTO game_versions (game_id, version, path, added_at, is_present)
-            VALUES (?, ?, ?, ?, 1) ON CONFLICT(game_id, version) DO UPDATE SET
-            path=excluded.path, added_at=excluded.added_at, is_present=1`,
-          params: [game.id, version.version, version.path, version.addedAt],
+          sql: `INSERT INTO game_versions
+            (game_id, version, path, added_at, install_source, market_id, is_present)
+            VALUES (?, ?, ?, ?, ?, ?, 1) ON CONFLICT(game_id, version) DO UPDATE SET
+            path=excluded.path, added_at=excluded.added_at,
+            install_source=excluded.install_source, market_id=excluded.market_id,
+            is_present=1`,
+          params: [
+            game.id,
+            version.version,
+            version.path,
+            version.addedAt,
+            version.installSource,
+            version.marketId,
+          ],
         });
       }
     }

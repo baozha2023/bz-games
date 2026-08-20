@@ -976,6 +976,12 @@ export function createGameHostingService({ config, mySqlService, accessControlSe
       [...byVersion.values()].map((version) => version.initialRevisionId).filter(Boolean),
     );
     await ensureStorage();
+    const capacity = auth.can(PORTAL_CAPABILITIES.HOSTING_CAPACITY_VIEW)
+      ? {
+          usedBytes: await directoryUsage(filesDir),
+          maxTotalBytes: config.MAX_GAME_HOSTING_TOTAL_BYTES,
+        }
+      : undefined;
     sendJson(res, 200, {
       games: games.map((game) => ({
         gameId: game.game_id,
@@ -989,8 +995,9 @@ export function createGameHostingService({ config, mySqlService, accessControlSe
       })),
       total: Number(counts[0]?.total || 0), page, pageSize,
       role: auth.user.role,
-      usedBytes: await directoryUsage(filesDir), maxPackageBytes: config.MAX_GAME_HOSTING_FILE_BYTES,
-      maxImageBytes: config.MAX_GAME_HOSTING_IMAGE_BYTES, maxTotalBytes: config.MAX_GAME_HOSTING_TOTAL_BYTES,
+      ...(capacity ? { capacity } : {}),
+      maxPackageBytes: config.MAX_GAME_HOSTING_FILE_BYTES,
+      maxImageBytes: config.MAX_GAME_HOSTING_IMAGE_BYTES,
     });
   }
 

@@ -25,6 +25,7 @@ const destination = new BzGamesDatabase(
   "destination.db",
   "database-service-test",
 );
+const legacy = new BzGamesDatabase("legacy.db", "database-service-test");
 
 function game(id: string, favorite?: boolean): GameRecord {
   return {
@@ -34,6 +35,8 @@ function game(id: string, favorite?: boolean): GameRecord {
         version: "1.0.0",
         path: `C:/${id}`,
         addedAt: 1,
+        installSource: "manual",
+        marketId: null,
         stats: {},
         unlockedAchievements: [],
         playtime: 0,
@@ -165,6 +168,8 @@ async function verifyReinstallRestoresDerivedData(): Promise<void> {
     version: nextVersion,
     path: nextVersionPath,
     addedAt: 2,
+    installSource: "manual",
+    marketId: null,
     stats: {},
     unlockedAchievements: [],
     playtime: 0,
@@ -249,6 +254,49 @@ async function main(): Promise<void> {
       "hosted-game-test-token",
     );
 
+    const legacyDirect = new Database("legacy.db");
+    legacyDirect.pragma("cipher='chacha20'");
+    legacyDirect.key(
+      crypto.createHash("sha256").update("database-service-test").digest(),
+    );
+    legacyDirect.exec(`
+      CREATE TABLE games (
+        id TEXT PRIMARY KEY,
+        added_at INTEGER NOT NULL,
+        is_favorite INTEGER NOT NULL DEFAULT 0,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        is_present INTEGER NOT NULL DEFAULT 1
+      );
+      CREATE TABLE game_versions (
+        game_id TEXT NOT NULL,
+        version TEXT NOT NULL,
+        path TEXT NOT NULL,
+        added_at INTEGER NOT NULL,
+        is_present INTEGER NOT NULL DEFAULT 1,
+        PRIMARY KEY (game_id, version)
+      );
+      INSERT INTO games (id, added_at) VALUES ('legacy-game', 1);
+      INSERT INTO game_versions (game_id, version, path, added_at)
+        VALUES ('legacy-game', '1.0.0', 'C:/legacy-game', 1);
+    `);
+    legacyDirect.close();
+
+    await legacy.initialize();
+    const legacyColumns = await legacy.all<{ name: string }>(
+      "PRAGMA table_info(game_versions)",
+    );
+    assert.equal(
+      legacyColumns.some((column) => column.name === "install_source"),
+      true,
+    );
+    assert.equal(
+      legacyColumns.some((column) => column.name === "market_id"),
+      true,
+    );
+    const legacyGames = await legacy.getGames();
+    assert.equal(legacyGames[0].versions[0].installSource, "manual");
+    assert.equal(legacyGames[0].versions[0].marketId, null);
+
     await source.initialize();
     await destination.initialize();
 
@@ -262,6 +310,14 @@ async function main(): Promise<void> {
     assert.equal(restored.length, 1);
     assert.equal(restored[0].isFavorite, true);
     assert.equal(restored[0].versions[0].unlockedAchievements.length, 1);
+
+    const marketGame = game("market-game");
+    marketGame.versions[0].installSource = "market";
+    marketGame.versions[0].marketId = "official";
+    await source.saveGames([marketGame]);
+    const persistedMarketVersion = (await source.getGames())[0].versions[0];
+    assert.equal(persistedMarketVersion.installSource, "market");
+    assert.equal(persistedMarketVersion.marketId, "official");
 
     await verifyReinstallRestoresDerivedData();
 
@@ -363,6 +419,7 @@ async function main(): Promise<void> {
   } finally {
     await source.close();
     await destination.close();
+    await legacy.close();
     await bzGamesDatabase.close();
   }
 }

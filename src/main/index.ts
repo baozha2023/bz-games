@@ -1,5 +1,4 @@
 import { app, BrowserWindow, session } from "electron";
-import { spawnSync } from "child_process";
 import path from "path";
 import {
   createWindow,
@@ -27,62 +26,19 @@ let appServicesInitialized = false;
 let shutdownStarted = false;
 let shutdownCompleted = false;
 
-function quoteWindowsArg(value: string): string {
-  return `"${value.replace(/"/g, '\\"')}"`;
-}
-
 function findProtocolUrl(argv: string[]): string {
   return argv.find((item) => item.startsWith(`${PROTOCOL_SCHEME}://`)) || "";
 }
 
 function registerProtocolClient(): void {
   if (process.defaultApp) {
-    const mainScriptPath = path.join(__dirname, "index.js");
+    const developmentEntry = process.argv[1]
+      ? path.resolve(process.argv[1])
+      : "";
+    if (!developmentEntry) return;
     app.setAsDefaultProtocolClient(PROTOCOL_SCHEME, process.execPath, [
-      mainScriptPath,
+      developmentEntry,
     ]);
-    if (process.platform === "win32") {
-      const command = `${quoteWindowsArg(process.execPath)} ${quoteWindowsArg(mainScriptPath)} "%1"`;
-      spawnSync(
-        "reg",
-        [
-          "add",
-          `HKCU\\Software\\Classes\\${PROTOCOL_SCHEME}`,
-          "/ve",
-          "/d",
-          "URL:BZ-Games Protocol",
-          "/f",
-        ],
-        { windowsHide: true },
-      );
-      spawnSync(
-        "reg",
-        [
-          "add",
-          `HKCU\\Software\\Classes\\${PROTOCOL_SCHEME}`,
-          "/v",
-          "URL Protocol",
-          "/t",
-          "REG_SZ",
-          "/d",
-          "",
-          "/f",
-        ],
-        { windowsHide: true },
-      );
-      spawnSync(
-        "reg",
-        [
-          "add",
-          `HKCU\\Software\\Classes\\${PROTOCOL_SCHEME}\\shell\\open\\command`,
-          "/ve",
-          "/d",
-          command,
-          "/f",
-        ],
-        { windowsHide: true },
-      );
-    }
     return;
   }
   app.setAsDefaultProtocolClient(PROTOCOL_SCHEME);

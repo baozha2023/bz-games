@@ -184,9 +184,9 @@ class StoreService {
     const defaultGamesPath = path.join(dataRoot, "games");
     const dbPath = path.join(dataRoot, "db");
 
-    const needConfig = !(await pathExists(configPath));
-    const needGames = !(await pathExists(defaultGamesPath));
-    const needDb = !(await pathExists(dbPath));
+    let needConfig = !(await pathExists(configPath));
+    let needGames = !(await pathExists(defaultGamesPath));
+    let needDb = !(await pathExists(dbPath));
 
     if (!needConfig && !needGames && !needDb) {
       return;
@@ -200,20 +200,54 @@ class StoreService {
       ".update-snapshots",
     );
 
-    let snapshots: string[] = [];
+    let snapshots: Array<{ dirPath: string; createdAt: number }> = [];
     try {
       const entries = await fs.readdir(snapshotRoot, { withFileTypes: true });
-      snapshots = entries
-        .filter((entry) => entry.isDirectory())
-        .map((entry) => entry.name)
-        .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+      const candidates = await Promise.all(
+        entries
+          .filter(
+            (entry) => entry.isDirectory() && !entry.name.includes(".tmp-"),
+          )
+          .map(async (entry) => {
+            const dirPath = path.join(snapshotRoot, entry.name);
+            try {
+              const metadata = JSON.parse(
+                await fs.readFile(
+                  path.join(dirPath, "snapshot-meta.json"),
+                  "utf-8",
+                ),
+              ) as { createdAt?: unknown };
+              if (
+                typeof metadata.createdAt === "number" &&
+                Number.isFinite(metadata.createdAt)
+              ) {
+                return { dirPath, createdAt: metadata.createdAt };
+              }
+            } catch {
+              // Legacy snapshots have no metadata; fall back to directory time.
+            }
+            try {
+              const stat = await fs.stat(dirPath);
+              return { dirPath, createdAt: stat.mtimeMs };
+            } catch (error) {
+              logger.warn(
+                `[StoreService] Ignoring unreadable update snapshot: ${dirPath}`,
+                error,
+              );
+              return null;
+            }
+          }),
+      );
+      snapshots = candidates.filter(
+        (candidate): candidate is { dirPath: string; createdAt: number } =>
+          candidate !== null,
+      );
+      snapshots.sort((a, b) => b.createdAt - a.createdAt);
     } catch {
       return;
     }
 
-    for (const dirName of snapshots) {
-      const dirPath = path.join(snapshotRoot, dirName);
-
+    for (const { dirPath } of snapshots) {
       if (needConfig) {
         const configBackups = [
           path.join(dirPath, configBackupName),
@@ -225,6 +259,7 @@ class StoreService {
             logger.info(
               `[StoreService] Restored config.json from snapshot: ${dirPath}`,
             );
+            needConfig = false;
             break;
           }
         }
@@ -237,6 +272,7 @@ class StoreService {
           logger.info(
             `[StoreService] Restored games dir from snapshot: ${dirPath}`,
           );
+          needGames = false;
         }
       }
 
@@ -247,10 +283,11 @@ class StoreService {
           logger.info(
             `[StoreService] Restored db dir from snapshot: ${dirPath}`,
           );
+          needDb = false;
         }
       }
 
-      return;
+      if (!needConfig && !needGames && !needDb) return;
     }
   }
 

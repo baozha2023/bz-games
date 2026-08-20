@@ -5,13 +5,13 @@ export default {
     settings: "设置",
     personalization: "个性化",
     rooms: "房间",
+    career: "游戏生涯",
     backToRoom: "返回房间",
   },
   feedback: {
     button: "建言献策",
     title: "建言献策",
     loggedInHint: "已登录，每 6 小时可以发送一次。",
-    anonymousHint: "未登录时，每 48 小时可以发送一次。",
     placeholder: "请输入你的建议、问题或期待的功能……",
     selectImages: "选择图片",
     clearImages: "清空图片",
@@ -462,6 +462,16 @@ export default {
     failed: "签到失败",
     error: "网络或系统错误",
     bonus: "连续7天额外奖励！",
+  },
+  bzCoinGuide: {
+    title: "如何获取 BZ 币？",
+    balance: "当前余额",
+    checkInTitle: "每日签到",
+    checkInDescription:
+      "每天签到可获得 BZ 币：连续签到第 1 至第 6 天依次获得 10、20、30、40、50、60 BZ 币，第 7 天获得 100 BZ 币，之后重新开始新的七日周期。",
+    playtimeTitle: "累计游玩",
+    playtimeDescription:
+      "游玩游戏时，每累计 10 分钟自动获得 10 BZ 币。累计时长按游戏记录计算，无需手动领取。",
   },
   settings: {
     title: "设置",

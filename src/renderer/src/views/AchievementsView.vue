@@ -1,31 +1,5 @@
 <template>
-  <div style="padding: 24px">
-    <n-page-header
-      :title="t('achievement.title')"
-      @back="$router.push({ name: 'Library' })"
-    >
-      <template #extra>
-        <n-space align="center" :size="8">
-          <n-input
-            v-if="isSearchExpanded"
-            v-model:value="searchKeyword"
-            clearable
-            autofocus
-            :placeholder="t('common.searchGame')"
-            style="width: 260px"
-            @blur="handleSearchBlur"
-          />
-          <n-button quaternary circle @click="toggleSearch">
-            <template #icon>
-              <n-icon>
-                <SearchOutline />
-              </n-icon>
-            </template>
-          </n-button>
-        </n-space>
-      </template>
-    </n-page-header>
-
+  <div class="career-section">
     <div v-if="achievementCards.length === 0" style="margin-top: 24px">
       <n-empty :description="t('achievement.noAchievements')" />
     </div>
@@ -185,7 +159,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from "vue";
 import { useI18n } from "vue-i18n";
-import { ChevronDown, ChevronUp, SearchOutline } from "@vicons/ionicons5";
+import { ChevronDown, ChevronUp } from "@vicons/ionicons5";
 import { useGameStore } from "../stores/useGameStore";
 import GameIcon from "../components/game/GameIcon.vue";
 import AchievementIcon from "../components/game/AchievementIcon.vue";
@@ -194,6 +168,7 @@ import { compareGameVersionsDescending } from "../../../shared/game-manifest";
 
 const { t } = useI18n();
 const gameStore = useGameStore();
+const searchKeyword = defineModel<string>("searchKeyword", { default: "" });
 
 const expandedGames = ref<Record<string, boolean>>({});
 
@@ -214,18 +189,14 @@ const displayGames = computed(() => {
 });
 
 const {
-  searchKeyword,
-  isSearchExpanded,
   selectedVersions,
   visibleCount,
   filteredItems: filteredDisplayGames,
-  toggleSearch,
-  handleSearchBlur,
   activateStaggerRendering,
   initializeManifestCache,
   handleVersionChange,
   getManifest,
-} = useGameListView(displayGames);
+} = useGameListView(displayGames, searchKeyword);
 
 onMounted(async () => {
   await gameStore.loadGames();
@@ -289,6 +260,10 @@ function getGameAchievements(gameId: string) {
 </script>
 
 <style scoped>
+.career-section {
+  padding-top: 12px;
+}
+
 .stagger-card-enter {
   animation: stagger-fade-in 0.3s ease-out both;
 }

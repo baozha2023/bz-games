@@ -8,7 +8,12 @@ import {
   type GameManifest,
 } from "../../../shared/game-manifest";
 import { storeService } from "../storage/StoreService";
-import { GameType, type GameRecord } from "../../../shared/types";
+import {
+  GameType,
+  type GameInstallProvenance,
+  type GameRecord,
+  type GameVersion,
+} from "../../../shared/types";
 import { logger } from "../../utils/logger";
 import { copyFolderRecursiveSync } from "../../utils/fileUtils";
 import {
@@ -89,7 +94,13 @@ export class GameLoader {
     return this.loadGameFromPath(filePaths[0]);
   }
 
-  static async loadGameFromPath(sourcePath: string): Promise<{
+  static async loadGameFromPath(
+    sourcePath: string,
+    provenance: GameInstallProvenance = {
+      installSource: "manual",
+      marketId: null,
+    },
+  ): Promise<{
     success: boolean;
     manifest?: GameManifest;
     error?: string;
@@ -111,7 +122,7 @@ export class GameLoader {
       } else {
         await this.ensureVersionNotExists(manifest.id, manifest.version);
       }
-      await this.installAndRecordGame(resolvedSourcePath, manifest);
+      await this.installAndRecordGame(resolvedSourcePath, manifest, provenance);
 
       this.cache = null;
       return { success: true, manifest };
@@ -182,7 +193,10 @@ export class GameLoader {
         await this.ensureVersionNotExists(manifest.id, manifest.version);
       }
 
-      await this.installAndRecordGame(resolvedSourcePath, manifest);
+      await this.installAndRecordGame(resolvedSourcePath, manifest, {
+        installSource: "manual",
+        marketId: null,
+      });
 
       this.cache = null;
       return { success: true, manifest };
@@ -612,10 +626,11 @@ export class GameLoader {
   private static async installAndRecordGame(
     sourcePath: string,
     manifest: GameManifest,
+    provenance: GameInstallProvenance,
   ): Promise<void> {
     const targetPath = this.installGameFiles(sourcePath, manifest);
     try {
-      await this.updateGameRecord(manifest, targetPath);
+      await this.updateGameRecord(manifest, targetPath, provenance);
     } catch (error) {
       this.removeIncompleteInstall(targetPath);
       throw error;
@@ -657,6 +672,7 @@ export class GameLoader {
   private static async updateGameRecord(
     manifest: GameManifest,
     targetPath: string,
+    provenance: GameInstallProvenance,
   ): Promise<void> {
     const games = await storeService.getGames();
     let record = games.find((g) => g.id === manifest.id);
@@ -666,6 +682,7 @@ export class GameLoader {
         version: manifest.version,
         path: targetPath,
         addedAt: Date.now(),
+        ...provenance,
         stats: {},
         unlockedAchievements: [],
         playtime: 0,
@@ -691,7 +708,7 @@ export class GameLoader {
         // Update path and addedAt for existing version
         record.versions = record.versions.map((v) =>
           v.version === manifest.version
-            ? { ...v, path: targetPath, addedAt: Date.now() }
+            ? { ...v, path: targetPath, addedAt: Date.now(), ...provenance }
             : v,
         );
       } else {
@@ -700,6 +717,7 @@ export class GameLoader {
           version: manifest.version,
           path: targetPath,
           addedAt: Date.now(),
+          ...provenance,
           stats: {},
           unlockedAchievements: [],
           playtime: 0,
@@ -719,6 +737,7 @@ export class GameLoader {
             version: manifest.version,
             path: targetPath,
             addedAt: Date.now(),
+            ...provenance,
             stats: {},
             unlockedAchievements: [],
             playtime: 0,
@@ -823,6 +842,8 @@ export class GameLoader {
           version: ver,
           path: versionPath,
           addedAt: Date.now(),
+          installSource: "manual",
+          marketId: null,
           stats: {},
           unlockedAchievements: [],
           playtime: 0,
@@ -845,11 +866,13 @@ export class GameLoader {
 
     // 3. Add completely new games found on disk
     for (const [gameId, versions] of diskGames.entries()) {
-      const gameVersions = Array.from(versions.entries()).map(
+      const gameVersions: GameVersion[] = Array.from(versions.entries()).map(
         ([version, versionPath]) => ({
           version,
           path: versionPath,
           addedAt: Date.now(),
+          installSource: "manual",
+          marketId: null,
           stats: {},
           unlockedAchievements: [],
           playtime: 0,

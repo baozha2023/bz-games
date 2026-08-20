@@ -5,13 +5,13 @@ export default {
     settings: "设置",
     personalization: "修饰",
     rooms: "房舍",
+    career: "游戏生涯",
     backToRoom: "归房",
   },
   feedback: {
     button: "献策",
     title: "建言献策",
     loggedInHint: "已入者，六时辰可呈言一次。",
-    anonymousHint: "未入者，四十八时辰可呈言一次。",
     placeholder: "请陈所议、所患、所愿之能……",
     selectImages: "择图",
     clearImages: "尽去诸图",
@@ -454,6 +454,15 @@ export default {
     failed: "签败",
     error: "网或系误",
     bonus: "连七日额赏！",
+  },
+  bzCoinGuide: {
+    title: "何以获 BZ 币？",
+    balance: "今有",
+    checkInTitle: "每日签到",
+    checkInDescription:
+      "每日签到可获币。连签一至六日，依次得十、二十、三十、四十、五十、六十枚；第七日得百枚，而后七日之期复始。",
+    playtimeTitle: "累时游玩",
+    playtimeDescription: "游玩之时，每积十分钟，自得十枚 BZ 币，无须手取。",
   },
   settings: {
     title: "设置",

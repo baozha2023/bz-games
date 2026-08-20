@@ -1,7 +1,6 @@
 import crypto from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
 import fs from "node:fs/promises";
-import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
@@ -10,7 +9,6 @@ import Busboy from "busboy";
 import { ObjectId } from "mongodb";
 
 import { requireHttpRelayToken } from "../utils/relay-auth.js";
-import { readBearerToken } from "../utils/http.js";
 import { sendJson } from "../utils/ws.js";
 import { PORTAL_CAPABILITIES } from "./portal-authorization.js";
 
@@ -461,19 +459,6 @@ function readJson(req, maxBytes) {
   });
 }
 
-export function normalizeSocketIp(remoteAddress) {
-  let value = String(remoteAddress || "")
-    .trim()
-    .toLowerCase();
-  const zoneIndex = value.indexOf("%");
-  if (zoneIndex >= 0) value = value.slice(0, zoneIndex);
-  if (value.startsWith("::ffff:")) {
-    const ipv4 = value.slice("::ffff:".length);
-    if (net.isIP(ipv4) === 4) return ipv4;
-  }
-  return net.isIP(value) ? value : "";
-}
-
 export function createFeedbackRateLimiter(cooldownMs) {
   const entries = new Map();
 
@@ -535,7 +520,6 @@ function serializeFeedbackSummary(row) {
     id: row.id,
     content: row.content,
     status: row.status,
-    submitterType: row.submitter_type,
     githubLogin: row.github_login || "",
     imageCount: Number(row.image_count || 0),
     createdAt: row.created_at,
@@ -572,38 +556,23 @@ export function createFeedbackService({
   authService,
   accessControlService,
 }) {
-  const anonymousLimiter = createFeedbackRateLimiter(
-    config.FEEDBACK_ANONYMOUS_COOLDOWN_MS,
-  );
   const authenticatedLimiter = createFeedbackRateLimiter(
     config.FEEDBACK_AUTHENTICATED_COOLDOWN_MS,
   );
   const adminAccess = accessControlService;
 
-  async function getOptionalAuth(req, res) {
-    const bearerToken = readBearerToken(req);
-    if (!bearerToken) {
-      return { auth: null, valid: true };
-    }
+  async function requireClientAuth(req, res) {
     const resolution = await authService.getClientSessionFromRequest(req);
     if (resolution.status !== "authenticated") {
       authService.sendAuthFailure(res, resolution.status);
-      return { auth: null, valid: false };
+      return null;
     }
-    return { auth: resolution.auth, valid: true };
+    return resolution.auth;
   }
 
   async function requireFeedbackOwner(req, res, userId) {
-    const { auth, valid } = await getOptionalAuth(req, res);
-    if (!valid) return false;
-    if (userId == null) return true;
-    if (!auth) {
-      sendJson(res, 401, {
-        error: "unauthorized",
-        message: "GitHub login is required to view this feedback",
-      });
-      return false;
-    }
+    const auth = await requireClientAuth(req, res);
+    if (!auth) return false;
     if (String(auth.user.id) !== String(userId)) {
       sendJson(res, 403, {
         error: "forbidden",
@@ -621,23 +590,18 @@ export function createFeedbackService({
       return true;
     }
 
-    const { auth, valid } = await getOptionalAuth(req, res);
-    if (!valid) {
+    const auth = await requireClientAuth(req, res);
+    if (!auth) {
       req.resume();
       return true;
     }
 
-    let limiter = authenticatedLimiter;
-    let limiterKey = String(auth?.user?.github_id || "");
-    if (!auth) {
-      limiter = anonymousLimiter;
-      limiterKey = normalizeSocketIp(req.socket.remoteAddress);
-      if (!limiterKey) {
-        sendJson(res, 400, { error: "client_ip_unavailable" });
-        req.resume();
-        return true;
-      }
-    }
+    return submitFeedback(req, res, auth, () => parseMultipart(req, config));
+  }
+
+  async function submitFeedback(req, res, auth, parsePayload) {
+    const limiter = authenticatedLimiter;
+    const limiterKey = String(auth.user.github_id);
     const reservation = limiter.reserve(limiterKey);
     if (!reservation.ok) {
       sendJson(res, 429, {
@@ -653,7 +617,7 @@ export function createFeedbackService({
     let bucket = null;
     const uploaded = [];
     try {
-      parsed = await parseMultipart(req, config);
+      parsed = await parsePayload();
       if (parsed.files.length > 0) {
         if (!mongoService.isEnabled()) {
           throw new FeedbackError("image_storage_not_configured", 503);
@@ -684,9 +648,9 @@ export function createFeedbackService({
           [
             feedbackId,
             parsed.content,
-            auth ? "github" : "anonymous",
-            auth?.user?.id || null,
-            auth?.user?.login || "",
+            "github",
+            auth.user.id,
+            auth.user.login,
             parsed.appVersion,
             parsed.platform,
             uploaded.length,
@@ -739,8 +703,53 @@ export function createFeedbackService({
     return true;
   }
 
+  async function handlePortalSubmit(req, res) {
+    if (!mySqlService.isEnabled()) {
+      sendJson(res, 503, { error: "feedback_storage_not_configured" });
+      return true;
+    }
+    const auth = await adminAccess.requirePortalSession(req, res, {
+      requireOrigin: true,
+    });
+    if (!auth) {
+      req.resume();
+      return true;
+    }
+    if (auth.user.role !== "player") {
+      sendJson(res, 403, { error: "forbidden" });
+      req.resume();
+      return true;
+    }
+    return submitFeedback(req, res, auth, async () => {
+      const body = await readJson(req, 64 * 1024);
+      const rawContent = body?.content;
+      if (typeof rawContent !== "string") {
+        throw new FeedbackError("invalid_feedback");
+      }
+      if (rawContent.trim().length > config.MAX_FEEDBACK_TEXT_LENGTH) {
+        throw new FeedbackError("feedback_text_too_long");
+      }
+      const content = cleanText(rawContent, config.MAX_FEEDBACK_TEXT_LENGTH);
+      if (!content) throw new FeedbackError("feedback_empty");
+      return {
+        tempDir: null,
+        content,
+        appVersion: "",
+        platform: "portal",
+        files: [],
+      };
+    });
+  }
+
   async function handleList(req, res, url) {
-    if (!(await adminAccess.requireCapability(req, res, PORTAL_CAPABILITIES.FEEDBACK_VIEW))) return;
+    if (
+      !(await adminAccess.requireCapability(
+        req,
+        res,
+        PORTAL_CAPABILITIES.FEEDBACK_VIEW,
+      ))
+    )
+      return;
     const rawPage = Number(url.searchParams.get("page") || 1);
     const rawPageSize = Number(url.searchParams.get("pageSize") || 20);
     if (
@@ -779,7 +788,7 @@ export function createFeedbackService({
       params,
     );
     const [rows] = await mySqlService.query(
-      `SELECT id, content, status, submitter_type, github_login,
+      `SELECT id, content, status, github_login,
               image_count, created_at
        FROM feedback
        ${where}
@@ -796,9 +805,16 @@ export function createFeedbackService({
   }
 
   async function handleDetail(req, res, feedbackId) {
-    if (!(await adminAccess.requireCapability(req, res, PORTAL_CAPABILITIES.FEEDBACK_VIEW))) return;
+    if (
+      !(await adminAccess.requireCapability(
+        req,
+        res,
+        PORTAL_CAPABILITIES.FEEDBACK_VIEW,
+      ))
+    )
+      return;
     const [rows] = await mySqlService.query(
-      `SELECT id, content, status, admin_note, reply, submitter_type, github_login,
+      `SELECT id, content, status, admin_note, reply, github_login,
               app_version, platform, image_count, created_at, updated_at
        FROM feedback
        WHERE id = ?
@@ -826,7 +842,14 @@ export function createFeedbackService({
   }
 
   async function handleImage(req, res, feedbackId, imageId) {
-    if (!(await adminAccess.requireCapability(req, res, PORTAL_CAPABILITIES.FEEDBACK_VIEW))) return;
+    if (
+      !(await adminAccess.requireCapability(
+        req,
+        res,
+        PORTAL_CAPABILITIES.FEEDBACK_VIEW,
+      ))
+    )
+      return;
     if (!mongoService.isEnabled()) {
       sendJson(res, 503, { error: "image_storage_not_configured" });
       return;
@@ -931,7 +954,15 @@ export function createFeedbackService({
   }
 
   async function handleUpdate(req, res, feedbackId) {
-    if (!(await adminAccess.requireCapability(req, res, PORTAL_CAPABILITIES.FEEDBACK_MANAGE, { requireOrigin: true }))) return;
+    if (
+      !(await adminAccess.requireCapability(
+        req,
+        res,
+        PORTAL_CAPABILITIES.FEEDBACK_MANAGE,
+        { requireOrigin: true },
+      ))
+    )
+      return;
     const body = await readJson(req, 64 * 1024);
     const status = cleanText(body?.status, 32);
     if (!ALLOWED_STATUSES.has(status)) {
@@ -961,9 +992,65 @@ export function createFeedbackService({
     sendJson(res, 200, { ok: true });
   }
 
+  async function handleDelete(req, res, feedbackId) {
+    if (
+      !(await adminAccess.requireCapability(
+        req,
+        res,
+        PORTAL_CAPABILITIES.FEEDBACK_MANAGE,
+        { requireOrigin: true },
+      ))
+    )
+      return;
+    const [feedbackRows] = await mySqlService.query(
+      "SELECT id FROM feedback WHERE id = ? LIMIT 1",
+      [feedbackId],
+    );
+    if (!feedbackRows[0]) {
+      sendJson(res, 404, { error: "feedback_not_found" });
+      return;
+    }
+    const [images] = await mySqlService.query(
+      "SELECT storage_id FROM feedback_images WHERE feedback_id = ?",
+      [feedbackId],
+    );
+    if (images.length && !mongoService.isEnabled()) {
+      sendJson(res, 503, { error: "image_storage_not_configured" });
+      return;
+    }
+    if (images.length) await mongoService.ensureReady();
+    await mySqlService.transaction(async (connection) => {
+      await connection.query(
+        "DELETE FROM feedback_images WHERE feedback_id = ?",
+        [feedbackId],
+      );
+      await connection.query("DELETE FROM feedback WHERE id = ?", [feedbackId]);
+    });
+    if (images.length) {
+      const bucket = mongoService.getBucket();
+      const results = await Promise.allSettled(
+        images
+          .filter((image) => ObjectId.isValid(image.storage_id))
+          .map((image) => bucket.delete(new ObjectId(image.storage_id))),
+      );
+      for (const result of results) {
+        if (result.status === "rejected") {
+          console.error(
+            "[relay-server] failed to delete feedback image",
+            result.reason,
+          );
+        }
+      }
+    }
+    sendJson(res, 200, { ok: true });
+  }
+
   async function handleRequest(req, res, url) {
     if (req.method === "POST" && url.pathname === "/api/v1/feedback") {
       return handleSubmit(req, res, url);
+    }
+    if (req.method === "POST" && url.pathname === "/api/portal/v1/feedback") {
+      return handlePortalSubmit(req, res);
     }
     const userImageMatch = url.pathname.match(
       /^\/api\/v1\/feedback\/([^/]+)\/images\/([^/]+)$/,
@@ -1034,6 +1121,10 @@ export function createFeedbackService({
       }
       return true;
     }
+    if (detailMatch && req.method === "DELETE") {
+      await handleDelete(req, res, safePathSegment(detailMatch[1]));
+      return true;
+    }
     sendJson(res, 404, { error: "not_found" });
     return true;
   }
@@ -1041,7 +1132,6 @@ export function createFeedbackService({
   return {
     handleRequest,
     dispose: () => {
-      anonymousLimiter.dispose();
       authenticatedLimiter.dispose();
     },
   };

@@ -26,12 +26,30 @@ function parseArguments(argv) {
     version: values.get("version"),
     sha256: values.get("sha256"),
     size: Number(values.get("size")),
+    allowDowngrade:
+      values.get("allow-downgrade") === "true"
+        ? true
+        : values.get("allow-downgrade") === "false"
+          ? false
+          : undefined,
   };
   if (
-    values.size !== 4 ||
-    [...values.keys()].some((key) => !Object.hasOwn(result, key))
+    values.size !== 5 ||
+    [...values.keys()].some(
+      (key) =>
+        !new Set([
+          "staged",
+          "version",
+          "sha256",
+          "size",
+          "allow-downgrade",
+        ]).has(key),
+    ) ||
+    typeof result.allowDowngrade !== "boolean"
   ) {
-    throw new Error("expected --staged, --version, --sha256 and --size");
+    throw new Error(
+      "expected --staged, --version, --sha256, --size and --allow-downgrade true|false",
+    );
   }
   return result;
 }
@@ -81,6 +99,8 @@ export async function publishDesktopRelease(options, runtimeConfig = config) {
   const maxFileBytes = runtimeConfig.MAX_DESKTOP_RELEASE_FILE_BYTES;
   if (!semver.valid(options.version) || semver.prerelease(options.version))
     throw new Error("version must be a stable semver");
+  if (typeof options.allowDowngrade !== "boolean")
+    throw new Error("allowDowngrade must be a boolean");
   if (!SHA256_PATTERN.test(options.sha256))
     throw new Error("sha256 must be 64 lowercase hexadecimal characters");
   if (
@@ -118,7 +138,11 @@ export async function publishDesktopRelease(options, runtimeConfig = config) {
   await fs.mkdir(storageRoot, { recursive: true, mode: 0o750 });
   await fs.mkdir(incomingRoot, { recursive: true, mode: 0o750 });
   const current = await readCurrentManifest(storageRoot, maxFileBytes);
-  if (current && semver.lt(options.version, current.version))
+  if (
+    current &&
+    !options.allowDowngrade &&
+    semver.lt(options.version, current.version)
+  )
     throw new Error("refusing to publish an older release");
   if (current?.version === options.version) {
     if (current.sha256 !== options.sha256)

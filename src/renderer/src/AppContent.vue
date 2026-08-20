@@ -3,10 +3,13 @@
     <router-view />
   </template>
   <n-layout v-else position="absolute">
-    <n-layout-header bordered style="height: 64px; padding: 16px;">
+    <n-layout-header bordered style="height: 64px; padding: 16px">
       <n-space justify="space-between" align="center">
-        <h2 style="margin: 0; display: flex; align-items: center;">
-          <button class="profile-entry" @click="router.push('/personalization')">
+        <h2 style="margin: 0; display: flex; align-items: center">
+          <button
+            class="profile-entry"
+            @click="router.push('/personalization')"
+          >
             <AvatarWithFrame
               :src="settingsStore.settings?.avatar"
               :name="settingsStore.settings?.playerName || ''"
@@ -18,45 +21,85 @@
               :nickname-style="settingsStore.settings?.nicknameStyle"
               :effective-theme="settingsStore.effectiveTheme"
               :size="20"
-              style="margin-left: 8px;"
+              style="margin-left: 8px"
             />
           </button>
 
-          <div 
-             style="margin-left: 16px; display: flex; align-items: center; background: var(--bz-bg-panel); padding: 4px 12px; border-radius: 16px; cursor: pointer; transition: all 0.3s;" 
-             @click="showCheckIn = true"
-          >
-             <img :src="bzCoinIcon" style="width: 18px; height: 18px; margin-right: 4px;" />
-             <span style="color: #FFD700; font-weight: bold; margin-right: 8px; font-size: 14px;">{{ settingsStore.userData?.bzCoins || 0 }}</span>
-             <n-icon :component="Calendar" :color="'var(--bz-text-title)'" size="16" />
+          <div class="economy-entry-group">
+            <button
+              class="economy-entry coin-entry"
+              type="button"
+              :title="t('bzCoinGuide.title')"
+              @click="showBzCoinGuide = true"
+            >
+              <img :src="bzCoinIcon" class="coin-entry-icon" />
+              <span>{{ settingsStore.userData?.bzCoins || 0 }}</span>
+            </button>
+            <button
+              class="economy-entry check-in-entry"
+              type="button"
+              :title="t('checkIn.title')"
+              :aria-label="t('checkIn.title')"
+              @click="showCheckIn = true"
+            >
+              <n-icon :component="Calendar" size="17" />
+            </button>
           </div>
         </h2>
         <n-space>
-          <n-button 
-            v-if="roomStore.room" 
-            secondary 
+          <n-button
+            v-if="roomStore.room"
+            secondary
             type="primary"
             @click="handleBackToRoom"
           >
-            {{ t('nav.backToRoom') }}
+            {{ t("nav.backToRoom") }}
           </n-button>
-          <n-button :type="activeNavKey === 'market' ? 'primary' : 'default'" @click="router.push('/markets')">{{ t('nav.market') }}</n-button>
-          <n-button :type="activeNavKey === 'library' ? 'primary' : 'default'" @click="router.push('/library')">{{ t('nav.myGames') }}</n-button>
-          <n-button :type="activeNavKey === 'statistics' ? 'primary' : 'default'" @click="router.push('/statistics')">{{ t('statistics.title') }}</n-button>
+          <n-button
+            :type="activeNavKey === 'market' ? 'primary' : 'default'"
+            @click="router.push('/markets')"
+            >{{ t("nav.market") }}</n-button
+          >
+          <n-button
+            :type="activeNavKey === 'library' ? 'primary' : 'default'"
+            @click="router.push('/library')"
+            >{{ t("nav.myGames") }}</n-button
+          >
           <div class="badge-wrapper">
-            <span v-if="gameStore.newAchievements.size > 0" class="red-dot"></span>
-            <n-button :type="activeNavKey === 'achievements' ? 'primary' : 'default'" @click="router.push('/achievements')">{{ t('achievement.title') }}</n-button>
+            <span
+              v-if="gameStore.newAchievements.size > 0"
+              class="red-dot"
+            ></span>
+            <n-button
+              :type="activeNavKey === 'career' ? 'primary' : 'default'"
+              @click="router.push('/career')"
+              >{{ t("nav.career") }}</n-button
+            >
           </div>
-          <n-button :type="activeNavKey === 'rooms' ? 'primary' : 'default'" @click="router.push('/rooms')">{{ t('nav.rooms') }}</n-button>
-          <n-button :type="activeNavKey === 'settings' ? 'primary' : 'default'" @click="router.push('/settings')">{{ t('nav.settings') }}</n-button>
+          <n-button
+            :type="activeNavKey === 'rooms' ? 'primary' : 'default'"
+            @click="router.push('/rooms')"
+            >{{ t("nav.rooms") }}</n-button
+          >
+          <n-button
+            :type="activeNavKey === 'settings' ? 'primary' : 'default'"
+            @click="router.push('/settings')"
+            >{{ t("nav.settings") }}</n-button
+          >
         </n-space>
       </n-space>
     </n-layout-header>
-    <n-layout position="absolute" style="top: 64px; bottom: 0;">
+    <n-layout position="absolute" style="top: 64px; bottom: 0">
       <router-view />
     </n-layout>
     <CheckInModal v-model:show="showCheckIn" />
-    <n-modal v-model:show="showUpdateModal" preset="card" :title="t('settings.updateTitle')" style="width: 520px;">
+    <BzCoinGuideModal v-model:show="showBzCoinGuide" />
+    <n-modal
+      v-model:show="showUpdateModal"
+      preset="card"
+      :title="t('settings.updateTitle')"
+      style="width: 520px"
+    >
       <n-space vertical>
         <n-text>{{ updateStatusText }}</n-text>
         <n-progress
@@ -65,17 +108,19 @@
           :percentage="progressPercent"
           :indicator-placement="'inside'"
         />
-        <n-text v-if="updateState.message" depth="3">{{ updateState.message }}</n-text>
+        <n-text v-if="updateState.message" depth="3">{{
+          updateState.message
+        }}</n-text>
       </n-space>
       <template #footer>
         <n-space justify="end">
-          <n-button @click="hideUpdateModal">{{ t('common.cancel') }}</n-button>
+          <n-button @click="hideUpdateModal">{{ t("common.cancel") }}</n-button>
           <n-button
             v-if="updateState.status === 'downloaded'"
             type="primary"
             @click="handleInstallUpdate"
           >
-            {{ t('settings.installNow') }}
+            {{ t("settings.installNow") }}
           </n-button>
         </n-space>
       </template>
@@ -84,202 +129,246 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, computed } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
-import { NSpace, NIcon, NModal, NText, NProgress, NButton, useDialog, useMessage } from 'naive-ui'
-import { useI18n } from 'vue-i18n'
-import { useSettingsStore } from './stores/useSettingsStore'
-import { useRoomStore } from './stores/useRoomStore'
-import { useGameStore } from './stores/useGameStore'
-import { Calendar } from '@vicons/ionicons5'
-import CheckInModal from './components/CheckInModal.vue'
-import AvatarWithFrame from './components/AvatarWithFrame.vue'
-import NicknameText from './components/NicknameText.vue'
-import { ref } from 'vue'
-import { AchievementNotifier } from './utils/achievementNotifier'
-import bzCoinIcon from './assets/images/bz-coin.png'
-import semver from 'semver'
-import { invalidateGameAssetCache } from './composables/useImageCache'
-import type { MarketTaskState } from '../../shared/types'
-import { getFrameImageFileName } from '../../shared/avatar-frames'
+import { onMounted, onUnmounted, computed } from "vue";
+import { useRouter, useRoute } from "vue-router";
+import {
+  NSpace,
+  NIcon,
+  NModal,
+  NText,
+  NProgress,
+  NButton,
+  useDialog,
+  useMessage,
+} from "naive-ui";
+import { useI18n } from "vue-i18n";
+import { useSettingsStore } from "./stores/useSettingsStore";
+import { useRoomStore } from "./stores/useRoomStore";
+import { useGameStore } from "./stores/useGameStore";
+import { Calendar } from "@vicons/ionicons5";
+import CheckInModal from "./components/CheckInModal.vue";
+import BzCoinGuideModal from "./components/BzCoinGuideModal.vue";
+import AvatarWithFrame from "./components/AvatarWithFrame.vue";
+import NicknameText from "./components/NicknameText.vue";
+import { ref } from "vue";
+import { AchievementNotifier } from "./utils/achievementNotifier";
+import bzCoinIcon from "./assets/images/bz-coin.png";
+import semver from "semver";
+import { invalidateGameAssetCache } from "./composables/useImageCache";
+import type { MarketTaskState } from "../../shared/types";
+import { getFrameImageFileName } from "../../shared/avatar-frames";
 
-const marketNotifiedTaskIds = new Set<string>()
+const marketNotifiedTaskIds = new Set<string>();
 
-const { t } = useI18n()
-const router = useRouter()
-const route = useRoute()
-const settingsStore = useSettingsStore()
-const roomStore = useRoomStore()
-const gameStore = useGameStore()
-const dialog = useDialog()
-const message = useMessage()
-const showCheckIn = ref(false)
+const { t } = useI18n();
+const router = useRouter();
+const route = useRoute();
+const settingsStore = useSettingsStore();
+const roomStore = useRoomStore();
+const gameStore = useGameStore();
+const dialog = useDialog();
+const message = useMessage();
+const showCheckIn = ref(false);
+const showBzCoinGuide = ref(false);
 
 const topBarFrameFileName = computed(() => {
-  const frameId = settingsStore.userData?.equippedFrame
-  if (!frameId) return undefined
-  return getFrameImageFileName(frameId)
-})
+  const frameId = settingsStore.userData?.equippedFrame;
+  if (!frameId) return undefined;
+  return getFrameImageFileName(frameId);
+});
 
 const isPopupWindow = computed(() => {
-  return route.name === 'Notification' || route.name === 'ChatPopout' || route.name === 'FloatBall';
-})
+  return (
+    route.name === "Notification" ||
+    route.name === "ChatPopout" ||
+    route.name === "FloatBall"
+  );
+});
 
 const activeNavKey = computed(() => {
-  if (route.name === 'MarketList' || route.name === 'Market') return 'market'
-  if (route.name === 'Library' || route.name === 'GameDetail') return 'library'
-  if (route.name === 'Statistics') return 'statistics'
-  if (route.name === 'Achievements') return 'achievements'
-  if (route.name === 'RoomDiscovery' || route.name === 'Room') return 'rooms'
-  if (route.name === 'Settings') return 'settings'
-  return ''
-})
+  if (route.name === "MarketList" || route.name === "Market") return "market";
+  if (route.name === "Library" || route.name === "GameDetail") return "library";
+  if (route.name === "Career") return "career";
+  if (route.name === "RoomDiscovery" || route.name === "Room") return "rooms";
+  if (route.name === "Settings") return "settings";
+  return "";
+});
 
 const handleBackToRoom = () => {
   if (roomStore.room && roomStore.room.gameId) {
     router.push({
-      name: 'Room',
+      name: "Room",
       params: { id: roomStore.room.gameId },
-      query: route.query.steamGameId === roomStore.room.gameId ? { fromSteam: '1' } : undefined
-    })
+      query:
+        route.query.steamGameId === roomStore.room.gameId
+          ? { fromSteam: "1" }
+          : undefined,
+    });
   }
-}
+};
 
-let cleanup: (() => void) | undefined
-let cleanupAchievements: (() => void) | undefined
-let cleanupMarketEvent: (() => void) | undefined
+let cleanup: (() => void) | undefined;
+let cleanupAchievements: (() => void) | undefined;
+let cleanupMarketEvent: (() => void) | undefined;
 const achievementNotifier = new AchievementNotifier({
   delayMs: 5200,
   onProcess: async () => {
-    await gameStore.loadGames()
-  }
-})
+    await gameStore.loadGames();
+  },
+});
 
-const updateState = computed(() => settingsStore.updateState)
+const updateState = computed(() => settingsStore.updateState);
 const showUpdateModal = computed({
   get: () => settingsStore.showUpdateModal,
   set: (val) => {
-    if (!val) settingsStore.hideUpdateModal()
-  }
-})
+    if (!val) settingsStore.hideUpdateModal();
+  },
+});
 
 const progressPercent = computed(() => {
-  return Math.max(0, Math.min(100, Math.round(updateState.value.progress || 0)))
-})
+  return Math.max(
+    0,
+    Math.min(100, Math.round(updateState.value.progress || 0)),
+  );
+});
 
 const showProgress = computed(() => {
-  return ['downloading', 'downloaded', 'up_to_date'].includes(updateState.value.status)
-})
+  return ["downloading", "downloaded", "up_to_date"].includes(
+    updateState.value.status,
+  );
+});
 
 const updateStatusText = computed(() => {
   const errorTextByCode: Record<string, string> = {
-    network_error: t('settings.updateErrors.network_error'),
-    feed_invalid: t('settings.updateErrors.feed_invalid'),
-    download_failed: t('settings.updateErrors.download_failed'),
-    verify_failed: t('settings.updateErrors.verify_failed'),
-    permission_denied: t('settings.updateErrors.permission_denied'),
-    unsupported_dev_mode: t('settings.updateErrors.unsupported_dev_mode'),
-    unknown: t('settings.updateErrors.unknown')
-  }
+    network_error: t("settings.updateErrors.network_error"),
+    feed_invalid: t("settings.updateErrors.feed_invalid"),
+    download_failed: t("settings.updateErrors.download_failed"),
+    verify_failed: t("settings.updateErrors.verify_failed"),
+    permission_denied: t("settings.updateErrors.permission_denied"),
+    unsupported_dev_mode: t("settings.updateErrors.unsupported_dev_mode"),
+    unknown: t("settings.updateErrors.unknown"),
+  };
   const map: Record<string, string> = {
-    idle: t('settings.updateIdle'),
-    checking: t('settings.updateChecking'),
-    available: t('settings.updateAvailable', { version: updateState.value.latestVersion || '' }),
-    up_to_date: t('settings.updateLatest'),
-    downloading: t('settings.updateDownloading', { progress: progressPercent.value }),
-    downloaded: t('settings.updateDownloaded'),
-    error: t('settings.updateError', {
-      message:
-        errorTextByCode[updateState.value.errorCode || 'unknown'] ||
-        updateState.value.message ||
-        ''
+    idle: t("settings.updateIdle"),
+    checking: t("settings.updateChecking"),
+    available: t("settings.updateAvailable", {
+      version: updateState.value.latestVersion || "",
     }),
-    unsupported: t('settings.updateUnsupported')
-  }
-  return map[updateState.value.status] || t('settings.updateIdle')
-})
+    up_to_date: t("settings.updateLatest"),
+    downloading: t("settings.updateDownloading", {
+      progress: progressPercent.value,
+    }),
+    downloaded: t("settings.updateDownloaded"),
+    error: t("settings.updateError", {
+      message:
+        errorTextByCode[updateState.value.errorCode || "unknown"] ||
+        updateState.value.message ||
+        "",
+    }),
+    unsupported: t("settings.updateUnsupported"),
+  };
+  return map[updateState.value.status] || t("settings.updateIdle");
+});
 
 const shouldPromptUpdate = (latestVersion?: string) => {
-  if (!latestVersion) return false
-  const ignored = settingsStore.settings?.ignoredUpdateVersion
-  if (!ignored) return true
-  if (ignored === latestVersion) return false
+  if (!latestVersion) return false;
+  const ignored = settingsStore.settings?.ignoredUpdateVersion;
+  if (!ignored) return true;
+  if (ignored === latestVersion) return false;
   if (semver.valid(ignored) && semver.valid(latestVersion)) {
-    return semver.gt(latestVersion, ignored)
+    return semver.gt(latestVersion, ignored);
   }
-  return latestVersion !== ignored
-}
+  return latestVersion !== ignored;
+};
 
 const handleAutoUpdateCheck = async () => {
-  if (isPopupWindow.value) return
-  await settingsStore.loadSettings()
-  const promptedStorage = await handleGameStorageStartupPrompt()
-  if (promptedStorage) return
-  const state = await settingsStore.checkUpdateOnly()
-  if (state.status !== 'available') return
-  if (!shouldPromptUpdate(state.latestVersion)) return
+  if (isPopupWindow.value) return;
+  await settingsStore.loadSettings();
+  const promptedStorage = await handleGameStorageStartupPrompt();
+  if (promptedStorage) return;
+  const state = await settingsStore.checkUpdateOnly();
+  if (state.status !== "available") return;
+  if (!shouldPromptUpdate(state.latestVersion)) return;
   dialog.warning({
-    title: t('settings.updatePromptTitle'),
-    content: t('settings.updatePromptMessage', { version: state.latestVersion || '' }),
-    positiveText: t('settings.updateNow'),
-    negativeText: t('settings.updateLater'),
+    title: t("settings.updatePromptTitle"),
+    content: t("settings.updatePromptMessage", {
+      version: state.latestVersion || "",
+    }),
+    positiveText: t("settings.updateNow"),
+    negativeText: t("settings.updateLater"),
     onPositiveClick: async () => {
-      await settingsStore.checkUpdate()
+      await settingsStore.checkUpdate();
     },
     onNegativeClick: () => {
-      if (!state.latestVersion) return
-      void settingsStore.ignoreUpdateVersion(state.latestVersion).catch((error: any) => {
-        message.error(`${t('settings.saveFail')}: ${error?.message || error}`)
-      })
-    }
-  })
-}
+      if (!state.latestVersion) return;
+      void settingsStore
+        .ignoreUpdateVersion(state.latestVersion)
+        .catch((error: any) => {
+          message.error(
+            `${t("settings.saveFail")}: ${error?.message || error}`,
+          );
+        });
+    },
+  });
+};
 
 const handleGameStorageStartupPrompt = async (): Promise<boolean> => {
-  const status = await window.electronAPI.settings.getDefaultGamesMigrationStatus()
-  if (!status.shouldPrompt) return false
+  const status =
+    await window.electronAPI.settings.getDefaultGamesMigrationStatus();
+  if (!status.shouldPrompt) return false;
 
   dialog.warning({
-    title: t('settings.defaultGamesMigrationTitle'),
-    content: t('settings.defaultGamesMigrationContent', { path: status.defaultGamesPath }),
-    positiveText: t('settings.migrateNow'),
-    negativeText: t('settings.doNotRemind'),
+    title: t("settings.defaultGamesMigrationTitle"),
+    content: t("settings.defaultGamesMigrationContent", {
+      path: status.defaultGamesPath,
+    }),
+    positiveText: t("settings.migrateNow"),
+    negativeText: t("settings.doNotRemind"),
     maskClosable: false,
     closable: false,
     onPositiveClick: async () => {
-      const result = await window.electronAPI.settings.selectGameStoragePathRelaxed()
-      if (!result) return false
-      const migrated = await window.electronAPI.settings.migrateDefaultGamesLibrary({ targetPath: result.path })
+      const result =
+        await window.electronAPI.settings.selectGameStoragePathRelaxed();
+      if (!result) return false;
+      const migrated =
+        await window.electronAPI.settings.migrateDefaultGamesLibrary({
+          targetPath: result.path,
+        });
       if (!migrated.success) {
-        message.error(t('settings.defaultGamesMigrationFailed'))
-        return false
+        message.error(t("settings.defaultGamesMigrationFailed"));
+        return false;
       }
-      await settingsStore.loadSettings()
-      await gameStore.loadGames()
-      message.success(t('settings.defaultGamesMigrationSuccess', {
-        gameCount: migrated.migratedGames || 0,
-        versionCount: migrated.migratedVersions || 0
-      }))
-      return true
+      await settingsStore.loadSettings();
+      await gameStore.loadGames();
+      message.success(
+        t("settings.defaultGamesMigrationSuccess", {
+          gameCount: migrated.migratedGames || 0,
+          versionCount: migrated.migratedVersions || 0,
+        }),
+      );
+      return true;
     },
     onNegativeClick: () => {
-      void window.electronAPI.settings.migrateDefaultGamesLibrary({ ignore: true })
+      void window.electronAPI.settings
+        .migrateDefaultGamesLibrary({ ignore: true })
         .then(() => settingsStore.loadSettings())
         .catch((error: any) => {
-          message.error(`${t('settings.saveFail')}: ${error?.message || error}`)
-        })
-    }
-  })
-  return true
-}
+          message.error(
+            `${t("settings.saveFail")}: ${error?.message || error}`,
+          );
+        });
+    },
+  });
+  return true;
+};
 
 const handleInstallUpdate = async () => {
-  await settingsStore.installUpdate()
-}
+  await settingsStore.installUpdate();
+};
 
 const hideUpdateModal = () => {
-  settingsStore.hideUpdateModal()
-}
+  settingsStore.hideUpdateModal();
+};
 
 const MARKET_ERROR_KEYS: Record<string, string> = {
   network: "market.networkError",
@@ -288,68 +377,73 @@ const MARKET_ERROR_KEYS: Record<string, string> = {
   extract: "market.extractError",
   install: "market.installError",
   manifest: "market.manifestMissing",
-}
+};
 
 function marketErrorMessage(task: MarketTaskState): string {
   if (task.errorCode && MARKET_ERROR_KEYS[task.errorCode]) {
-    return t(MARKET_ERROR_KEYS[task.errorCode])
+    return t(MARKET_ERROR_KEYS[task.errorCode]);
   }
-  return task.message || ""
+  return task.message || "";
 }
 
 onMounted(() => {
-  if (isPopupWindow.value) return
+  if (isPopupWindow.value) return;
 
   if (window.electronAPI?.room?.onEvent) {
     cleanup = window.electronAPI.room.onEvent((event) => {
-      roomStore.handleRoomEvent(event)
-    })
+      roomStore.handleRoomEvent(event);
+    });
   }
-  
+
   if (window.electronAPI?.game?.onAchievementUnlocked) {
     cleanupAchievements = window.electronAPI.game.onAchievementUnlocked(
       (gameId, version, achievementId) => {
-        achievementNotifier.enqueue({ gameId, version, achievementId })
-      }
-    )
+        achievementNotifier.enqueue({ gameId, version, achievementId });
+      },
+    );
   }
 
   if (window.electronAPI?.market?.onEvent) {
     cleanupMarketEvent = window.electronAPI.market.onEvent(async ({ task }) => {
       if (task.status === "idle") {
-        marketNotifiedTaskIds.delete(task.taskId)
-        return
+        marketNotifiedTaskIds.delete(task.taskId);
+        return;
       }
 
       if (!marketNotifiedTaskIds.has(task.taskId)) {
         if (task.status === "completed") {
-          marketNotifiedTaskIds.add(task.taskId)
-          invalidateGameAssetCache(task.gameId)
-          await gameStore.loadGames()
-          const game = gameStore.games.find((g) => g.id === task.gameId)
-          const gameName = game?.name || task.gameId
-          message.success(t("market.installSuccess", { name: gameName, version: task.version }))
+          marketNotifiedTaskIds.add(task.taskId);
+          invalidateGameAssetCache(task.gameId);
+          await gameStore.loadGames();
+          const game = gameStore.games.find((g) => g.id === task.gameId);
+          const gameName = game?.name || task.gameId;
+          message.success(
+            t("market.installSuccess", {
+              name: gameName,
+              version: task.version,
+            }),
+          );
         } else if (task.status === "error") {
-          marketNotifiedTaskIds.add(task.taskId)
-          const errMsg = marketErrorMessage(task)
-          message.error(errMsg || t("market.downloadFailed"))
+          marketNotifiedTaskIds.add(task.taskId);
+          const errMsg = marketErrorMessage(task);
+          message.error(errMsg || t("market.downloadFailed"));
         } else if (task.status === "canceled") {
-          marketNotifiedTaskIds.add(task.taskId)
-          message.info(t("market.canceled"))
+          marketNotifiedTaskIds.add(task.taskId);
+          message.info(t("market.canceled"));
         }
       }
-    })
+    });
   }
 
-  handleAutoUpdateCheck()
-})
+  handleAutoUpdateCheck();
+});
 
 onUnmounted(() => {
-  if (cleanup) cleanup()
-  if (cleanupAchievements) cleanupAchievements()
-  if (cleanupMarketEvent) cleanupMarketEvent()
-  achievementNotifier.dispose()
-})
+  if (cleanup) cleanup();
+  if (cleanupAchievements) cleanupAchievements();
+  if (cleanupMarketEvent) cleanupMarketEvent();
+  achievementNotifier.dispose();
+});
 </script>
 
 <style scoped>
@@ -371,6 +465,66 @@ onUnmounted(() => {
 
 .profile-entry:hover {
   opacity: 0.86;
+}
+
+.economy-entry-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 16px;
+}
+
+.economy-entry {
+  height: 32px;
+  border: 1px solid transparent;
+  border-radius: 16px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--bz-text-title);
+  font: inherit;
+  cursor: pointer;
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+
+.economy-entry:hover {
+  background: transparent;
+  box-shadow: none;
+  opacity: 0.82;
+  transform: translateY(-1px);
+}
+
+.economy-entry:active {
+  box-shadow: none;
+}
+
+.economy-entry:focus-visible {
+  outline: 2px solid var(--bz-info-blue);
+  outline-offset: 2px;
+}
+
+.coin-entry {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 11px 0 9px;
+  color: var(--bz-gold);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.coin-entry-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.check-in-entry {
+  display: inline-flex;
+  width: 32px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
 }
 
 .red-dot {

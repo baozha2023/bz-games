@@ -36,20 +36,15 @@
     </n-alert>
 
     <n-space v-if="isLoading && sources.length === 0" vertical size="large">
-      <n-grid
-        :cols="'2 s:3 m:4 l:5 xl:6'"
-        :x-gap="24"
-        :y-gap="24"
-        responsive="screen"
-      >
-        <n-grid-item v-for="index in 6" :key="index">
+      <div class="market-source-grid">
+        <div v-for="index in 6" :key="index" class="market-source-grid-item">
           <n-card size="small" embedded>
             <n-skeleton height="140px" />
             <n-skeleton text style="margin-top: 12px" />
             <n-skeleton text :width="120" />
           </n-card>
-        </n-grid-item>
-      </n-grid>
+        </div>
+      </div>
     </n-space>
 
     <n-empty
@@ -61,16 +56,14 @@
       :description="t('marketList.empty')"
     />
 
-    <n-grid
+    <div
       v-else
-      :cols="'2 s:3 m:4 l:5 xl:6'"
-      :x-gap="24"
-      :y-gap="24"
-      responsive="screen"
+      class="market-source-grid"
     >
-      <n-grid-item
+      <div
         v-for="source in displayedSources"
         :key="source.marketId"
+        class="market-source-grid-item"
         @click="enterMarket(source.originalIndex)"
       >
         <div class="source-card-shell">
@@ -133,8 +126,8 @@
             </div>
           </n-card>
         </div>
-      </n-grid-item>
-    </n-grid>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -233,6 +226,18 @@ onMounted(async () => {
 <style scoped>
 .market-list-root {
   padding: 24px;
+}
+
+.market-source-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 24px;
+  justify-content: start;
+  align-items: start;
+}
+
+.market-source-grid-item {
+  min-width: 0;
 }
 
 .source-card-shell {

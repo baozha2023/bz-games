@@ -51,6 +51,7 @@ interface TaskMeta {
   downloadPath: string;
   archiveType: MarketArchiveType;
   sourceIdx: number;
+  marketId: string;
 }
 
 interface ActiveTask {
@@ -404,32 +405,122 @@ export class MarketService {
   }
 
   private lastFloatBallEmitTime = 0;
-  private static readonly FLOAT_BALL_THROTTLE_MS = 1000;
+  private floatBallEmitTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly lastMarketEmitTimes = new Map<string, number>();
+  private readonly marketEmitTimers = new Map<
+    string,
+    ReturnType<typeof setTimeout>
+  >();
+  private readonly pendingMarketStates = new Map<string, MarketTaskState>();
+  private static readonly FLOAT_BALL_THROTTLE_MS = 100;
+  private static readonly MARKET_EVENT_THROTTLE_MS = 100;
 
   // ── State transitions (single source of truth) ──
 
-  private emit(state: MarketTaskState): void {
-    mainWindow?.webContents.send(IPC.MARKET_EVENT, { task: state });
+  private emit(state: MarketTaskState, forceMarketEvent = false): void {
+    this.emitMarketEvent(state, forceMarketEvent);
     this.emitFloatBallProgress(false);
   }
 
-  private emitFloatBallProgress(force = false): void {
-    if (!floatBallWindow || floatBallWindow.isDestroyed()) return;
-    const now_ = now();
-    if (
-      !force &&
-      now_ - this.lastFloatBallEmitTime < MarketService.FLOAT_BALL_THROTTLE_MS
-    )
-      return;
-    this.lastFloatBallEmitTime = now_;
-    const progress = this.computeTotalProgress();
-    floatBallWindow.webContents.send(IPC.MARKET_FLOAT_BALL_EVENT, progress);
+  private emitMarketEvent(
+    state: MarketTaskState,
+    forceMarketEvent: boolean,
+  ): void {
+    const taskId = state.taskId;
+    const send = (nextState: MarketTaskState): void => {
+      const window = mainWindow;
+      if (!window || window.isDestroyed() || window.webContents.isDestroyed()) {
+        return;
+      }
+      this.lastMarketEmitTimes.set(taskId, now());
+      window.webContents.send(IPC.MARKET_EVENT, { task: nextState });
+    };
 
-    if (progress.activeTaskCount > 0) {
-      if (!floatBallWindow.isVisible()) floatBallWindow.showInactive();
-    } else {
-      if (floatBallWindow.isVisible()) floatBallWindow.hide();
+    const timer = this.marketEmitTimers.get(taskId);
+    if (forceMarketEvent) {
+      if (timer) clearTimeout(timer);
+      this.marketEmitTimers.delete(taskId);
+      this.pendingMarketStates.delete(taskId);
+      send(state);
+      return;
     }
+
+    const elapsed = now() - (this.lastMarketEmitTimes.get(taskId) ?? 0);
+    if (elapsed >= MarketService.MARKET_EVENT_THROTTLE_MS) {
+      if (timer) clearTimeout(timer);
+      this.marketEmitTimers.delete(taskId);
+      this.pendingMarketStates.delete(taskId);
+      send(state);
+      return;
+    }
+
+    this.pendingMarketStates.set(taskId, { ...state });
+    if (timer) return;
+
+    this.marketEmitTimers.set(
+      taskId,
+      setTimeout(() => {
+        this.marketEmitTimers.delete(taskId);
+        const pendingState = this.pendingMarketStates.get(taskId);
+        this.pendingMarketStates.delete(taskId);
+        if (pendingState) send(pendingState);
+      }, MarketService.MARKET_EVENT_THROTTLE_MS - elapsed),
+    );
+  }
+
+  private clearTaskEmission(taskId: string): void {
+    const timer = this.marketEmitTimers.get(taskId);
+    if (timer) clearTimeout(timer);
+    this.marketEmitTimers.delete(taskId);
+    this.pendingMarketStates.delete(taskId);
+    this.lastMarketEmitTimes.delete(taskId);
+  }
+
+  private emitFloatBallProgress(force = false): void {
+    const window = floatBallWindow;
+    if (!window || window.isDestroyed() || window.webContents.isDestroyed()) {
+      if (this.floatBallEmitTimer) {
+        clearTimeout(this.floatBallEmitTimer);
+        this.floatBallEmitTimer = null;
+      }
+      return;
+    }
+
+    const progress = this.computeTotalProgress();
+
+    // Window visibility must follow the live task state immediately. Terminal
+    // tasks intentionally remain in `tasks` for the main UI's history, but
+    // must never keep the float ball visible.
+    if (progress.activeTaskCount > 0) {
+      if (!window.isVisible()) window.showInactive();
+    } else if (window.isVisible()) {
+      window.hide();
+    }
+
+    const now_ = now();
+    const elapsed = now_ - this.lastFloatBallEmitTime;
+    const shouldEmitImmediately =
+      force ||
+      progress.activeTaskCount === 0 ||
+      elapsed >= MarketService.FLOAT_BALL_THROTTLE_MS;
+
+    if (shouldEmitImmediately) {
+      if (this.floatBallEmitTimer) {
+        clearTimeout(this.floatBallEmitTimer);
+        this.floatBallEmitTimer = null;
+      }
+      this.lastFloatBallEmitTime = now_;
+      window.webContents.send(IPC.MARKET_FLOAT_BALL_EVENT, progress);
+      return;
+    }
+
+    // Keep one trailing update. A leading-edge-only throttle can lose the
+    // final state when a small download starts and finishes inside one window.
+    if (this.floatBallEmitTimer) return;
+    this.floatBallEmitTimer = setTimeout(() => {
+      this.floatBallEmitTimer = null;
+      this.emitFloatBallProgress(true);
+    }, MarketService.FLOAT_BALL_THROTTLE_MS - elapsed);
   }
 
   private getTaskWeight(task: ActiveTask): number {
@@ -546,7 +637,7 @@ export class MarketService {
       updatedAt: now(),
     };
     this.tasks.set(taskId, task);
-    this.emit(task.state);
+    this.emit(task.state, current !== status);
     return task.state;
   }
 
@@ -570,7 +661,7 @@ export class MarketService {
     };
     const abort = new AbortController();
     this.tasks.set(taskId, { state, meta, abort });
-    this.emit(state);
+    this.emit(state, true);
     return state;
   }
 
@@ -611,6 +702,7 @@ export class MarketService {
     );
     if (removeTaskImmediately) {
       this.tasks.delete(taskId);
+      this.clearTaskEmission(taskId);
       this.emitFloatBallProgress(true);
       await Promise.all([
         removeIfExists(downloadPath).catch(() => undefined),
@@ -626,6 +718,7 @@ export class MarketService {
 
     setTimeout(() => {
       this.tasks.delete(taskId);
+      this.clearTaskEmission(taskId);
       this.emitFloatBallProgress(true);
     }, 30_000);
   }
@@ -729,6 +822,7 @@ export class MarketService {
       downloadPath: snap.downloadPath,
       archiveType: snap.archiveType,
       sourceIdx: snap.sourceIdx,
+      marketId: index.marketId,
     };
 
     const state = this.startTask(taskId, meta, {
@@ -773,10 +867,11 @@ export class MarketService {
         downloadPath: snap.downloadPath,
         archiveType: snap.archiveType,
         sourceIdx: snap.sourceIdx,
+        marketId: "",
       };
       const abort = new AbortController();
       this.tasks.set(snap.taskId, { state, meta, abort });
-      this.emit(state);
+      this.emit(state, true);
     }
   }
 
@@ -890,6 +985,7 @@ export class MarketService {
       downloadPath,
       archiveType,
       sourceIdx,
+      marketId: index.marketId,
     };
     const state = this.startTask(taskId, meta);
     this.startPipeline(taskId, game, targetVersion);
@@ -1060,7 +1156,14 @@ export class MarketService {
     await this.extractArchive(taskId, meta, extractRoot, signal);
     signal.throwIfAborted();
 
-    await this.installGame(taskId, game, targetVersion, extractRoot, signal);
+    await this.installGame(
+      taskId,
+      game,
+      targetVersion,
+      extractRoot,
+      meta.marketId,
+      signal,
+    );
 
     await this.removeSnapshot(taskId);
     this.transition(taskId, "completed", { progress: 100 });
@@ -1278,6 +1381,7 @@ export class MarketService {
     game: MarketGame,
     targetVersion: MarketGameVersion,
     extractRoot: string,
+    marketId: string,
     signal: AbortSignal,
   ): Promise<void> {
     this.transition(taskId, "installing", { progress: 95 });
@@ -1335,7 +1439,10 @@ export class MarketService {
         throw new Error("market_platform_version_manifest_mismatch");
       }
 
-      const result = await GameLoader.loadGameFromPath(importDir);
+      const result = await GameLoader.loadGameFromPath(importDir, {
+        installSource: "market",
+        marketId,
+      });
       if (!result.success || !result.manifest) {
         throw new Error(result.error || "market_install_failed");
       }

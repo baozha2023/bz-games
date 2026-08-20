@@ -151,6 +151,9 @@ class FeedbackService {
   async selectImages(
     existingSelectionId?: unknown,
   ): Promise<FeedbackSelectionResult> {
+    if (!storeService.getSettings().cloudSessionToken) {
+      return { success: false, error: "unauthorized" };
+    }
     const requestedSelectionId =
       typeof existingSelectionId === "string" ? existingSelectionId : "";
     const existingSelection = requestedSelectionId
@@ -259,6 +262,7 @@ class FeedbackService {
   }
 
   getHistory(): FeedbackHistoryItem[] {
+    if (!storeService.getSettings().cloudSessionToken) return [];
     try {
       return storeService.getFeedbackHistory();
     } catch (error) {
@@ -268,6 +272,9 @@ class FeedbackService {
   }
 
   async getDetail(feedbackId: unknown): Promise<FeedbackDetailResult> {
+    if (!storeService.getSettings().cloudSessionToken) {
+      return { success: false, error: "unauthorized" };
+    }
     const id = typeof feedbackId === "string" ? feedbackId.trim() : "";
     if (!UUID_PATTERN.test(id)) {
       return { success: false, error: "invalid_feedback_id" };
@@ -416,6 +423,10 @@ class FeedbackService {
   }
 
   async submit(payload: unknown): Promise<FeedbackSubmitResult> {
+    const settings = storeService.getSettings();
+    if (!settings.cloudSessionToken) {
+      return { success: false, error: "unauthorized" };
+    }
     if (!this.baseUrl) {
       return { success: false, error: "feedback_not_configured" };
     }
@@ -439,7 +450,6 @@ class FeedbackService {
     }
 
     const url = `${this.baseUrl}/api/v1/feedback`;
-    const settings = storeService.getSettings();
     const form = new FormData();
     form.set("content", content);
     form.set("appVersion", app.getVersion());
@@ -454,12 +464,9 @@ class FeedbackService {
       );
     }
 
-    const headers = requestInterceptor.buildHeaders(
-      url,
-      settings.cloudSessionToken
-        ? { Authorization: `Bearer ${settings.cloudSessionToken}` }
-        : undefined,
-    );
+    const headers = requestInterceptor.buildHeaders(url, {
+      Authorization: `Bearer ${settings.cloudSessionToken}`,
+    });
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     try {

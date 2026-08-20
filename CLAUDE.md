@@ -39,12 +39,12 @@
 - 个性化系统（头像框解锁、装备、预览，支持多场景展示）
 - 系统设置（玩家信息、主题、端口、语言、更新、游戏库列表、GitHub Token）
 - 官方登录与云同步服务（GitHub OAuth 登录；脱敏配置与三张业务表 SQL 逻辑备份组成单一平台快照，原子发布并在本地幂等合并）
-- 建言献策（可选文字与图片；未登录每 48 小时一次，GitHub 登录后每 6 小时一次）
+- 建言献策（仅 GitHub 登录用户可提交文字与图片，每个账号每 6 小时一次）
 - 创作者中心（所有 GitHub 用户可登录；数据库 RBAC 控制反馈管理、游戏投稿、审核和发布；Vue 3 + Vite 独立构建，中继服务 `/admin/` 同源提供）
 - 客户端卸载系统（游戏进程批量收口、游戏库可选择删除、路径安全校验、符号链接防护）
 - 默认封面/图标静态回退（`GameCover.vue` / `GameIcon.vue` 在无自定义资源时使用内置静态图片）
-- 官网最新安装包下载（正式 GitHub Release 原子同步到官方服务器，固定接口支持断点续传并对全部并发下载合计限速 50 Mbps）
-- 平台版本管理（管理员可查看当前版本，仅超级管理员可在管理端上传稳定版 EXE；Actions 与管理端统一经过暂存、SHA-256/PE/semver 校验、发布锁和 latest 原子切换）
+- 官网最新安装包下载（正式 GitHub Release 原子同步到官方服务器，固定接口支持断点续传并对全部并发下载合计限速 100 Mbps）
+- 平台版本管理（管理员可查看当前版本，仅超级管理员可在管理端上传稳定版 EXE，手动上传允许升版或降版；Actions 仍只允许升版；两条链路统一经过暂存、SHA-256/PE/semver 校验、发布锁和 latest 原子切换）
 
 ---
 
@@ -117,13 +117,15 @@ bz-games/
 │       │   ├── access-control-service.js  # Portal 认证、RBAC、所有权与同源写入校验
 │       │   ├── admin-static-service.js     # `/admin/` 静态资源、SPA fallback 与安全响应头
 │       │   ├── cloud-data-service.js      # 单一平台快照上传、下载与原子指针发布
-│       │   ├── feedback-service.js        # 反馈上传、匿名限流、GridFS 图片与管理 API
+│       │   ├── feedback-service.js        # 登录反馈上传、限流、GridFS 图片与管理 API
 │       │   ├── game-hosting-service.js    # 游戏投稿、审核、托管资源与市场配置导出
 │       │   ├── message-router.js          # WebSocket 消息路由分发（含中继侧敏感词过滤与图片拦截）
 │       │   ├── mongo-service.js           # MongoDB GridFS 连接管理
 │       │   ├── mysql-service.js           # MySQL 连接池与最新完整建表结构
 │       │   ├── portal-user-service.js     # Portal 创作者激活与管理员用户查询
+│       │   ├── release-download-service.js # 桌面发行版校验、原子发布与限速下载
 │       │   ├── room-service.js            # 房间创建、加入、密码、清理
+│       │   ├── system-monitor-service.js  # CPU、内存、磁盘、网络和连接状态监控
 │       │   └── sensitive-word-service.js  # 中继侧敏感词过滤服务（词库加载 + Unicode 安全字符级掩码）
 │       ├── vocabulary/                    # 敏感词词库目录（15 个分类 .txt 文件）
 │       ├── utils/
@@ -961,7 +963,7 @@ interface AppSettings {
   - **下载校验条件化**：`verifyArchive()` 中 size 校验仅当 `meta.size > 0` 时执行，sha256 校验仅当 `meta.sha256` 存在时执行。若版本未提供 sha256 且 GitHub API 也未返回有效 sha256，则跳过哈希校验直接进入解压阶段。
   - 错误分类由 `classifyErrorCode()` 统一处理，根据错误消息自动归类为四种错误码（download/verify/extract/install）。
   - `tasks` Map 维护任务全生命周期，`finalize()` 在清理临时文件后延迟 30 秒删除 Map 条目，确保 UI 能读到终态。
-  - **下载悬浮球进度推送**：`emitFloatBallProgress(force)` 方法在每次 `emit()` 状态变更时自动调用，将加权合并进度通过 `market:floatBall:event` 推送给悬浮球窗口。推送速率由 `FLOAT_BALL_THROTTLE_MS`（1 秒）节流控制，`force` 参数用于关键事件（恢复、取消、暂停、终态清理）立即推送。`computeTotalProgress()` 使用任务文件大小加权平均算法计算整体进度百分比，同时统计活跃/已完成/总任务数。有活跃任务时自动显示悬浮球（`showInactive()`），全部完成后自动隐藏（`hide()`）。`getAllTaskStates()` 返回所有当前任务状态快照，供悬浮球窗口挂载时初始同步。
+  - **下载悬浮球进度推送**：`emitFloatBallProgress(force)` 方法在每次 `emit()` 状态变更时自动调用，将加权合并进度通过 `market:floatBall:event` 推送给悬浮球窗口。主窗口任务事件与悬浮球事件均按 100 ms 合并高频进度并保留尾值，`force` 参数用于关键事件（恢复、取消、暂停、终态清理）立即推送。`computeTotalProgress()` 使用任务文件大小加权平均算法计算整体进度百分比，同时统计活跃/已完成/总任务数。有活跃任务时自动显示悬浮球（`showInactive()`），全部完成后立即隐藏（`hide()`）。`getAllTaskStates()` 返回所有当前任务状态快照，供悬浮球窗口挂载时初始同步。
 - **useImageCache 统一图片缓存层**：
   - 模块级 `Map<string, CacheEntry>` 跨所有组件共享，一份 data URL 在整个渲染进程中只加载一次，消除视图切换导致的重复
     IPC
@@ -1062,11 +1064,11 @@ interface AppSettings {
 - **反馈系统设计（FeedbackService）**：
   - **图片选择与验证（v3.1.3 追加模式）**：`selectImages(existingSelectionId?)` 支持传入已有选区 ID 时以追加模式在现有图片上叠加新图片。读取文件后：① 魔术字节检测实际 MIME；② 比对实际格式与扩展名声明是否一致（`getDeclaredContentType`）；③ `nativeImage.createFromBuffer` 验证图形有效性；④ 每张图片生成 SHA-256 哈希用于跨批次去重（同一选区中哈希重复的图片被拒绝，前端弹出 `duplicate_image` 提示）。追加时若原选区已满 4 张或总图片数超限则返回 `too_many_images`；传入已过期选区 ID 返回 `feedback_images_expired`。通过后将 Buffer 与哈希存入进程内存 Map（`selectionId` 为键），供后续 multipart 上传引用。整组图片 30 分钟后自动清理；单张移除后刷新 `createdAt`。
   - **释放语义**：`releaseImages(selectionId, imageId?)` 支持单张移除或整组释放；单张移除后若 selection 为空则自动删除 Map 条目，否则刷新 `createdAt` 时间戳。
-  - **提交管线**：`submit()` 先在主进程侧校验 content ≤ 5000 字、selectionId 有效性、文字或图片至少存在一种。通过 `FormData` 构造 multipart，注入 `appVersion` 与 `platform`，通过 `RequestInterceptor.buildHeaders()` 自动注入 relayToken 和可选的 GitHub Bearer Token。POST `/api/v1/feedback` 超时 45 秒。通过 `cloudSyncService.handleAuthFailure(body.error)` 统一处理登录失效——仅 `session_expired` / `session_invalid` 时清除本地云会话。
+  - **提交管线**：建言献策仅对已登录用户开放；设置页仅在 GitHub 会话有效时显示入口，主进程的图片选择、历史读取、详情查询和提交 IPC 也独立校验本地会话。`submit()` 校验 content ≤ 5000 字、selectionId 有效性、文字或图片至少存在一种，通过 `FormData` 构造 multipart，注入 `appVersion` 与 `platform`，并由 `RequestInterceptor.buildHeaders()` 注入 relayToken 和必需的 GitHub Bearer Token。POST `/api/v1/feedback` 超时 45 秒。通过 `cloudSyncService.handleAuthFailure(body.error)` 统一处理登录失效——仅 `session_expired` / `session_invalid` 时清除本地云会话。
   - **反馈历史**：`getFeedbackHistory()` / `addFeedbackHistory(id)` 仅由主进程通过 `StoreService` 读写 `AppSettings.feedbackHistory[]`，设置页不得提交或覆盖该字段；本地只保存反馈编号和提交时间戳并去重。历史随 `config.json` 正常云同步；展开条目时调用 `getFeedbackDetail(id)` 从服务端查询正文、状态、回复与图片，收起后再次展开会重新查询，不设定时刷新。
   - **反馈详情查询**：`getDetail(feedbackId)` 通过 `/api/v1/feedback/:id` 获取用户可见详情。主进程校验 UUID 格式反馈 ID，然后校验响应结构（id、content、status、reply、imageCount、createdAt、updatedAt 及 images 数组的每个元素的类型与大小）。随后逐个通过 `/api/v1/feedback/:id/images/:imageId` 下载图片，校验实际 Content-Type 与 MySQL 记录的 MIME 一致、实际 body 长度与声明 size 一致、不超 MAX_IMAGE_BYTES。任一步不通过返回 `feedback_invalid_response`。通过 auth 失败或权限不足由 `handleAuthFailure` 统一收口。
   - **IPC 边界**：渲染进程仅通过 `FeedbackModal.vue` → `electronAPI.settings.selectFeedbackImages / releaseFeedbackImages / submitFeedback / getFeedbackHistory / getFeedbackDetail` 与主进程交互，不直接接触文件路径或服务端 relayToken / GitHub 会话。主进程必须校验反馈详情结构、图片数量、大小、MIME 和实际响应长度后再生成 Data URL。
-  - **服务端并联（v3.1.3 用户详情接口）**：`/api/v1/feedback/:id`（GET）返回用户可见详情：`id/content/status/reply/imageCount/createdAt/updatedAt/images`，不含 `adminNote`。GitHub 反馈要求 Bearer Token 并校验所有者；匿名反馈仅需发行版 relayToken，以随机 UUID 作为访问凭据。`/api/v1/feedback/:id/images/:imageId` 返回单张图片原始流。管理 API 详情额外包含 `adminNote`，更新接口接受 `status/adminNote/reply`，备注与回复均不超过 5000 字符。其他逻辑同前：busboy 流式 multipart、魔法字节校验、IP/GitHub ID 双层冷却、MySQL 事务 + GridFS。
+  - **服务端并联（v3.1.3 用户详情接口）**：`POST /api/v1/feedback`、`GET /api/v1/feedback/:id` 和图片读取接口均要求发行版 relayToken、有效 GitHub Bearer Token，并对详情和图片校验反馈所有者。详情返回 `id/content/status/reply/imageCount/createdAt/updatedAt/images`，不含 `adminNote`；图片接口返回单张图片原始流。管理 API 详情额外包含 `adminNote`，更新接口接受 `status/adminNote/reply`，备注与回复均不超过 5000 字符。提交采用 busboy 流式 multipart、魔法字节校验、GitHub ID 进程内冷却、MySQL 事务 + GridFS。
   - **Portal 前端**：`bz-games-admin/` 为独立 Vue 3 + Vite + Pinia 项目，构建为 `/admin/` 同源静态站点。服务端会话接口返回唯一 capability 集合，前端 `rbac.ts` 只校验能力契约，不维护角色到能力的映射；菜单、路由、按钮和提交前置检查均调用 `auth.can(capability)`。玩家只显示无权限页，创作者只显示游戏托管，管理员显示全部管理界面但不能修改角色或上传桌面客户端版本，超级管理员拥有全部界面与操作。服务端仍是唯一授权决策源，并独立执行 capability、资源所有权、状态机和精确 Origin 校验。中继侧 `admin-static-service.js` 提供 SPA fallback、路径穿越防护、CSP/`nosniff`/`DENY` iframe 等安全响应头。
 - **卸载系统设计（UninstallService）**：
   - **状态互斥**：`running` 布尔标志防止重复卸载调用。
@@ -1209,7 +1211,7 @@ interface AppSettings {
 - `market:getPendingTasks`：读取本地快照文件，返回所有未完成的暂停/中断任务。
 - `market:resolveAssetInfo`：通过 GitHub REST API 解析 Release Asset 的 sha256/size（5次指数退避重试，1小时缓存）。
 - `market:getAllTaskStates`：获取所有当前下载任务的状态快照（供悬浮球窗口初始同步）。
-- `market:floatBall:event`：主进程 → 悬浮球渲染进程，推送合并后的下载进度数据（`FloatBallProgress`），节流 1 秒。
+- `market:floatBall:event`：主进程 → 悬浮球渲染进程，推送合并后的下载进度数据（`FloatBallProgress`），高频进度按 100 ms 合并并保留尾值，关键状态立即推送。
 - `floatBall:dragState`：主进程 → 悬浮球渲染进程，通知拖拽状态（拖动中/停止）。
 - `room:create`：创建房间并在本地启动房间服务。
 - `room:join`：加入指定地址的房间（支持官方短地址、物理局域网 IP、虚拟局域网 IP、用户自备 frp 地址），并可附带密码。
@@ -1384,7 +1386,7 @@ interface AppSettings {
 - **设置页主题跟随系统**：主题选择器提供"跟随系统"选项（`themeAuto`）。当选择 `auto` 时，平台自动跟随操作系统亮/暗模式切换。
 - **设置页官网链接**：设置页需展示官方网址，使用 NaiveUI `n-a` 组件渲染为可点击链接，`
 @click.prevent` 拦截默认跳转后通过 `system:openUrl` IPC 调用 `shell.openExternal` 打开系统默认浏览器。
-- **设置页建言献策**：底部入口打开固定 72vw × 72vh 的 `FeedbackModal`，使用“建言献策 / 历史记录”两个 Tab，不再打开第二层历史弹窗。文字最多 5,000 字，可选最多 4 张 PNG/JPEG/WebP（单张 5 MiB）；重复选择通过顶部 message 提示，新增图片追加到当前选择，缩略图按最长边 `contain`，文件名完整换行显示。渲染进程只持有主进程生成的预览和选择 ID，不接触文件路径、发行版中继令牌或 GitHub 会话令牌。未登录提示为每 48 小时一次，登录后提示为每 6 小时一次；触发限制时只展示服务端 `resetAt` 对应的一条提示。历史列表默认全部收起，右侧只显示展开按钮；展开时从服务端查询正文、图片、处理状态和回复，详情区内部显示状态，历史较多时在固定弹窗内容区滚动。
+- **设置页建言献策**：仅登录用户可见底部入口，入口打开固定 72vw × 72vh 的 `FeedbackModal`，使用“建言献策 / 历史记录”两个 Tab，不再打开第二层历史弹窗。文字最多 5,000 字，可选最多 4 张 PNG/JPEG/WebP（单张 5 MiB）；重复选择通过顶部 message 提示，新增图片追加到当前选择，缩略图按最长边 `contain`，文件名完整换行显示。渲染进程只持有主进程生成的预览和选择 ID，不接触文件路径、发行版中继令牌或 GitHub 会话令牌。已登录用户每 6 小时可提交一次；触发限制时只展示服务端 `resetAt` 对应的一条提示。历史列表默认全部收起，右侧只显示展开按钮；展开时从服务端查询正文、图片、处理状态和回复，详情区内部显示状态，历史较多时在固定弹窗内容区滚动。
 - **GitHub Token 设置**：设置页提供 `githubToken` 字段（`n-input type="password"`，`@copy.prevent` + `@cut.prevent` 防剪贴板泄漏）。填写有效的 GitHub Personal Access Token 后，平台所有 GitHub API 请求自动携带 `Authorization: Bearer <token>`，将 API 限流从 60 次/小时提升至 5000 次/小时（用于 Release Asset 解析）。
 - **云端同步说明**：设置页 GitHub 登录区域在上传/下载按钮旁提供 `?` 帮助按钮，hover 展示 `cloudSyncHelp` tooltip，说明上传会排除 GitHub Token 与登录会话字段、下载 config.json 仅更新云端存在的字段。
 - **设置页数据自检**：设置页需提供“数据自检”按钮。清单检查必须复用 `GameManifestFileService`，在不迁移或覆盖原文件的前提下识别明文/密文、验证密文信封/密钥/认证标签和最新 `GameManifestSchema`，并核对游戏 ID/版本、平台兼容范围、入口及图标/封面/视频/成就图标文件。明文为警告，解密、格式、密钥或 Schema 问题为错误；主进程返回稳定错误码和参数，渲染层使用六语 i18n 展示，不直接显示主进程硬编码文案。
@@ -1426,19 +1428,21 @@ interface AppSettings {
 - **版本策略**：发布前需先提升 `package.json` 版本号，并使用对应 Tag 创建 Release。
 - **生效条件**：自动更新在打包后的生产环境可用；开发模式（`pnpm dev`）下提示不支持。
 - **本地数据保护**：
-  - 在下载更新与安装更新前，`UpdateService` 必须创建数据快照目录（`.update-snapshots/<timestamp-stage>`）。
-  - 快照至少包含 `config.json` 备份文件、SQLite `db/` 目录副本与所有游戏保存根目录副本（支持多路径）。
-  - 快照写入失败时记录日志并保留现有 `config.json` 与所有游戏目录。
+  - 更新包下载完成后，`UpdateService` 按目标版本创建 `.update-snapshots/version-<version>-<hash>`；下载前不创建快照。
+  - 点击安装时必须确认目标版本快照存在，不存在才补建；同一目标版本的并发或重复调用必须复用唯一快照。
+  - 快照包含 `config.json` 备份、默认游戏目录和 SQLite `db/` 目录；任一复制失败时清理临时目录并阻止安装，不得把不完整目录标记为完成。
+  - 禁止退出应用时自动安装更新，所有安装必须经过显式安装入口和快照检查。
 
 ### 6.6 建言献策、管理后台与配置安全
 
-- **客户端边界**：`FeedbackService` 在主进程完成图片读取、实际格式校验、multipart 构造、发行版中继令牌和可选 GitHub Bearer Token 注入；IPC 输入必须视为不可信并进行运行时校验。
-- **反馈限制**：服务端仅使用 `req.socket.remoteAddress` 规范化后的 IP作为匿名身份；不得读取 `X-Forwarded-For`，不得保存 IP、`playerId` 或客户端 ID。匿名用户按 IP在进程内 Map限制 48 小时，登录用户按 GitHub ID在独立的进程内 Map限制 6 小时；待处理占位必须持续到成功提交或失败释放，防止并发穿透，两类状态均在服务重启后清空。
+- **客户端边界**：`FeedbackService` 在主进程完成登录状态检查、图片读取、实际格式校验、multipart 构造、发行版中继令牌和必需 GitHub Bearer Token 注入；IPC 输入必须视为不可信并进行运行时校验。
+- **开发模式 OAuth 回跳**：`process.defaultApp` 下注册 `bzgames://` 时必须使用 `process.execPath` 加 `path.resolve(process.argv[1])`，确保协议启动命令与 `electron-vite dev` 当前的 `electron.exe .` 应用入口一致。禁止改用构建产物 `out/main/index.js` 或手写 Windows 注册表命令，否则回跳会启动不同应用身份，无法通过 `second-instance` 把 OAuth URL 交给当前开发实例。打包模式继续直接注册当前 EXE。
+- **反馈限制**：客户端反馈接口必须携带有效 GitHub Bearer Session，服务端以 GitHub 用户 ID 作为唯一限流身份并限制每 6 小时一次；待处理占位必须持续到成功提交或失败释放，防止并发穿透。匿名提交路径和匿名限流状态均不存在。
 - **上传安全**：服务端使用 busboy 流式解析，总请求、字段、文件数量及单文件大小都必须设限；图片必须同时校验声明 MIME、文件签名、容器结构和合理尺寸。MySQL 失败时尽力删除本次 GridFS 文件，临时目录始终清理。
 - **会话错误协议**：受保护 HTTP 接口统一区分 `authenticated / missing / expired / invalid`。缺少令牌返回 `401 unauthorized`，过期返回 `401 session_expired`，无效、撤销或未知令牌返回 `401 session_invalid`，并同时返回稳定 `error` 与可读 `message`。过期会话默认保留 7 天以便识别，由 `AUTH_EXPIRED_SESSION_RETENTION_MS` 配置；普通 `unauthorized` 不触发客户端清理登录。
-- **Portal RBAC 与认证边界**：`users.role` 是唯一角色来源，只允许 `player`、`creator`、`administrator`、`super_administrator`。服务端唯一授权模块把角色映射为固定 capability 集合，未知角色和未知能力默认拒绝；超级管理员拥有全部能力，管理员除修改用户角色和上传桌面客户端版本外拥有全部管理能力，创作者仅能托管自己的游戏且提交必须审核，玩家没有管理能力。`GET /api/portal/v1/session` 只通过同源 Session Cookie 返回当前用户、能力集合和过期时间，Portal 接口拒绝 Bearer 或混合凭据，写接口还必须校验精确 Origin；前端只消费能力集合，不得按角色推断授权。桌面客户端接口只接受 Bearer Session，需要登录的接口仅校验会话有效性，不读取角色或 capability。OAuth 只负责创建默认玩家、刷新 GitHub 资料和建立会话，永不自动修改已有角色。角色修改只允许超级管理员操作其他非超级管理员，且不能授予超级管理员。GitHub OAuth 的 Portal 回跳只允许 `PORTAL_PUBLIC_URL` 同源 `/admin/` 路径，Cookie 使用 HttpOnly、SameSite=Lax。管理静态文件必须阻止路径穿越和符号链接越界，并发送 CSP、`nosniff`、拒绝 iframe 等安全响应头。
+- **Portal RBAC 与认证边界**：`users.role` 是唯一角色来源，只允许 `player`、`creator`、`administrator`、`super_administrator`。服务端唯一授权模块把角色映射为固定 capability 集合，未知角色和未知能力默认拒绝；超级管理员拥有全部能力，管理员无用户角色调整、托管容量查看、系统监控和桌面客户端版本上传能力，创作者仅能托管自己的游戏且提交必须审核，玩家仅能进入欢迎页并管理自己的反馈。`GET /api/portal/v1/session` 只通过同源 Session Cookie 返回当前用户、能力集合和过期时间，Portal 接口拒绝 Bearer 或混合凭据，写接口还必须校验精确 Origin；前端只消费能力集合，不得按角色推断授权。桌面客户端接口只接受 Bearer Session，需要登录的接口仅校验会话有效性，不读取角色或 capability。OAuth 只负责创建默认玩家、刷新 GitHub 资料和建立会话，永不自动修改已有角色。角色修改只允许超级管理员操作其他非超级管理员，且不能授予超级管理员。GitHub OAuth 的 Portal 回跳只允许 `PORTAL_PUBLIC_URL` 同源 `/admin/` 路径，Cookie 使用 HttpOnly、SameSite=Lax。管理静态文件必须阻止路径穿越和符号链接越界，并发送 CSP、`nosniff`、拒绝 iframe 等安全响应头。
 - **MySQL schema 生命周期**：仓库代码只在 `mysql-service.js` 的 `ensureSchema()` 中维护最新、完整、幂等的 `CREATE TABLE IF NOT EXISTS` 初始化结构，不加入 `ALTER TABLE`、迁移脚本或自动补列逻辑。已发布表新增或改变列、索引、约束时，必须在部署前检查线上实际结构，并通过单独审核的手工 SQL 完成变更；部署文档需说明目标结构、执行顺序、历史数据默认值、管理员角色赋值和验证查询。反馈图片继续复用现有 GridFS Bucket。
-- **三端接口**：提交成功仅返回 `{ ok, id }`；匿名限制返回 `429 + error + retryAfterSeconds + resetAt`。用户详情返回 `id/content/status/reply/imageCount/createdAt/updatedAt/images`，不得包含 `adminNote`；用户图片接口复用同一所有权规则。管理详情额外返回 `adminNote`，更新接受 `status/adminNote/reply`。所有字段以 `relay-server/API.md` 为准，服务端测试、客户端共享类型、预加载声明与管理端 TypeScript 类型必须同步。
+- **三端接口**：反馈提交成功仅返回 `{ ok, id }`；登录账号限流返回 `429 + error + retryAfterSeconds + resetAt`。玩家列表与详情只能访问自己的反馈，详情返回 `id/content/status/reply/imageCount/createdAt/updatedAt/images`，不得包含 `adminNote`；玩家图片和删除接口复用同一所有权规则。管理详情额外返回 `adminNote`，更新接受 `status/adminNote/reply`，管理删除需要对应 capability。所有字段以 `relay-server/API.md` 为准，服务端测试、客户端共享类型、预加载声明与管理端 TypeScript 类型必须同步。
 - **托管接口对齐**：逻辑地址的 `gameId/version/role/encodedFileName` 规则、市场导出结构、Portal 请求/响应类型和服务端校验必须保持同一字段语义；新增、替换、审核、设为最新、删除及下载分别使用最小职责接口，写接口由服务端执行角色、所有权、状态机和精确 Origin 校验，不能依赖前端隐藏按钮。客户端仅可把规范逻辑地址改写到配置的 Relay `origin`。
 - **令牌注入边界**：客户端附加 GitHub Token、Relay Token 或专用 Referer 前，必须使用 `URL` 解析并精确校验协议、`origin` 与允许的路径边界；禁止使用字符串 `startsWith` 判断可信主机，禁止向相似前缀域名、用户信息段、重定向后的第三方地址或任意市场 URL 发送凭据。
 - **配置唯一来源**：客户端真实关键配置只允许出现在被 Git 忽略的 `private-build.config.json`；服务端真实关键配置只允许存在于服务器 `/etc/systemd/system/bz-games-relay.service`，权限必须为 `root:root 0600`；管理端生产环境使用同源 `/api` 与 `/auth`，当前无环境字段。

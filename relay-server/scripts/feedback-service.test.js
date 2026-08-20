@@ -8,20 +8,12 @@ import { ObjectId } from "mongodb";
 import {
   createFeedbackRateLimiter,
   createFeedbackService,
-  normalizeSocketIp,
 } from "../src/services/feedback-service.js";
 
 const VALID_PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
   "base64",
 );
-
-test("normalizes direct socket addresses without trusting forwarding headers", () => {
-  assert.equal(normalizeSocketIp("::ffff:203.0.113.8"), "203.0.113.8");
-  assert.equal(normalizeSocketIp("203.0.113.9"), "203.0.113.9");
-  assert.equal(normalizeSocketIp("2001:db8::1"), "2001:db8::1");
-  assert.equal(normalizeSocketIp("not-an-ip"), "");
-});
 
 test("feedback limiter commits a successful cooldown", () => {
   const limiter = createFeedbackRateLimiter(48 * 60 * 60 * 1000);
@@ -76,7 +68,7 @@ test("feedback limiter state is cleared when the service is recreated", () => {
   }
 });
 
-test("feedback endpoint applies separate anonymous and authenticated cooldowns", async () => {
+test("feedback endpoint requires login and applies authenticated cooldowns", async () => {
   const inserted = [];
   const insertedImages = [];
   const uploadedImages = [];
@@ -86,7 +78,6 @@ test("feedback endpoint applies separate anonymous and authenticated cooldowns",
     MAX_FEEDBACK_TEXT_LENGTH: 5000,
     MAX_FEEDBACK_IMAGES: 4,
     MAX_FEEDBACK_IMAGE_BYTES: 5 * 1024 * 1024,
-    FEEDBACK_ANONYMOUS_COOLDOWN_MS: 48 * 60 * 60 * 1000,
     FEEDBACK_AUTHENTICATED_COOLDOWN_MS: 6 * 60 * 60 * 1000,
     SESSION_COOKIE_NAME: "bz_games_session",
   };
@@ -106,12 +97,10 @@ test("feedback endpoint applies separate anonymous and authenticated cooldowns",
   };
   const authService = {
     getClientSessionFromRequest: async (req) => {
-      const token =
-        String(req.headers.authorization || "").replace(/^Bearer\s+/i, "") ||
-        String(req.headers.cookie || "").replace(
-          /^.*bz_games_session=([^;]+).*$/,
-          "$1",
-        );
+      const token = String(req.headers.authorization || "").replace(
+        /^Bearer\s+/i,
+        "",
+      );
       const userNumber = /^valid-session-(\d+)$/.exec(token)?.[1];
       return userNumber
         ? {
@@ -131,6 +120,7 @@ test("feedback endpoint applies separate anonymous and authenticated cooldowns",
       res.end(JSON.stringify({ error: status }));
     },
   };
+  let portalRole = "player";
   const service = createFeedbackService({
     config,
     mySqlService,
@@ -154,6 +144,16 @@ test("feedback endpoint applies separate anonymous and authenticated cooldowns",
       }),
     },
     authService,
+    accessControlService: {
+      requirePortalSession: async () => ({
+        user: {
+          id: 9,
+          github_id: "github-9",
+          login: "portal-user",
+          role: portalRole,
+        },
+      }),
+    },
   });
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host}`);
@@ -201,11 +201,23 @@ test("feedback endpoint applies separate anonymous and authenticated cooldowns",
     };
   }
 
+  async function submitFromPortal(content = "portal feedback") {
+    const response = await fetch(`${baseUrl}/api/portal/v1/feedback`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        origin: "https://games.example",
+      },
+      body: JSON.stringify({ content }),
+    });
+    return {
+      status: response.status,
+      body: await response.json(),
+    };
+  }
+
   try {
-    assert.equal((await submit()).status, 201);
-    const blocked = await submit({ forwardedFor: "198.51.100.99" });
-    assert.equal(blocked.status, 429);
-    assert.equal(blocked.body.error, "feedback_too_frequent");
+    assert.equal((await submit()).status, 401);
 
     assert.equal(
       (await submit({ authorization: "Bearer invalid-session" })).status,
@@ -217,7 +229,7 @@ test("feedback endpoint applies separate anonymous and authenticated cooldowns",
     );
     assert.equal(
       (await submit({ cookie: "bz_games_session=valid-session-1" })).status,
-      429,
+      401,
     );
     assert.equal(
       (await submit({ authorization: "Bearer valid-session-1" })).status,
@@ -251,7 +263,16 @@ test("feedback endpoint applies separate anonymous and authenticated cooldowns",
       (await submit({ authorization: "Bearer valid-session-4" })).status,
       201,
     );
+    portalRole = "administrator";
+    assert.equal((await submitFromPortal()).status, 403);
+    portalRole = "player";
+    assert.equal((await submitFromPortal()).status, 201);
+    const portalBlocked = await submitFromPortal();
+    assert.equal(portalBlocked.status, 429);
+    assert.equal(portalBlocked.body.error, "feedback_too_frequent");
     assert.equal(inserted.length, 5);
+    assert.equal(inserted.at(-1)[2], "github");
+    assert.equal(inserted.at(-1)[6], "portal");
     assert.equal(insertedImages.length, 1);
     assert.equal(Buffer.concat(uploadedImages).length, VALID_PNG.length);
   } finally {
@@ -270,7 +291,7 @@ test("admin endpoints validate pagination and keep response fields aligned", asy
     admin_note: "",
     reply: "Thanks for the report",
     submitter_type: "github",
-    user_id: null,
+    user_id: 42,
     github_login: "test-admin",
     app_version: "3.1.1",
     platform: "win32",
@@ -278,6 +299,8 @@ test("admin endpoints validate pagination and keep response fields aligned", asy
     created_at: now,
     updated_at: now,
   };
+  const deletedStorageIds = [];
+  let deletedFeedback = false;
   const mySqlService = {
     isEnabled: () => true,
     query: async (sql) => {
@@ -300,6 +323,7 @@ test("admin endpoints validate pagination and keep response fields aligned", asy
           [
             {
               id: "image-id",
+              storage_id: storageId.toHexString(),
               file_name: "image.png",
               content_type: "image/png",
               size: VALID_PNG.length,
@@ -310,6 +334,15 @@ test("admin endpoints validate pagination and keep response fields aligned", asy
       if (sql.includes("UPDATE feedback")) return [{ affectedRows: 1 }];
       return [[feedbackRow]];
     },
+    transaction: async (callback) =>
+      callback({
+        query: async (sql) => {
+          if (sql.includes("DELETE FROM feedback WHERE")) {
+            deletedFeedback = true;
+          }
+          return [{ affectedRows: 1 }];
+        },
+      }),
   };
   const service = createFeedbackService({
     config: {
@@ -318,7 +351,6 @@ test("admin endpoints validate pagination and keep response fields aligned", asy
       MAX_FEEDBACK_TEXT_LENGTH: 5000,
       MAX_FEEDBACK_IMAGES: 4,
       MAX_FEEDBACK_IMAGE_BYTES: 5 * 1024 * 1024,
-      FEEDBACK_ANONYMOUS_COOLDOWN_MS: 86_400_000,
       FEEDBACK_AUTHENTICATED_COOLDOWN_MS: 21_600_000,
       SESSION_COOKIE_NAME: "bz_games_session",
     },
@@ -331,20 +363,26 @@ test("admin endpoints validate pagination and keep response fields aligned", asy
           assert.equal(id.toHexString(), storageId.toHexString());
           return Readable.from(VALID_PNG);
         },
+        delete: async (id) => deletedStorageIds.push(id.toHexString()),
       }),
     },
     authService: {
-      getClientSessionFromRequest: async () => ({
-        status: "authenticated",
-        auth: {
-          user: {
-            id: 42,
-            github_id: "123456789",
-            login: "test-admin",
-            avatar_url: "",
-          },
-        },
-      }),
+      getClientSessionFromRequest: async (req) =>
+        req.headers.authorization === "Bearer owner-session"
+          ? {
+              status: "authenticated",
+              auth: {
+                user: {
+                  id: 42,
+                  github_id: "123456789",
+                  login: "test-admin",
+                  avatar_url: "",
+                },
+              },
+            }
+          : {
+              status: "invalid",
+            },
       sendAuthFailure: (res, status) => {
         res.writeHead(401, { "content-type": "application/json" });
         res.end(JSON.stringify({ error: status }));
@@ -352,7 +390,12 @@ test("admin endpoints validate pagination and keep response fields aligned", asy
     },
     accessControlService: {
       requireCapability: async () => ({
-        user: { id: 42, github_id: "123456789", login: "test-admin", avatar_url: "" },
+        user: {
+          id: 42,
+          github_id: "123456789",
+          login: "test-admin",
+          avatar_url: "",
+        },
       }),
     },
   });
@@ -382,7 +425,6 @@ test("admin endpoints validate pagination and keep response fields aligned", asy
           id: feedbackRow.id,
           content: feedbackRow.content,
           status: feedbackRow.status,
-          submitterType: feedbackRow.submitter_type,
           githubLogin: feedbackRow.github_login,
           imageCount: feedbackRow.image_count,
           createdAt: now.toISOString(),
@@ -401,7 +443,6 @@ test("admin endpoints validate pagination and keep response fields aligned", asy
       id: feedbackRow.id,
       content: feedbackRow.content,
       status: feedbackRow.status,
-      submitterType: feedbackRow.submitter_type,
       githubLogin: feedbackRow.github_login,
       imageCount: feedbackRow.image_count,
       createdAt: now.toISOString(),
@@ -422,8 +463,19 @@ test("admin endpoints validate pagination and keep response fields aligned", asy
       `${baseUrl}/api/v1/feedback/${feedbackRow.id}`,
       { headers: { "x-relay-token": "test-relay-token" } },
     );
-    assert.equal(userDetailResponse.status, 200);
-    assert.deepEqual(await userDetailResponse.json(), {
+    assert.equal(userDetailResponse.status, 401);
+
+    const ownerDetailResponse = await fetch(
+      `${baseUrl}/api/v1/feedback/${feedbackRow.id}`,
+      {
+        headers: {
+          "x-relay-token": "test-relay-token",
+          authorization: "Bearer owner-session",
+        },
+      },
+    );
+    assert.equal(ownerDetailResponse.status, 200);
+    assert.deepEqual(await ownerDetailResponse.json(), {
       id: feedbackRow.id,
       content: feedbackRow.content,
       status: feedbackRow.status,
@@ -441,27 +493,14 @@ test("admin endpoints validate pagination and keep response fields aligned", asy
       ],
     });
 
-    feedbackRow.user_id = 42;
-    const ownerLoginRequired = await fetch(
-      `${baseUrl}/api/v1/feedback/${feedbackRow.id}`,
-      { headers: { "x-relay-token": "test-relay-token" } },
-    );
-    assert.equal(ownerLoginRequired.status, 401);
-    const ownerDetailResponse = await fetch(
-      `${baseUrl}/api/v1/feedback/${feedbackRow.id}`,
+    const userImageResponse = await fetch(
+      `${baseUrl}/api/v1/feedback/${feedbackRow.id}/images/image-id`,
       {
         headers: {
           "x-relay-token": "test-relay-token",
           authorization: "Bearer owner-session",
         },
       },
-    );
-    assert.equal(ownerDetailResponse.status, 200);
-    feedbackRow.user_id = null;
-
-    const userImageResponse = await fetch(
-      `${baseUrl}/api/v1/feedback/${feedbackRow.id}/images/image-id`,
-      { headers: { "x-relay-token": "test-relay-token" } },
     );
     assert.equal(userImageResponse.status, 200);
     assert.equal(userImageResponse.headers.get("content-type"), "image/png");
@@ -511,6 +550,15 @@ test("admin endpoints validate pagination and keep response fields aligned", asy
     );
     assert.equal(updateResponse.status, 200);
     assert.deepEqual(await updateResponse.json(), { ok: true });
+
+    const deleteResponse = await fetch(
+      `${baseUrl}/api/admin/v1/feedback/${feedbackRow.id}`,
+      { method: "DELETE" },
+    );
+    assert.equal(deleteResponse.status, 200);
+    assert.deepEqual(await deleteResponse.json(), { ok: true });
+    assert.equal(deletedFeedback, true);
+    assert.deepEqual(deletedStorageIds, [storageId.toHexString()]);
   } finally {
     service.dispose();
     await new Promise((resolve) => server.close(resolve));

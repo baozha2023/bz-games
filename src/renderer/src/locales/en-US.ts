@@ -5,14 +5,13 @@ export default {
     settings: "Settings",
     personalization: "Personalize",
     rooms: "Rooms",
+    career: "Game Career",
     backToRoom: "Back to Room",
   },
   feedback: {
     button: "Feedback",
     title: "Feedback & Suggestions",
     loggedInHint: "When signed in, you can send feedback once every 6 hours.",
-    anonymousHint:
-      "When signed out, you can send feedback once every 48 hours.",
     placeholder:
       "Share a suggestion, report a problem, or describe a feature you would like…",
     selectImages: "Select Images",
@@ -494,6 +493,16 @@ export default {
     failed: "Check-in failed",
     error: "Network or system error",
     bonus: "7-day bonus!",
+  },
+  bzCoinGuide: {
+    title: "How can I earn BZ Coins?",
+    balance: "Current balance",
+    checkInTitle: "Daily check-in",
+    checkInDescription:
+      "Check in each day to earn 10, 20, 30, 40, 50, and 60 BZ Coins on days 1–6 of a streak, then 100 BZ Coins on day 7. A new seven-day cycle starts afterward.",
+    playtimeTitle: "Play games",
+    playtimeDescription:
+      "Earn 10 BZ Coins automatically for every 10 minutes of recorded game time. No manual claim is required.",
   },
   settings: {
     title: "Settings",
