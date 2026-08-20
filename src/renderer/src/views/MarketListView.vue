@@ -56,10 +56,7 @@
       :description="t('marketList.empty')"
     />
 
-    <div
-      v-else
-      class="market-source-grid"
-    >
+    <div v-else class="market-source-grid">
       <div
         v-for="source in displayedSources"
         :key="source.marketId"
@@ -233,10 +230,13 @@ onMounted(async () => {
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
   gap: 24px;
   justify-content: start;
+  justify-items: center;
   align-items: start;
 }
 
 .market-source-grid-item {
+  width: 100%;
+  max-width: 360px;
   min-width: 0;
 }
 

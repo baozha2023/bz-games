@@ -1469,6 +1469,7 @@ const handleConfirmDraftImport = async () => {
 .library-game-grid {
   display: grid;
   justify-content: start;
+  justify-items: center;
   align-items: start;
 }
 
@@ -1483,7 +1484,16 @@ const handleConfirmDraftImport = async () => {
 }
 
 .library-game-grid-item {
+  width: 100%;
   min-width: 0;
+}
+
+.library-game-grid.is-icon .library-game-grid-item {
+  max-width: 160px;
+}
+
+.library-game-grid.is-card .library-game-grid-item {
+  max-width: 360px;
 }
 .drop-overlay {
   position: absolute;
