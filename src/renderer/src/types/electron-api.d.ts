@@ -25,6 +25,9 @@ import type {
   CloudSnapshotMetaResult,
   CloudSyncResult,
   LocalCloudStatus,
+  GameImportStartResult,
+  GameImportTaskEvent,
+  GameImportTaskState,
 } from "../../../shared/types";
 import type { GameManifest } from "../../../shared/game-manifest";
 
@@ -47,6 +50,32 @@ declare global {
         }>;
       };
       game: {
+        selectImportDirectory: () => Promise<string | null>;
+        startImport: (
+          sourcePath: string,
+          draft?: {
+            id: string;
+            name: string;
+            version: string;
+            description?: string;
+            author: string;
+            entry?: string;
+            web_url?: string;
+            platformVersion?: string;
+            icon?: string;
+            cover?: string;
+            type: GameType;
+            minPlayers?: number;
+            maxPlayers?: number;
+          },
+        ) => Promise<GameImportStartResult>;
+        getImportTasks: () => Promise<GameImportTaskState[]>;
+        cancelImport: (taskId: string) => Promise<boolean>;
+        retryImport: (taskId: string) => Promise<GameImportStartResult>;
+        dismissImport: (taskId: string) => Promise<boolean>;
+        onImportEvent: (
+          callback: (payload: GameImportTaskEvent) => void,
+        ) => () => void;
         load: (sourcePath?: string) => Promise<{
           success: boolean;
           manifest?: GameManifest;
@@ -185,6 +214,7 @@ declare global {
         ) => Promise<MarketTaskState>;
         getTaskState: (taskId: string) => Promise<MarketTaskState | null>;
         cancelTask: (taskId: string) => Promise<boolean>;
+        dismissTask: (taskId: string) => Promise<boolean>;
         pauseTask: (taskId: string) => Promise<boolean>;
         resumeTask: (taskId: string) => Promise<MarketTaskState | null>;
         getPendingTasks: () => Promise<DownloadTaskSnapshot[]>;

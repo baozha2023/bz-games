@@ -36,6 +36,11 @@ const router = createRouter({
       component: () => import("../views/RoomDiscoveryView.vue"),
     },
     {
+      path: "/social",
+      name: "Social",
+      component: () => import("../views/SocialView.vue"),
+    },
+    {
       path: "/settings",
       name: "Settings",
       component: () => import("../views/SettingsView.vue"),

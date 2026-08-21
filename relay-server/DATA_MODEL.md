@@ -162,8 +162,9 @@ The SQL dump omits the local autoincrement implementation column `stats_reports.
 两张表都由 `createMySqlService().ensureSchema()` 使用完整的
 `CREATE TABLE IF NOT EXISTS` 自动初始化，不提供独立迁移脚本。
 
-客户端本地历史只保存反馈编号和提交时间。展开历史记录时，通过用户反馈详情接口
-读取正文、处理状态、回复和图片；管理备注不会返回给客户端。
+客户端不持久化反馈历史。打开历史记录时，客户端按当前登录用户从
+`GET /api/v1/feedback` 查询反馈编号和提交时间；展开历史记录时，再通过用户反馈详情接口
+读取正文、处理状态、回复和图片。管理备注不会返回给客户端。
 
 ### MongoDB GridFS
 

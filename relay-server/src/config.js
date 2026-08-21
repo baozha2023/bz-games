@@ -24,7 +24,7 @@ export const config = {
     process.env.GAME_HOSTING_STORAGE_DIR || "/var/lib/bz-games-hosting"
   ).trim(),
   MAX_GAME_HOSTING_FILE_BYTES: Number(
-    process.env.MAX_GAME_HOSTING_FILE_BYTES || 100 * 1024 * 1024,
+    process.env.MAX_GAME_HOSTING_FILE_BYTES || 200 * 1024 * 1024,
   ),
   MAX_GAME_HOSTING_IMAGE_BYTES: Number(
     process.env.MAX_GAME_HOSTING_IMAGE_BYTES || 5 * 1024 * 1024,

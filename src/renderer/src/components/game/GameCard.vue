@@ -20,6 +20,14 @@
       >
         <GameCover v-if="!compact" :game-id="game.id" />
         <GameIcon v-else :game-id="game.id" />
+        <GameImportOverlay
+          v-if="importTasks?.length"
+          :tasks="importTasks"
+          :compact="compact"
+          @cancel="$emit('cancel-import', $event)"
+          @retry="$emit('retry-import', $event)"
+          @dismiss="$emit('dismiss-import', $event)"
+        />
         <n-icon
           v-if="isFavorite"
           :size="compact ? 18 : 24"
@@ -50,11 +58,14 @@ import { Heart } from "@vicons/ionicons5";
 import GameCover from "./GameCover.vue";
 import GameIcon from "./GameIcon.vue";
 import type { GameManifest } from "../../../../shared/game-manifest";
+import type { GameImportTaskState } from "../../../../shared/types";
 import { useGameStore } from "../../stores/useGameStore";
+import GameImportOverlay from "./GameImportOverlay.vue";
 
 const props = defineProps<{
   game: GameManifest;
   compact?: boolean;
+  importTasks?: GameImportTaskState[];
 }>();
 
 const gameStore = useGameStore();
@@ -65,6 +76,9 @@ const isFavorite = computed(() => {
 
 const emit = defineEmits<{
   (e: "click", id: string): void;
+  (e: "cancel-import", taskId: string): void;
+  (e: "retry-import", taskId: string): void;
+  (e: "dismiss-import", taskId: string): void;
 }>();
 
 const handleClick = () => {

@@ -52,7 +52,7 @@ type RendererWritableSettings = Partial<
 /**
  * Renderer settings are untrusted. Only fields that have renderer-owned UI or
  * renderer runtime state may cross this IPC boundary. In particular,
- * feedbackHistory and authentication/identity fields are main-process-owned.
+ * Authentication and identity fields are main-process-owned.
  */
 function selectRendererWritableSettings(
   settings: unknown,

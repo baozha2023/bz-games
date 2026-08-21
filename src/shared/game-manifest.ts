@@ -163,6 +163,7 @@ export const GameManifestBaseSchema = z.object({
   multiplayer: MultiplayerSchema.optional(),
   args: ManifestArgsSchema.optional(),
   env: ManifestEnvSchema.optional(),
+  windowedFullscreen: z.boolean().optional(),
   achievements: z
     .array(
       z.object({
@@ -231,6 +232,13 @@ export const GameManifestSchema = GameManifestBaseSchema.superRefine(
         code: z.ZodIssueCode.custom,
         path: ["env"],
         message: "env is only supported by native game entries",
+      });
+    }
+    if (!isWebEntry && manifest.windowedFullscreen !== undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["windowedFullscreen"],
+        message: "windowedFullscreen is only supported by Web game entries",
       });
     }
     if (!isWebEntry && manifest.encryptLocalStorage === true) {

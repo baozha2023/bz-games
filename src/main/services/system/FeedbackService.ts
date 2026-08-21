@@ -132,7 +132,7 @@ function isFeedbackStatus(value: unknown): value is FeedbackStatus {
   );
 }
 
-class FeedbackService {
+export class FeedbackService {
   private readonly selections = new Map<string, FeedbackSelection>();
   private readonly baseUrl = normalizeRelayHttpBase();
 
@@ -261,13 +261,64 @@ class FeedbackService {
     }
   }
 
-  getHistory(): FeedbackHistoryItem[] {
-    if (!storeService.getSettings().cloudSessionToken) return [];
+  async getHistory(): Promise<FeedbackHistoryItem[]> {
     try {
-      return storeService.getFeedbackHistory();
+      storeService.clearLegacyFeedbackHistory();
     } catch (error) {
-      logger.warn("[FeedbackService] Failed to read feedback history", error);
+      logger.warn(
+        "[FeedbackService] Failed to clear legacy feedback history",
+        error,
+      );
+    }
+
+    const settings = storeService.getSettings();
+    if (!settings.cloudSessionToken || !this.baseUrl) return [];
+
+    const url = `${this.baseUrl}/api/v1/feedback`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    try {
+      const response = await fetch(url, {
+        headers: requestInterceptor.buildHeaders(url, {
+          Authorization: `Bearer ${settings.cloudSessionToken}`,
+        }),
+        signal: controller.signal,
+      });
+      const body = (await response.json().catch(() => ({}))) as {
+        items?: unknown;
+        error?: string;
+      };
+      cloudSyncService.handleAuthFailure(body.error);
+      if (!response.ok || !Array.isArray(body.items)) {
+        return [];
+      }
+
+      const items = body.items.map((item) => {
+        if (!item || typeof item !== "object" || Array.isArray(item)) {
+          throw new Error("feedback_invalid_response");
+        }
+        const value = item as Record<string, unknown>;
+        if (
+          typeof value.id !== "string" ||
+          !UUID_PATTERN.test(value.id) ||
+          typeof value.submittedAt !== "number" ||
+          !Number.isInteger(value.submittedAt) ||
+          !Number.isFinite(value.submittedAt) ||
+          value.submittedAt <= 0
+        ) {
+          throw new Error("feedback_invalid_response");
+        }
+        return {
+          id: value.id,
+          submittedAt: value.submittedAt,
+        } satisfies FeedbackHistoryItem;
+      });
+      return items;
+    } catch (error) {
+      logger.warn("[FeedbackService] Failed to load feedback history", error);
       return [];
+    } finally {
+      clearTimeout(timeout);
     }
   }
 
@@ -497,11 +548,6 @@ class FeedbackService {
       }
       const feedbackId = body.id.trim();
       if (selectionId) this.selections.delete(selectionId);
-      try {
-        storeService.addFeedbackHistory(feedbackId);
-      } catch (error) {
-        logger.warn("[FeedbackService] Failed to save feedback history", error);
-      }
       return {
         success: true,
         id: feedbackId,

@@ -1,5 +1,5 @@
 import { ChildProcess, execFile, spawn } from "child_process";
-import { BrowserWindow } from "electron";
+import { BrowserWindow, screen } from "electron";
 import path from "path";
 import fs from "fs";
 import { createServer, Server } from "http";
@@ -26,6 +26,10 @@ import { gameWindowIdentityRegistry } from "./GameWindowIdentityRegistry";
 import { resolveGameEntryMode } from "../../../shared/game-launch";
 import { findMatchingRoom } from "../room/RoomContext";
 import { logger } from "../../utils/logger";
+import {
+  applyWebWindowStartupState,
+  resolveWebWindowStartupOptions,
+} from "./WebWindowStartup";
 
 class GameManager {
   private activeProcesses: Map<string, ChildProcess> = new Map();
@@ -90,7 +94,12 @@ class GameManager {
 
       const entryMode = resolveGameEntryMode(manifest.entry);
       if (entryMode === "url") {
-        return this.launchRemoteWebGame(id, versionPath, manifest);
+        return this.launchRemoteWebGame(
+          id,
+          versionPath,
+          manifest,
+          manifest.windowedFullscreen === true,
+        );
       }
 
       const { port, token } = await this.startApiServer(id, manifest.version);
@@ -106,7 +115,12 @@ class GameManager {
           token,
           settings,
         );
-        return this.launchServeGame(id, versionPath, manifest);
+        return this.launchServeGame(
+          id,
+          versionPath,
+          manifest,
+          manifest.windowedFullscreen === true,
+        );
       } else if (entryMode === "html") {
         this.writeWebGameConfig(
           id,
@@ -116,7 +130,12 @@ class GameManager {
           token,
           settings,
         );
-        return this.launchWebGame(id, versionPath, manifest);
+        return this.launchWebGame(
+          id,
+          versionPath,
+          manifest,
+          manifest.windowedFullscreen === true,
+        );
       } else {
         const env = GameEnvironment.prepare(
           id,
@@ -291,6 +310,7 @@ class GameManager {
     id: string,
     versionPath: string,
     manifest: GameManifest,
+    windowedFullscreen: boolean,
   ): Promise<boolean> {
     let serveOrigin = "";
     const staticFiles = serveStatic(versionPath, {
@@ -361,7 +381,14 @@ class GameManager {
     this.activeServers.set(id, server);
 
     const url = `${serveOrigin}/?gameId=${encodeURIComponent(id)}&version=${encodeURIComponent(manifest.version)}`;
-    await this.createGameWindow(id, manifest, versionPath, url, false);
+    await this.createGameWindow(
+      id,
+      manifest,
+      versionPath,
+      url,
+      false,
+      windowedFullscreen,
+    );
     return true;
   }
 
@@ -369,6 +396,7 @@ class GameManager {
     id: string,
     versionPath: string,
     manifest: GameManifest,
+    windowedFullscreen: boolean,
   ): Promise<boolean> {
     const entryPath = path.join(versionPath, manifest.entry);
 
@@ -376,7 +404,14 @@ class GameManager {
       throw { code: "entryNotFound", params: { entry: manifest.entry } };
     }
 
-    await this.createGameWindow(id, manifest, versionPath, entryPath, true);
+    await this.createGameWindow(
+      id,
+      manifest,
+      versionPath,
+      entryPath,
+      true,
+      windowedFullscreen,
+    );
     return true;
   }
 
@@ -384,6 +419,7 @@ class GameManager {
     id: string,
     versionPath: string,
     manifest: GameManifest,
+    windowedFullscreen: boolean,
   ): Promise<boolean> {
     if (!manifest.web_url) {
       throw { code: "webUrlMissing" };
@@ -394,6 +430,7 @@ class GameManager {
       versionPath,
       manifest.web_url,
       false,
+      windowedFullscreen,
     );
     return true;
   }
@@ -404,10 +441,18 @@ class GameManager {
     versionPath: string,
     urlOrPath: string,
     isFile: boolean,
+    windowedFullscreen: boolean,
   ): Promise<BrowserWindow> {
+    const startupOptions = resolveWebWindowStartupOptions(
+      windowedFullscreen,
+      windowedFullscreen ? this.getWebWindowWorkArea() : undefined,
+    );
     const win = new BrowserWindow({
-      width: 1280,
-      height: 720,
+      width: startupOptions.width,
+      height: startupOptions.height,
+      ...(startupOptions.x !== undefined && startupOptions.y !== undefined
+        ? { x: startupOptions.x, y: startupOptions.y }
+        : {}),
       show: false,
       title: manifest.name,
       icon: manifest.icon ? path.join(versionPath, manifest.icon) : undefined,
@@ -455,6 +500,8 @@ class GameManager {
       await win.loadURL(urlOrPath);
     }
 
+    applyWebWindowStartupState(win, startupOptions);
+
     const sessionStart = Date.now();
     const sessionId = playSessionDatabaseService.startSession(
       id,
@@ -473,6 +520,17 @@ class GameManager {
     mainWindow?.webContents.send(IPC.GAME_PROCESS_STARTED, id);
 
     return win;
+  }
+
+  private getWebWindowWorkArea() {
+    try {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        return screen.getDisplayMatching(mainWindow.getBounds()).workArea;
+      }
+      return screen.getPrimaryDisplay().workArea;
+    } catch {
+      return undefined;
+    }
   }
 
   private async spawnGameProcess(

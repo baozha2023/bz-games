@@ -82,6 +82,11 @@
             >{{ t("nav.rooms") }}</n-button
           >
           <n-button
+            :type="activeNavKey === 'social' ? 'primary' : 'default'"
+            @click="router.push('/social')"
+            >{{ t("nav.social") }}</n-button
+          >
+          <n-button
             :type="activeNavKey === 'settings' ? 'primary' : 'default'"
             @click="router.push('/settings')"
             >{{ t("nav.settings") }}</n-button
@@ -154,11 +159,11 @@ import { ref } from "vue";
 import { AchievementNotifier } from "./utils/achievementNotifier";
 import bzCoinIcon from "./assets/images/bz-coin.png";
 import semver from "semver";
-import { invalidateGameAssetCache } from "./composables/useImageCache";
 import type { MarketTaskState } from "../../shared/types";
 import { getFrameImageFileName } from "../../shared/avatar-frames";
 
 const marketNotifiedTaskIds = new Set<string>();
+const manualImportNotifiedTaskIds = new Set<string>();
 
 const { t } = useI18n();
 const router = useRouter();
@@ -190,6 +195,7 @@ const activeNavKey = computed(() => {
   if (route.name === "Library" || route.name === "GameDetail") return "library";
   if (route.name === "Career") return "career";
   if (route.name === "RoomDiscovery" || route.name === "Room") return "rooms";
+  if (route.name === "Social") return "social";
   if (route.name === "Settings") return "settings";
   return "";
 });
@@ -209,6 +215,7 @@ const handleBackToRoom = () => {
 
 let cleanup: (() => void) | undefined;
 let cleanupAchievements: (() => void) | undefined;
+let cleanupGameImportEvent: (() => void) | undefined;
 let cleanupMarketEvent: (() => void) | undefined;
 const achievementNotifier = new AchievementNotifier({
   delayMs: 5200,
@@ -403,8 +410,28 @@ onMounted(() => {
     );
   }
 
+  if (window.electronAPI?.game?.onImportEvent) {
+    cleanupGameImportEvent = window.electronAPI.game.onImportEvent(
+      ({ task }) => {
+        if (
+          task.status !== "completed" ||
+          manualImportNotifiedTaskIds.has(task.taskId)
+        ) {
+          return;
+        }
+        manualImportNotifiedTaskIds.add(task.taskId);
+        message.success(
+          t("library.addSuccessWithVersion", {
+            name: task.gameName || task.gameId,
+            version: task.version,
+          }),
+        );
+      },
+    );
+  }
+
   if (window.electronAPI?.market?.onEvent) {
-    cleanupMarketEvent = window.electronAPI.market.onEvent(async ({ task }) => {
+    cleanupMarketEvent = window.electronAPI.market.onEvent(({ task }) => {
       if (task.status === "idle") {
         marketNotifiedTaskIds.delete(task.taskId);
         return;
@@ -413,10 +440,8 @@ onMounted(() => {
       if (!marketNotifiedTaskIds.has(task.taskId)) {
         if (task.status === "completed") {
           marketNotifiedTaskIds.add(task.taskId);
-          invalidateGameAssetCache(task.gameId);
-          await gameStore.loadGames();
           const game = gameStore.games.find((g) => g.id === task.gameId);
-          const gameName = game?.name || task.gameId;
+          const gameName = task.gameName || game?.name || task.gameId;
           message.success(
             t("market.installSuccess", {
               name: gameName,
@@ -441,6 +466,7 @@ onMounted(() => {
 onUnmounted(() => {
   if (cleanup) cleanup();
   if (cleanupAchievements) cleanupAchievements();
+  if (cleanupGameImportEvent) cleanupGameImportEvent();
   if (cleanupMarketEvent) cleanupMarketEvent();
   achievementNotifier.dispose();
 });

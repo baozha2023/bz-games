@@ -211,6 +211,48 @@ test("publisher rejects rollback and same-version replacement", async () => {
   }
 });
 
+test(
+  "publisher normalizes release ownership and permissions",
+  { skip: process.platform === "win32" },
+  async () => {
+    const storageRoot = await fs.mkdtemp(
+      path.join(os.tmpdir(), "bz-release-permissions-"),
+    );
+    const incomingRoot = path.join(storageRoot, ".incoming");
+    await fs.mkdir(incomingRoot);
+    const executable = Buffer.alloc(96, 4);
+    executable.write("MZ", 0, "ascii");
+    const staged = path.join(incomingRoot, "staged.exe");
+    await fs.writeFile(staged, executable, { mode: 0o600 });
+
+    try {
+      await publishDesktopRelease(
+        {
+          staged,
+          version: "3.2.2",
+          size: executable.length,
+          sha256: createHash("sha256").update(executable).digest("hex"),
+          allowDowngrade: false,
+        },
+        {
+          DESKTOP_RELEASE_STORAGE_DIR: storageRoot,
+          MAX_DESKTOP_RELEASE_FILE_BYTES: 2 * 1024 * 1024,
+        },
+      );
+
+      const storageStat = await fs.stat(storageRoot);
+      for (const fileName of ["BZ-Games-Setup-3.2.2.exe", "latest.json"]) {
+        const fileStat = await fs.stat(path.join(storageRoot, fileName));
+        assert.equal(fileStat.uid, storageStat.uid);
+        assert.equal(fileStat.gid, storageStat.gid);
+        assert.equal(fileStat.mode & 0o777, 0o640);
+      }
+    } finally {
+      await fs.rm(storageRoot, { recursive: true, force: true });
+    }
+  },
+);
+
 test("super administrator upload publishes an executable through the shared publisher", async () => {
   const storageRoot = await fs.mkdtemp(
     path.join(os.tmpdir(), "bz-release-admin-"),

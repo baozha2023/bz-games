@@ -1,15 +1,14 @@
 <template>
   <div
     class="library-root"
-    :class="{ 'library-root-steam': isLibraryReady && layoutMode === 'steam' }"
+    :class="{ 'library-root-steam': layoutMode === 'steam' }"
     style="padding: 24px"
     @dragenter.prevent="handleExternalDragEnter"
     @dragover.prevent="handleExternalDragOver"
     @dragleave.prevent="handleExternalDragLeave"
     @drop.prevent="handleExternalDrop"
   >
-    <template v-if="isLibraryReady">
-      <n-space
+    <n-space
         justify="space-between"
         align="center"
         style="margin-bottom: 24px"
@@ -44,7 +43,11 @@
       </n-space>
 
       <n-empty
-        v-if="!gameStore.isLoading && gameStore.games.length === 0"
+        v-if="
+          !showInitialSkeleton &&
+          gameStore.games.length === 0 &&
+          newGameImportTasks.length === 0
+        "
         :description="t('library.emptyState')"
         style="margin-top: 100px"
       >
@@ -60,13 +63,15 @@
           <aside class="steam-sidebar">
             <div class="steam-sidebar-title">{{ t("library.allGames") }}</div>
             <div class="steam-sidebar-list">
-              <template v-if="gameStore.isLoading">
+              <template v-if="showInitialSkeleton">
                 <n-space vertical :size="10">
                   <n-skeleton height="56px" :repeat="6" />
                 </n-space>
               </template>
               <n-empty
-                v-else-if="displayedGames.length === 0"
+                v-else-if="
+                  displayedGames.length === 0 && newGameImportTasks.length === 0
+                "
                 :description="
                   searchQuery
                     ? t('library.noSearchResults')
@@ -74,9 +79,34 @@
                 "
                 size="small"
               />
+              <div
+                v-for="task in newGameImportTasks"
+                :key="task.taskId"
+                class="steam-list-item steam-import-list-item import-position-last"
+                @click="selectedSteamGameId = ''"
+              >
+                <div class="steam-list-thumb">
+                  <GameImportPlaceholder
+                    :task="task"
+                    compact
+                    @cancel="handleCancelImport"
+                    @retry="handleRetryImport"
+                    @dismiss="handleDismissImport"
+                  />
+                </div>
+                <div class="steam-list-text">
+                  <div class="steam-list-name">{{ task.gameName }}</div>
+                  <n-progress
+                    type="line"
+                    :percentage="task.progress || 0"
+                    :processing="task.progress === null"
+                    :show-indicator="false"
+                    :height="5"
+                  />
+                </div>
+              </div>
               <button
                 v-for="game in visibleDisplayedGames"
-                v-else
                 :key="game.id"
                 type="button"
                 class="steam-list-item"
@@ -94,6 +124,14 @@
                     <span>{{ game.version }}</span>
                     <span>{{ game.author }}</span>
                   </div>
+                  <n-progress
+                    v-if="tasksForGame(game.id).length"
+                    type="line"
+                    :percentage="tasksForGame(game.id)[0].progress || 0"
+                    :processing="tasksForGame(game.id)[0].progress === null"
+                    :show-indicator="false"
+                    :height="4"
+                  />
                 </div>
                 <div class="steam-list-flags">
                   <n-icon
@@ -151,7 +189,7 @@
               @back="selectedSteamGameId = ''"
               @deleted="handleSteamDetailDeleted"
             />
-            <div v-else-if="gameStore.isLoading" class="steam-cover-grid">
+            <div v-else-if="showInitialSkeleton" class="steam-cover-grid">
               <n-card
                 v-for="index in 8"
                 :key="index"
@@ -165,7 +203,9 @@
               </n-card>
             </div>
             <n-empty
-              v-else-if="displayedGames.length === 0"
+              v-else-if="
+                displayedGames.length === 0 && newGameImportTasks.length === 0
+              "
               :description="
                 searchQuery
                   ? t('library.noSearchResults')
@@ -174,6 +214,18 @@
               style="margin-top: 80px"
             />
             <div v-else class="steam-cover-grid">
+              <div
+                v-for="task in newGameImportTasks"
+                :key="task.taskId"
+                class="steam-card-shell import-position-last"
+              >
+                <GameImportPlaceholder
+                  :task="task"
+                  @cancel="handleCancelImport"
+                  @retry="handleRetryImport"
+                  @dismiss="handleDismissImport"
+                />
+              </div>
               <div
                 v-for="(game, index) in visibleDisplayedGames"
                 :key="game.id"
@@ -192,7 +244,14 @@
                 @mouseleave="clearLongPress"
                 @contextmenu.prevent="handleContextMenu($event, game.id)"
               >
-                <GameCard :game="game" @click="handleSteamCardClick" />
+                <GameCard
+                  :game="game"
+                  :import-tasks="tasksForGame(game.id)"
+                  @click="handleSteamCardClick"
+                  @cancel-import="handleCancelImport"
+                  @retry-import="handleRetryImport"
+                  @dismiss-import="handleDismissImport"
+                />
                 <div v-if="isReorderMode" class="reorder-overlay"></div>
               </div>
             </div>
@@ -202,10 +261,23 @@
 
       <template v-else>
         <div
-          v-if="!gameStore.isLoading"
+          v-if="!showInitialSkeleton"
           class="library-game-grid"
           :class="layoutMode === 'icon' ? 'is-icon' : 'is-card'"
         >
+          <div
+            v-for="task in newGameImportTasks"
+            :key="task.taskId"
+            class="library-game-grid-item import-position-last"
+          >
+            <GameImportPlaceholder
+              :task="task"
+              :compact="layoutMode === 'icon'"
+              @cancel="handleCancelImport"
+              @retry="handleRetryImport"
+              @dismiss="handleDismissImport"
+            />
+          </div>
           <div
             v-for="(game, index) in visibleDisplayedGames"
             :key="game.id"
@@ -230,7 +302,11 @@
               <GameCard
                 :game="game"
                 :compact="layoutMode === 'icon'"
+                :import-tasks="tasksForGame(game.id)"
                 @click="goToDetail"
+                @cancel-import="handleCancelImport"
+                @retry-import="handleRetryImport"
+                @dismiss-import="handleDismissImport"
               />
               <div v-if="isReorderMode" class="reorder-overlay"></div>
             </div>
@@ -250,21 +326,6 @@
           </div>
         </div>
       </template>
-    </template>
-
-    <n-space v-else vertical size="large">
-      <n-skeleton text :width="120" />
-      <n-skeleton text :repeat="2" />
-      <div class="library-game-grid is-card">
-        <div v-for="index in 6" :key="index" class="library-game-grid-item">
-          <n-card size="small" embedded>
-            <n-skeleton height="180px" />
-            <n-skeleton text style="margin-top: 12px" />
-            <n-skeleton text :width="120" />
-          </n-card>
-        </div>
-      </div>
-    </n-space>
 
     <div
       v-if="isDragActive && !isReorderMode"
@@ -509,6 +570,7 @@ import { useGameStore } from "../stores/useGameStore";
 import { useSettingsStore } from "../stores/useSettingsStore";
 import GameCard from "../components/game/GameCard.vue";
 import GameIcon from "../components/game/GameIcon.vue";
+import GameImportPlaceholder from "../components/game/GameImportPlaceholder.vue";
 import GameDeleteModal from "../components/game/GameDeleteModal.vue";
 import GameDetailView from "./GameDetailView.vue";
 import { playShatterEffect } from "../utils/deleteEffect";
@@ -525,8 +587,9 @@ type LibrarySortMode = "custom" | "name" | "recent-played" | "recent-added";
 
 const layoutSequence: LibraryLayout[] = ["card", "icon", "steam"];
 
-const layoutMode = ref<LibraryLayout>("card");
-const isLibraryReady = ref(false);
+const layoutMode = ref<LibraryLayout>(
+  settingsStore.settings?.libraryLayout || "card",
+);
 const isReorderMode = ref(false);
 const draggedIndex = ref<number | null>(null);
 const isDragActive = ref(false);
@@ -715,6 +778,19 @@ const needsMultiplayerConfig = computed(
     draftForm.value.type === GameType.Multiplayer ||
     draftForm.value.type === GameType.SingleMultiple,
 );
+const newGameImportTasks = computed(() =>
+  gameStore.importTasks.filter((task) => !task.existingGame),
+);
+const showInitialSkeleton = computed(
+  () =>
+    gameStore.isLoading &&
+    gameStore.games.length === 0 &&
+    newGameImportTasks.value.length === 0,
+);
+const tasksForGame = (gameId: string) =>
+  gameStore.importTasks.filter(
+    (task) => task.existingGame && task.gameId === gameId,
+  );
 
 const isRightClickedFavorite = computed(() => {
   if (!rightClickedGameId.value) return false;
@@ -839,10 +915,9 @@ const confirmDelete = async (versionsToDelete: string[]) => {
 };
 
 onMounted(async () => {
-  await settingsStore.loadSettings();
+  await Promise.all([settingsStore.loadSettings(), gameStore.loadGames()]);
   layoutMode.value = settingsStore.settings?.libraryLayout || "card";
-  isLibraryReady.value = true;
-  await gameStore.loadGames();
+  await gameStore.loadImportTasks();
 
   const deletedGameId = route.query.deletedGameId as string | undefined;
   if (deletedGameId) {
@@ -878,10 +953,9 @@ onUnmounted(() => {
 });
 
 watch(layoutMode, async (nextLayout) => {
-  if (isStaggerEnabled.value && isLibraryReady.value && !gameStore.isLoading) {
+  if (isStaggerEnabled.value && !gameStore.isLoading) {
     startStaggerRendering();
   }
-  if (!isLibraryReady.value) return;
   try {
     await settingsStore.savePartialSettings({ libraryLayout: nextLayout });
   } catch (error) {
@@ -890,8 +964,7 @@ watch(layoutMode, async (nextLayout) => {
 });
 
 watch(displayedGames, (nextGames, prevGames) => {
-  if (!isStaggerEnabled.value || !isLibraryReady.value || gameStore.isLoading)
-    return;
+  if (!isStaggerEnabled.value || gameStore.isLoading) return;
   if (hasSameGameIds(nextGames, prevGames)) return;
   if (isSupersetById(nextGames, prevGames)) {
     continueStaggerRendering();
@@ -920,42 +993,54 @@ watch(
   { immediate: true },
 );
 
-const showAddGameResult = (
-  result: Awaited<ReturnType<typeof gameStore.addGame>>,
-) => {
-  if (result.success) {
-    if (result.manifest?.name && result.manifest?.version) {
-      message.success(
-        t("library.addSuccessWithVersion", {
-          name: result.manifest.name,
-          version: result.manifest.version,
-        }),
-      );
-    } else {
-      message.success(t("library.addSuccess"));
-    }
+const showImportError = (result: {
+  error?: string;
+  params?: Record<string, unknown>;
+}) => {
+  if (result.error === "canceled") return;
+
+  const errorKey = `library.importError.${result.error}`;
+  const translated = t(errorKey, result.params || {});
+
+  if (translated === errorKey) {
+    message.error(result.error || t("library.addError"));
   } else {
-    if (result.error === "canceled") return;
-
-    const errorKey = `library.importError.${result.error}`;
-    const translated = t(errorKey, result.params || {});
-
-    if (translated === errorKey) {
-      message.error(result.error || t("library.addError"));
-    } else {
-      message.error(translated);
-    }
+    message.error(translated);
   }
 };
 
 const handleAddGame = async () => {
-  const result = await gameStore.addGame();
-  if (result.error === "noManifest" && result.params?.sourcePath) {
-    message.info(t("library.importError.noManifest"));
-    await openImportDraftModal(result.params.sourcePath as string);
+  const sourcePath = await window.electronAPI.game.selectImportDirectory();
+  if (!sourcePath) return;
+  await beginImportFromPath(sourcePath);
+};
+
+const beginImportFromPath = async (sourcePath: string) => {
+  const prep = await window.electronAPI.game.prepareImport(sourcePath);
+  if (!prep) {
+    message.error(t("library.importError.notDirectory"));
     return;
   }
-  showAddGameResult(result);
+  if (!prep.hasManifest) {
+    message.info(t("library.importError.noManifest"));
+    await openImportDraftModal(prep.sourcePath);
+    return;
+  }
+  const result = await gameStore.startImport(prep.sourcePath);
+  if (!result.success) showImportError(result);
+};
+
+const handleCancelImport = async (taskId: string) => {
+  await gameStore.cancelImport(taskId);
+};
+
+const handleRetryImport = async (taskId: string) => {
+  const result = await gameStore.retryImport(taskId);
+  if (!result.success) showImportError(result);
+};
+
+const handleDismissImport = async (taskId: string) => {
+  await gameStore.dismissImport(taskId);
 };
 
 const goToDetail = (id: string) => {
@@ -1088,13 +1173,7 @@ const handleExternalDrop = async (e: DragEvent) => {
     return;
   }
 
-  const result = await gameStore.addGame(droppedPath);
-  if (result.error === "noManifest" && result.params?.sourcePath) {
-    message.info(t("library.importError.noManifest"));
-    await openImportDraftModal(result.params.sourcePath as string);
-    return;
-  }
-  showAddGameResult(result);
+  await beginImportFromPath(droppedPath);
 };
 
 const openImportDraftModal = async (sourcePath: string) => {
@@ -1186,32 +1265,30 @@ const handleConfirmDraftImport = async () => {
 
   isDraftSubmitting.value = true;
   try {
-    const result = await gameStore.addGameWithManifest(
-      pendingImportSourcePath.value,
-      {
-        id,
-        name,
-        version,
-        description: draftForm.value.description.trim(),
-        author,
-        entry,
-        web_url: entry.toLowerCase() === "url" ? webUrl : undefined,
-        platformVersion: draftForm.value.platformVersion,
-        icon: draftForm.value.icon.trim(),
-        cover: draftForm.value.cover.trim(),
-        type: draftForm.value.type,
-        minPlayers: needsMultiplayerConfig.value
-          ? draftForm.value.minPlayers
-          : undefined,
-        maxPlayers: needsMultiplayerConfig.value
-          ? draftForm.value.maxPlayers
-          : undefined,
-      },
-    );
+    const result = await gameStore.startImport(pendingImportSourcePath.value, {
+      id,
+      name,
+      version,
+      description: draftForm.value.description.trim(),
+      author,
+      entry,
+      web_url: entry.toLowerCase() === "url" ? webUrl : undefined,
+      platformVersion: draftForm.value.platformVersion,
+      icon: draftForm.value.icon.trim(),
+      cover: draftForm.value.cover.trim(),
+      type: draftForm.value.type,
+      minPlayers: needsMultiplayerConfig.value
+        ? draftForm.value.minPlayers
+        : undefined,
+      maxPlayers: needsMultiplayerConfig.value
+        ? draftForm.value.maxPlayers
+        : undefined,
+    });
     if (result.success) {
       showImportDraftModal.value = false;
+    } else {
+      showImportError(result);
     }
-    showAddGameResult(result);
   } finally {
     isDraftSubmitting.value = false;
   }
@@ -1271,8 +1348,14 @@ const handleConfirmDraftImport = async () => {
 
 .steam-sidebar-list {
   flex: 1;
+  display: flex;
+  flex-direction: column;
   overflow-y: auto;
   padding: 10px;
+}
+
+.import-position-last {
+  order: 1;
 }
 
 .steam-list-item {
@@ -1469,17 +1552,17 @@ const handleConfirmDraftImport = async () => {
 .library-game-grid {
   display: grid;
   justify-content: start;
-  justify-items: center;
+  justify-items: start;
   align-items: start;
 }
 
 .library-game-grid.is-icon {
-  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
   gap: 12px;
 }
 
 .library-game-grid.is-card {
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
   gap: 24px;
 }
 

@@ -188,7 +188,6 @@ export interface AppSettings {
   cloudUserName?: string;
   cloudUserProfileUrl?: string;
   cloudLastUploadedAt?: string;
-  feedbackHistory?: FeedbackHistoryItem[];
   nicknameStyle?: NicknameStyle;
   libraryLayout?: LibraryLayout;
   lastJoinRoomAddress?: string;

@@ -39,6 +39,10 @@ export function registerMarketIpc() {
     return marketService.cancelTask(taskId);
   });
 
+  ipcMain.handle(IPC.MARKET_DISMISS_TASK, async (_, taskId: string) => {
+    return marketService.dismissTask(taskId);
+  });
+
   ipcMain.handle(IPC.MARKET_PAUSE_TASK, async (_, taskId: string) => {
     return marketService.pauseTask(taskId);
   });

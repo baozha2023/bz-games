@@ -746,6 +746,23 @@ sequenceDiagram
 
 ## 建言献策
 
+### `GET /api/v1/feedback`
+
+读取当前登录用户的反馈历史。请求必须同时携带发行版 `X-Relay-Token` 和当前有效的
+`Authorization: Bearer <session token>`；服务端只按会话用户 ID 查询，不接受客户端传入用户 ID。
+响应只包含反馈编号和提交时间，一次返回该账号的全部记录，按提交时间倒序排列。
+
+```json
+{
+  "items": [
+    {
+      "id": "uuid",
+      "submittedAt": 1735689600000
+    }
+  ]
+}
+```
+
 ### `POST /api/v1/feedback`
 
 提交文字和图片。请求必须同时携带发行版 `X-Relay-Token` 和当前登录用户的
@@ -876,6 +893,8 @@ sequenceDiagram
 - `DELETE /api/portal/v1/game-hosting/games/:gameId`：仅管理员递归删除游戏。
 
 审核请求包含 `decision`、`expectedUpdatedAt`，驳回时必须包含 `reason`；版本通过时可传 `setLatest`。投稿在审核期间变化会返回 `409 submission_changed`。所有 Cookie 写请求必须来自 `PORTAL_PUBLIC_URL` 的同源 `Origin`。同一 `gameId + version` 唯一，大小、MIME、SHA-256 和逻辑地址均由服务端计算。
+
+版本中的 `gameManifest` 遵循桌面端 `game.json` 约束：`windowedFullscreen` 仅适用于 `serve`、`url`、`.html` 和 `.htm` Web 入口；`args` 与 `env` 仅适用于 Native 入口。服务端会拒绝未知字段、非布尔的 `windowedFullscreen` 以及这些入口组合错误。
 
 ## 下载接口
 

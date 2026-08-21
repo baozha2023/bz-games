@@ -546,9 +546,14 @@ Environment=DESKTOP_RELEASE_BANDWIDTH_BPS=100000000
 
 ```bash
 useradd --create-home --shell /bin/bash bz-release-deploy
-install -d -o bz-release-deploy -g bz-release-deploy -m 0750 /var/lib/bz-games-releases
-install -d -o bz-release-deploy -g bz-release-deploy -m 0750 /var/lib/bz-games-releases/.incoming
+install -d -o bz-release-deploy -g bz-release-deploy -m 2750 /var/lib/bz-games-releases
+install -d -o bz-release-deploy -g bz-release-deploy -m 2750 /var/lib/bz-games-releases/.incoming
 ```
+
+发布目录必须保留 setgid，确保 Relay 服务以 root 执行管理端手动上传时，新文件仍继承
+`bz-release-deploy` 组。共享发布程序会在原子切换前把安装包和 `latest.json` 的属主、属组统一为发布目录属主、属组，并显式设置为 `0640`；GitHub Actions 与管理端不得各自维护文件权限逻辑。
+`bz-release-deploy` 还必须能够遍历 `/opt/bz-games-relay` 并读取
+`scripts/publish-desktop-release.js`，但不得拥有服务端代码目录的写权限。
 
 GitHub Environment、SSH 专用密钥和主机指纹配置见
 [`docs/GITHUB_ACTIONS_RELEASE_DEPLOY.md`](../docs/GITHUB_ACTIONS_RELEASE_DEPLOY.md)。发布工作流先以非阻塞方式获取
@@ -590,7 +595,7 @@ curl -H 'Range: bytes=0-1023' -o /dev/null -D - http://39.106.221.85/bz-games/ap
 
 ```ini
 Environment=GAME_HOSTING_STORAGE_DIR=/var/lib/bz-games-hosting
-Environment=MAX_GAME_HOSTING_FILE_BYTES=104857600
+Environment=MAX_GAME_HOSTING_FILE_BYTES=209715200
 Environment=MAX_GAME_HOSTING_IMAGE_BYTES=5242880
 Environment=MAX_GAME_HOSTING_TOTAL_BYTES=5368709120
 ```

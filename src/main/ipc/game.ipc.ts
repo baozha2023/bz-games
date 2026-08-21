@@ -1,4 +1,4 @@
-import { ipcMain } from "electron";
+import { BrowserWindow, dialog, ipcMain } from "electron";
 import fs from "fs";
 import path from "path";
 import { IPC } from "../../shared/ipc-channels";
@@ -9,6 +9,7 @@ import {
 import { gameManager } from "../services/game/GameManager";
 import { storeService } from "../services/storage/StoreService";
 import { logger } from "../utils/logger";
+import { gameImportTaskService } from "../services/game/GameImportTaskService";
 
 const VIDEO_MIME_BY_EXT: Record<string, string> = {
   mp4: "video/mp4",
@@ -49,6 +50,40 @@ async function readManifestAssetDataUrl(
 }
 
 export function registerGameIpc() {
+  gameImportTaskService.onEvent((payload) => {
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.isDestroyed()) {
+        window.webContents.send(IPC.GAME_IMPORT_EVENT, payload);
+      }
+    }
+  });
+
+  ipcMain.handle(IPC.GAME_SELECT_IMPORT_DIRECTORY, async () => {
+    const result = await dialog.showOpenDialog({
+      title: "Select Game Directory",
+      properties: ["openDirectory"],
+    });
+    return result.canceled ? null : result.filePaths[0] || null;
+  });
+
+  ipcMain.handle(
+    IPC.GAME_START_IMPORT,
+    async (_, sourcePath: string, draft?: ManualManifestDraft) =>
+      gameImportTaskService.startImport(sourcePath, draft),
+  );
+  ipcMain.handle(IPC.GAME_GET_IMPORT_TASKS, () =>
+    gameImportTaskService.getTasks(),
+  );
+  ipcMain.handle(IPC.GAME_CANCEL_IMPORT, (_, taskId: string) =>
+    gameImportTaskService.cancelImport(taskId),
+  );
+  ipcMain.handle(IPC.GAME_RETRY_IMPORT, (_, taskId: string) =>
+    gameImportTaskService.retryImport(taskId),
+  );
+  ipcMain.handle(IPC.GAME_DISMISS_IMPORT, (_, taskId: string) =>
+    gameImportTaskService.dismissImport(taskId),
+  );
+
   ipcMain.handle(IPC.GAME_LOAD, async (_, sourcePath?: string) => {
     if (sourcePath) {
       return await GameLoader.loadGameFromPath(sourcePath);

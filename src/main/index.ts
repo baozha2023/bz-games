@@ -15,6 +15,7 @@ import { requestInterceptor } from "./utils/requestInterceptor";
 import { roomDiscoveryService } from "./services/room/RoomDiscoveryService";
 import { cloudSyncService } from "./services/system/CloudSyncService";
 import { logger } from "./utils/logger";
+import { gameImportTaskService } from "./services/game/GameImportTaskService";
 
 logger.installGlobalHandlers();
 
@@ -97,6 +98,7 @@ if (!gotTheLock) {
     requestInterceptor.registerSessionHandler(session.defaultSession);
 
     await storeService.init();
+    await gameImportTaskService.restoreTasks();
     appServicesInitialized = true;
     appReadyForProtocol = true;
     const settings = storeService.getSettings();
@@ -166,6 +168,7 @@ app.on("before-quit", (event) => {
         roomDiscoveryService.stop();
       }
       await cloudSyncService.shutdown();
+      await gameImportTaskService.shutdown();
       await bzGamesDatabase.close();
     } catch (error) {
       logger.error("[Main] Failed to close services before quit", error);

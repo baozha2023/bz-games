@@ -25,7 +25,7 @@
 
 ### 平台核心功能
 
-- 游戏库管理（导入、删除、排序、收藏、封面/图标展示）
+- 游戏库管理（异步多任务导入、进度占位、取消/重试/中断恢复、删除、排序、收藏、封面/图标展示）
 - 游戏启动与进程生命周期管理（主进程统一托管）
 - 联机房间系统（创建、加入、准备、开始、离开、聊天、踢人、解散同步）
 - 房间发现系统（局域网自动发现、官方服务器房间列表、加入前本地游戏与版本校验）
@@ -44,7 +44,7 @@
 - 客户端卸载系统（游戏进程批量收口、游戏库可选择删除、路径安全校验、符号链接防护）
 - 默认封面/图标静态回退（`GameCover.vue` / `GameIcon.vue` 在无自定义资源时使用内置静态图片）
 - 官网最新安装包下载（正式 GitHub Release 原子同步到官方服务器，固定接口支持断点续传并对全部并发下载合计限速 100 Mbps）
-- 平台版本管理（管理员可查看当前版本，仅超级管理员可在管理端上传稳定版 EXE，手动上传允许升版或降版；Actions 仍只允许升版；两条链路统一经过暂存、SHA-256/PE/semver 校验、发布锁和 latest 原子切换）
+- 平台版本管理（管理员可查看当前版本，仅超级管理员可在管理端上传稳定版 EXE，手动上传允许升版或降版；Actions 仍只允许升版；两条链路统一经过暂存、SHA-256/PE/semver 校验、发布锁和 latest 原子切换，并把发布文件归一到发布目录属主、属组与 `0640` 权限）
 
 ---
 
@@ -176,7 +176,8 @@ bz-games/
 │   │   │   │   └── StoreService.ts        # 本地数据读写与业务数据维护
 │   │   │   ├── game/
 │   │   │   │   ├── GameEnvironment.ts     # 游戏启动环境变量、bz-config.js 生成与清理
-│   │   │   │   ├── GameLoader.ts          # 游戏导入、校验、扫描与记录同步
+│   │   │   │   ├── GameImportTaskService.ts # 手动导入任务队列、持久化、取消/重试与中断恢复
+│   │   │   │   ├── GameLoader.ts          # 统一异步复制、原子落盘、校验与记录同步
 │   │   │   │   ├── GameManifestFileService.ts # 已安装 Manifest 的 Schema 校验、AES-GCM 加解密、原子写入与明文迁移
 │   │   │   │   ├── GameWindowIdentityRegistry.ts # WebContents 与 gameId/version 的可信身份绑定，供存储 IPC 鉴权
 │   │   │   │   └── GameManager.ts         # 游戏进程启动/停止与生命周期管理
@@ -204,7 +205,7 @@ bz-games/
 │   │   └── utils/
 │   │       ├── appPath.ts                 # 应用根路径工具
 │   │       ├── externalUrl.ts             # 外部链接 http/https 协议白名单校验与统一打开
-│   │       ├── fileUtils.ts               # 文件复制等通用文件工具
+│   │       ├── fileUtils.ts               # 并发扫描、异步复制、字节进度与取消工具
 │   │       ├── logger.ts                  # Logger 类：生产模式 error→文件日志（5MB 上限 + 3 份轮转备份）；开发模式全量 console 输出；全局异常捕获（uncaughtException / unhandledRejection / render-process-gone / child-process-gone）；console 代理（log/warn/error 统一路由到 Logger）；结构化渲染进程错误接收（RendererLogPayload）
 │   │       ├── relayCloseError.ts         # WebSocket 关闭帧错误码映射工具（统一 mapRelayCloseError，三处 room 服务共用）
 │   │       └── requestInterceptor.ts      # HTTP 请求头统一注入（Referer 防盗链 + GitHub Token）
@@ -234,6 +235,7 @@ bz-games/
 │   │       │   ├── LibraryView.vue        # 游戏库首页
 │   │       │   ├── MarketListView.vue      # 市场列表页面（一级界面）
 │   │       │   ├── MarketView.vue          # 市场游戏详情页面（二级界面）
+│   │       │   ├── SocialView.vue          # 社交占位页面（论坛/好友）
 │   │       │   ├── ChatPopoutView.vue    # 聊天弹窗独立窗口页面
 │   │       │   ├── NotificationView.vue   # 通知窗口页面
 │   │       │   ├── FloatBallView.vue       # 下载悬浮球独立窗口页面
@@ -258,6 +260,8 @@ bz-games/
 │   │       │   │   ├── GameCard.vue        # 游戏卡片组件
 │   │       │   │   ├── GameCover.vue       # 游戏封面组件（缺失时使用构建期静态默认封面）
 │   │       │   │   ├── GameDeleteModal.vue # 游戏删除弹窗组件
+│   │       │   │   ├── GameImportOverlay.vue # 导入阶段、进度与任务操作遮罩
+│   │       │   │   ├── GameImportPlaceholder.vue # 新游戏默认素材占位卡片
 │   │       │   │   └── GameIcon.vue        # 游戏图标组件（缺失时使用构建期静态默认图标）
 │   │       │   ├── settings/
 │   │       │   │   └── FeedbackModal.vue   # 建言献策文字/图片选择、限流与提交结果弹窗
@@ -812,7 +816,7 @@ interface NicknameStyle {
 interface FeedbackHistoryItem {
   id: string;
   submittedAt: number;
-}
+} // 仅表示当前反馈弹窗内存中的服务端响应，不属于 AppSettings 持久化字段
 
 interface AppSettings {
   playerName: string;
@@ -824,7 +828,6 @@ interface AppSettings {
   cloudUserName?: string;
   cloudUserProfileUrl?: string;
   cloudLastUploadedAt?: string;
-  feedbackHistory?: FeedbackHistoryItem[];
   nicknameStyle?: NicknameStyle;
   libraryLayout?: "card" | "icon" | "steam";
   lastJoinRoomAddress?: string;
@@ -859,6 +862,10 @@ interface AppSettings {
   `ipcRenderer.sendSync` 确保数据完整落盘，避免异步 send 丢数据。
 - **Web 游戏独立渲染进程**：每个游戏窗口使用独立 `partition: persist:game_<id>_<version>`，通过 Chromium
   站点隔离机制自动分配到独立的渲染进程，确保不同游戏进程不互相干扰。
+- **Web 窗口启动状态**：`windowedFullscreen` 仅适用于 `serve`、`url`、`.html` 和 `.htm` 入口；未配置或为
+  `false` 时创建 `1280×720` 的普通窗口，为 `true` 时仍先以 `1280×720` 创建隐藏窗口，再在显示前调用
+  `BrowserWindow.maximize()`。窗口保留标题栏、边框和可调整大小能力，用户还原后恢复 `1280×720`，不使用无边框或
+  `setFullScreen()`。
 - **Web 存储可选加密**：支持通过 Manifest 字段 `encryptLocalStorage` 控制 `gamedata.json` 是否加密存储（默认关闭）。
 - **Web 联机模式标记**：平台生成的 `bz-config.js` 提供 `isMultiple` 字段，便于 `singlemultiple` 游戏在运行时区分单人模式与联机模式。
 - **远程网页模式约束**：当 `entry=url` 时，平台不生成 `bz-config.js`，也不启动 Game API Server 或注入 `window.BZ_CONFIG`。
@@ -911,7 +918,7 @@ interface AppSettings {
   - **下载应用顺序**：配置先在内存中解密确认可应用，SQL 在单一事务中完成幂等合并，随后从统一数据库刷新游戏缓存中的会话、成就和统计派生数据，最后才一次性提交配置；SQL 导入或缓存刷新失败时不得写入配置。
   - **同步黑名单**：`CLOUD_SETTINGS_SYNC_BLACKLIST` 在上传与下载合并时都排除 `githubToken`、云会话和云用户身份字段，并只合并 `userData` 与非敏感设置。
   - **被动会话失效**：设置页只通过 `getLocalCloudStatus()` 读取 `config.json`，不轮询且不调用任何 Portal 会话或权限接口主动探测。OAuth 成功以及客户端业务接口返回 `session_expired` / `session_invalid` 时，主进程发送 `system:cloud:authChanged`；仅这两类稳定错误会清空 `cloudSessionToken` 与 `cloudSessionExpiresAt`。普通 `unauthorized`、网络错误、超时、限流和服务端错误不得清理本地令牌。快照元数据只在上传或下载成功后按需查询。
-  - **设置写入隔离**：渲染进程提交完整或部分普通设置时，`system.ipc.ts` 必须按明确白名单提取允许渲染层维护的字段；`feedbackHistory`、`playerId`、云会话/云用户身份、存储迁移状态、更新时间和窗口位置等字段均由主进程或专用 IPC 独占写入，防止旧表单或陈旧状态覆盖后台更新的数据。
+  - **设置写入隔离**：渲染进程提交完整或部分普通设置时，`system.ipc.ts` 必须按明确白名单提取允许渲染层维护的字段；`playerId`、云会话/云用户身份、存储迁移状态、更新时间和窗口位置等字段均由主进程或专用 IPC 独占写入，防止旧表单或陈旧状态覆盖后台更新的数据。
   - **未来边界**：游戏云存档不得加入 `PlatformCloudSnapshot`。未来必须使用独立的 `GameSaveCloudService`、`/api/cloud/game-saves/*`、引用表和 `kind=game-save` 对象。
 - **MarketService 设计**：
   - **职责分离**：`MarketCatalogClient` 负责官方 OSS→GitHub 来源切换、第三方 GitHub Raw 请求、结构化错误与索引解析；`MarketService` 只负责内存缓存、进行中请求合并及市场安装业务。目录请求不复用下载或 Release Asset 的通用重试逻辑。
@@ -1065,11 +1072,11 @@ interface AppSettings {
   - **图片选择与验证（v3.1.3 追加模式）**：`selectImages(existingSelectionId?)` 支持传入已有选区 ID 时以追加模式在现有图片上叠加新图片。读取文件后：① 魔术字节检测实际 MIME；② 比对实际格式与扩展名声明是否一致（`getDeclaredContentType`）；③ `nativeImage.createFromBuffer` 验证图形有效性；④ 每张图片生成 SHA-256 哈希用于跨批次去重（同一选区中哈希重复的图片被拒绝，前端弹出 `duplicate_image` 提示）。追加时若原选区已满 4 张或总图片数超限则返回 `too_many_images`；传入已过期选区 ID 返回 `feedback_images_expired`。通过后将 Buffer 与哈希存入进程内存 Map（`selectionId` 为键），供后续 multipart 上传引用。整组图片 30 分钟后自动清理；单张移除后刷新 `createdAt`。
   - **释放语义**：`releaseImages(selectionId, imageId?)` 支持单张移除或整组释放；单张移除后若 selection 为空则自动删除 Map 条目，否则刷新 `createdAt` 时间戳。
   - **提交管线**：建言献策仅对已登录用户开放；设置页仅在 GitHub 会话有效时显示入口，主进程的图片选择、历史读取、详情查询和提交 IPC 也独立校验本地会话。`submit()` 校验 content ≤ 5000 字、selectionId 有效性、文字或图片至少存在一种，通过 `FormData` 构造 multipart，注入 `appVersion` 与 `platform`，并由 `RequestInterceptor.buildHeaders()` 注入 relayToken 和必需的 GitHub Bearer Token。POST `/api/v1/feedback` 超时 45 秒。通过 `cloudSyncService.handleAuthFailure(body.error)` 统一处理登录失效——仅 `session_expired` / `session_invalid` 时清除本地云会话。
-  - **反馈历史**：`getFeedbackHistory()` / `addFeedbackHistory(id)` 仅由主进程通过 `StoreService` 读写 `AppSettings.feedbackHistory[]`，设置页不得提交或覆盖该字段；本地只保存反馈编号和提交时间戳并去重。历史随 `config.json` 正常云同步；展开条目时调用 `getFeedbackDetail(id)` 从服务端查询正文、状态、回复与图片，收起后再次展开会重新查询，不设定时刷新。
+  - **反馈历史**：打开历史 Tab 时，主进程先删除旧版本 `config.json` 中的 `settings.feedbackHistory`，再通过 `GET /api/v1/feedback` 按当前登录账号查询反馈编号和提交时间；客户端不再主动持久化反馈历史，旧字段在打开历史时清理。展开条目时调用 `getFeedbackDetail(id)` 从服务端查询正文、状态、回复与图片，收起后再次展开会重新查询，不设定时刷新。列表加载期间显示骨架屏。
   - **反馈详情查询**：`getDetail(feedbackId)` 通过 `/api/v1/feedback/:id` 获取用户可见详情。主进程校验 UUID 格式反馈 ID，然后校验响应结构（id、content、status、reply、imageCount、createdAt、updatedAt 及 images 数组的每个元素的类型与大小）。随后逐个通过 `/api/v1/feedback/:id/images/:imageId` 下载图片，校验实际 Content-Type 与 MySQL 记录的 MIME 一致、实际 body 长度与声明 size 一致、不超 MAX_IMAGE_BYTES。任一步不通过返回 `feedback_invalid_response`。通过 auth 失败或权限不足由 `handleAuthFailure` 统一收口。
-  - **IPC 边界**：渲染进程仅通过 `FeedbackModal.vue` → `electronAPI.settings.selectFeedbackImages / releaseFeedbackImages / submitFeedback / getFeedbackHistory / getFeedbackDetail` 与主进程交互，不直接接触文件路径或服务端 relayToken / GitHub 会话。主进程必须校验反馈详情结构、图片数量、大小、MIME 和实际响应长度后再生成 Data URL。
-  - **服务端并联（v3.1.3 用户详情接口）**：`POST /api/v1/feedback`、`GET /api/v1/feedback/:id` 和图片读取接口均要求发行版 relayToken、有效 GitHub Bearer Token，并对详情和图片校验反馈所有者。详情返回 `id/content/status/reply/imageCount/createdAt/updatedAt/images`，不含 `adminNote`；图片接口返回单张图片原始流。管理 API 详情额外包含 `adminNote`，更新接口接受 `status/adminNote/reply`，备注与回复均不超过 5000 字符。提交采用 busboy 流式 multipart、魔法字节校验、GitHub ID 进程内冷却、MySQL 事务 + GridFS。
-  - **Portal 前端**：`bz-games-admin/` 为独立 Vue 3 + Vite + Pinia 项目，构建为 `/admin/` 同源静态站点。服务端会话接口返回唯一 capability 集合，前端 `rbac.ts` 只校验能力契约，不维护角色到能力的映射；菜单、路由、按钮和提交前置检查均调用 `auth.can(capability)`。玩家只显示无权限页，创作者只显示游戏托管，管理员显示全部管理界面但不能修改角色或上传桌面客户端版本，超级管理员拥有全部界面与操作。服务端仍是唯一授权决策源，并独立执行 capability、资源所有权、状态机和精确 Origin 校验。中继侧 `admin-static-service.js` 提供 SPA fallback、路径穿越防护、CSP/`nosniff`/`DENY` iframe 等安全响应头。
+  - **IPC 边界**：渲染进程仅通过 `FeedbackModal.vue` → `electronAPI.settings.selectFeedbackImages / releaseFeedbackImages / submitFeedback / getFeedbackHistory / getFeedbackDetail` 与主进程交互，不直接接触文件路径或服务端 relayToken / GitHub 会话。`getFeedbackHistory` 从服务端查询当前账号列表，主进程必须校验历史和详情响应结构、图片数量、大小、MIME 和实际响应长度后再生成 Data URL。
+  - **服务端并联（v3.1.3 用户详情接口）**：`POST /api/v1/feedback`、`GET /api/v1/feedback`、`GET /api/v1/feedback/:id` 和图片读取接口均要求发行版 relayToken、有效 GitHub Bearer Token，并对历史、详情和图片校验反馈所有者。历史接口只返回当前账号的 `id/submittedAt`；详情返回 `id/content/status/reply/imageCount/createdAt/updatedAt/images`，不含 `adminNote`；图片接口返回单张图片原始流。管理 API 详情额外包含 `adminNote`，更新接口接受 `status/adminNote/reply`，备注与回复均不超过 5000 字符。提交采用 busboy 流式 multipart、魔法字节校验、GitHub ID 进程内冷却、MySQL 事务 + GridFS。
+  - **Portal 前端**：`bz-games-admin/` 为独立 Vue 3 + Vite + Pinia 项目，构建为 `/admin/` 同源静态站点。服务端会话接口返回唯一 capability 集合，前端 `rbac.ts` 只校验能力契约，不维护角色到能力的映射；菜单、路由、按钮和提交前置检查均调用 `auth.can(capability)`。玩家进入欢迎页并管理自己的反馈，创作者仅管理自己的游戏托管，管理员无用户角色调整、托管容量查看、系统监控和桌面客户端版本上传能力，超级管理员拥有全部界面与操作。服务端仍是唯一授权决策源，并独立执行 capability、资源所有权、状态机和精确 Origin 校验。中继侧 `admin-static-service.js` 提供 SPA fallback、路径穿越防护、CSP/`nosniff`/`DENY` iframe 等安全响应头。
 - **卸载系统设计（UninstallService）**：
   - **状态互斥**：`running` 布尔标志防止重复卸载调用。
   - **游戏进程收口**：`shutdownForUninstall()` 设置 `shuttingDownForUninstall = true` 拒新启，等待 `launchingGames` 清空（5s 超时），然后通过 `taskkill /PID /T /F` 批量终止所有已托管游戏进程树，最后调用 `GameManager.stop()` 清理窗口和服务注册。
@@ -1107,6 +1114,12 @@ interface AppSettings {
 - **任意文件夹导入**：`GameLoader` 支持任意目录导入。若目录缺少 `game.json`，前端需弹出补录表单，由用户填写核心字段后生成
   Manifest 并继续导入。
 - **文件选择策略**：Windows 下文件选择对话框使用 `openDirectory` 模式。
+- **异步任务边界**：手动导入由主进程 `GameImportTaskService` 统一管理，每次选择一个目录，最多同时执行两个任务；任务按 `taskId` 隔离，禁止相同 `gameId + version` 的重复活动任务，网页游戏按 `gameId` 排他。渲染进程只创建、订阅和操作任务，不执行文件复制。
+- **复制与落盘**：`fileUtils.copyFolderRecursive()` 先并发扫描并统计总字节，再以受控并发复制小文件、流式复制大文件；取消使用 `AbortSignal`，并等待所有已开始的复制收口后才允许清理。导入拒绝符号链接，避免越过源目录边界读取文件。
+- **原子安装**：所有导入先写入默认游戏库 `.imports/<taskId>`，扫描游戏库时必须忽略 `.imports`。复制完成后写入加密 Manifest 和任务标记，再原子移动到 `<gameId>/<version>`；数据库记录更新串行执行。失败或取消清理暂存目录，异常退出若发生在原子移动后，仅允许凭匹配的任务标记删除对应目标，禁止按未校验路径清理。
+- **任务恢复**：手动导入摘要持久化到用户数据目录。重启后未完成任务统一转为 `interrupted`，清理其受控半成品，不自动续传；用户可从原路径完整重试。完成任务必须先刷新对应游戏记录，再移除任务摘要。
+- **游戏库占位**：新游戏的手动导入和市场安装占位统一显示在游戏库最后；已有游戏的新版本保留原素材并在原卡片叠加任务遮罩，同一游戏多版本分行展示。市场下载、校验和解压阶段不进入游戏库，只有最终调用 `GameLoader` 复制时设置 `installStarted` 并显示占位。
+- **完成通知**：手动导入成功通知由根布局 `AppContent` 监听 `game:import:event` 的真实 `completed` 状态后全局展示，并按 `taskId` 去重；任务入队成功不得提前提示导入成功。
 - **版本检查**：导入时会检查 `game.json` 中的 `platformVersion` 字段，若当前平台版本不满足要求（使用 `semver`
   比较），将拒绝导入并提示用户。
 - **拖拽路径解析统一**：游戏库拖拽导入路径统一使用 `webUtils.getPathForFile(file)` 获取。
@@ -1117,7 +1130,7 @@ interface AppSettings {
 - **私有资源防盗链 Referer**：所有指向私有 CDN/OSS 的请求均携带构建期注入的 Referer。实现分两层：`fetch` 请求通过 `RequestInterceptor.buildHeaders()` 统一注入；`<img>` 标签等渲染层请求由 `RequestInterceptor.registerSessionHandler()` 注册的 Electron 全局拦截器注入。
 - **市场下载暂存**：市场安装包应先下载到应用可控的临时目录（如 `.market-cache/`）中，校验通过后再解压并导入。
 - **市场安装统一导入**：市场下载成功后，解压目录复用 `GameLoader` 导入链路。
-- **Manifest 加密落点**：`GameLoader.installGameFiles()` 完成文件复制后，使用已在内存中通过 Schema 校验的 Manifest 原子覆盖目标 `game.json` 为密文；失败时清理本次未完成目录且不新增游戏记录。所有已安装 Manifest 读取统一经过 `GameManifestFileService`，不得在启动过程中临时写回明文。
+- **Manifest 加密落点**：`GameLoader.installGameFiles()` 在 `.imports/<taskId>` 完成文件复制后，使用已在内存中通过 Schema 校验的 Manifest 覆盖暂存目录内的 `game.json` 为密文，再原子移动到正式版本目录；失败时清理本次未完成目录且不新增游戏记录。所有已安装 Manifest 读取统一经过 `GameManifestFileService`，不得在启动过程中临时写回明文。
 - **市场安装失败保护**：下载、校验、解压或导入任一步失败时保留已有游戏记录；清理当前失败任务产生的临时文件（`finally`
   块中执行 `removeIfExists`，`.catch(() => undefined)` 隔离清理异常）。
 - **市场错误码分类**：所有安装失败必须归类为四种错误码之一：`download`（下载失败）、`verify`（校验失败，含 sha256 与 size 不匹配）、
@@ -1179,10 +1192,14 @@ interface AppSettings {
 
 ### 6.2 IPC 接口清单
 
-- `game:load`：导入游戏（支持弹窗选目录或传入目录路径）。
+- `game:load`：兼容旧调用的直接导入接口；游戏库手动导入 UI 不得调用，必须使用异步任务接口。
 - `game:prepareImport`：导入前预检查目录并返回建议草稿信息。
-- `game:loadWithManifest`：使用补录表单生成 Manifest 并导入。
+- `game:loadWithManifest`：兼容旧调用的补录 Manifest 直接导入接口；新流程通过 `game:startImport` 传入草稿。
 - `game:checkIdExists`：校验游戏 ID 是否已存在。
+- `game:selectImportDirectory`：只选择单个手动导入目录，不执行复制。
+- `game:startImport`：快速校验并创建异步手动导入任务，立即返回任务状态。
+- `game:getImportTasks`：获取全部手动导入任务快照。
+- `game:cancelImport` / `game:retryImport` / `game:dismissImport`：取消、完整重试或移除终态手动导入任务。
 - `game:getAll`：获取用于展示的完整游戏列表数据。
 - `game:getRecords`：获取原始游戏记录（版本路径等）。
 - `game:getManifest`：透明解密并读取指定游戏版本的 `game.json`，返回内存中的已校验 Manifest 对象。
@@ -1206,6 +1223,7 @@ interface AppSettings {
   Range），服务端不支持时自动降级为全量下载。
 - `market:getTaskState`：获取市场下载/安装任务状态与进度。
 - `market:cancelTask`：取消指定市场下载/安装任务（含已暂停和中断的任务）。
+- `market:dismissTask`：移除市场终态任务及其临时文件。
 - `market:pauseTask`：暂停正在进行的下载任务，进度持久化到本地快照文件。
 - `market:resumeTask`：从暂停快照恢复下载任务，重新拉取索引校验兼容性后启动新管线续传。
 - `market:getPendingTasks`：读取本地快照文件，返回所有未完成的暂停/中断任务。
@@ -1249,7 +1267,7 @@ interface AppSettings {
 - `system:feedback:selectImages`：打开文件对话框选择反馈图片（支持传入 `selectionId` 追加模式），主进程侧执行 MIME 声明与实际格式一致性校验、SHA-256 去重。
 - `system:feedback:releaseImages`：释放单张或全部已选反馈图片。
 - `system:feedback:submit`：文本 ≤ 5000 字 + 可选图片 multipart 上传。
-- `system:feedback:getHistory`：读取本地反馈历史记录（仅保存编号与提交时间戳）。
+- `system:feedback:getHistory`：从服务端读取当前登录账号的反馈历史编号与提交时间戳，并在查询前清理旧版本地历史。
 - `system:feedback:getDetail`：从服务端查询反馈详情（正文、处理状态、回复、图片），主进程侧校验响应结构后再返回 Data URL。
 - `system:saveSettings`：保存应用设置并应用相关系统行为。
 - `system:savePartialSettings`：保存部分应用设置（合并写入，不会覆盖未传入的字段）。
@@ -1287,6 +1305,7 @@ interface AppSettings {
 - `game:launch:failed`：推送游戏启动失败事件。
 - `system:update:event`：推送更新状态变化事件。
 - `market:event`：推送市场下载/安装任务状态变化事件。
+- `game:import:event`：推送手动导入任务的阶段、字节进度和终态快照。
 - `game:unlockAchievement`：推送成就解锁事件到渲染层。
 - `game:storage:init`：初始化 Web 游戏本地存储数据。
 - `game:storage:save`：保存单个 localStorage 键值。

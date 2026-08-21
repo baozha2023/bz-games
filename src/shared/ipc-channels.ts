@@ -18,6 +18,13 @@ export const IPC = {
   GAME_PREPARE_IMPORT: "game:prepareImport",
   GAME_LOAD_WITH_MANIFEST: "game:loadWithManifest",
   GAME_CHECK_ID_EXISTS: "game:checkIdExists",
+  GAME_SELECT_IMPORT_DIRECTORY: "game:selectImportDirectory",
+  GAME_START_IMPORT: "game:startImport",
+  GAME_GET_IMPORT_TASKS: "game:getImportTasks",
+  GAME_CANCEL_IMPORT: "game:cancelImport",
+  GAME_RETRY_IMPORT: "game:retryImport",
+  GAME_DISMISS_IMPORT: "game:dismissImport",
+  GAME_IMPORT_EVENT: "game:import:event",
 
   // ── 游戏市场 ──
   MARKET_GET_SOURCES: "market:getSources",
@@ -27,6 +34,7 @@ export const IPC = {
   MARKET_DOWNLOAD_AND_INSTALL: "market:downloadAndInstall",
   MARKET_GET_TASK_STATE: "market:getTaskState",
   MARKET_CANCEL_TASK: "market:cancelTask",
+  MARKET_DISMISS_TASK: "market:dismissTask",
   MARKET_PAUSE_TASK: "market:pauseTask",
   MARKET_RESUME_TASK: "market:resumeTask",
   MARKET_GET_PENDING_TASKS: "market:getPendingTasks",

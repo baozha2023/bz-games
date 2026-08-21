@@ -100,6 +100,7 @@ my-game/
 | `cover` | string | 否 | 最长 500 字符的游戏封面安全相对路径 |
 | `video` | string | 否 | 最长 500 字符的预览视频安全相对路径，支持 `mp4/webm/ogv/mov/m4v` |
 | `encryptLocalStorage` | boolean | 否 | 是否启用 `gamedata.json` 加密持久化，仅对 Web 游戏 `localStorage` 生效，默认 `false` |
+| `windowedFullscreen` | boolean | 否 | 仅 Web 入口可用；是否在启动时自动最大化窗口，默认 `false`；用户仍可手动最大化和还原 |
 | `achievements` | array | 否 | 成就列表，最多 1000 项；字段见下方“成就定义” |
 | `statistics` | array | 否 | 统计指标列表，支持字符串、显示名称和带更新模式的对象格式；字段见下方“统计定义” |
 | `args` | string[] | 否 | 仅 Native 入口可用；最多 256 项，每项最长 8192 字符，按数组顺序原样传给目标进程 |
@@ -162,7 +163,8 @@ my-game/
 #### 字段组合约束
 
 - `entry=url` 必须提供 `web_url`；其他入口不得声明 `web_url`。
-- `.html`、`.htm`、`serve` 和 `url` 属于 Web 入口，不得声明非空 `args` 或 `env`。
+- `.html`、`.htm`、`serve` 和 `url` 属于 Web 入口，不得声明非空 `args` 或 `env`；`windowedFullscreen` 仅允许 Web 入口声明。
+- 管理端托管 Manifest 表单会根据 `entry` 动态显示入口专属字段：Web 入口显示 `windowedFullscreen`，Native 入口显示 `args` 和 `env`。
 - Native 入口不得启用 `encryptLocalStorage`。
 - `networkgame` 必须使用 `entry=url`。
 - 所有文件路径均须为游戏目录内的安全相对路径，禁止空路径、绝对路径、盘符、空字节以及 `.` / `..` 路径段。
@@ -205,6 +207,17 @@ window.BZ_CONFIG = {
 ```
 
 平台只保证通过 `window.BZ_CONFIG` 提供上述 Game API 配置。启动 URL 中的 `gameId` 和 `version` 仅用于页面识别与兼容，不包含 API Token，不能替代 `bz-config.js`。
+
+Web 游戏可以通过 Manifest 的 `windowedFullscreen` 控制启动时的默认窗口状态：
+
+```json
+{
+  "entry": "serve",
+  "windowedFullscreen": true
+}
+```
+
+未配置或设置为 `false` 时，游戏以 `1280×720` 普通窗口启动；设置为 `true` 时，游戏仍以 `1280×720` 的还原尺寸创建窗口，但加载完成后自动最大化。窗口保留标题栏、边框和最大化/还原按钮，用户可以还原回 `1280×720`。该字段只控制启动时的默认窗口状态，不会传给网页脚本，也不会启用原生全屏。
 
 **注意**：
 - `entry=serve` 时，平台仅在 `127.0.0.1` 提供静态服务，并将根路径 `/` 解析为 `index.html`。

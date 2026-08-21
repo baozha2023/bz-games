@@ -12,7 +12,6 @@ import type {
   DataHealthReport,
   GameRecord,
   GameVersion,
-  FeedbackHistoryItem,
   UserData,
   NicknameStyle,
 } from "../../../shared/types";
@@ -44,7 +43,6 @@ const defaultSettings: AppSettings = {
   cloudUserName: "",
   cloudUserProfileUrl: "",
   cloudLastUploadedAt: "",
-  feedbackHistory: [],
   nicknameStyle: DEFAULT_NICKNAME_STYLE,
   libraryLayout: "card",
   lastJoinRoomAddress: "",
@@ -1192,36 +1190,10 @@ class StoreService {
     });
   }
 
-  getFeedbackHistory(): FeedbackHistoryItem[] {
-    const history = this.getSettings().feedbackHistory;
-    if (!Array.isArray(history)) return [];
-    return history
-      .filter((item): item is FeedbackHistoryItem =>
-        Boolean(
-          item &&
-          typeof item.id === "string" &&
-          item.id.trim() &&
-          Number.isFinite(item.submittedAt) &&
-          item.submittedAt > 0,
-        ),
-      )
-      .map((item) => ({
-        id: item.id.trim(),
-        submittedAt: item.submittedAt,
-      }));
-  }
-
-  addFeedbackHistory(id: string, submittedAt = Date.now()): void {
-    const normalizedId = id.trim();
-    if (!normalizedId || !Number.isFinite(submittedAt) || submittedAt <= 0) {
-      return;
-    }
-    const history = this.getFeedbackHistory().filter(
-      (item) => item.id !== normalizedId,
-    );
-    this.saveSettings({
-      feedbackHistory: [{ id: normalizedId, submittedAt }, ...history],
-    });
+  clearLegacyFeedbackHistory(): void {
+    const store = this.getStore();
+    // This key is intentionally absent from AppSettings but may exist in older stores.
+    store.delete("settings.feedbackHistory" as keyof AppStore);
   }
 
   getDefaultGamesMigrationStatus(): {

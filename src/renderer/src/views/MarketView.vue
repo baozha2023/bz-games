@@ -796,18 +796,18 @@ async function syncExistingTasks(): Promise<void> {
     taskIds.map((taskId) => window.electronAPI.market.getTaskState(taskId)),
   );
   const next: Record<string, MarketTaskState> = {};
-  let needsGameRefresh = false;
+  const completedGameIds = new Set<string>();
   for (const state of states) {
     if (!state) continue;
     if (["downloading", "verifying", "extracting", "installing", "paused", "interrupted"].includes(state.status)) {
       next[state.taskId] = state;
     } else if (state.status === "completed") {
-      needsGameRefresh = true;
+      completedGameIds.add(state.gameId);
     }
   }
   taskStates.value = next;
-  if (needsGameRefresh) {
-    await gameStore.loadGames();
+  if (completedGameIds.size > 0) {
+    await gameStore.refreshGames(Array.from(completedGameIds));
   }
 }
 
@@ -974,9 +974,6 @@ onMounted(async () => {
       ...taskStates.value,
       [task.taskId]: task,
     };
-    if (task.status === "completed") {
-      await gameStore.loadGames();
-    }
     if (
       task.status !== "idle" &&
       task.status !== "downloading" &&

@@ -549,6 +549,13 @@ function serializeUserFeedbackDetail(row) {
   };
 }
 
+function serializeUserFeedbackHistory(row) {
+  return {
+    id: row.id,
+    submittedAt: new Date(row.created_at).getTime(),
+  };
+}
+
 export function createFeedbackService({
   config,
   mySqlService,
@@ -597,6 +604,23 @@ export function createFeedbackService({
     }
 
     return submitFeedback(req, res, auth, () => parseMultipart(req, config));
+  }
+
+  async function handleUserHistory(req, res, url) {
+    if (!requireHttpRelayToken(config, req, res, url)) return;
+    const auth = await requireClientAuth(req, res);
+    if (!auth) return;
+
+    const [rows] = await mySqlService.query(
+      `SELECT id, created_at
+       FROM feedback
+       WHERE user_id = ?
+       ORDER BY created_at DESC, id DESC`,
+      [auth.user.id],
+    );
+    sendJson(res, 200, {
+      items: rows.map(serializeUserFeedbackHistory),
+    });
   }
 
   async function submitFeedback(req, res, auth, parsePayload) {
@@ -1048,6 +1072,14 @@ export function createFeedbackService({
   async function handleRequest(req, res, url) {
     if (req.method === "POST" && url.pathname === "/api/v1/feedback") {
       return handleSubmit(req, res, url);
+    }
+    if (req.method === "GET" && url.pathname === "/api/v1/feedback") {
+      if (!mySqlService.isEnabled()) {
+        sendJson(res, 503, { error: "feedback_storage_not_configured" });
+        return true;
+      }
+      await handleUserHistory(req, res, url);
+      return true;
     }
     if (req.method === "POST" && url.pathname === "/api/portal/v1/feedback") {
       return handlePortalSubmit(req, res);

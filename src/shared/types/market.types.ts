@@ -266,6 +266,9 @@ export interface MarketTaskState {
   taskId: string;
   gameId: string;
   version: string;
+  gameName?: string;
+  sourceIdx?: number;
+  installStarted?: boolean;
   status: MarketTaskStatus;
   progress: number;
   bytesReceived?: number;
@@ -292,6 +295,7 @@ export interface DownloadTaskSnapshot {
   taskId: string;
   gameId: string;
   version: string;
+  gameName?: string;
   sourceIdx: number;
   downloadUrl: string;
   sha256: string | undefined;

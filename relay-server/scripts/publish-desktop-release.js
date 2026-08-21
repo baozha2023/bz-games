@@ -60,6 +60,13 @@ async function calculateSha256(filePath) {
   return hash.digest("hex");
 }
 
+async function normalizePublishedFile(filePath, storageOwner) {
+  if (typeof process.getuid === "function") {
+    await fs.chown(filePath, storageOwner.uid, storageOwner.gid);
+  }
+  await fs.chmod(filePath, 0o640);
+}
+
 async function readCurrentManifest(storageRoot, maxFileBytes) {
   try {
     return parseReleaseManifest(
@@ -137,6 +144,7 @@ export async function publishDesktopRelease(options, runtimeConfig = config) {
 
   await fs.mkdir(storageRoot, { recursive: true, mode: 0o750 });
   await fs.mkdir(incomingRoot, { recursive: true, mode: 0o750 });
+  const storageOwner = await fs.stat(storageRoot);
   const current = await readCurrentManifest(storageRoot, maxFileBytes);
   if (
     current &&
@@ -155,6 +163,7 @@ export async function publishDesktopRelease(options, runtimeConfig = config) {
   const filename = `BZ-Games-Setup-${options.version}.exe`;
   const targetPath = path.join(storageRoot, filename);
   await fs.rename(stagedPath, targetPath);
+  await normalizePublishedFile(targetPath, storageOwner);
   const manifest = {
     version: options.version,
     filename,
@@ -169,6 +178,7 @@ export async function publishDesktopRelease(options, runtimeConfig = config) {
     flag: "wx",
     mode: 0o640,
   });
+  await normalizePublishedFile(manifestTemp, storageOwner);
   await fs.rename(manifestTemp, path.join(storageRoot, "latest.json"));
   await cleanStorage(storageRoot, filename);
   return manifest;

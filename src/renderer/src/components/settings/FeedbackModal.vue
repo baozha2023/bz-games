@@ -96,12 +96,22 @@
       </n-tab-pane>
 
       <n-tab-pane name="history" :tab="t('feedback.history')" :disabled="busy">
-        <n-spin
-          :show="historyLoading"
-          class="feedback-tab-content feedback-history-content"
-        >
+        <div class="feedback-tab-content feedback-history-content">
+          <div v-if="historyLoading" class="feedback-history-skeleton-list">
+            <div
+              v-for="index in 5"
+              :key="index"
+              class="feedback-history-skeleton-item"
+            >
+              <div class="feedback-history-skeleton-copy">
+                <n-skeleton text :width="220" />
+                <n-skeleton text :width="150" />
+              </div>
+              <n-skeleton text width="24px" />
+            </div>
+          </div>
           <n-empty
-            v-if="!historyLoading && history.length === 0"
+            v-else-if="history.length === 0"
             :description="t('feedback.historyEmpty')"
           />
           <n-scrollbar v-else class="feedback-history-list">
@@ -224,7 +234,7 @@
               </n-list-item>
             </n-list>
           </n-scrollbar>
-        </n-spin>
+        </div>
       </n-tab-pane>
     </n-tabs>
 
@@ -288,7 +298,6 @@ const resetAt = ref("");
 const successId = ref("");
 const activeTab = ref<"submit" | "history">("submit");
 const historyLoading = ref(false);
-const historyLoaded = ref(false);
 const history = ref<FeedbackHistoryItem[]>([]);
 const expandedHistory = ref<Record<string, boolean>>({});
 const historyDetails = ref<Record<string, FeedbackDetail | undefined>>({});
@@ -373,14 +382,17 @@ async function clearImages() {
 }
 
 async function loadHistory() {
-  if (historyLoaded.value || historyLoading.value) return;
+  if (historyLoading.value) return;
   const generation = historyRequestGeneration;
+  history.value = [];
+  expandedHistory.value = {};
+  historyDetails.value = {};
+  historyDetailErrors.value = {};
   historyLoading.value = true;
   try {
     const nextHistory = await window.electronAPI.settings.getFeedbackHistory();
     if (generation !== historyRequestGeneration) return;
     history.value = nextHistory;
-    historyLoaded.value = true;
   } catch {
     if (generation !== historyRequestGeneration) return;
     history.value = [];
@@ -482,7 +494,6 @@ async function submit() {
     content.value = "";
     selectionId.value = "";
     images.value = [];
-    historyLoaded.value = false;
   } finally {
     submitting.value = false;
   }
@@ -502,7 +513,6 @@ function resetState() {
   successId.value = "";
   activeTab.value = "submit";
   historyLoading.value = false;
-  historyLoaded.value = false;
   history.value = [];
   expandedHistory.value = {};
   historyDetails.value = {};
@@ -568,8 +578,26 @@ onBeforeUnmount(() => {
   overflow: hidden;
 }
 
-.feedback-history-content :deep(.n-spin-content) {
-  height: 100%;
+.feedback-history-skeleton-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 4px;
+}
+
+.feedback-history-skeleton-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+}
+
+.feedback-history-skeleton-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .feedback-images {

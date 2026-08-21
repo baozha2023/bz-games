@@ -339,3 +339,38 @@ test("deleting a version preserves the selected latest version and removes stale
     assert.equal(config.coverUrl, undefined);
   } finally { await harness.close(); }
 });
+
+test("supports Web windowed fullscreen and rejects incompatible entry-specific fields", async () => {
+  const webHarness = await createHarness();
+  try {
+    const webVersion = {
+      ...VERSION,
+      version: "1.2.0",
+      gameManifest: {
+        entry: "serve",
+        windowedFullscreen: true,
+      },
+    };
+    assert.equal((await uploadRequest(webHarness.baseUrl, { version: webVersion })).status, 201);
+    const config = await (await fetch(`${webHarness.baseUrl}/api/portal/v1/game-hosting/games/${GAME.id}/config`, {
+      headers: { "x-test-admin": "yes" },
+    })).json();
+    assert.equal(config.versions[0].gameManifest.windowedFullscreen, true);
+  } finally { await webHarness.close(); }
+
+  for (const gameManifest of [
+    { entry: "index.html", args: ["--example"] },
+    { entry: "index.html", env: { EXAMPLE: "1" } },
+    { entry: "game.exe", windowedFullscreen: true },
+    { entry: "serve", windowedFullscreen: "true" },
+  ]) {
+    const harness = await createHarness();
+    try {
+      const response = await uploadRequest(harness.baseUrl, {
+        version: { ...VERSION, gameManifest },
+      });
+      assert.equal(response.status, 400);
+      assert.equal((await response.json()).error, "invalid_game_manifest");
+    } finally { await harness.close(); }
+  }
+});

@@ -379,6 +379,7 @@ export class MarketService {
       taskId,
       gameId: meta.gameId,
       version: meta.version,
+      gameName: meta.gameName,
       sourceIdx: meta.sourceIdx,
       downloadUrl: meta.catalogDownloadUrl,
       sha256: meta.sha256,
@@ -653,6 +654,8 @@ export class MarketService {
       taskId,
       gameId: meta.gameId,
       version: meta.version,
+      gameName: meta.gameName,
+      sourceIdx: meta.sourceIdx,
       status: "idle",
       progress: 0,
       ...initial,
@@ -845,6 +848,8 @@ export class MarketService {
         taskId: snap.taskId,
         gameId: snap.gameId,
         version: snap.version,
+        gameName: snap.gameName || snap.gameId,
+        sourceIdx: snap.sourceIdx,
         status: "interrupted",
         progress:
           snap.size > 0
@@ -891,6 +896,13 @@ export class MarketService {
     this.transition(taskId, "canceled");
     task.abort.abort();
     this.finalize(taskId, true);
+    return true;
+  }
+
+  async dismissTask(taskId: string): Promise<boolean> {
+    const task = this.tasks.get(taskId);
+    if (!task || !TERMINAL_STATUSES.includes(task.state.status)) return false;
+    await this.finalize(taskId, true);
     return true;
   }
 
@@ -1372,6 +1384,7 @@ export class MarketService {
           : undefined),
       args: gm.args,
       env: gm.env,
+      windowedFullscreen: gm.windowedFullscreen,
       achievements: gm.achievements,
     });
   }
@@ -1439,10 +1452,25 @@ export class MarketService {
         throw new Error("market_platform_version_manifest_mismatch");
       }
 
-      const result = await GameLoader.loadGameFromPath(importDir, {
-        installSource: "market",
-        marketId,
-      });
+      this.transition(taskId, "installing", { installStarted: true });
+      const result = await GameLoader.loadGameFromPath(
+        importDir,
+        {
+          installSource: "market",
+          marketId,
+        },
+        {
+          signal,
+          onProgress: (progress) => {
+            if (progress.phase !== "copying") return;
+            const ratio =
+              progress.totalBytes > 0
+                ? progress.processedBytes / progress.totalBytes
+                : 1;
+            this.tickProgress(taskId, 95 + Math.min(1, ratio) * 4);
+          },
+        },
+      );
       if (!result.success || !result.manifest) {
         throw new Error(result.error || "market_install_failed");
       }

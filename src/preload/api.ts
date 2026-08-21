@@ -22,12 +22,50 @@ import type {
   CloudSnapshotMetaResult,
   CloudSyncResult,
   LocalCloudStatus,
+  GameImportStartResult,
+  GameImportTaskEvent,
+  GameImportTaskState,
 } from "../shared/types";
 
 installErrorForwarding("main-window");
 
 export const electronAPI = {
   game: {
+    selectImportDirectory: (): Promise<string | null> =>
+      ipcRenderer.invoke(IPC.GAME_SELECT_IMPORT_DIRECTORY),
+    startImport: (
+      sourcePath: string,
+      draft?: {
+        id: string;
+        name: string;
+        version: string;
+        description?: string;
+        author: string;
+        entry?: string;
+        web_url?: string;
+        platformVersion?: string;
+        icon?: string;
+        cover?: string;
+        type: GameType;
+        minPlayers?: number;
+        maxPlayers?: number;
+      },
+    ): Promise<GameImportStartResult> =>
+      ipcRenderer.invoke(IPC.GAME_START_IMPORT, sourcePath, draft),
+    getImportTasks: (): Promise<GameImportTaskState[]> =>
+      ipcRenderer.invoke(IPC.GAME_GET_IMPORT_TASKS),
+    cancelImport: (taskId: string): Promise<boolean> =>
+      ipcRenderer.invoke(IPC.GAME_CANCEL_IMPORT, taskId),
+    retryImport: (taskId: string): Promise<GameImportStartResult> =>
+      ipcRenderer.invoke(IPC.GAME_RETRY_IMPORT, taskId),
+    dismissImport: (taskId: string): Promise<boolean> =>
+      ipcRenderer.invoke(IPC.GAME_DISMISS_IMPORT, taskId),
+    onImportEvent: (callback: (payload: GameImportTaskEvent) => void) => {
+      const handler = (_: any, payload: GameImportTaskEvent) =>
+        callback(payload);
+      ipcRenderer.on(IPC.GAME_IMPORT_EVENT, handler);
+      return () => ipcRenderer.removeListener(IPC.GAME_IMPORT_EVENT, handler);
+    },
     load: (sourcePath?: string) =>
       ipcRenderer.invoke(IPC.GAME_LOAD, sourcePath),
     prepareImport: (sourcePath: string) =>
@@ -201,6 +239,8 @@ export const electronAPI = {
       ipcRenderer.invoke(IPC.MARKET_GET_TASK_STATE, taskId),
     cancelTask: (taskId: string): Promise<boolean> =>
       ipcRenderer.invoke(IPC.MARKET_CANCEL_TASK, taskId),
+    dismissTask: (taskId: string): Promise<boolean> =>
+      ipcRenderer.invoke(IPC.MARKET_DISMISS_TASK, taskId),
     pauseTask: (taskId: string): Promise<boolean> =>
       ipcRenderer.invoke(IPC.MARKET_PAUSE_TASK, taskId),
     resumeTask: (taskId: string): Promise<MarketTaskState | null> =>

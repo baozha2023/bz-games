@@ -1,6 +1,8 @@
 import { dialog, app } from "electron";
 import fs from "fs";
+import fsp from "fs/promises";
 import path from "path";
+import crypto from "crypto";
 import semver from "semver";
 import {
   GameManifestSchema,
@@ -15,7 +17,10 @@ import {
   type GameVersion,
 } from "../../../shared/types";
 import { logger } from "../../utils/logger";
-import { copyFolderRecursiveSync } from "../../utils/fileUtils";
+import {
+  copyFolderRecursive,
+  type FolderCopyProgress,
+} from "../../utils/fileUtils";
 import {
   GameManifestFileError,
   readGameManifestFile,
@@ -47,6 +52,23 @@ export interface ManualManifestDraft {
   maxPlayers?: number;
 }
 
+export interface GameImportProgress extends Omit<FolderCopyProgress, "phase"> {
+  phase: "scanning" | "copying" | "finalizing";
+}
+
+export interface GameImportExecutionOptions {
+  taskId?: string;
+  storagePath?: string;
+  signal?: AbortSignal;
+  onProgress?: (progress: GameImportProgress) => void | Promise<void>;
+}
+
+export interface PreparedGameImport {
+  sourcePath: string;
+  manifest: GameManifest;
+  existingGame: boolean;
+}
+
 type EntryCandidate = {
   relativePath: string;
   name: string;
@@ -55,8 +77,11 @@ type EntryCandidate = {
   size: number;
 };
 
+const IMPORT_TASK_MARKER = ".bz-import-task";
+
 export class GameLoader {
   private static cache: GameManifest[] | null = null;
+  private static finalizationChain: Promise<void> = Promise.resolve();
 
   private static resolveImportDirectory(sourcePath: string): string | null {
     if (!sourcePath || typeof sourcePath !== "string") {
@@ -100,6 +125,7 @@ export class GameLoader {
       installSource: "manual",
       marketId: null,
     },
+    options: GameImportExecutionOptions = {},
   ): Promise<{
     success: boolean;
     manifest?: GameManifest;
@@ -122,7 +148,12 @@ export class GameLoader {
       } else {
         await this.ensureVersionNotExists(manifest.id, manifest.version);
       }
-      await this.installAndRecordGame(resolvedSourcePath, manifest, provenance);
+      await this.installAndRecordGame(
+        resolvedSourcePath,
+        manifest,
+        provenance,
+        options,
+      );
 
       this.cache = null;
       return { success: true, manifest };
@@ -151,13 +182,15 @@ export class GameLoader {
     const hasManifest = fs.existsSync(
       path.join(resolvedSourcePath, "game.json"),
     );
-    const suggestedEntry = (() => {
-      try {
-        return this.detectEntryFile(resolvedSourcePath);
-      } catch {
-        return "";
-      }
-    })();
+    const suggestedEntry = hasManifest
+      ? ""
+      : (() => {
+          try {
+            return this.detectEntryFile(resolvedSourcePath);
+          } catch {
+            return "";
+          }
+        })();
     return {
       sourcePath: resolvedSourcePath,
       hasManifest,
@@ -171,6 +204,7 @@ export class GameLoader {
   static async loadGameFromPathWithManifest(
     sourcePath: string,
     draft: ManualManifestDraft,
+    options: GameImportExecutionOptions = {},
   ): Promise<{
     success: boolean;
     manifest?: GameManifest;
@@ -193,10 +227,15 @@ export class GameLoader {
         await this.ensureVersionNotExists(manifest.id, manifest.version);
       }
 
-      await this.installAndRecordGame(resolvedSourcePath, manifest, {
-        installSource: "manual",
-        marketId: null,
-      });
+      await this.installAndRecordGame(
+        resolvedSourcePath,
+        manifest,
+        {
+          installSource: "manual",
+          marketId: null,
+        },
+        options,
+      );
 
       this.cache = null;
       return { success: true, manifest };
@@ -218,6 +257,31 @@ export class GameLoader {
     if (!id) return false;
     const games = await storeService.getGames();
     return games.some((g) => g.id === id);
+  }
+
+  static async prepareGameImport(
+    sourcePath: string,
+    draft?: ManualManifestDraft,
+  ): Promise<PreparedGameImport> {
+    const resolvedSourcePath = this.resolveImportDirectory(sourcePath);
+    if (!resolvedSourcePath) {
+      throw { code: "notDirectory" };
+    }
+    const manifest = draft
+      ? this.buildManualManifestDraft(draft)
+      : await this.validateManifestFile(resolvedSourcePath);
+    this.verifyManifestVersion(manifest);
+    this.assertPlatformCompatible(manifest);
+    this.checkEntryFile(resolvedSourcePath, manifest);
+    this.checkOptionalManifestFiles(resolvedSourcePath, manifest);
+    const existingGame = await this.checkGameIdExists(manifest.id);
+    if (draft || manifest.type === GameType.NetworkGame) {
+      await this.ensureGameIdNotExists(manifest.id);
+    }
+    if (manifest.type !== GameType.NetworkGame) {
+      await this.ensureVersionNotExists(manifest.id, manifest.version);
+    }
+    return { sourcePath: resolvedSourcePath, manifest, existingGame };
   }
 
   private static async validateManifestFile(
@@ -344,6 +408,7 @@ export class GameLoader {
       const entries = fs.readdirSync(directory, { withFileTypes: true });
       for (const entry of entries) {
         const absolutePath = path.join(directory, entry.name);
+        if (entry.isSymbolicLink()) continue;
         if (entry.isDirectory()) {
           if (!ignoredDirectories.has(entry.name.toLowerCase())) {
             walk(absolutePath, depth + 1);
@@ -582,11 +647,12 @@ export class GameLoader {
     return readGameManifestFile(jsonPath);
   }
 
-  private static installGameFiles(
+  private static async installGameFiles(
     sourcePath: string,
     manifest: GameManifest,
-  ): string {
-    const gamesDir = storeService.getGameStoragePath();
+    options: GameImportExecutionOptions,
+  ): Promise<string> {
+    const gamesDir = options.storagePath || storeService.getGameStoragePath();
     if (!fs.existsSync(gamesDir)) {
       fs.mkdirSync(gamesDir, { recursive: true });
     }
@@ -601,6 +667,11 @@ export class GameLoader {
     }
 
     const targetPath = path.join(gameRootDir, manifest.version);
+    const stagingRoot = path.join(gamesDir, ".imports");
+    const stagingPath = path.join(
+      stagingRoot,
+      options.taskId || crypto.randomUUID(),
+    );
 
     if (fs.existsSync(targetPath)) {
       throw {
@@ -611,14 +682,37 @@ export class GameLoader {
 
     logger.info(`Copying game files from ${sourcePath} to ${targetPath}`);
     try {
-      copyFolderRecursiveSync(sourcePath, targetPath);
+      await fsp.rm(stagingPath, { recursive: true, force: true });
+      await copyFolderRecursive(sourcePath, stagingPath, {
+        signal: options.signal,
+        onProgress: options.onProgress,
+      });
+      await options.onProgress?.({
+        phase: "finalizing",
+        processedBytes: 0,
+        totalBytes: 0,
+        processedFiles: 0,
+        totalFiles: 0,
+      });
       writeEncryptedGameManifestFile(
-        path.join(targetPath, "game.json"),
+        path.join(stagingPath, "game.json"),
         manifest,
       );
+      if (options.taskId) {
+        await fsp.writeFile(
+          path.join(stagingPath, IMPORT_TASK_MARKER),
+          options.taskId,
+          "utf8",
+        );
+      }
+      await fsp.mkdir(gameRootDir, { recursive: true });
+      if (fs.existsSync(targetPath)) {
+        throw { code: "versionExists", params: { version: manifest.version } };
+      }
+      await fsp.rename(stagingPath, targetPath);
       return targetPath;
     } catch (error) {
-      this.removeIncompleteInstall(targetPath);
+      await this.removeIncompleteInstall(stagingPath);
       throw error;
     }
   }
@@ -627,20 +721,41 @@ export class GameLoader {
     sourcePath: string,
     manifest: GameManifest,
     provenance: GameInstallProvenance,
+    options: GameImportExecutionOptions,
   ): Promise<void> {
-    const targetPath = this.installGameFiles(sourcePath, manifest);
+    const targetPath = await this.installGameFiles(
+      sourcePath,
+      manifest,
+      options,
+    );
     try {
-      await this.updateGameRecord(manifest, targetPath, provenance);
+      const finalize = this.finalizationChain.then(() =>
+        this.updateGameRecord(manifest, targetPath, provenance),
+      );
+      this.finalizationChain = finalize.catch(() => undefined);
+      await finalize;
     } catch (error) {
-      this.removeIncompleteInstall(targetPath);
+      await this.removeIncompleteInstall(targetPath);
       throw error;
+    }
+    if (options.taskId) {
+      try {
+        await fsp.rm(path.join(targetPath, IMPORT_TASK_MARKER), { force: true });
+      } catch (error) {
+        logger.warn(
+          `[GameLoader] Failed to remove completed import marker ${options.taskId}`,
+          error,
+        );
+      }
     }
   }
 
-  private static removeIncompleteInstall(targetPath: string): void {
+  private static async removeIncompleteInstall(
+    targetPath: string,
+  ): Promise<void> {
     try {
       if (fs.existsSync(targetPath)) {
-        fs.rmSync(targetPath, {
+        await fsp.rm(targetPath, {
           recursive: true,
           force: true,
           maxRetries: 10,
@@ -666,6 +781,42 @@ export class GameLoader {
         `Failed to clean empty game directory: ${gameRootDir}`,
         error,
       );
+    }
+  }
+
+  static async cleanupInterruptedImportTarget(
+    storagePath: string,
+    gameId: string,
+    version: string,
+    taskId: string,
+  ): Promise<void> {
+    const storageRoot = path.resolve(storagePath);
+    const targetPath = path.resolve(storageRoot, gameId, version);
+    const relative = path.relative(storageRoot, targetPath);
+    if (
+      relative.startsWith("..") ||
+      path.isAbsolute(relative) ||
+      relative.split(path.sep).length !== 2
+    ) {
+      logger.warn(
+        `[GameLoader] Refusing to clean unsafe interrupted import path: ${targetPath}`,
+      );
+      return;
+    }
+    try {
+      const marker = await fsp.readFile(
+        path.join(targetPath, IMPORT_TASK_MARKER),
+        "utf8",
+      );
+      if (marker !== taskId) return;
+      await this.removeIncompleteInstall(targetPath);
+    } catch (error: any) {
+      if (error?.code !== "ENOENT") {
+        logger.warn(
+          `[GameLoader] Failed to inspect interrupted import ${taskId}`,
+          error,
+        );
+      }
     }
   }
 
@@ -792,12 +943,19 @@ export class GameLoader {
       try {
         const gameDirs = fs.readdirSync(root);
         for (const gameId of gameDirs) {
+          if (gameId === ".imports") continue;
           const gameRoot = path.join(root, gameId);
-          if (!fs.statSync(gameRoot).isDirectory()) continue;
+          const gameRootStat = fs.lstatSync(gameRoot);
+          if (!gameRootStat.isDirectory() || gameRootStat.isSymbolicLink()) {
+            continue;
+          }
           const versions = fs.readdirSync(gameRoot);
           for (const version of versions) {
             const versionPath = path.join(gameRoot, version);
-            if (!fs.statSync(versionPath).isDirectory()) continue;
+            const versionStat = fs.lstatSync(versionPath);
+            if (!versionStat.isDirectory() || versionStat.isSymbolicLink()) {
+              continue;
+            }
             if (!fs.existsSync(path.join(versionPath, "game.json"))) continue;
             if (!diskGames.has(gameId)) {
               diskGames.set(gameId, new Map());

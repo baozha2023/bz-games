@@ -68,9 +68,13 @@ vi.mock("../../../shared/AppConstants", () => ({
 }));
 
 import { MarketService } from "./MarketService";
+import type { GameManifest } from "../../../shared/game-manifest";
+import { GameType } from "../../../shared/types";
 import type {
   MarketDirectory,
+  MarketGame,
   MarketIndex,
+  MarketGameVersion,
   MarketSource,
   MarketTaskState,
   MarketTaskStatus,
@@ -153,6 +157,11 @@ function taskMeta() {
 }
 
 interface MarketServiceTestAccess {
+  buildManifestFromMarket(
+    game: MarketGame,
+    targetVersion: MarketGameVersion,
+    importDir: string,
+  ): GameManifest;
   startTask(
     taskId: string,
     meta: ReturnType<typeof taskMeta>,
@@ -263,6 +272,43 @@ describe("MarketService catalog cache", () => {
       "market_id_mismatch",
     );
     await expect(service.getIndex(1)).resolves.toBe(cached);
+  });
+});
+
+describe("MarketService Manifest conversion", () => {
+  it("preserves Web windowed fullscreen configuration", () => {
+    const service = new MarketService({
+      fetchOfficialCatalog: vi.fn(),
+      fetchExternalIndex: vi.fn(),
+    });
+    const targetVersion: MarketGameVersion = {
+      version: "1.0.0",
+      description: "Web game",
+      platformVersion: ">=1.0.0",
+      downloadUrl: "https://example.com/game.zip",
+      gameManifest: {
+        entry: "url",
+        web_url: "https://example.com/game",
+        windowedFullscreen: true,
+      },
+    };
+    const game: MarketGame = {
+      id: "com.example.market-game",
+      name: "Market Game",
+      author: "Example",
+      type: GameType.Singleplayer,
+      summary: "A market game",
+      latestVersion: targetVersion.version,
+      versions: [targetVersion],
+    };
+
+    const manifest = accessInternals(service).buildManifestFromMarket(
+      game,
+      targetVersion,
+      "C:/tmp/game",
+    );
+
+    expect(manifest.windowedFullscreen).toBe(true);
   });
 });
 

@@ -172,7 +172,6 @@ test("feedback endpoint requires login and applies authenticated cooldowns", asy
   async function submit({
     authorization = "",
     cookie = "",
-    forwardedFor = "",
     imageBuffer = null,
   } = {}) {
     const form = new FormData();
@@ -189,7 +188,6 @@ test("feedback endpoint requires login and applies authenticated cooldowns", asy
     const headers = { "x-relay-token": config.RELAY_TOKEN };
     if (authorization) headers.authorization = authorization;
     if (cookie) headers.cookie = cookie;
-    if (forwardedFor) headers["x-forwarded-for"] = forwardedFor;
     const response = await fetch(`${baseUrl}/api/v1/feedback`, {
       method: "POST",
       headers,
@@ -279,6 +277,174 @@ test("feedback endpoint requires login and applies authenticated cooldowns", asy
     service.dispose();
     await new Promise((resolve) => server.close(resolve));
   }
+});
+
+test("user feedback history requires login and returns only the current user's IDs", async () => {
+  const queryCalls = [];
+  const rowsByUser = new Map([
+    [
+      42,
+      [
+        {
+          id: "22222222-2222-4222-8222-222222222222",
+          created_at: new Date("2026-08-21T10:00:00.000Z"),
+        },
+        {
+          id: "11111111-1111-4111-8111-111111111111",
+          created_at: new Date("2026-08-20T10:00:00.000Z"),
+        },
+      ],
+    ],
+    [
+      7,
+      [
+        {
+          id: "77777777-7777-4777-8777-777777777777",
+          created_at: new Date("2026-08-19T10:00:00.000Z"),
+        },
+      ],
+    ],
+  ]);
+  const service = createFeedbackService({
+    config: {
+      RELAY_TOKEN: "test-relay-token",
+      FEEDBACK_AUTHENTICATED_COOLDOWN_MS: 21_600_000,
+    },
+    mySqlService: {
+      isEnabled: () => true,
+      query: async (_sql, params) => {
+        queryCalls.push(params);
+        return [rowsByUser.get(params[0]) || []];
+      },
+    },
+    mongoService: { isEnabled: () => false },
+    authService: {
+      getClientSessionFromRequest: async (req) => {
+        const token = String(req.headers.authorization || "").replace(
+          /^Bearer\s+/i,
+          "",
+        );
+        const userId =
+          token === "owner-session" ? 42 : token === "other-session" ? 7 : 0;
+        return userId
+          ? {
+              status: "authenticated",
+              auth: { user: { id: userId, github_id: `github-${userId}` } },
+            }
+          : { status: "invalid" };
+      },
+      sendAuthFailure: (res, status) => {
+        res.writeHead(401, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: status }));
+      },
+    },
+  });
+  const server = http.createServer(async (req, res) => {
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    if (!(await service.handleRequest(req, res, url))) {
+      res.writeHead(404).end();
+    }
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const missingToken = await fetch(`${baseUrl}/api/v1/feedback`);
+    assert.equal(missingToken.status, 401);
+
+    const unauthenticated = await fetch(`${baseUrl}/api/v1/feedback`, {
+      headers: { "x-relay-token": "test-relay-token" },
+    });
+    assert.equal(unauthenticated.status, 401);
+    assert.equal(queryCalls.length, 0);
+
+    const ownerResponse = await fetch(`${baseUrl}/api/v1/feedback`, {
+      headers: {
+        "x-relay-token": "test-relay-token",
+        authorization: "Bearer owner-session",
+      },
+    });
+    assert.equal(ownerResponse.status, 200);
+    assert.deepEqual(await ownerResponse.json(), {
+      items: [
+        {
+          id: "22222222-2222-4222-8222-222222222222",
+          submittedAt: Date.parse("2026-08-21T10:00:00.000Z"),
+        },
+        {
+          id: "11111111-1111-4111-8111-111111111111",
+          submittedAt: Date.parse("2026-08-20T10:00:00.000Z"),
+        },
+      ],
+    });
+    assert.deepEqual(queryCalls.at(-1), [42]);
+
+    const otherResponse = await fetch(`${baseUrl}/api/v1/feedback`, {
+      headers: {
+        "x-relay-token": "test-relay-token",
+        authorization: "Bearer other-session",
+      },
+    });
+    assert.equal(otherResponse.status, 200);
+    assert.deepEqual(await otherResponse.json(), {
+      items: [
+        {
+          id: "77777777-7777-4777-8777-777777777777",
+          submittedAt: Date.parse("2026-08-19T10:00:00.000Z"),
+        },
+      ],
+    });
+    assert.deepEqual(queryCalls.at(-1), [7]);
+  } finally {
+    service.dispose();
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test("user feedback history reports unavailable storage", async () => {
+  const service = createFeedbackService({
+    config: {
+      RELAY_TOKEN: "test-relay-token",
+      FEEDBACK_AUTHENTICATED_COOLDOWN_MS: 21_600_000,
+    },
+    mySqlService: { isEnabled: () => false },
+    mongoService: { isEnabled: () => false },
+    authService: {
+      getClientSessionFromRequest: async () => {
+        throw new Error("authentication should not be checked");
+      },
+      sendAuthFailure: () => {
+        throw new Error("authentication should not be checked");
+      },
+    },
+  });
+  const request = new Request("http://relay.test/api/v1/feedback", {
+    headers: { "x-relay-token": "test-relay-token" },
+  });
+  const req = Readable.from([]);
+  req.method = "GET";
+  req.url = "/api/v1/feedback";
+  req.headers = { host: "relay.test", "x-relay-token": "test-relay-token" };
+  const response = await new Promise((resolve) => {
+    const res = {
+      writeHead(status, headers) {
+        this.status = status;
+        this.headers = headers;
+      },
+      end(body) {
+        resolve({
+          status: this.status,
+          headers: this.headers,
+          body: JSON.parse(body),
+        });
+      },
+    };
+    service.handleRequest(req, res, new URL(request.url));
+  });
+  assert.equal(response.status, 503);
+  assert.deepEqual(response.body, { error: "feedback_storage_not_configured" });
+  service.dispose();
 });
 
 test("admin endpoints validate pagination and keep response fields aligned", async () => {

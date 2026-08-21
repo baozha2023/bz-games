@@ -5,6 +5,48 @@ export enum GameType {
   NetworkGame = "networkgame",
 }
 
+export type GameImportTaskStatus =
+  | "queued"
+  | "validating"
+  | "scanning"
+  | "copying"
+  | "finalizing"
+  | "completed"
+  | "failed"
+  | "canceled"
+  | "interrupted";
+
+export interface GameImportTaskState {
+  taskId: string;
+  sourcePath: string;
+  gameId: string;
+  gameName: string;
+  version: string;
+  existingGame: boolean;
+  source: "manual" | "market";
+  status: GameImportTaskStatus;
+  progress: number | null;
+  processedBytes?: number;
+  totalBytes?: number;
+  processedFiles?: number;
+  totalFiles?: number;
+  error?: string;
+  params?: Record<string, unknown>;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface GameImportTaskEvent {
+  task: GameImportTaskState;
+}
+
+export interface GameImportStartResult {
+  success: boolean;
+  task?: GameImportTaskState;
+  error?: string;
+  params?: Record<string, unknown>;
+}
+
 export interface GameLaunchFailurePayload {
   id: string;
   code: string;

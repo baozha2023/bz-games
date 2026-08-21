@@ -171,7 +171,7 @@ function validateManifest(raw) {
     new Set([
       "name", "description", "author", "author_url", "platformVersion", "entry",
       "web_url", "icon", "cover", "video", "encryptLocalStorage", "type",
-      "statistics", "multiplayer", "args", "env", "achievements",
+      "statistics", "multiplayer", "args", "env", "windowedFullscreen", "achievements",
     ]),
     "invalid_game_manifest",
   );
@@ -191,6 +191,7 @@ function validateManifest(raw) {
     if (value[key] !== undefined) result[key] = safeManifestPath(value[key], "invalid_game_manifest");
   }
   if (value.encryptLocalStorage !== undefined) result.encryptLocalStorage = optionalBoolean(value.encryptLocalStorage, "invalid_game_manifest");
+  if (value.windowedFullscreen !== undefined) result.windowedFullscreen = optionalBoolean(value.windowedFullscreen, "invalid_game_manifest");
   if (value.type !== undefined) {
     if (!GAME_TYPES.has(value.type)) throw new GameHostingError("invalid_game_manifest");
     result.type = value.type;
@@ -215,6 +216,13 @@ function validateManifest(raw) {
       normalized[key] = item;
     }
     result.env = normalized;
+  }
+  if (value.entry !== undefined) {
+    const entry = value.entry.toLowerCase();
+    const isWebEntry = entry === "serve" || entry === "url" || entry.endsWith(".html") || entry.endsWith(".htm");
+    if (isWebEntry && value.args !== undefined && value.args.length > 0) throw new GameHostingError("invalid_game_manifest");
+    if (isWebEntry && value.env !== undefined && Object.keys(value.env).length > 0) throw new GameHostingError("invalid_game_manifest");
+    if (!isWebEntry && value.windowedFullscreen !== undefined) throw new GameHostingError("invalid_game_manifest");
   }
   if (value.statistics !== undefined) {
     if (!Array.isArray(value.statistics) || value.statistics.length > 1000) throw new GameHostingError("invalid_game_manifest");
