@@ -126,6 +126,31 @@ describe("UpdateService snapshots", () => {
     expect(await snapshotDirectories()).toHaveLength(1);
   });
 
+  it("creates an empty games snapshot when the library directory does not exist", async () => {
+    await fs.rm(path.join(mocks.appRoot, "games"), {
+      recursive: true,
+      force: true,
+    });
+    const service = new UpdateService();
+    service.init();
+    mocks.handlers.get("update-available")?.({ version: "3.4.1" });
+
+    service.installUpdate();
+
+    await vi.waitFor(() => expect(mocks.quitAndInstall).toHaveBeenCalledOnce());
+    const [snapshotName] = await snapshotDirectories();
+    const snapshotPath = path.join(
+      mocks.userData,
+      ".update-snapshots",
+      snapshotName,
+    );
+    const [gamesSnapshotName] = (await fs.readdir(snapshotPath)).filter(
+      (entry) => entry.startsWith("games_"),
+    );
+    const snapshotGamesPath = path.join(snapshotPath, gamesSnapshotName);
+    expect((await fs.readdir(snapshotGamesPath))).toEqual([]);
+  });
+
   it("does not install when the required snapshot cannot be created", async () => {
     await fs.rm(path.join(mocks.appRoot, "db"), {
       recursive: true,

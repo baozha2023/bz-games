@@ -9,7 +9,7 @@ import {
 
 describe("game card product catalog", () => {
   it("contains the fixed products and unique ids", () => {
-    expect(GAME_CARD_PRODUCTS).toHaveLength(3);
+    expect(GAME_CARD_PRODUCTS).toHaveLength(6);
     const ids = GAME_CARD_PRODUCTS.map((product) => product.id);
     expect(new Set(ids).size).toBe(ids.length);
     expect(getGameCardProduct("jade_glow")?.unlock).toEqual({
@@ -24,6 +24,19 @@ describe("game card product catalog", () => {
       type: "date_playtime",
       date: "2027-02-06",
       durationMs: 45 * 60 * 1000,
+    });
+    expect(getGameCardProduct("starlit_transit")?.unlock).toEqual({
+      type: "playtime",
+      durationMs: 18 * 60 * 60 * 1000,
+    });
+    expect(getGameCardProduct("neon_arcade")?.unlock).toEqual({
+      type: "bzcoin",
+      amount: 360,
+    });
+    expect(getGameCardProduct("bz_games_1st_anniversary_2027")?.unlock).toEqual({
+      type: "date_playtime",
+      date: "2027-02-21",
+      durationMs: 60 * 60 * 1000,
     });
   });
 

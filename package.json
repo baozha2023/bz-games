@@ -1,6 +1,6 @@
 {
   "name": "bz-launcher",
-  "version": "3.3.0",
+  "version": "3.3.1",
   "description": "BZ-Games game platform",
   "main": "./out/main/index.js",
   "author": {
@@ -85,7 +85,13 @@
     },
     "files": [
       "out/**/*",
-      "resources/**/*",
+      "resources/icon.png",
+      "resources/default_icon.png",
+      "resources/default_cover.png",
+      "resources/elevate.exe",
+      "resources/avatar-frames/**/*",
+      "resources/game-card-products/**/*",
+      "resources/vocabulary/**/*",
       "node_modules/better-sqlite3-multiple-ciphers/**/*",
       "node_modules/bindings/**/*",
       "node_modules/file-uri-to-path/**/*"

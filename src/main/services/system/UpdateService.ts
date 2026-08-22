@@ -259,9 +259,28 @@ export class UpdateService {
 
       const defaultGamesRoot = path.resolve(path.join(appRoot, "games"));
       const gamesLabel = this.toSnapshotLabel(defaultGamesRoot);
-      await fs.cp(defaultGamesRoot, path.join(tempDir, `games_${gamesLabel}`), {
-        recursive: true,
-      });
+      const gamesSnapshotPath = path.join(tempDir, `games_${gamesLabel}`);
+      let gamesRootExists = true;
+      try {
+        await fs.lstat(defaultGamesRoot);
+      } catch (error: unknown) {
+        const code =
+          error && typeof error === "object" && "code" in error
+            ? error.code
+            : undefined;
+        if (code !== "ENOENT") throw error;
+        gamesRootExists = false;
+      }
+      if (gamesRootExists) {
+        await fs.cp(defaultGamesRoot, gamesSnapshotPath, {
+          recursive: true,
+        });
+      } else {
+        // A fresh installation may not have created the default library yet.
+        // Keep an empty directory in the snapshot so restore logic can treat
+        // it the same as an existing, empty library.
+        await fs.mkdir(gamesSnapshotPath, { recursive: true });
+      }
       metadata.gameRoots.push(defaultGamesRoot);
 
       const dbPath = path.resolve(path.join(appRoot, "db"));

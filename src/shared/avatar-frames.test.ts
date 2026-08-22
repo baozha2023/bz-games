@@ -10,6 +10,25 @@ import {
 } from "./avatar-frames";
 
 describe("avatar frame catalog", () => {
+  const expectedContentInsetByFile: Record<string, number> = {
+    "Guofeng_Ink_Halo.png": 46,
+    "Kawaii_Macaron_Loop.png": 42,
+    "Cyberpunk_Neon_Ring.png": 41,
+    "Fairy_Forest_Vine.png": 41,
+    "Gothic_Thorn_Circle.png": 43,
+    "Ocean_Pearl_Ring.png": 46,
+    "Astrology_Moon_Phase.png": 60,
+    "Autumn_Maple_Twig.png": 42,
+    "Starry_Compass.png": 38,
+    "Jade_Bamboo_Clouds.png": 38,
+    "Molten_Gold_Movement.png": 38,
+    "Frost_Crown.png": 38,
+    "Kintsugi_Moon_Ring.png": 38,
+    "Pixel_Warp.png": 38,
+    "Spring_Kite_Letter.png": 38,
+    "Ember_Dragonspine.png": 38,
+  };
+
   it("keeps frame ids and file names unique", () => {
     const ids = AVATAR_FRAMES.map((frame) => frame.id);
     const fileNames = AVATAR_FRAMES.map((frame) => frame.imageFileName);
@@ -55,11 +74,13 @@ describe("avatar frame catalog", () => {
     );
     expect(getFrameImageFileName(frame.id)).toBe(frame.imageFileName);
     expect(getAvatarFrameByFileName(frame.imageFileName)).toBe(frame);
+    const expectedInset = expectedContentInsetByFile[frame.imageFileName];
+    expect(expectedInset).toBeDefined();
     expect(frame.contentInsetPx).toEqual({
-      top: 60,
-      right: 60,
-      bottom: 60,
-      left: 60,
+      top: expectedInset,
+      right: expectedInset,
+      bottom: expectedInset,
+      left: expectedInset,
     });
   });
 

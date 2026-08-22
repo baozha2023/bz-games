@@ -28,7 +28,6 @@ export interface AvatarFrameDef {
   description: string;
   imageFileName: string;
   contentInsetPx: FrameContentInset;
-  rarity: "common" | "rare" | "epic" | "legendary";
   unlock: AvatarFrameUnlockCondition;
 }
 

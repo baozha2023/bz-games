@@ -1011,7 +1011,7 @@ interface AppSettings {
   - 日期点击弹出会话详情弹窗时：先清空 `selectedDateSessions`、设置 `isLoadingSessions = true` 并 `await nextTick()` 确保弹窗以 loading 态打开，再发起 IPC 查询。会话加载中展示居中的 `n-spin` 旋转指示器（最小高度 160px），替代骨架屏，视觉上更轻量且无布局抖动。
   - ResizeObserver 使用 `requestAnimationFrame` 节流 + 同值跳过，避免热力图容器宽度频繁变化引起的布局抖动。
 - **头像框系统（Avatar Frame）**：
-  - **数据定义**：`src/shared/avatar-frames.ts` 导出 `AVATAR_FRAMES` 常量数组（16 款头像框），每款定义 `id`、`name`、`imageFileName`、`rarity`、`unlockMethod`（playtime/consecutive_checkin/total_checkin/bzcoin）、`unlockValue`。新增星河罗盘、青竹流云、熔金机芯、霜华王冠、金缮月轮、像素跃迁、纸鸢春信和龙脊余烬。`normalizeAvatarFrameId()`、`normalizeAvatarFrameFileName()` 与 `getFrameImageFileName()` 共同提供统一白名单边界。
+  - **数据定义**：`src/shared/avatar-frames.ts` 导出 `AVATAR_FRAMES` 常量数组（16 款头像框），每款定义 `id`、`name`、`description`、`imageFileName`、`contentInsetPx` 和 `unlock`。新增星河罗盘、青竹流云、熔金机芯、霜华王冠、金缮月轮、像素跃迁、纸鸢春信和龙脊余烬。`normalizeAvatarFrameId()`、`normalizeAvatarFrameFileName()` 与 `getFrameImageFileName()` 共同提供统一白名单边界。
   - **类型定义**：`AvatarFrameDef` 和 `AvatarFrameUnlockMethod` 定义在 `src/shared/types/store.types.ts`，通过 `shared/types/index.ts` 统一导出。
   - **渲染组件**：`AvatarWithFrame.vue` 使用 CSS absolute 叠加方案：底层 `n-avatar` (z=0)，上层 `<img>` overlay (z=1, `pointer-events: none`)。渲染入口必须先通过 `normalizeAvatarFrameFileName()` 校验文件名；旧客户端、联机载荷或异常值统一回落为无头像框，不生成资源请求。异步图片加载使用请求序号隔离，快速切换时旧请求不得覆盖新头像框。
     - **算法**：`FRAME_MARGIN = 60`（帧图留白像素），`contentSize = w - 2*MARGIN`，`scale = w / contentSize`，`offsetPercent = -50*(scale-1)`。通过 `naturalWidth` 获取帧图原始尺寸后计算 scale/offset，适配任意帧图。
@@ -1453,7 +1453,7 @@ interface AppSettings {
 - **本地数据保护**：
   - 更新包下载完成后，`UpdateService` 按目标版本创建 `.update-snapshots/version-<version>-<hash>`；下载前不创建快照。
   - 点击安装时必须确认目标版本快照存在，不存在才补建；同一目标版本的并发或重复调用必须复用唯一快照。
-  - 快照包含 `config.json` 备份、默认游戏目录和 SQLite `db/` 目录；任一复制失败时清理临时目录并阻止安装，不得把不完整目录标记为完成。
+  - 快照包含 `config.json` 备份、默认游戏目录和 SQLite `db/` 目录；默认游戏目录尚未创建时，快照保存一个空目录，不要求先修改原应用目录。除该明确的缺失根目录场景外，任一复制失败都必须清理临时目录并阻止安装，不得把不完整目录标记为完成。
   - 禁止退出应用时自动安装更新，所有安装必须经过显式安装入口和快照检查。
 
 ### 6.6 建言献策、管理后台与配置安全
