@@ -34,6 +34,10 @@ test("system monitor calculates CPU and Linux network deltas", async () => {
       getEventLoopDelayMs: () => 2,
     },
     accessControlService: {},
+    mySqlService: {
+      isEnabled: () => true,
+      query: async () => [[{ online_users: 3 }]],
+    },
     now: () => time,
     osModule: {
       platform: () => "linux",
@@ -59,6 +63,7 @@ test("system monitor calculates CPU and Linux network deltas", async () => {
   assert.equal(result.rooms.count, 1);
   assert.equal(result.rooms.clients, 1);
   assert.equal(result.rooms.maxClients, 400);
+  assert.equal(result.onlineUsers, 3);
   assert.equal(Number.isFinite(result.runtime.processUptimeSeconds), true);
 });
 

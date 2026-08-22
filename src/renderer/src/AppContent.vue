@@ -23,6 +23,10 @@
               :size="20"
               style="margin-left: 8px"
             />
+            <span v-if="isOnline" class="online-badge">
+              <span class="online-badge-dot" aria-hidden="true"></span>
+              {{ t("settings.online") }}
+            </span>
           </button>
 
           <div class="economy-entry-group">
@@ -99,6 +103,7 @@
     </n-layout>
     <CheckInModal v-model:show="showCheckIn" />
     <BzCoinGuideModal v-model:show="showBzCoinGuide" />
+    <UpdatePrompt />
     <n-modal
       v-model:show="showUpdateModal"
       preset="card"
@@ -134,7 +139,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, computed } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import {
   NSpace,
@@ -153,14 +158,15 @@ import { useGameStore } from "./stores/useGameStore";
 import { Calendar } from "@vicons/ionicons5";
 import CheckInModal from "./components/CheckInModal.vue";
 import BzCoinGuideModal from "./components/BzCoinGuideModal.vue";
+import UpdatePrompt from "./components/settings/UpdatePrompt.vue";
 import AvatarWithFrame from "./components/AvatarWithFrame.vue";
 import NicknameText from "./components/NicknameText.vue";
-import { ref } from "vue";
 import { AchievementNotifier } from "./utils/achievementNotifier";
 import bzCoinIcon from "./assets/images/bz-coin.png";
 import semver from "semver";
 import type { MarketTaskState } from "../../shared/types";
 import { getFrameImageFileName } from "../../shared/avatar-frames";
+import { useUpdatePrompt } from "./composables/useUpdatePrompt";
 
 const marketNotifiedTaskIds = new Set<string>();
 const manualImportNotifiedTaskIds = new Set<string>();
@@ -173,8 +179,10 @@ const roomStore = useRoomStore();
 const gameStore = useGameStore();
 const dialog = useDialog();
 const message = useMessage();
+const { showUpdatePrompt } = useUpdatePrompt();
 const showCheckIn = ref(false);
 const showBzCoinGuide = ref(false);
+const isOnline = ref(false);
 
 const topBarFrameFileName = computed(() => {
   const frameId = settingsStore.userData?.equippedFrame;
@@ -217,6 +225,7 @@ let cleanup: (() => void) | undefined;
 let cleanupAchievements: (() => void) | undefined;
 let cleanupGameImportEvent: (() => void) | undefined;
 let cleanupMarketEvent: (() => void) | undefined;
+let cleanupPresence: (() => void) | undefined;
 const achievementNotifier = new AchievementNotifier({
   delayMs: 5200,
   onProcess: async () => {
@@ -293,30 +302,11 @@ const handleAutoUpdateCheck = async () => {
   await settingsStore.loadSettings();
   const promptedStorage = await handleGameStorageStartupPrompt();
   if (promptedStorage) return;
+  if (settingsStore.settings?.skipStartupUpdateCheck) return;
   const state = await settingsStore.checkUpdateOnly();
   if (state.status !== "available") return;
   if (!shouldPromptUpdate(state.latestVersion)) return;
-  dialog.warning({
-    title: t("settings.updatePromptTitle"),
-    content: t("settings.updatePromptMessage", {
-      version: state.latestVersion || "",
-    }),
-    positiveText: t("settings.updateNow"),
-    negativeText: t("settings.updateLater"),
-    onPositiveClick: async () => {
-      await settingsStore.checkUpdate();
-    },
-    onNegativeClick: () => {
-      if (!state.latestVersion) return;
-      void settingsStore
-        .ignoreUpdateVersion(state.latestVersion)
-        .catch((error: any) => {
-          message.error(
-            `${t("settings.saveFail")}: ${error?.message || error}`,
-          );
-        });
-    },
-  });
+  showUpdatePrompt(state);
 };
 
 const handleGameStorageStartupPrompt = async (): Promise<boolean> => {
@@ -393,8 +383,22 @@ function marketErrorMessage(task: MarketTaskState): string {
   return task.message || "";
 }
 
+const refreshPresenceStatus = async () => {
+  try {
+    const status = await window.electronAPI.settings.getPresenceStatus();
+    isOnline.value = status.enabled;
+  } catch {
+    isOnline.value = false;
+  }
+};
+
 onMounted(() => {
   if (isPopupWindow.value) return;
+
+  cleanupPresence = window.electronAPI.settings.onPresenceChanged((payload) => {
+    isOnline.value = payload.enabled;
+  });
+  void refreshPresenceStatus();
 
   if (window.electronAPI?.room?.onEvent) {
     cleanup = window.electronAPI.room.onEvent((event) => {
@@ -468,6 +472,7 @@ onUnmounted(() => {
   if (cleanupAchievements) cleanupAchievements();
   if (cleanupGameImportEvent) cleanupGameImportEvent();
   if (cleanupMarketEvent) cleanupMarketEvent();
+  if (cleanupPresence) cleanupPresence();
   achievementNotifier.dispose();
 });
 </script>
@@ -491,6 +496,29 @@ onUnmounted(() => {
 
 .profile-entry:hover {
   opacity: 0.86;
+}
+
+.online-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: rgba(24, 160, 88, 0.12);
+  color: #18a058;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.online-badge-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 2px rgba(24, 160, 88, 0.14);
 }
 
 .economy-entry-group {

@@ -14,6 +14,8 @@ import type {
   GameVersion,
   UserData,
   NicknameStyle,
+  ManualUnlockCondition,
+  ManualUnlockResult,
 } from "../../../shared/types";
 import {
   DEFAULT_NICKNAME_STYLE,
@@ -22,6 +24,7 @@ import {
 import { getAppRoot } from "../../utils/appPath";
 import { logger } from "../../utils/logger";
 import { AVATAR_FRAMES } from "../../../shared/avatar-frames";
+import { getGameCardProduct } from "../../../shared/game-card-products";
 import {
   CONFIG_ENCRYPTION_SEED,
   PLAYTIME_REWARD_AMOUNT,
@@ -33,6 +36,7 @@ import {
   readGameManifestFileWithMetadata,
 } from "../game/GameManifestFileService";
 import { bzGamesDatabase } from "./database/BzGamesDatabase";
+import { playSessionDatabaseService } from "./database/PlaySessionDatabaseService";
 
 const defaultSettings: AppSettings = {
   playerName: "玩家",
@@ -52,6 +56,7 @@ const defaultSettings: AppSettings = {
   closeBehavior: "tray",
   autoLaunch: false,
   ignoredUpdateVersion: "",
+  skipStartupUpdateCheck: false,
   gameStoragePath: "",
   gameStorageHistory: [],
   lastOpenedAt: undefined,
@@ -66,16 +71,79 @@ const defaultUserData: UserData = {
   checkIn: {
     lastCheckInDate: "",
     consecutiveDays: 0,
+    maxConsecutiveDays: 0,
     totalDays: 0,
   },
   ownedFrames: [],
   equippedFrame: undefined,
+  ownedGameCardProducts: [],
+  equippedGameCardProduct: undefined,
 };
 
 const defaultStore: AppStore = {
   settings: defaultSettings,
   userData: defaultUserData,
 };
+
+function normalizeNonNegativeInteger(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.max(0, Math.trunc(value))
+    : 0;
+}
+
+function normalizeNonNegativeNumber(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.max(0, value)
+    : 0;
+}
+
+function normalizeStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? Array.from(
+        new Set(
+          value.filter((item): item is string => typeof item === "string"),
+        ),
+      )
+    : [];
+}
+
+function normalizeUserData(value: unknown): UserData {
+  const source =
+    value && typeof value === "object"
+      ? (value as Partial<UserData>)
+      : ({} as Partial<UserData>);
+  const sourceCheckIn: Partial<UserData["checkIn"]> =
+    source.checkIn && typeof source.checkIn === "object" ? source.checkIn : {};
+  const consecutiveDays = normalizeNonNegativeInteger(
+    sourceCheckIn.consecutiveDays,
+  );
+
+  return {
+    bzCoins: normalizeNonNegativeNumber(source.bzCoins),
+    checkIn: {
+      lastCheckInDate:
+        typeof sourceCheckIn.lastCheckInDate === "string"
+          ? sourceCheckIn.lastCheckInDate
+          : "",
+      consecutiveDays,
+      maxConsecutiveDays: Math.max(
+        consecutiveDays,
+        normalizeNonNegativeInteger(sourceCheckIn.maxConsecutiveDays),
+      ),
+      totalDays: normalizeNonNegativeInteger(sourceCheckIn.totalDays),
+    },
+    ownedFrames: normalizeStringArray(source.ownedFrames),
+    equippedFrame:
+      typeof source.equippedFrame === "string"
+        ? source.equippedFrame
+        : undefined,
+    ownedGameCardProducts: normalizeStringArray(source.ownedGameCardProducts),
+    equippedGameCardProduct:
+      typeof source.equippedGameCardProduct === "string"
+        ? source.equippedGameCardProduct
+        : undefined,
+  };
+}
 
 const CLOUD_SETTINGS_SYNC_BLACKLIST: Array<keyof AppSettings> = [
   "githubToken",
@@ -174,6 +242,16 @@ class StoreService {
   private store: ElectronStore<AppStore> | null = null;
   private _initPromise: Promise<void> | null = null;
   private gamesCache: GameRecord[] = [];
+  private manualUnlockChain: Promise<void> = Promise.resolve();
+
+  private enqueueManualUnlock<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.manualUnlockChain.then(operation, operation);
+    this.manualUnlockChain = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  }
 
   private async restoreDataFromSnapshotIfNeeded(
     dataRoot: string,
@@ -347,16 +425,18 @@ class StoreService {
     }
 
     const currentUserData = this.getUserData();
-    const nextUserData = cloudData.userData
-      ? {
-          ...currentUserData,
-          ...cloudData.userData,
-          checkIn: {
-            ...currentUserData.checkIn,
-            ...(cloudData.userData.checkIn || {}),
-          },
-        }
-      : currentUserData;
+    const nextUserData = normalizeUserData(
+      cloudData.userData
+        ? {
+            ...currentUserData,
+            ...cloudData.userData,
+            checkIn: {
+              ...currentUserData.checkIn,
+              ...(cloudData.userData.checkIn || {}),
+            },
+          }
+        : currentUserData,
+    );
     store.store = {
       ...store.store,
       userData: nextUserData,
@@ -401,38 +481,145 @@ class StoreService {
   }
 
   getUserData(): UserData {
-    return this.getStore().get("userData") || defaultUserData;
+    return normalizeUserData(this.getStore().get("userData"));
   }
 
-  performBuyFrame(frameId: string): {
-    success: boolean;
-    code?: string;
-  } {
-    const store = this.getStore();
-    const userData = store.get("userData") || defaultUserData;
-    const frame = AVATAR_FRAMES.find((candidate) => candidate.id === frameId);
+  async performUnlockFrame(frameId: string): Promise<ManualUnlockResult> {
+    return this.enqueueManualUnlock(async () => {
+      const userData = this.getUserData();
+      const frame = AVATAR_FRAMES.find((candidate) => candidate.id === frameId);
 
-    if (!frame || frame.unlockMethod !== "bzcoin") {
-      return { success: false, code: "invalid_frame" };
+      if (!frame) return { success: false, code: "invalid_item" };
+      return this.unlockCosmetic(
+        userData,
+        frameId,
+        frame.unlock,
+        userData.ownedFrames,
+        (id) => {
+          userData.equippedFrame = id;
+        },
+      );
+    });
+  }
+
+  async performUnlockGameCardProduct(
+    productId: string,
+  ): Promise<ManualUnlockResult> {
+    return this.enqueueManualUnlock(async () => {
+      const userData = this.getUserData();
+      const product = getGameCardProduct(productId);
+
+      if (!product) return { success: false, code: "invalid_item" };
+      return this.unlockCosmetic(
+        userData,
+        productId,
+        product.unlock,
+        userData.ownedGameCardProducts,
+        (id) => {
+          userData.equippedGameCardProduct = id;
+        },
+      );
+    });
+  }
+
+  async getGameCardProductUnlockProgress(
+    productId: string,
+  ): Promise<ManualUnlockResult> {
+    const userData = this.getUserData();
+    const product = getGameCardProduct(productId);
+    if (!product) return { success: false, code: "invalid_item" };
+    if (userData.ownedGameCardProducts.includes(productId)) {
+      return { success: true, code: "already_owned" };
     }
-    const coinCost = frame.unlockValue;
+    return this.checkManualUnlockCondition(product.unlock, userData);
+  }
 
-    if (!userData.ownedFrames) userData.ownedFrames = [];
-
-    if (userData.ownedFrames.includes(frameId)) {
+  private async unlockCosmetic(
+    userData: UserData,
+    itemId: string,
+    condition: ManualUnlockCondition,
+    ownedItems: string[],
+    equip: (itemId: string) => void,
+  ): Promise<ManualUnlockResult> {
+    if (ownedItems.includes(itemId)) {
       return { success: false, code: "already_owned" };
     }
 
-    if ((userData.bzCoins || 0) < coinCost) {
-      return { success: false, code: "insufficient_coins" };
+    const result = await this.checkManualUnlockCondition(condition, userData);
+    if (!result.success) return result;
+
+    if (condition.type === "bzcoin") {
+      userData.bzCoins -= condition.amount;
     }
-
-    userData.bzCoins -= coinCost;
-    userData.ownedFrames.push(frameId);
-    userData.equippedFrame = frameId;
-
-    store.set("userData", userData);
+    ownedItems.push(itemId);
+    equip(itemId);
+    this.getStore().set("userData", userData);
     return { success: true };
+  }
+
+  private async checkManualUnlockCondition(
+    condition: ManualUnlockCondition,
+    userData: UserData,
+  ): Promise<ManualUnlockResult> {
+    switch (condition.type) {
+      case "bzcoin":
+        return {
+          success: userData.bzCoins >= condition.amount,
+          code:
+            userData.bzCoins >= condition.amount
+              ? undefined
+              : "insufficient_coins",
+          current: userData.bzCoins,
+          required: condition.amount,
+        };
+      case "playtime": {
+        const current = await playSessionDatabaseService.getTotalPlayDuration();
+        return current >= condition.durationMs
+          ? { success: true }
+          : {
+              success: false,
+              code: "condition_not_met",
+              current,
+              required: condition.durationMs,
+            };
+      }
+      case "total_checkin": {
+        const current = userData.checkIn.totalDays;
+        return current >= condition.days
+          ? { success: true }
+          : {
+              success: false,
+              code: "condition_not_met",
+              current,
+              required: condition.days,
+            };
+      }
+      case "consecutive_checkin": {
+        const current = userData.checkIn.maxConsecutiveDays;
+        return current >= condition.days
+          ? { success: true }
+          : {
+              success: false,
+              code: "condition_not_met",
+              current,
+              required: condition.days,
+            };
+      }
+      case "date_playtime": {
+        const current = await playSessionDatabaseService.getPlayDurationForDate(
+          condition.date,
+        );
+        return current >= condition.durationMs
+          ? { success: true }
+          : {
+              success: false,
+              code: "condition_not_met",
+              current,
+              required: condition.durationMs,
+              targetDate: condition.date,
+            };
+      }
+    }
   }
 
   performSaveNicknameStyle(
@@ -443,9 +630,9 @@ class StoreService {
     code?: string;
   } {
     const store = this.getStore();
-    const userData = store.get("userData") || defaultUserData;
+    const userData = this.getUserData();
 
-    if ((userData.bzCoins || 0) < coinCost) {
+    if (userData.bzCoins < coinCost) {
       return { success: false, code: "insufficient_coins" };
     }
 
@@ -457,9 +644,7 @@ class StoreService {
 
   performEquipFrame(frameId: string): void {
     const store = this.getStore();
-    const userData = store.get("userData") || defaultUserData;
-
-    if (!userData.ownedFrames) userData.ownedFrames = [];
+    const userData = this.getUserData();
 
     if (!userData.ownedFrames.includes(frameId)) return;
 
@@ -467,9 +652,18 @@ class StoreService {
     store.set("userData", userData);
   }
 
+  performEquipGameCardProduct(productId: string): void {
+    const store = this.getStore();
+    const userData = this.getUserData();
+    if (!getGameCardProduct(productId)) return;
+    if (!userData.ownedGameCardProducts.includes(productId)) return;
+    userData.equippedGameCardProduct = productId;
+    store.set("userData", userData);
+  }
+
   performUnequipFrame(frameId: string): void {
     const store = this.getStore();
-    const userData = store.get("userData") || defaultUserData;
+    const userData = this.getUserData();
 
     if (userData.equippedFrame === frameId) {
       userData.equippedFrame = undefined;
@@ -477,17 +671,26 @@ class StoreService {
     }
   }
 
+  performUnequipGameCardProduct(productId: string): void {
+    const store = this.getStore();
+    const userData = this.getUserData();
+    if (userData.equippedGameCardProduct === productId) {
+      userData.equippedGameCardProduct = undefined;
+      store.set("userData", userData);
+    }
+  }
+
   addBzCoins(amount: number): number {
     const store = this.getStore();
-    const userData = store.get("userData") || defaultUserData;
-    userData.bzCoins = (userData.bzCoins || 0) + amount;
+    const userData = this.getUserData();
+    userData.bzCoins += amount;
     store.set("userData", userData);
     return userData.bzCoins;
   }
 
   private applyPlaytimeRewards(oldTime: number, newTime: number): number {
     const store = this.getStore();
-    const userData = store.get("userData") || defaultUserData;
+    const userData = this.getUserData();
 
     const oldIntervals = Math.floor(oldTime / PLAYTIME_REWARD_INTERVAL_MS);
     const newIntervals = Math.floor(newTime / PLAYTIME_REWARD_INTERVAL_MS);
@@ -495,33 +698,12 @@ class StoreService {
     const rewardCount = newIntervals - oldIntervals;
     if (rewardCount > 0) {
       const reward = rewardCount * PLAYTIME_REWARD_AMOUNT;
-      userData.bzCoins = (userData.bzCoins || 0) + reward;
+      userData.bzCoins += reward;
       logger.info(`[StoreService] Awarded ${reward} coins for playtime.`);
     }
 
-    this.tryUnlockPlaytimeFrames(userData, newTime);
-
     store.set("userData", userData);
     return rewardCount * PLAYTIME_REWARD_AMOUNT;
-  }
-
-  private tryUnlockPlaytimeFrames(
-    userData: UserData,
-    cumulativePlayTime: number,
-  ): void {
-    if (!userData.ownedFrames) userData.ownedFrames = [];
-    for (const f of AVATAR_FRAMES) {
-      if (userData.ownedFrames.includes(f.id)) continue;
-      if (
-        f.unlockMethod === "playtime" &&
-        cumulativePlayTime >= f.unlockValue
-      ) {
-        userData.ownedFrames.push(f.id);
-        logger.info(
-          `[StoreService] Auto-unlocked frame: ${f.id} (playtime ${cumulativePlayTime}ms)`,
-        );
-      }
-    }
   }
 
   private formatDate(date: Date): string {
@@ -545,7 +727,7 @@ class StoreService {
     code?: string;
   }> {
     const store = this.getStore();
-    const userData = store.get("userData") || defaultUserData;
+    const userData = this.getUserData();
 
     const todayStr = this.formatDate(new Date());
 
@@ -564,6 +746,10 @@ class StoreService {
     } else {
       userData.checkIn.consecutiveDays = 1;
     }
+    userData.checkIn.maxConsecutiveDays = Math.max(
+      userData.checkIn.maxConsecutiveDays,
+      userData.checkIn.consecutiveDays,
+    );
 
     const cycleDay = ((userData.checkIn.consecutiveDays - 1) % 7) + 1;
     let reward = cycleDay * 10;
@@ -572,10 +758,8 @@ class StoreService {
     }
 
     userData.checkIn.lastCheckInDate = todayStr;
-    userData.checkIn.totalDays = (userData.checkIn.totalDays || 0) + 1;
-    userData.bzCoins = (userData.bzCoins || 0) + reward;
-
-    this.tryUnlockCheckInFrames(userData);
+    userData.checkIn.totalDays += 1;
+    userData.bzCoins += reward;
 
     store.set("userData", userData);
     return {
@@ -583,31 +767,6 @@ class StoreService {
       coins: reward,
       days: userData.checkIn.consecutiveDays,
     };
-  }
-
-  private tryUnlockCheckInFrames(userData: UserData): void {
-    if (!userData.ownedFrames) userData.ownedFrames = [];
-    for (const f of AVATAR_FRAMES) {
-      if (userData.ownedFrames.includes(f.id)) continue;
-      if (
-        f.unlockMethod === "consecutive_checkin" &&
-        (userData.checkIn?.consecutiveDays || 0) >= f.unlockValue
-      ) {
-        userData.ownedFrames.push(f.id);
-        logger.info(
-          `[StoreService] Auto-unlocked frame: ${f.id} (consecutive ${userData.checkIn?.consecutiveDays}d)`,
-        );
-      }
-      if (
-        f.unlockMethod === "total_checkin" &&
-        (userData.checkIn?.totalDays || 0) >= f.unlockValue
-      ) {
-        userData.ownedFrames.push(f.id);
-        logger.info(
-          `[StoreService] Auto-unlocked frame: ${f.id} (total ${userData.checkIn?.totalDays}d)`,
-        );
-      }
-    }
   }
 
   async addGame(game: GameRecord): Promise<void> {
@@ -1353,6 +1512,7 @@ class StoreService {
     store.set("settings", {
       ...current,
       ignoredUpdateVersion: version,
+      skipStartupUpdateCheck: true,
     });
   }
 

@@ -13,195 +13,61 @@
         align="center"
         style="margin-bottom: 24px"
       >
-        <h1 style="margin: 0">{{ t("library.title") }}</h1>
-        <n-space>
-          <n-tooltip trigger="hover">
-            <template #trigger>
-              <n-button quaternary @click="cycleLayoutMode">
-                <template #icon>
-                  <n-icon :size="20">
-                    <GridOutline v-if="nextLayoutMode === 'icon'" />
-                    <LibraryOutline v-else-if="nextLayoutMode === 'steam'" />
-                    <AppsOutline v-else />
-                  </n-icon>
-                </template>
-              </n-button>
-            </template>
-            {{ nextLayoutLabel }}
-          </n-tooltip>
-          <n-button
-            v-if="isReorderMode"
-            type="success"
-            @click.stop="isReorderMode = false"
-          >
-            {{ t("common.save") }}
-          </n-button>
-          <n-button type="primary" @click="handleAddGame">{{
-            t("library.addGameButton")
-          }}</n-button>
-        </n-space>
-      </n-space>
-
-      <n-empty
-        v-if="
-          !showInitialSkeleton &&
-          gameStore.games.length === 0 &&
-          newGameImportTasks.length === 0
-        "
-        :description="t('library.emptyState')"
-        style="margin-top: 100px"
-      >
-        <template #extra>
-          <n-button @click="handleAddGame">{{
-            t("library.addGameShort")
-          }}</n-button>
-        </template>
-      </n-empty>
-
-      <template v-else-if="layoutMode === 'steam'">
-        <div class="steam-layout">
-          <aside class="steam-sidebar">
-            <div class="steam-sidebar-title">{{ t("library.allGames") }}</div>
-            <div class="steam-sidebar-list">
-              <template v-if="showInitialSkeleton">
-                <n-space vertical :size="10">
-                  <n-skeleton height="56px" :repeat="6" />
-                </n-space>
+      <h1 style="margin: 0">{{ t("library.title") }}</h1>
+      <n-space>
+        <n-tooltip trigger="hover">
+          <template #trigger>
+            <n-button quaternary @click="cycleLayoutMode">
+              <template #icon>
+                <n-icon :size="20">
+                  <GridOutline v-if="nextLayoutMode === 'icon'" />
+                  <LibraryOutline v-else-if="nextLayoutMode === 'steam'" />
+                  <AppsOutline v-else />
+                </n-icon>
               </template>
-              <n-empty
-                v-else-if="
-                  displayedGames.length === 0 && newGameImportTasks.length === 0
-                "
-                :description="
-                  searchQuery
-                    ? t('library.noSearchResults')
-                    : t('library.emptyState')
-                "
-                size="small"
-              />
-              <div
-                v-for="task in newGameImportTasks"
-                :key="task.taskId"
-                class="steam-list-item steam-import-list-item import-position-last"
-                @click="selectedSteamGameId = ''"
-              >
-                <div class="steam-list-thumb">
-                  <GameImportPlaceholder
-                    :task="task"
-                    compact
-                    @cancel="handleCancelImport"
-                    @retry="handleRetryImport"
-                    @dismiss="handleDismissImport"
-                  />
-                </div>
-                <div class="steam-list-text">
-                  <div class="steam-list-name">{{ task.gameName }}</div>
-                  <n-progress
-                    type="line"
-                    :percentage="task.progress || 0"
-                    :processing="task.progress === null"
-                    :show-indicator="false"
-                    :height="5"
-                  />
-                </div>
-              </div>
-              <button
-                v-for="game in visibleDisplayedGames"
-                :key="game.id"
-                type="button"
-                class="steam-list-item"
-                :class="{ active: selectedSteamGameId === game.id }"
-                @click="handleSteamListClick(game.id)"
-                @dblclick="handleSteamListClick(game.id)"
-                @contextmenu.prevent="handleContextMenu($event, game.id)"
-              >
-                <div class="steam-list-thumb">
-                  <GameIcon :game-id="game.id" />
-                </div>
-                <div class="steam-list-text">
-                  <div class="steam-list-name">{{ game.name }}</div>
-                  <div class="steam-list-meta">
-                    <span>{{ game.version }}</span>
-                    <span>{{ game.author }}</span>
-                  </div>
-                  <n-progress
-                    v-if="tasksForGame(game.id).length"
-                    type="line"
-                    :percentage="tasksForGame(game.id)[0].progress || 0"
-                    :processing="tasksForGame(game.id)[0].progress === null"
-                    :show-indicator="false"
-                    :height="4"
-                  />
-                </div>
-                <div class="steam-list-flags">
-                  <n-icon
-                    v-if="isFavorite(game.id)"
-                    class="steam-flag-heart"
-                    :size="16"
-                    color="#d03050"
-                    :component="Heart"
-                  />
-                  <span
-                    v-if="gameStore.runningGameIds.has(game.id)"
-                    class="steam-flag steam-flag-running"
-                    >RUN</span
-                  >
-                </div>
-              </button>
-            </div>
-          </aside>
+            </n-button>
+          </template>
+          {{ nextLayoutLabel }}
+        </n-tooltip>
+        <n-button
+          v-if="isReorderMode"
+          type="success"
+          @click.stop="isReorderMode = false"
+        >
+          {{ t("common.save") }}
+        </n-button>
+        <n-button type="primary" @click="handleAddGame">{{
+          t("library.addGameButton")
+        }}</n-button>
+      </n-space>
+    </n-space>
 
-          <section class="steam-main">
-            <div class="steam-toolbar">
-              <div class="steam-toolbar-info">
-                <span class="steam-game-count">{{ gameCountLabel }}</span>
-              </div>
-              <n-space align="center" :size="12" wrap>
-                <div class="steam-sort-wrap">
-                  <span class="steam-sort-label">{{
-                    t("library.sortBy")
-                  }}</span>
-                  <n-select
-                    v-model:value="sortMode"
-                    :options="sortOptions"
-                    size="small"
-                    class="steam-sort-select"
-                  />
-                </div>
-                <n-input
-                  v-model:value="searchQuery"
-                  clearable
-                  :placeholder="t('library.searchPlaceholder')"
-                  class="steam-search"
-                >
-                  <template #prefix>
-                    <n-icon><SearchOutline /></n-icon>
-                  </template>
-                </n-input>
+    <n-empty
+      v-if="
+        !showInitialSkeleton &&
+        gameStore.games.length === 0 &&
+        newGameImportTasks.length === 0
+      "
+      :description="t('library.emptyState')"
+      style="margin-top: 100px"
+    >
+      <template #extra>
+        <n-button @click="handleAddGame">{{
+          t("library.addGameShort")
+        }}</n-button>
+      </template>
+    </n-empty>
+
+    <template v-else-if="layoutMode === 'steam'">
+      <div class="steam-layout">
+        <aside class="steam-sidebar">
+          <div class="steam-sidebar-title">{{ t("library.allGames") }}</div>
+          <div class="steam-sidebar-list">
+            <template v-if="showInitialSkeleton">
+              <n-space vertical :size="10">
+                <n-skeleton height="56px" :repeat="6" />
               </n-space>
-            </div>
-
-            <GameDetailView
-              v-if="selectedSteamGameId"
-              :game-id="selectedSteamGameId"
-              embedded
-              class="steam-detail-scroll"
-              @back="selectedSteamGameId = ''"
-              @deleted="handleSteamDetailDeleted"
-            />
-            <div v-else-if="showInitialSkeleton" class="steam-cover-grid">
-              <n-card
-                v-for="index in 8"
-                :key="index"
-                size="small"
-                embedded
-                class="steam-cover-skeleton"
-              >
-                <n-skeleton height="180px" />
-                <n-skeleton text style="margin-top: 12px" />
-                <n-skeleton text :width="120" />
-              </n-card>
-            </div>
+            </template>
             <n-empty
               v-else-if="
                 displayedGames.length === 0 && newGameImportTasks.length === 0
@@ -211,99 +77,177 @@
                   ? t('library.noSearchResults')
                   : t('library.emptyState')
               "
-              style="margin-top: 80px"
+              size="small"
             />
-            <div v-else class="steam-cover-grid">
-              <div
-                v-for="task in newGameImportTasks"
-                :key="task.taskId"
-                class="steam-card-shell import-position-last"
-              >
+            <div
+              v-for="task in newGameImportTasks"
+              :key="task.taskId"
+              class="steam-list-item steam-import-list-item import-position-last"
+              @click="selectedSteamGameId = ''"
+            >
+              <div class="steam-list-thumb">
                 <GameImportPlaceholder
                   :task="task"
+                  compact
                   @cancel="handleCancelImport"
                   @retry="handleRetryImport"
                   @dismiss="handleDismissImport"
                 />
               </div>
-              <div
-                v-for="(game, index) in visibleDisplayedGames"
-                :key="game.id"
-                class="steam-card-shell"
-                :class="{
-                  active: selectedSteamGameId === game.id,
-                  shake: isReorderMode,
-                }"
-                :data-steam-cover-id="game.id"
-                :draggable="isReorderMode"
-                @dragstart="handleDragStart($event, index)"
-                @dragover.prevent="handleDragOver($event, index)"
-                @drop="handleDrop($event, index)"
-                @mousedown="handleMouseDown"
-                @mouseup="clearLongPress"
-                @mouseleave="clearLongPress"
-                @contextmenu.prevent="handleContextMenu($event, game.id)"
-              >
-                <GameCard
-                  :game="game"
-                  :import-tasks="tasksForGame(game.id)"
-                  @click="handleSteamCardClick"
-                  @cancel-import="handleCancelImport"
-                  @retry-import="handleRetryImport"
-                  @dismiss-import="handleDismissImport"
+              <div class="steam-list-text">
+                <div class="steam-list-name">{{ task.gameName }}</div>
+                <n-progress
+                  type="line"
+                  :percentage="task.progress || 0"
+                  :processing="task.progress === null"
+                  :show-indicator="false"
+                  :height="5"
                 />
-                <div v-if="isReorderMode" class="reorder-overlay"></div>
               </div>
             </div>
-          </section>
-        </div>
-      </template>
-
-      <template v-else>
-        <div
-          v-if="!showInitialSkeleton"
-          class="library-game-grid"
-          :class="layoutMode === 'icon' ? 'is-icon' : 'is-card'"
-        >
-          <div
-            v-for="task in newGameImportTasks"
-            :key="task.taskId"
-            class="library-game-grid-item import-position-last"
-          >
-            <GameImportPlaceholder
-              :task="task"
-              :compact="layoutMode === 'icon'"
-              @cancel="handleCancelImport"
-              @retry="handleRetryImport"
-              @dismiss="handleDismissImport"
-            />
+            <button
+              v-for="game in visibleDisplayedGames"
+              :key="game.id"
+              type="button"
+              class="steam-list-item"
+              :class="{ active: selectedSteamGameId === game.id }"
+              @click="handleSteamListClick(game.id)"
+              @dblclick="handleSteamListClick(game.id)"
+              @contextmenu.prevent="handleContextMenu($event, game.id)"
+            >
+              <div class="steam-list-thumb">
+                  <GameIconCard :game="game" :interactive="false" />
+              </div>
+              <div class="steam-list-text">
+                <div class="steam-list-name">{{ game.name }}</div>
+                <div class="steam-list-meta">
+                  <span>{{ game.version }}</span>
+                  <span>{{ game.author }}</span>
+                </div>
+                <n-progress
+                  v-if="tasksForGame(game.id).length"
+                  type="line"
+                  :percentage="tasksForGame(game.id)[0].progress || 0"
+                  :processing="tasksForGame(game.id)[0].progress === null"
+                  :show-indicator="false"
+                  :height="4"
+                />
+              </div>
+              <div class="steam-list-flags">
+                <n-icon
+                  v-if="isFavorite(game.id)"
+                  class="steam-flag-heart"
+                  :size="16"
+                  color="#d03050"
+                  :component="Heart"
+                />
+                <span
+                  v-if="gameStore.runningGameIds.has(game.id)"
+                  class="steam-flag steam-flag-running"
+                  >RUN</span
+                >
+              </div>
+            </button>
           </div>
-          <div
-            v-for="(game, index) in visibleDisplayedGames"
-            :key="game.id"
-            class="library-game-grid-item"
-            :draggable="isReorderMode"
-            @dragstart="handleDragStart($event, index)"
-            @dragover.prevent="handleDragOver($event, index)"
-            @drop="handleDrop($event, index)"
-            @mousedown="handleMouseDown"
-            @mouseup="clearLongPress"
-            @mouseleave="clearLongPress"
-            @contextmenu.prevent="handleContextMenu($event, game.id)"
-          >
+        </aside>
+
+        <section class="steam-main">
+          <div class="steam-toolbar">
+            <div class="steam-toolbar-info">
+              <span class="steam-game-count">{{ gameCountLabel }}</span>
+            </div>
+            <n-space align="center" :size="12" wrap>
+              <div class="steam-sort-wrap">
+                  <span class="steam-sort-label">{{
+                    t("library.sortBy")
+                  }}</span>
+                <n-select
+                  v-model:value="sortMode"
+                  :options="sortOptions"
+                  size="small"
+                  class="steam-sort-select"
+                />
+              </div>
+              <n-input
+                v-model:value="searchQuery"
+                clearable
+                :placeholder="t('library.searchPlaceholder')"
+                class="steam-search"
+              >
+                <template #prefix>
+                  <n-icon><SearchOutline /></n-icon>
+                </template>
+              </n-input>
+            </n-space>
+          </div>
+
+          <GameDetailView
+            v-if="selectedSteamGameId"
+            :game-id="selectedSteamGameId"
+            embedded
+            class="steam-detail-scroll"
+            @back="selectedSteamGameId = ''"
+            @deleted="handleSteamDetailDeleted"
+          />
+          <div v-else-if="showInitialSkeleton" class="steam-cover-grid">
+            <n-card
+              v-for="index in 8"
+              :key="index"
+              size="small"
+              embedded
+              class="steam-cover-skeleton"
+            >
+              <n-skeleton height="180px" />
+              <n-skeleton text style="margin-top: 12px" />
+              <n-skeleton text :width="120" />
+            </n-card>
+          </div>
+          <n-empty
+            v-else-if="
+              displayedGames.length === 0 && newGameImportTasks.length === 0
+            "
+            :description="
+              searchQuery
+                ? t('library.noSearchResults')
+                : t('library.emptyState')
+            "
+            style="margin-top: 80px"
+          />
+          <div v-else class="steam-cover-grid">
             <div
-              class="game-card-wrapper"
+              v-for="task in newGameImportTasks"
+              :key="task.taskId"
+              class="steam-card-shell import-position-last"
+            >
+              <GameImportPlaceholder
+                :task="task"
+                @cancel="handleCancelImport"
+                @retry="handleRetryImport"
+                @dismiss="handleDismissImport"
+              />
+            </div>
+            <div
+              v-for="(game, index) in visibleDisplayedGames"
+              :key="game.id"
+              class="steam-card-shell"
               :class="{
+                active: selectedSteamGameId === game.id,
                 shake: isReorderMode,
-                'icon-mode': layoutMode === 'icon',
               }"
-              :data-game-id="game.id"
+              :data-steam-cover-id="game.id"
+              :draggable="isReorderMode"
+              @click="handleSteamCardClick(game.id)"
+              @dragstart="handleDragStart($event, index)"
+              @dragover.prevent="handleDragOver($event, index)"
+              @drop="handleDrop($event, index)"
+              @mousedown="handleMouseDown"
+              @mouseup="clearLongPress"
+              @mouseleave="clearLongPress"
+              @contextmenu.prevent="handleContextMenu($event, game.id)"
             >
               <GameCard
                 :game="game"
-                :compact="layoutMode === 'icon'"
                 :import-tasks="tasksForGame(game.id)"
-                @click="goToDetail"
                 @cancel-import="handleCancelImport"
                 @retry-import="handleRetryImport"
                 @dismiss-import="handleDismissImport"
@@ -311,21 +255,85 @@
               <div v-if="isReorderMode" class="reorder-overlay"></div>
             </div>
           </div>
+        </section>
+      </div>
+    </template>
+
+    <template v-else>
+      <div
+        v-if="!showInitialSkeleton"
+        class="library-game-grid"
+        :class="layoutMode === 'icon' ? 'is-icon' : 'is-card'"
+      >
+        <div
+          v-for="task in newGameImportTasks"
+          :key="task.taskId"
+          class="library-game-grid-item import-position-last"
+        >
+          <GameImportPlaceholder
+            :task="task"
+            :compact="layoutMode === 'icon'"
+            @cancel="handleCancelImport"
+            @retry="handleRetryImport"
+            @dismiss="handleDismissImport"
+          />
         </div>
         <div
-          v-else
-          class="library-game-grid"
-          :class="layoutMode === 'icon' ? 'is-icon' : 'is-card'"
+          v-for="(game, index) in visibleDisplayedGames"
+          :key="game.id"
+          class="library-game-grid-item"
+          :draggable="isReorderMode"
+          @click="goToDetail(game.id)"
+          @dragstart="handleDragStart($event, index)"
+          @dragover.prevent="handleDragOver($event, index)"
+          @drop="handleDrop($event, index)"
+          @mousedown="handleMouseDown"
+          @mouseup="clearLongPress"
+          @mouseleave="clearLongPress"
+          @contextmenu.prevent="handleContextMenu($event, game.id)"
         >
-          <div v-for="index in 8" :key="index" class="library-game-grid-item">
-            <n-card size="small" embedded>
-              <n-skeleton height="180px" />
-              <n-skeleton text style="margin-top: 12px" />
-              <n-skeleton text :width="120" />
-            </n-card>
+          <div
+            class="game-card-wrapper"
+            :class="{
+              shake: isReorderMode,
+              'icon-mode': layoutMode === 'icon',
+            }"
+            :data-game-id="game.id"
+          >
+            <GameIconCard
+              v-if="layoutMode === 'icon'"
+              :game="game"
+              :import-tasks="tasksForGame(game.id)"
+              @cancel-import="handleCancelImport"
+              @retry-import="handleRetryImport"
+              @dismiss-import="handleDismissImport"
+            />
+            <GameCard
+              v-else
+              :game="game"
+              :import-tasks="tasksForGame(game.id)"
+              @cancel-import="handleCancelImport"
+              @retry-import="handleRetryImport"
+              @dismiss-import="handleDismissImport"
+            />
+            <div v-if="isReorderMode" class="reorder-overlay"></div>
           </div>
         </div>
-      </template>
+      </div>
+      <div
+        v-else
+        class="library-game-grid"
+        :class="layoutMode === 'icon' ? 'is-icon' : 'is-card'"
+      >
+        <div v-for="index in 8" :key="index" class="library-game-grid-item">
+          <n-card size="small" embedded>
+            <n-skeleton height="180px" />
+            <n-skeleton text style="margin-top: 12px" />
+            <n-skeleton text :width="120" />
+          </n-card>
+        </div>
+      </div>
+    </template>
 
     <div
       v-if="isDragActive && !isReorderMode"
@@ -569,7 +577,7 @@ import {
 import { useGameStore } from "../stores/useGameStore";
 import { useSettingsStore } from "../stores/useSettingsStore";
 import GameCard from "../components/game/GameCard.vue";
-import GameIcon from "../components/game/GameIcon.vue";
+import GameIconCard from "../components/game/GameIconCard.vue";
 import GameImportPlaceholder from "../components/game/GameImportPlaceholder.vue";
 import GameDeleteModal from "../components/game/GameDeleteModal.vue";
 import GameDetailView from "./GameDetailView.vue";
@@ -1384,9 +1392,9 @@ const handleConfirmDraftImport = async () => {
   width: 42px;
   height: 42px;
   border-radius: 8px;
-  overflow: hidden;
+  overflow: visible;
   flex-shrink: 0;
-  background: var(--bz-bg-card-placeholder);
+  background: transparent;
 }
 
 .steam-list-text {
@@ -1517,6 +1525,7 @@ const handleConfirmDraftImport = async () => {
 .steam-card-shell {
   position: relative;
   min-width: 0;
+  cursor: pointer;
   border-radius: 12px;
   transition:
     transform 0.2s ease,
@@ -1546,7 +1555,12 @@ const handleConfirmDraftImport = async () => {
 
 .game-card-wrapper {
   position: relative;
-  transition: transform 0.2s;
+  cursor: pointer;
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.game-card-wrapper:hover {
+  transform: translateY(-6px);
 }
 
 .library-game-grid {
@@ -1569,6 +1583,7 @@ const handleConfirmDraftImport = async () => {
 .library-game-grid-item {
   width: 100%;
   min-width: 0;
+  cursor: pointer;
 }
 
 .library-game-grid.is-icon .library-game-grid-item {
@@ -1631,17 +1646,6 @@ const handleConfirmDraftImport = async () => {
 
 .shake {
   animation: shake 0.3s infinite;
-}
-
-.game-card-wrapper.icon-mode {
-  transition:
-    transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
-    box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.game-card-wrapper.icon-mode:hover {
-  transform: translateY(-6px);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
 }
 
 .import-draft-form :deep(.n-form-item-label__text) {

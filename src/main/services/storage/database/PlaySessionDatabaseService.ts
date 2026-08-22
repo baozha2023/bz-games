@@ -78,11 +78,65 @@ class PlaySessionDatabaseService {
     );
   }
 
-  async getTotalPlayDuration(): Promise<number> {
-    const row = await this.database.get<{ total: number }>("SELECT COALESCE(SUM(duration_ms), 0) as total FROM play_sessions WHERE duration_ms IS NOT NULL");
-    return row?.total || 0;
+  async getTotalPlayDuration(now = Date.now()): Promise<number> {
+    const sessions = await this.database.all<{
+      start_time: number;
+      end_time: number | null;
+    }>("SELECT start_time, end_time FROM play_sessions");
+    return sessions.reduce(
+      (total, session) =>
+        total +
+        Math.max(0, (session.end_time ?? now) - session.start_time),
+      0,
+    );
   }
 
+  async getPlayDurationForDate(
+    date: string,
+    now = Date.now(),
+  ): Promise<number> {
+    const dayRange = getLocalDayRange(date);
+    if (!dayRange) return 0;
+
+    const sessions = await this.database.all<{
+      start_time: number;
+      end_time: number | null;
+    }>(
+      `SELECT start_time, end_time
+       FROM play_sessions
+       WHERE start_time < ?
+         AND COALESCE(end_time, ?) > ?`,
+      [dayRange.end, now, dayRange.start],
+    );
+
+    return sessions.reduce((total, session) => {
+      const sessionEnd = session.end_time ?? now;
+      const overlapStart = Math.max(session.start_time, dayRange.start);
+      const overlapEnd = Math.min(sessionEnd, dayRange.end);
+      return total + Math.max(0, overlapEnd - overlapStart);
+    }, 0);
+  }
+
+}
+
+function getLocalDayRange(
+  date: string,
+): { start: number; end: number } | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const startDate = new Date(year, month - 1, day);
+  if (
+    startDate.getFullYear() !== year ||
+    startDate.getMonth() !== month - 1 ||
+    startDate.getDate() !== day
+  ) {
+    return null;
+  }
+  const endDate = new Date(year, month - 1, day + 1);
+  return { start: startDate.getTime(), end: endDate.getTime() };
 }
 
 export const playSessionDatabaseService = new PlaySessionDatabaseService();

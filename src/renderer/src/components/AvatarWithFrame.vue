@@ -1,5 +1,9 @@
 <template>
-  <div class="awf-wrapper" :style="wrapperStyle">
+  <div
+    class="awf-wrapper"
+    :class="{ 'awf-wrapper--hoverable': hoverable }"
+    :style="wrapperStyle"
+  >
     <n-avatar round :size="size" :src="src">
       <template v-if="!src">
         {{ name?.charAt(0)?.toUpperCase() || '?' }}
@@ -17,19 +21,22 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { NAvatar } from 'naive-ui'
-import { normalizeAvatarFrameFileName } from '../../../shared/avatar-frames'
-
-const FRAME_MARGIN = 60
+import {
+  getAvatarFrameByFileName,
+  normalizeAvatarFrameFileName,
+} from '../../../shared/avatar-frames'
 
 const props = defineProps<{
   src?: string
   name?: string
   size: number
   frameFileName?: string
+  hoverable?: boolean
 }>()
 
 const frameDataUrl = ref<string | null>(null)
 const frameNaturalWidth = ref<number>(0)
+const frameNaturalHeight = ref<number>(0)
 let frameLoadRequestId = 0
 
 async function loadFrame(value: unknown) {
@@ -38,6 +45,7 @@ async function loadFrame(value: unknown) {
   if (!fileName) {
     frameDataUrl.value = null
     frameNaturalWidth.value = 0
+    frameNaturalHeight.value = 0
     return
   }
 
@@ -47,6 +55,7 @@ async function loadFrame(value: unknown) {
     if (!dataUrl) {
       frameDataUrl.value = null
       frameNaturalWidth.value = 0
+      frameNaturalHeight.value = 0
       return
     }
     frameDataUrl.value = dataUrl
@@ -54,17 +63,20 @@ async function loadFrame(value: unknown) {
     img.onload = () => {
       if (requestId !== frameLoadRequestId) return
       frameNaturalWidth.value = img.naturalWidth
+      frameNaturalHeight.value = img.naturalHeight
     }
     img.onerror = () => {
       if (requestId !== frameLoadRequestId) return
       frameDataUrl.value = null
       frameNaturalWidth.value = 0
+      frameNaturalHeight.value = 0
     }
     img.src = dataUrl
   } catch {
     if (requestId !== frameLoadRequestId) return
     frameDataUrl.value = null
     frameNaturalWidth.value = 0
+    frameNaturalHeight.value = 0
   }
 }
 
@@ -77,17 +89,20 @@ const wrapperStyle = computed(() => ({
 
 const overlayStyle = computed(() => {
   const w = frameNaturalWidth.value
-  if (!w) return { display: 'none' }
+  const h = frameNaturalHeight.value
+  const frame = getAvatarFrameByFileName(props.frameFileName)
+  if (!w || !h || !frame) return { display: 'none' }
 
-  const contentSize = w - FRAME_MARGIN * 2
-  const scale = w / contentSize
-  const offsetPercent = -50 * (scale - 1)
+  const { top, right, bottom, left } = frame.contentInsetPx
+  const contentWidth = w - left - right
+  const contentHeight = h - top - bottom
+  if (contentWidth <= 0 || contentHeight <= 0) return { display: 'none' }
 
   return {
-    width: `${(scale * 100).toFixed(2)}%`,
-    height: `${(scale * 100).toFixed(2)}%`,
-    top: `${offsetPercent.toFixed(2)}%`,
-    left: `${offsetPercent.toFixed(2)}%`,
+    width: `${((w / contentWidth) * 100).toFixed(2)}%`,
+    height: `${((h / contentHeight) * 100).toFixed(2)}%`,
+    top: `${((-top / contentHeight) * 100).toFixed(2)}%`,
+    left: `${((-left / contentWidth) * 100).toFixed(2)}%`,
   }
 })
 </script>
@@ -101,9 +116,27 @@ const overlayStyle = computed(() => {
   flex-shrink: 0;
 }
 
+.awf-wrapper--hoverable {
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.awf-wrapper--hoverable:hover {
+  transform: scale(1.08);
+}
+
 .awf-overlay {
   position: absolute;
   pointer-events: none;
   z-index: 1;
+}
+
+.awf-wrapper--hoverable .awf-overlay {
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+  transition: filter 0.2s ease;
+}
+
+.awf-wrapper--hoverable:hover .awf-overlay {
+  filter: drop-shadow(0 8px 12px rgba(0, 0, 0, 0.22));
 }
 </style>

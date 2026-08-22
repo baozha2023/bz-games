@@ -1,9 +1,12 @@
 {
   "name": "bz-launcher",
-  "version": "3.2.3",
+  "version": "3.3.0",
   "description": "BZ-Games game platform",
   "main": "./out/main/index.js",
-  "author": "BZ-Games",
+  "author": {
+    "name": "baozha2023",
+    "email": "a17238716972022@163.com"
+  },
   "license": "GPL-3.0-only",
   "repository": {
     "type": "git",
@@ -16,13 +19,14 @@
     "typecheck:web": "vue-tsc --noEmit -p tsconfig.web.json",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "check:config": "node scripts/check-config-examples.mjs",
-    "test": "npm run test:import && npm run test:market && npm run test:manifest && npm run test:nickname && npm run test:avatar-frame && npm run test:feedback && npm run test:database && npm run test:all --prefix relay-server",
-    "test:import": "vitest run src/main/utils/fileUtils.test.ts src/main/services/game/GameImportTaskService.test.ts src/renderer/src/stores/useGameStore.test.ts",
+    "test": "npm run test:import && npm run test:market && npm run test:manifest && npm run test:nickname && npm run test:avatar-frame && npm run test:game-card && npm run test:feedback && npm run test:database && npm run test:all --prefix relay-server",
+    "test:import": "vitest run src/main/utils/fileUtils.test.ts src/main/services/game/GameImportTaskService.test.ts src/main/services/game/ProcessTreeService.test.ts src/renderer/src/stores/useGameStore.test.ts",
     "test:market": "vitest run src/main/services/market",
     "test:manifest": "vitest run src/shared/game-manifest.test.ts src/main/services/game/WebWindowStartup.test.ts bz-games-admin/src/utils/manifest-entry.test.ts",
     "test:feedback": "vitest run src/main/services/system/FeedbackService.test.ts",
     "test:nickname": "vitest run src/shared/types/store.types.test.ts",
-    "test:avatar-frame": "vitest run src/shared/avatar-frames.test.ts",
+    "test:avatar-frame": "vitest run src/shared/avatar-frames.test.ts src/shared/frame-assets.test.ts",
+    "test:game-card": "vitest run src/shared/game-card-products.test.ts",
     "test:database": "node scripts/run-database-test.mjs",
     "start": "electron-vite preview",
     "dev": "electron-vite dev",

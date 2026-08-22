@@ -125,6 +125,10 @@ export function registerGameIpc() {
     return gameManager.launch(id, version);
   });
 
+  ipcMain.handle(IPC.GAME_GET_RUNNING_IDS, () =>
+    gameManager.getRunningGameIds(),
+  );
+
   ipcMain.handle(IPC.GAME_GET_ALL, async () => {
     return await GameLoader.getAllGames();
   });

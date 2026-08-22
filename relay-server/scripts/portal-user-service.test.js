@@ -10,6 +10,7 @@ function user(id, login, role) {
     github_id: String(208792844 + id),
     login,
     name: login,
+    nickname: `${login}-nickname`,
     avatar_url: "https://example.com/avatar.png",
     profile_url: `https://github.com/${login}`,
     email: `${login}@example.com`,
@@ -121,6 +122,7 @@ test("user list is administrator-only, paginated and exposes all roles", async (
     assert.equal(body.total, 3);
     assert.equal(body.items[0].role, "super_administrator");
     assert.equal(body.items[1].role, "creator");
+    assert.equal(body.items[0].nickname, "baozha2023-nickname");
   } finally {
     await app.close();
   }

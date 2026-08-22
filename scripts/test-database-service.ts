@@ -8,6 +8,7 @@ import {
   bzGamesDatabase,
 } from "../src/main/services/storage/database/BzGamesDatabase";
 import { storeService } from "../src/main/services/storage/StoreService";
+import { playSessionDatabaseService } from "../src/main/services/storage/database/PlaySessionDatabaseService";
 import {
   isValidDownloadUrl,
   isValidMarketImageUrl,
@@ -207,6 +208,116 @@ async function verifyReinstallRestoresDerivedData(): Promise<void> {
   assert.equal(await count(bzGamesDatabase, "achievement_unlocks"), 1);
 }
 
+function localDateString(date: Date): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+async function verifyManualUnlockProgressData(): Promise<void> {
+  const originalUserData = structuredClone(storeService.getUserData());
+  const now = new Date();
+  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const yesterdayString = localDateString(yesterday);
+
+  storeService.applyCloudConfig({
+    userData: {
+      ...originalUserData,
+      checkIn: {
+        ...originalUserData.checkIn,
+        lastCheckInDate: yesterdayString,
+        consecutiveDays: 4,
+        maxConsecutiveDays: 6,
+        totalDays: 10,
+      },
+    },
+  });
+  const continued = await storeService.performCheckIn();
+  assert.equal(continued.success, true);
+  assert.equal(storeService.getUserData().checkIn.consecutiveDays, 5);
+  assert.equal(storeService.getUserData().checkIn.maxConsecutiveDays, 6);
+
+  storeService.applyCloudConfig({
+    userData: {
+      ...storeService.getUserData(),
+      checkIn: {
+        ...storeService.getUserData().checkIn,
+        lastCheckInDate: "2000-01-01",
+        consecutiveDays: 5,
+        maxConsecutiveDays: 6,
+      },
+    },
+  });
+  const afterMissedDay = await storeService.performCheckIn();
+  assert.equal(afterMissedDay.success, true);
+  assert.equal(storeService.getUserData().checkIn.consecutiveDays, 1);
+  assert.equal(storeService.getUserData().checkIn.maxConsecutiveDays, 6);
+
+  const targetStart = new Date(2027, 1, 6, 0, 0, 0, 0).getTime();
+  const targetEnd = new Date(2027, 1, 7, 0, 0, 0, 0).getTime();
+  const beforeMidnight = targetStart - 30 * 60 * 1000;
+  const afterMidnight = targetEnd + 40 * 60 * 1000;
+  const activeNow = new Date(2027, 1, 6, 12, 30, 0, 0).getTime();
+
+  await bzGamesDatabase.run(
+    `INSERT INTO play_sessions
+      (id, game_id, game_name, version, start_time, end_time, duration_ms)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [
+      "date-playtime-before-midnight",
+      "date-playtime",
+      "date-playtime",
+      "1.0.0",
+      beforeMidnight,
+      targetStart + 20 * 60 * 1000,
+      50 * 60 * 1000,
+    ],
+  );
+  await bzGamesDatabase.run(
+    `INSERT INTO play_sessions
+      (id, game_id, game_name, version, start_time, end_time, duration_ms)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [
+      "date-playtime-after-midnight",
+      "date-playtime",
+      "date-playtime",
+      "1.0.0",
+      targetEnd - 10 * 60 * 1000,
+      afterMidnight,
+      50 * 60 * 1000,
+    ],
+  );
+  await bzGamesDatabase.run(
+    `INSERT INTO play_sessions
+      (id, game_id, game_name, version, start_time, end_time, duration_ms)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [
+      "date-playtime-active",
+      "date-playtime",
+      "date-playtime",
+      "1.0.0",
+      new Date(2027, 1, 6, 12, 0, 0, 0).getTime(),
+      null,
+      null,
+    ],
+  );
+
+  try {
+    const duration = await playSessionDatabaseService.getPlayDurationForDate(
+      "2027-02-06",
+      activeNow,
+    );
+    assert.equal(duration, 60 * 60 * 1000);
+  } finally {
+    await bzGamesDatabase.run(
+      "DELETE FROM play_sessions WHERE id LIKE 'date-playtime-%'",
+    );
+    storeService.applyCloudConfig({ userData: originalUserData });
+  }
+}
+
 async function main(): Promise<void> {
   try {
     assert.equal(resolveGameHostingPortalUrl(), "https://relay.example.com/admin/game-hosting");
@@ -320,6 +431,7 @@ async function main(): Promise<void> {
     assert.equal(persistedMarketVersion.marketId, "official");
 
     await verifyReinstallRestoresDerivedData();
+    await verifyManualUnlockProgressData();
 
     for (const table of [
       "games",

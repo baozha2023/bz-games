@@ -19,9 +19,11 @@ import type {
   RoomConnectResult,
   RoomCreateResult,
   CloudAuthChangedPayload,
+  CloudPresenceStatus,
   CloudSnapshotMetaResult,
   CloudSyncResult,
   LocalCloudStatus,
+  ManualUnlockResult,
   GameImportStartResult,
   GameImportTaskEvent,
   GameImportTaskState,
@@ -95,6 +97,8 @@ export const electronAPI = {
       ipcRenderer.invoke(IPC.GAME_REMOVE, id, versions),
     launch: (id: string, version?: string): Promise<boolean> =>
       ipcRenderer.invoke(IPC.GAME_LAUNCH, id, version),
+    getRunningIds: (): Promise<string[]> =>
+      ipcRenderer.invoke(IPC.GAME_GET_RUNNING_IDS),
     getAll: () => ipcRenderer.invoke(IPC.GAME_GET_ALL),
     getAllRecords: () => ipcRenderer.invoke(IPC.GAME_GET_RECORDS),
     getVersions: (id: string) => ipcRenderer.invoke(IPC.GAME_GET_VERSIONS, id),
@@ -279,6 +283,10 @@ export const electronAPI = {
       ipcRenderer.invoke(IPC.SYSTEM_GET_SENSITIVE_WORDS),
     getLocalCloudStatus: (): Promise<LocalCloudStatus> =>
       ipcRenderer.invoke(IPC.SYSTEM_CLOUD_GET_LOCAL_STATUS),
+    getPresenceStatus: () =>
+      ipcRenderer.invoke(IPC.SYSTEM_CLOUD_GET_PRESENCE_STATUS),
+    setPresenceEnabled: (enabled: boolean) =>
+      ipcRenderer.invoke(IPC.SYSTEM_CLOUD_SET_PRESENCE, enabled),
     getCloudSnapshotMeta: (): Promise<CloudSnapshotMetaResult> =>
       ipcRenderer.invoke(IPC.SYSTEM_CLOUD_GET_SNAPSHOT_META),
     loginWithGitHub: () => ipcRenderer.invoke(IPC.SYSTEM_CLOUD_LOGIN_GITHUB),
@@ -384,15 +392,41 @@ export const electronAPI = {
       return () =>
         ipcRenderer.removeListener(IPC.SYSTEM_CLOUD_AUTH_CHANGED, handler);
     },
+    onPresenceChanged: (callback: (payload: CloudPresenceStatus) => void) => {
+      const handler = (_: any, payload: CloudPresenceStatus) =>
+        callback(payload);
+      ipcRenderer.on(IPC.SYSTEM_CLOUD_PRESENCE_CHANGED, handler);
+      return () =>
+        ipcRenderer.removeListener(IPC.SYSTEM_CLOUD_PRESENCE_CHANGED, handler);
+    },
   },
   user: {
     getData: () => ipcRenderer.invoke(IPC.SYSTEM_GET_USER_DATA),
-    buyFrame: (frameId: string) =>
-      ipcRenderer.invoke(IPC.SYSTEM_BUY_FRAME, frameId),
+    unlockFrame: (frameId: string): Promise<ManualUnlockResult> =>
+      ipcRenderer.invoke(IPC.SYSTEM_UNLOCK_FRAME, frameId),
     equipFrame: (frameId: string) =>
       ipcRenderer.invoke(IPC.SYSTEM_EQUIP_FRAME, frameId),
     unequipFrame: (frameId: string) =>
       ipcRenderer.invoke(IPC.SYSTEM_UNEQUIP_FRAME, frameId),
+    unlockGameCardProduct: (productId: string): Promise<ManualUnlockResult> =>
+      ipcRenderer.invoke(IPC.SYSTEM_UNLOCK_GAME_CARD_PRODUCT, productId),
+    getGameCardProductProgress: (
+      productId: string,
+    ): Promise<ManualUnlockResult> =>
+      ipcRenderer.invoke(IPC.SYSTEM_GET_GAME_CARD_PRODUCT_PROGRESS, productId),
+    equipGameCardProduct: (productId: string) =>
+      ipcRenderer.invoke(IPC.SYSTEM_EQUIP_GAME_CARD_PRODUCT, productId),
+    unequipGameCardProduct: (productId: string) =>
+      ipcRenderer.invoke(IPC.SYSTEM_UNEQUIP_GAME_CARD_PRODUCT, productId),
+    getGameCardProductImage: (
+      productId: string,
+      ratio: "square" | "wide",
+    ): Promise<string | null> =>
+      ipcRenderer.invoke(
+        IPC.SYSTEM_GET_GAME_CARD_PRODUCT_IMAGE,
+        productId,
+        ratio,
+      ),
     checkIn: () => ipcRenderer.invoke(IPC.SYSTEM_CHECK_IN),
   },
   stats: {

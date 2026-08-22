@@ -80,7 +80,11 @@ export const useSettingsStore = defineStore("settings", () => {
   async function ignoreUpdateVersion(version: string) {
     await window.electronAPI.settings.ignoreUpdateVersion(version);
     if (settings.value) {
-      settings.value = { ...settings.value, ignoredUpdateVersion: version };
+      settings.value = {
+        ...settings.value,
+        ignoredUpdateVersion: version,
+        skipStartupUpdateCheck: true,
+      };
     }
   }
 

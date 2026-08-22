@@ -1,87 +1,40 @@
 <template>
-  <n-card
-    hoverable
-    style="cursor: pointer"
-    @click="handleClick"
-    content-style="padding: 0;"
+  <GameCardBase
+    :game="game"
+    ratio="wide"
+    :import-tasks="importTasks"
+    :frame-product-id="frameProductId"
+    :preview-url="previewCoverUrl"
+    :interactive="interactive"
+    @click="$emit('click', $event)"
+    @cancel-import="$emit('cancel-import', $event)"
+    @retry-import="$emit('retry-import', $event)"
+    @dismiss-import="$emit('dismiss-import', $event)"
   >
-    <template #cover>
-      <div
-        :style="compact ? 'aspect-ratio: 1/1;' : 'aspect-ratio: 16/9;'"
-        style="
-          width: 100%;
-          background: var(--bz-bg-card-placeholder);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          overflow: hidden;
-          position: relative;
-        "
-      >
-        <GameCover v-if="!compact" :game-id="game.id" />
-        <GameIcon v-else :game-id="game.id" />
-        <GameImportOverlay
-          v-if="importTasks?.length"
-          :tasks="importTasks"
-          :compact="compact"
-          @cancel="$emit('cancel-import', $event)"
-          @retry="$emit('retry-import', $event)"
-          @dismiss="$emit('dismiss-import', $event)"
-        />
-        <n-icon
-          v-if="isFavorite"
-          :size="compact ? 18 : 24"
-          color="#d03050"
-          :style="
-            compact
-              ? 'position: absolute; top: 4px; right: 4px; filter: drop-shadow(0 0 2px rgba(0,0,0,0.5));'
-              : 'position: absolute; top: 8px; right: 8px; filter: drop-shadow(0 0 2px rgba(0,0,0,0.5));'
-          "
-        >
-          <Heart />
-        </n-icon>
-      </div>
+    <template #visual>
+      <GameCover :game-id="game.id" />
     </template>
-    <div v-if="!compact" style="padding: 12px">
-      <n-ellipsis style="max-width: 100%; font-weight: bold; font-size: 16px">
-        {{ game.name }}
-      </n-ellipsis>
-      <n-text depth="3" style="font-size: 12px">{{ game.author }}</n-text>
-    </div>
-  </n-card>
+  </GameCardBase>
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
-import { NCard, NEllipsis, NText, NIcon } from "naive-ui";
-import { Heart } from "@vicons/ionicons5";
+import GameCardBase from "./GameCardBase.vue";
 import GameCover from "./GameCover.vue";
-import GameIcon from "./GameIcon.vue";
 import type { GameManifest } from "../../../../shared/game-manifest";
 import type { GameImportTaskState } from "../../../../shared/types";
-import { useGameStore } from "../../stores/useGameStore";
-import GameImportOverlay from "./GameImportOverlay.vue";
 
-const props = defineProps<{
+defineProps<{
   game: GameManifest;
-  compact?: boolean;
   importTasks?: GameImportTaskState[];
+  frameProductId?: string;
+  previewCoverUrl?: string;
+  interactive?: boolean;
 }>();
 
-const gameStore = useGameStore();
-const isFavorite = computed(() => {
-  const record = gameStore.getGameRecord(props.game.id);
-  return record?.isFavorite || false;
-});
-
-const emit = defineEmits<{
-  (e: "click", id: string): void;
-  (e: "cancel-import", taskId: string): void;
-  (e: "retry-import", taskId: string): void;
-  (e: "dismiss-import", taskId: string): void;
+defineEmits<{
+  (event: "click", id: string): void;
+  (event: "cancel-import", taskId: string): void;
+  (event: "retry-import", taskId: string): void;
+  (event: "dismiss-import", taskId: string): void;
 }>();
-
-const handleClick = () => {
-  emit("click", props.game.id);
-};
 </script>

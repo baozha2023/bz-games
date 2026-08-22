@@ -215,6 +215,7 @@ Cookie: bz_games_session=<session_token>
     "githubId": "12345678",
     "login": "player",
     "name": "Player Name",
+    "nickname": "玩家",
     "avatarUrl": "https://avatars.githubusercontent.com/u/12345678?v=4",
     "profileUrl": "https://github.com/player",
     "email": "player@example.com",
@@ -256,6 +257,71 @@ Origin: https://relay.example.com
 ```
 
 接口只接受管理端 Cookie 并校验精确 Origin；Bearer Token 不作为退出凭据。
+
+### PATCH /api/v1/me/profile
+
+更新当前桌面客户端登录用户的昵称。接口只接受客户端 Bearer Session，不接受 Cookie，
+用户身份从当前 Session 解析，不接受请求体中的用户 ID。
+
+请求：
+
+```http
+PATCH /api/v1/me/profile HTTP/1.1
+Authorization: Bearer <session_token>
+Content-Type: application/json
+X-Relay-Token: <relayToken>
+
+{"nickname":"新的昵称"}
+```
+
+昵称必须非空、最多 16 个字符，并且不能包含 `< > " ' \` & /`。
+
+响应：
+
+```json
+{
+  "ok": true,
+  "user": {
+    "id": "1",
+    "nickname": "新的昵称"
+  }
+}
+```
+
+未登录或会话失效返回 `401`；昵称格式错误返回 `400`。
+
+### PUT /api/v1/me/presence
+
+更新当前桌面客户端的在线状态。接口只接受客户端 Bearer Session 和
+`X-Relay-Token`，用户身份从当前 Session 解析，不接受请求体中的用户 ID。
+
+请求：
+
+```http
+PUT /api/v1/me/presence HTTP/1.1
+Authorization: Bearer <session_token>
+Content-Type: application/json
+X-Relay-Token: <relayToken>
+
+{"online":true}
+```
+
+请求体必须只包含布尔字段 `online`。客户端开启后每 60 秒发送一次心跳；服务端超过
+90 秒未收到心跳时将用户视为离线，并由后台清理任务回收过期标记。
+
+响应：
+
+```json
+{
+  "ok": true,
+  "presence": {
+    "isOnline": true,
+    "lastOnlineAt": "2026-08-22T12:00:00.000Z"
+  }
+}
+```
+
+未登录或会话失效返回 `401`；请求体错误返回 `400`。
 
 ---
 
@@ -837,7 +903,7 @@ sequenceDiagram
 
 ### `GET /api/portal/v1/system-monitor`
 
-只接受同源管理端 Session Cookie 并要求 `system.monitor.view`，该 capability 仅授予超级管理员。响应仅包含页面使用的 CPU 利用率、内存、磁盘、实时收发带宽、房间与连接数量及服务进程运行时间；网络速率由服务器网卡（不含回环接口）累计字节差值按采样间隔计算。
+只接受同源管理端 Session Cookie 并要求 `system.monitor.view`，该 capability 仅授予超级管理员。响应仅包含页面使用的 CPU 利用率、内存、磁盘、实时收发带宽、房间与连接数量、在线人数及服务进程运行时间；在线人数统计最近 90 秒内仍有心跳的用户，网络速率由服务器网卡（不含回环接口）累计字节差值按采样间隔计算。
 
 ```json
 {
@@ -850,6 +916,7 @@ sequenceDiagram
     "transmitBytesPerSecond": 1
   },
   "rooms": { "count": 0, "clients": 0, "maxRooms": 80, "maxClients": 400 },
+  "onlineUsers": 0,
   "runtime": { "processUptimeSeconds": 60 }
 }
 ```
@@ -886,6 +953,7 @@ sequenceDiagram
 - `PUT /api/portal/v1/game-hosting/games/:gameId`：管理员立即更新；创作者创建或更新公共信息修订。
 - `PUT|DELETE /api/portal/v1/game-hosting/games/:gameId/versions/:version`：管理员可维护全部；创作者仅可维护本人的 `pending/rejected` 版本。
 - `GET /api/portal/v1/game-hosting/games/:gameId/config`：管理员或所有者下载规范 `MarketGame` JSON。
+- `GET|HEAD /api/portal/v1/game-hosting/assets/:assetId/download`：管理员或资源所有者下载已上传的 ZIP、图标或封面；使用管理端 Session 鉴权，支持单段 `Range`。
 - `PUT /api/portal/v1/game-hosting/games/:gameId/latest`：管理员设置已通过的最新版本。
 - `PUT /api/portal/v1/game-hosting/reviews/versions/:id`：管理员审核版本，首版本同时审核初始公共信息。
 - `PUT /api/portal/v1/game-hosting/reviews/revisions/:id`：管理员审核已发布游戏的公共信息修订。
@@ -893,6 +961,7 @@ sequenceDiagram
 - `DELETE /api/portal/v1/game-hosting/games/:gameId`：仅管理员递归删除游戏。
 
 审核请求包含 `decision`、`expectedUpdatedAt`，驳回时必须包含 `reason`；版本通过时可传 `setLatest`。投稿在审核期间变化会返回 `409 submission_changed`。所有 Cookie 写请求必须来自 `PORTAL_PUBLIC_URL` 的同源 `Origin`。同一 `gameId + version` 唯一，大小、MIME、SHA-256 和逻辑地址均由服务端计算。
+每个游戏只有一个托管版本时，版本创建或替换请求才允许上传 `icon`、`cover`；版本数量按数据库中的全部版本记录计算，已有多个版本时仅可继续维护 ZIP 和版本信息。
 
 版本中的 `gameManifest` 遵循桌面端 `game.json` 约束：`windowedFullscreen` 仅适用于 `serve`、`url`、`.html` 和 `.htm` Web 入口；`args` 与 `env` 仅适用于 Native 入口。服务端会拒绝未知字段、非布尔的 `windowedFullscreen` 以及这些入口组合错误。
 
@@ -907,4 +976,4 @@ sequenceDiagram
 - `GET /api/portal/v1/users?page=1&pageSize=20&q=`：仅 `administrator` 或 `super_administrator` 可访问，按最近登录时间返回用户分页列表。
 - `PATCH /api/portal/v1/users/:id/role`：仅 `super_administrator` 可使用同源 Session Cookie 调用，请求体只能是 `{ "role": "player" | "creator" | "administrator" }`。接口拒绝 Bearer Token，不能修改调用者本人、任何超级管理员或授予超级管理员。
 
-搜索覆盖 GitHub ID、登录名、名称和邮箱；响应包含数据库 RBAC 角色、注册时间、更新时间与最近登录时间。创作者和玩家访问返回 `403`，普通管理员调用角色更新接口返回 `403`。
+搜索覆盖 GitHub ID、登录名、名称、昵称和邮箱；响应包含昵称、数据库 RBAC 角色、注册时间、更新时间与最近登录时间。创作者和玩家访问返回 `403`，普通管理员调用角色更新接口返回 `403`。

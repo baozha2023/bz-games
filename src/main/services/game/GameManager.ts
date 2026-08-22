@@ -1,4 +1,4 @@
-import { ChildProcess, execFile, spawn } from "child_process";
+import { ChildProcess, spawn } from "child_process";
 import { BrowserWindow, screen } from "electron";
 import path from "path";
 import fs from "fs";
@@ -30,10 +30,28 @@ import {
   applyWebWindowStartupState,
   resolveWebWindowStartupOptions,
 } from "./WebWindowStartup";
+import { processTreeService } from "./ProcessTreeService";
+
+type GameRuntimeKind = "native" | "web";
+
+interface GameRuntime {
+  id: string;
+  kind: GameRuntimeKind;
+  pid: number;
+  process?: ChildProcess;
+  window?: BrowserWindow;
+  knownPids: Set<number>;
+  rootExited: boolean;
+  monitorTimer?: NodeJS.Timeout;
+  monitorInFlight: boolean;
+  treeQueryFailures: number;
+  treeMonitoringDegraded: boolean;
+}
+
+const PROCESS_TREE_POLL_INTERVAL_MS = 1_000;
 
 class GameManager {
-  private activeProcesses: Map<string, ChildProcess> = new Map();
-  private activeWindows: Map<string, BrowserWindow> = new Map();
+  private activeRuntimes: Map<string, GameRuntime> = new Map();
   private activeServers: Map<string, Server> = new Map();
   private activeConfigPaths: Map<string, string> = new Map();
   private gameApiServers: Map<string, GameApiServer> = new Map();
@@ -153,7 +171,7 @@ class GameManager {
         error?.params,
         error?.message,
       );
-      this.cleanup(id);
+      this.cleanup(id, true);
       return false;
     } finally {
       this.launchingGames.delete(id);
@@ -162,7 +180,7 @@ class GameManager {
 
   stop(id: string): void {
     if (this.isGameRunning(id) || this.startTimes.has(id)) {
-      this.handleProcessExit(id, null);
+      void this.stopRuntime(id);
     } else {
       this.cleanup(id);
     }
@@ -183,35 +201,15 @@ class GameManager {
     }
 
     const gameIds = new Set([
-      ...this.activeProcesses.keys(),
-      ...this.activeWindows.keys(),
+      ...this.activeRuntimes.keys(),
       ...this.activeServers.keys(),
       ...this.gameApiServers.keys(),
       ...this.startTimes.keys(),
     ]);
-    const processIds = Array.from(this.activeProcesses.values())
-      .map((child) => child.pid)
-      .filter((pid): pid is number => typeof pid === "number" && pid > 0);
 
-    if (process.platform === "win32") {
-      await Promise.all(
-        processIds.map(
-          (pid) =>
-            new Promise<void>((resolve) => {
-              execFile(
-                "taskkill.exe",
-                ["/PID", String(pid), "/T", "/F"],
-                { windowsHide: true },
-                () => resolve(),
-              );
-            }),
-        ),
-      );
-    }
-
-    for (const gameId of gameIds) {
-      this.stop(gameId);
-    }
+    await Promise.all(
+      Array.from(gameIds).map((gameId) => this.stopRuntime(gameId)),
+    );
   }
 
   relayToGame(gameId: string, msg: RoomMessage) {
@@ -235,7 +233,97 @@ class GameManager {
   }
 
   private isGameRunning(id: string): boolean {
-    return this.activeProcesses.has(id) || this.activeWindows.has(id);
+    const runtime = this.activeRuntimes.get(id);
+    if (!runtime) return false;
+    if (runtime.kind === "web") {
+      return !!runtime.window && !runtime.window.isDestroyed();
+    }
+    return true;
+  }
+
+  getRunningGameIds(): string[] {
+    return Array.from(this.activeRuntimes.keys()).filter((id) =>
+      this.isGameRunning(id),
+    );
+  }
+
+  private startNativeRuntimeMonitor(id: string): void {
+    const runtime = this.activeRuntimes.get(id);
+    if (!runtime || runtime.kind !== "native") return;
+
+    runtime.monitorTimer = setInterval(() => {
+      void this.refreshNativeRuntime(id);
+    }, PROCESS_TREE_POLL_INTERVAL_MS);
+    runtime.monitorTimer.unref?.();
+    void this.refreshNativeRuntime(id);
+  }
+
+  private async refreshNativeRuntime(
+    id: string,
+    exitCode: number | null = null,
+  ): Promise<void> {
+    const runtime = this.activeRuntimes.get(id);
+    if (!runtime || runtime.kind !== "native" || runtime.monitorInFlight) {
+      return;
+    }
+
+    runtime.monitorInFlight = true;
+    try {
+      if (runtime.treeMonitoringDegraded) {
+        if (runtime.rootExited) this.handleProcessExit(id, exitCode);
+        return;
+      }
+
+      if (!runtime.rootExited) {
+        const tree = await processTreeService.listTree(runtime.pid);
+        for (const pid of tree) runtime.knownPids.add(pid);
+        runtime.treeQueryFailures = 0;
+        return;
+      }
+
+      const alive = await processTreeService.isTreeAlive(
+        runtime.pid,
+        runtime.knownPids,
+      );
+      runtime.treeQueryFailures = 0;
+      if (!alive) {
+        this.handleProcessExit(id, exitCode);
+      }
+    } catch (error) {
+      runtime.treeQueryFailures += 1;
+      logger.warn(
+        `[GameManager] Failed to inspect process tree for ${id}`,
+        error,
+      );
+      if (runtime.treeQueryFailures >= 3) {
+        runtime.treeMonitoringDegraded = true;
+        logger.warn(
+          `[GameManager] Falling back to root process tracking for ${id}`,
+        );
+        if (runtime.rootExited) this.handleProcessExit(id, exitCode);
+      }
+    } finally {
+      runtime.monitorInFlight = false;
+    }
+  }
+
+  private async stopRuntime(id: string): Promise<void> {
+    const runtime = this.activeRuntimes.get(id);
+    if (!runtime) {
+      if (this.startTimes.has(id)) this.handleProcessExit(id, null);
+      else this.cleanup(id);
+      return;
+    }
+
+    if (runtime.kind === "web") {
+      this.handleProcessExit(id, null);
+      return;
+    }
+
+    await processTreeService.killTree(runtime.pid, runtime.knownPids);
+    if (this.activeRuntimes.has(id) || this.startTimes.has(id)) {
+      this.handleProcessExit(id, null);
+    }
   }
 
   private async prepareGame(
@@ -481,15 +569,40 @@ class GameManager {
       return { action: "deny" };
     });
 
-    this.activeWindows.set(id, win);
+    const rendererPid = win.webContents.getOSProcessId();
+    const runtime: GameRuntime = {
+      id,
+      kind: "web",
+      pid: rendererPid,
+      window: win,
+      knownPids: new Set(rendererPid > 0 ? [rendererPid] : []),
+      rootExited: false,
+      monitorInFlight: false,
+      treeQueryFailures: 0,
+      treeMonitoringDegraded: false,
+    };
+    this.activeRuntimes.set(id, runtime);
     let launchCompleted = false;
     win.on("closed", () => {
       gameWindowIdentityRegistry.unregister(webContentsId);
-      if (launchCompleted && this.activeWindows.get(id) === win) {
+      if (launchCompleted && this.activeRuntimes.get(id)?.window === win) {
         this.handleProcessExit(id, 0);
-      } else if (this.activeWindows.get(id) === win) {
-        this.activeWindows.delete(id);
+      } else if (this.activeRuntimes.get(id)?.window === win) {
+        this.activeRuntimes.delete(id);
       }
+    });
+
+    win.webContents.on("render-process-gone", (_event, details) => {
+      if (this.activeRuntimes.get(id)?.window !== win) return;
+      if (!launchCompleted) {
+        this.activeRuntimes.delete(id);
+        return;
+      }
+      logger.warn(`[GameManager] Web game renderer exited for ${id}`, {
+        reason: details.reason,
+        exitCode: details.exitCode,
+      });
+      this.handleProcessExit(id, details.exitCode);
     });
 
     if (isFile) {
@@ -568,8 +681,10 @@ class GameManager {
         earlyExitCode = code;
         return;
       }
-      if (this.activeProcesses.get(id) === cp) {
-        this.handleProcessExit(id, code);
+      const runtime = this.activeRuntimes.get(id);
+      if (runtime?.process === cp) {
+        runtime.rootExited = true;
+        void this.refreshNativeRuntime(id, code);
       }
     });
 
@@ -587,13 +702,36 @@ class GameManager {
     });
 
     cp.on("error", (error) => {
-      this.notifyLaunchFailure(id, "processLaunchFailed", undefined, error.message);
-      if (this.activeProcesses.get(id) === cp) {
-        this.handleProcessExit(id, null);
+      this.notifyLaunchFailure(
+        id,
+        "processLaunchFailed",
+        undefined,
+        error.message,
+      );
+      const runtime = this.activeRuntimes.get(id);
+      if (runtime?.process === cp) {
+        runtime.rootExited = true;
+        void this.refreshNativeRuntime(id, null);
       }
     });
     cp.unref();
-    this.activeProcesses.set(id, cp);
+    const rootPid = cp.pid;
+    if (!rootPid || rootPid <= 0) {
+      throw new Error("Failed to resolve game process id");
+    }
+    const runtime: GameRuntime = {
+      id,
+      kind: "native",
+      pid: rootPid,
+      process: cp,
+      knownPids: new Set([rootPid]),
+      rootExited: exitedBeforeTracking,
+      monitorInFlight: false,
+      treeQueryFailures: 0,
+      treeMonitoringDegraded: false,
+    };
+    this.activeRuntimes.set(id, runtime);
+    this.startNativeRuntimeMonitor(id);
     const sessionStart = Date.now();
     const sessionId = playSessionDatabaseService.startSession(
       id,
@@ -610,7 +748,7 @@ class GameManager {
 
     mainWindow?.webContents.send(IPC.GAME_PROCESS_STARTED, id);
     if (exitedBeforeTracking) {
-      this.handleProcessExit(id, earlyExitCode);
+      void this.refreshNativeRuntime(id, earlyExitCode);
     }
 
     return true;
@@ -649,7 +787,9 @@ class GameManager {
       const durationMs = Date.now() - startTimeData.start;
       void storeService
         .updatePlaytime(id, startTimeData.version, durationMs)
-        .catch((error) => logger.error("Failed to update playtime rewards", error));
+        .catch((error) =>
+          logger.error("Failed to update playtime rewards", error),
+        );
       playSessionDatabaseService.endSession(
         startTimeData.sessionId,
         startTimeData.start,
@@ -672,25 +812,29 @@ class GameManager {
     }
   }
 
-  private cleanup(id: string) {
+  private cleanup(id: string, terminateRuntime = false) {
     const activeConfigPath = this.activeConfigPaths.get(id);
     if (activeConfigPath) {
       GameEnvironment.removeConfig(activeConfigPath);
       this.activeConfigPaths.delete(id);
     }
 
-    const cp = this.activeProcesses.get(id);
-    if (cp) {
-      cp.kill();
-      this.activeProcesses.delete(id);
+    const runtime = this.activeRuntimes.get(id);
+    if (runtime?.monitorTimer) {
+      clearInterval(runtime.monitorTimer);
+      runtime.monitorTimer = undefined;
+    }
+    this.activeRuntimes.delete(id);
+
+    if (runtime?.kind === "native" && terminateRuntime) {
+      void processTreeService.killTree(runtime.pid, runtime.knownPids);
     }
 
-    const win = this.activeWindows.get(id);
+    const win = runtime?.window;
     if (win) {
       if (!win.isDestroyed()) {
         win.close();
       }
-      this.activeWindows.delete(id);
     }
 
     const server = this.activeServers.get(id);

@@ -180,6 +180,7 @@ bz-games/
 │   │   │   │   ├── GameLoader.ts          # 统一异步复制、原子落盘、校验与记录同步
 │   │   │   │   ├── GameManifestFileService.ts # 已安装 Manifest 的 Schema 校验、AES-GCM 加解密、原子写入与明文迁移
 │   │   │   │   ├── GameWindowIdentityRegistry.ts # WebContents 与 gameId/version 的可信身份绑定，供存储 IPC 鉴权
+│   │   │   │   ├── ProcessTreeService.ts  # 跨平台进程树查询与终止（Windows PowerShell / macOS/Linux ps）
 │   │   │   │   └── GameManager.ts         # 游戏进程启动/停止与生命周期管理
 │   │   │   ├── game-api/
 │   │   │   │   ├── GameApiServer.ts       # 游戏进程本地 WebSocket API 服务（连接认证、协议路由、事件分发）
@@ -715,7 +716,7 @@ interface FloatBallProgress {
 - **生产环境 DevTools 锁定**：通过 `app.on("browser-window-created")` 拦截所有窗口的 F12 / Ctrl+Shift+I 快捷键，并监听 `devtools-opened` 事件自动关闭 DevTools；同时启用 F11 全屏切换。开发模式（`!app.isPackaged`）保留 DevTools 功能。
 - 读写本地存储（electron-store），**配置与数据均存储于应用根目录**
 - 调用系统 API（文件对话框、环境变量、子进程）
-- 游戏进程启动 / 管理 / 终止（`child_process.spawn`，支持 Windows 隐藏窗口）
+- 游戏进程启动 / 管理 / 终止（`child_process.spawn`，支持 Windows 隐藏窗口）以及统一运行时状态维护
 - 拉取远程游戏市场索引、下载市场安装包并执行校验与安装。所有私有资源请求均携带构建期注入的 Referer 防盗链
   header（fetch 显式设置 + `session.webRequest.onBeforeSendHeaders` 全量拦截）
 - 运行 Room Server（Host 时）/ Room Client（Client 时）
@@ -877,6 +878,8 @@ interface AppSettings {
 - **模块化**：复杂逻辑（如 `GameLoader.loadGameFromDialog`）拆分为独立函数（`validateManifestFile`, `checkPlatformVersion`,
   `checkEntryFile` 等），提升可读性与可维护性。
 - **环境配置抽离**：`game-launch.ts` 统一四入口分类及 Web/Native 配置映射；`GameEnvironment` 只负责读取 Electron/房间上下文和临时文件 I/O。Native 环境过滤 `ELECTRON_`/`NODE_`/`NPM_`/`VSCODE_`，Manifest `args` 原样传递，平台 `BZ_` 变量最后注入且不可覆盖。
+- **统一游戏运行时**：`GameManager.activeRuntimes` 是运行状态的唯一内存记录。Native 游戏记录入口 PID 和已发现的子进程 PID，由 `ProcessTreeService` 通过 Windows PowerShell `Get-CimInstance Win32_Process` 或 macOS/Linux `ps` 查询进程树；入口进程退出但已记录子进程仍存活时，游戏继续视为运行中，进程树为空后才结束。Web 游戏记录 `BrowserWindow` 和 `webContents.getOSProcessId()`，窗口关闭或 `render-process-gone` 后结束。进程树查询连续失败时降级为入口进程跟踪并记录日志。
+- **运行状态快照**：`game:getRunningIds` 由主进程返回当前 `activeRuntimes` 中仍运行的游戏 ID；渲染层 `useGameStore` 初始化时读取一次快照，之后通过 `game:process:started` / `game:process:ended` 增量维护。快照提交必须受事件版本保护，不能覆盖请求期间已收到的生命周期事件。
 - **启动成功语义**：HTML/URL 必须等待 `loadFile`/`loadURL` 成功，Serve 必须等待回环端口监听成功，Native 必须收到子进程 `spawn` 事件，`launch()` 才返回成功。请求 ID/版本必须与解密 Manifest 一致，且每次启动重新校验 `platformVersion`。`multiplayer` 入口要求本地玩家位于同一游戏、同一版本的房间，但不得依赖 `waiting`/`starting`/`playing` 的瞬时同步状态；能否开局由房间 IPC 单独校验。
 - **房间上下文粒度**：`RoomContext.findMatchingRoom()` 是环境注入和 Multiplayer 启动门禁的唯一房间匹配入口，只接受游戏 ID 与 Manifest 版本均一致的房间。不得因为客户端当前加入了其他游戏的房间而错误注入 `BZ_ROOM_ID`、`BZ_IS_HOST` 或 `BZ_IS_MULTIPLE`。
 - **IPC 结果契约**：启动、房间创建/加入和重连的返回结果在 `shared/types` 中统一定义，Preload 与 Renderer 声明必须同步复用；`game.launch`、`room.start`、`room.reconnect` 均返回 `boolean`，房间创建/加入返回结构化 `success/error/params`，不得把失败的 IPC 调用误显示为成功。
@@ -1079,7 +1082,7 @@ interface AppSettings {
   - **Portal 前端**：`bz-games-admin/` 为独立 Vue 3 + Vite + Pinia 项目，构建为 `/admin/` 同源静态站点。服务端会话接口返回唯一 capability 集合，前端 `rbac.ts` 只校验能力契约，不维护角色到能力的映射；菜单、路由、按钮和提交前置检查均调用 `auth.can(capability)`。玩家进入欢迎页并管理自己的反馈，创作者仅管理自己的游戏托管，管理员无用户角色调整、托管容量查看、系统监控和桌面客户端版本上传能力，超级管理员拥有全部界面与操作。服务端仍是唯一授权决策源，并独立执行 capability、资源所有权、状态机和精确 Origin 校验。中继侧 `admin-static-service.js` 提供 SPA fallback、路径穿越防护、CSP/`nosniff`/`DENY` iframe 等安全响应头。
 - **卸载系统设计（UninstallService）**：
   - **状态互斥**：`running` 布尔标志防止重复卸载调用。
-  - **游戏进程收口**：`shutdownForUninstall()` 设置 `shuttingDownForUninstall = true` 拒新启，等待 `launchingGames` 清空（5s 超时），然后通过 `taskkill /PID /T /F` 批量终止所有已托管游戏进程树，最后调用 `GameManager.stop()` 清理窗口和服务注册。
+  - **游戏进程收口**：`shutdownForUninstall()` 设置 `shuttingDownForUninstall = true` 拒新启，等待 `launchingGames` 清空（5s 超时），然后调用 `GameManager.shutdownForUninstall()` 通过统一运行时记录停止所有原生进程树、Web 游戏窗口及本地游戏服务。
   - **GameManager 联动**：`launch()` 增加 `shuttingDownForUninstall` 前置检查，卸载期间直接拒绝新启动请求。
   - **路径安全校验**：`normalizeUninstallStorageRoots()` 对每个游戏库路径执行 `path.resolve` 并校验：① 不是盘符根；② 不包含安装目录；③ 不与系统保护路径（home/appData/userData/temp）相同或为符号链接。任一项不满足时拒绝卸载，返回 `unsafe_game_storage_path` 错误。
   - **兜底防御**：`removeStorageRoots()` 删除前额外检查目标路径是否为符号链接；`fs.rmSync` 使用 `maxRetries: 5` + `retryDelay: 250` 重试防御，删除后再次 `existsSync` 核验。
@@ -1213,6 +1216,7 @@ interface AppSettings {
 - `game:toggleFavorite`：切换游戏收藏状态。
 - `game:remove`：删除指定游戏或指定版本。
 - `game:launch`：启动指定游戏版本。
+- `game:getRunningIds`：返回主进程当前判定仍在运行的游戏 ID 快照。Native 游戏按入口进程及已发现的子进程树判断；Web 游戏按窗口和渲染进程生命周期判断。
 - `stats:getDailyPlayDurations`：查询最近 N 天的每日游玩时长（日历热力图数据源）。
 - `stats:getRecentSessions`：查询最近 N 条游玩会话记录。
 - `stats:getSessionsByDate`：查询指定本地自然日的已结束游玩会话记录。
@@ -1300,8 +1304,8 @@ interface AppSettings {
 - `system:installUpdate`：安装更新并重启。
 - `system:log:error`：渲染进程错误日志回传主进程统一记录（`ipcRenderer.send` 单向推送，无需返回值）。
 - `room:event`：主进程推送房间事件给渲染层。
-- `game:process:started`：推送游戏进程启动事件。
-- `game:process:ended`：推送游戏进程结束事件。
+- `game:process:started`：推送平台托管的游戏运行实体启动事件。Native 在入口进程 `spawn` 后发送；Web 在窗口加载成功并创建游玩会话后发送。
+- `game:process:ended`：推送平台托管的游戏运行实体结束事件。Native 在入口进程及已发现的子进程树均结束后发送；Web 在窗口关闭或渲染进程崩溃/被杀死后发送。
 - `game:launch:failed`：推送游戏启动失败事件。
 - `system:update:event`：推送更新状态变化事件。
 - `market:event`：推送市场下载/安装任务状态变化事件。
@@ -1486,9 +1490,9 @@ interface AppSettings {
    - **游戏中继 UI 隔离**：`game:message:relay` / `game:broadcast:relay` / `game:message:ack` 进入 `GameManager.relayToGame()`，不转发到房间 UI 或聊天窗口 IPC。
    - **中继幂等缓存**：`RoomServer` 和 `RoomClient` 使用最近 `messageId` 缓存过滤重复游戏中继消息，默认缓存最近 1000 条。
 5. **游戏结束语义**：
-   - `game.end` API：游戏主动调用，平台回复 `{success: true}`；房间状态和进程生命周期由 Host 进程退出事件驱动。
+   - `game.end` API：游戏主动调用，平台回复 `{success: true}`；房间状态和平台运行实体生命周期仍由 Host 的进程树或 Web 窗口生命周期驱动。
    - `game.report` API：游戏完成一局后提交战绩报告（纯文本 / 结构化 / 自定义 HTML），以系统消息形式展示在房间聊天中，由 `GameReportCard.vue` 渲染。
-   - 游戏真正结束仅由 **Host 进程退出** 触发：`handleProcessExit` → `notifyRoomGameEnd` → state 变 `"waiting"` + 清空 `reconnectPlayerIds` + 广播 `room:game:end` + `room:state:sync`。客机 `RoomClient` 收到 `room:game:end` 后调用 `onGameStop` → `stop()` 杀死所有客机进程。
+   - 游戏真正结束仅由 **Host 的平台托管运行实体结束** 触发：Native 进程树为空或 Web 窗口关闭/渲染进程终止后，`handleProcessExit` → `notifyRoomGameEnd` → state 变 `"waiting"` + 清空 `reconnectPlayerIds` + 广播 `room:game:end` + `room:state:sync`。客机 `RoomClient` 收到 `room:game:end` 后调用 `onGameStop` → `stop()` 结束所有客机运行实体。
    - 前端通过 `room:state:sync` 检测 `playing→waiting` 态变化来显示"游戏已结束"聊天消息。
 
 ### 7.2 联机完整流程
@@ -1539,7 +1543,7 @@ interface AppSettings {
 3. **客户端响应**：`useRoomStore.isReconnectMode` 为 `computed` 属性，从 `room.reconnectPlayerIds.includes(playerId)` 派生，**无需手动管理**。
 4. **UI 表现**：客机玩家在房间页看到"重连"按钮，位于 Ready/Unready 按钮区域。
 5. **点击重连**：`handleReconnect()` → `reconnectGame()` → `room.reconnect` IPC → 检查 `reconnectPlayerIds.includes(playerId)` → `gameManager.launch(gameId, version)`。
-6. **房间状态**：Host 和其他客机维持当前流程，房间 `state` 保持 `"playing"`。客机进程退出不广播 `room:game:end`；Host 进程退出触发 `notifyRoomGameEnd` → 清空 `reconnectPlayerIds`。
+6. **房间状态**：Host 和其他客机维持当前流程，房间 `state` 保持 `"playing"`。客机运行实体结束不广播 `room:game:end`；Host 的平台托管运行实体结束触发 `notifyRoomGameEnd` → 清空 `reconnectPlayerIds`。
 7. **重新加入**：重连成功的玩家通过 `room:join` 重新加入房间时，`RoomServer.handleJoin()` 将其从 `reconnectPlayerIds` 中移除。
 8. **游戏侧适配**：重连的游戏进程是全新实例（运行时状态丢失），游戏需要调用 `room.getInfo()` 判断 `state`：若 `"playing"` 则是重连；若 `"waiting"` 则是正常启动。
 

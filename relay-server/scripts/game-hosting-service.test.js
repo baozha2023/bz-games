@@ -44,6 +44,9 @@ function createDatabase({ failInsert = false } = {}) {
     if (normalized.startsWith("SELECT id FROM hosted_game_versions WHERE game_id = ? AND version = ?")) {
       return [state.versions.filter((row) => row.game_id === params[0] && row.version === params[1] && (!normalized.includes("status = 'approved'") || row.status === "approved"))];
     }
+    if (normalized === "SELECT COUNT(*) AS total FROM hosted_game_versions WHERE game_id = ?") {
+      return [[{ total: state.versions.filter((row) => row.game_id === params[0]).length }]];
+    }
     if (normalized.startsWith("INSERT INTO hosted_games")) {
       if (failInsert) throw new Error("simulated_insert_failure");
       state.games.push({
@@ -128,6 +131,18 @@ function createDatabase({ failInsert = false } = {}) {
         });
       }
       return [rows];
+    }
+    if (normalized.startsWith("SELECT a.id, a.role, a.original_name")) {
+      const asset = state.assets.find((item) => item.id === params[0]);
+      if (!asset) return [[]];
+      const version = state.versions.find((item) => item.id === asset.version_id);
+      const game = state.games.find((item) => item.game_id === version?.game_id);
+      return [[game && version ? {
+        ...asset,
+        game_id: version.game_id,
+        version: version.version,
+        owner_user_id: game.owner_user_id,
+      } : null].filter(Boolean)];
     }
     if (normalized.startsWith("SELECT id, game_id, metadata_json, status, review_reason")) return [[...state.revisions]];
     if (normalized.startsWith("SELECT a.original_name")) {
@@ -278,6 +293,11 @@ test("creates a full game tree, exports config, and serves UTF-8 named assets", 
     assert.deepEqual(Buffer.from(await full.arrayBuffer()), VALID_ZIP);
     assert.match(full.headers.get("content-disposition"), /%E6%98%9F%E8%BD%A8%E5%AE%88%E6%9C%9B\.zip/);
 
+    const portalDownload = await fetch(`${harness.baseUrl}/api/portal/v1/game-hosting/assets/${packageAsset.id}/download`, { headers: { "x-test-admin": "yes" } });
+    assert.equal(portalDownload.status, 200);
+    assert.deepEqual(Buffer.from(await portalDownload.arrayBuffer()), VALID_ZIP);
+    assert.match(portalDownload.headers.get("content-disposition"), /attachment/);
+
     const range = await fetch(`${harness.baseUrl}${assetPath}`, { headers: { "x-relay-token": "relay-test-token", range: "bytes=2-5" } });
     assert.equal(range.status, 206);
     assert.deepEqual(Buffer.from(await range.arrayBuffer()), VALID_ZIP.subarray(2, 6));
@@ -296,7 +316,18 @@ test("adds versions, rejects duplicates and invalid content, and rolls back fail
     assert.equal((await uploadRequest(harness.baseUrl)).status, 201);
     assert.equal((await uploadRequest(harness.baseUrl)).status, 409);
     const secondVersion = { ...VERSION, version: "1.1.0", description: "第二版" };
+    const secondVersionWithImages = await uploadRequest(harness.baseUrl, { gameId: GAME.id, version: secondVersion });
+    assert.equal(secondVersionWithImages.status, 400);
+    assert.equal((await secondVersionWithImages.json()).error, "hosted_version_images_require_unique");
     assert.equal((await uploadRequest(harness.baseUrl, { gameId: GAME.id, version: secondVersion, icon: false })).status, 201);
+    const replaceForm = new FormData();
+    replaceForm.set("version", JSON.stringify(secondVersion));
+    replaceForm.set("icon", new Blob([VALID_PNG], { type: "image/png" }), "替换图标.png");
+    const replaceResponse = await fetch(`${harness.baseUrl}/api/portal/v1/game-hosting/games/${GAME.id}/versions/1.1.0`, {
+      method: "PUT", headers: { "x-test-admin": "yes" }, body: replaceForm,
+    });
+    assert.equal(replaceResponse.status, 400);
+    assert.equal((await replaceResponse.json()).error, "hosted_version_images_require_unique");
     assert.equal(harness.database.state.versions.length, 2);
     assert.equal(harness.database.state.games[0].latest_version, "1.1.0");
     const invalidZip = await uploadRequest(harness.baseUrl, { game: { ...GAME, id: "com.example.invalid" }, packageBody: Buffer.from("not zip"), icon: false });

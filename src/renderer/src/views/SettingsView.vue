@@ -19,69 +19,38 @@
         />
       </n-form-item>
 
-      <n-form-item :label="t('settings.cloudSync')">
-        <div class="cloud-sync-row">
-          <div class="cloud-login-line">
-            <n-button
-              class="github-login-button"
-              :disabled="cloudBusy"
-              @click="handleGitHubLogin"
-            >
-              <template #icon>
-                <n-icon :size="18">
-                  <LogoGithub />
-                </n-icon>
-              </template>
-              {{ t("settings.githubLogin") }}
-            </n-button>
-            <button
-              v-if="cloudStatus.authenticated && cloudAccountLabel"
-              class="github-account-link"
-              type="button"
-              :disabled="!cloudStatus.userProfileUrl"
-              @click="handleOpenGitHubProfile"
-            >
-              {{ cloudAccountLabel }}
-            </button>
-          </div>
-          <div class="cloud-action-line">
-            <n-button
-              type="primary"
-              secondary
-              :disabled="!cloudStatus.authenticated || cloudBusy"
-              @click="handleCloudUpload"
-              >{{ t("settings.cloudUpload") }}</n-button
-            >
-            <n-button
-              type="primary"
-              secondary
-              :disabled="!cloudStatus.authenticated || cloudBusy"
-              @click="handleCloudDownload"
-              >{{ t("settings.cloudDownload") }}</n-button
-            >
-            <n-tooltip trigger="hover" placement="top">
-              <template #trigger>
-                <button
-                  class="cloud-help-button"
-                  type="button"
-                  :aria-label="t('settings.cloudSyncHelpTitle')"
-                >
-                  <n-icon :size="18">
-                    <HelpCircleOutline />
-                  </n-icon>
-                </button>
-              </template>
-              <div class="cloud-help-content">
-                <div class="cloud-help-title">
-                  {{ t("settings.cloudSyncHelpTitle") }}
-                </div>
-                <div>{{ t("settings.cloudSyncHelp") }}</div>
-              </div>
-            </n-tooltip>
-            <n-text depth="3" class="cloud-upload-time">{{
-              cloudTimeText
-            }}</n-text>
-          </div>
+      <n-form-item :label="t('settings.login')">
+        <div class="login-setting-row">
+          <n-button
+            class="github-login-button"
+            :disabled="cloudBusy"
+            @click="handleGitHubLogin"
+          >
+            <template #icon>
+              <n-icon :size="18">
+                <LogoGithub />
+              </n-icon>
+            </template>
+            {{ t("settings.githubLogin") }}
+          </n-button>
+          <button
+            v-if="cloudStatus.authenticated && cloudAccountLabel"
+            class="github-account-link"
+            type="button"
+            :disabled="!cloudStatus.userProfileUrl"
+            @click="handleOpenGitHubProfile"
+          >
+            {{ cloudAccountLabel }}
+          </button>
+          <n-button
+            v-if="cloudStatus.authenticated"
+            type="primary"
+            secondary
+            :disabled="cloudBusy"
+            @click="showCloudSettingsModal = true"
+          >
+            {{ t("settings.cloudSettings") }}
+          </n-button>
         </div>
       </n-form-item>
 
@@ -92,6 +61,7 @@
               :src="formValue?.avatar"
               :name="formValue?.playerName || ''"
               :size="40"
+              hoverable
               :frame-file-name="settingsFrameFileName"
             />
           </div>
@@ -377,6 +347,79 @@
     </n-form>
 
     <n-modal
+      v-model:show="showCloudSettingsModal"
+      preset="card"
+      :title="t('settings.cloudSettings')"
+      style="
+        width: 60vw;
+        height: 70vh;
+        max-width: calc(100vw - 32px);
+        max-height: calc(100vh - 32px);
+      "
+      :closable="!cloudBusy"
+      :mask-closable="!cloudBusy"
+    >
+      <n-space vertical :size="18" style="width: 100%">
+        <div class="cloud-setting-item cloud-presence-setting-item">
+          <div class="cloud-presence-copy">
+            <n-text strong>{{ t("settings.onlineStatus") }}</n-text>
+            <n-text depth="3">{{ t("settings.onlineStatusHint") }}</n-text>
+          </div>
+          <n-space align="center" :size="10">
+            <n-text>{{ presenceEnabled ? t("settings.online") : t("settings.offline") }}</n-text>
+            <n-switch
+              :value="presenceEnabled"
+              :loading="presenceBusy"
+              :disabled="!cloudStatus.authenticated || cloudBusy"
+              @update:value="handlePresenceToggle"
+            />
+          </n-space>
+        </div>
+        <div class="cloud-setting-item">
+          <n-text strong>{{ t("settings.cloudData") }}</n-text>
+          <n-text depth="3">{{ cloudTimeText }}</n-text>
+        </div>
+        <div class="cloud-action-line">
+          <n-button
+            type="primary"
+            secondary
+            :disabled="!cloudStatus.authenticated || cloudBusy"
+            @click="handleCloudUpload"
+          >
+            {{ t("settings.cloudUpload") }}
+          </n-button>
+          <n-button
+            type="primary"
+            secondary
+            :disabled="!cloudStatus.authenticated || cloudBusy"
+            @click="handleCloudDownload"
+          >
+            {{ t("settings.cloudDownload") }}
+          </n-button>
+          <n-tooltip trigger="hover" placement="top">
+            <template #trigger>
+              <button
+                class="cloud-help-button"
+                type="button"
+                :aria-label="t('settings.cloudSyncHelpTitle')"
+              >
+                <n-icon :size="18">
+                  <HelpCircleOutline />
+                </n-icon>
+              </button>
+            </template>
+            <div class="cloud-help-content">
+              <div class="cloud-help-title">
+                {{ t("settings.cloudSyncHelpTitle") }}
+              </div>
+              <div>{{ t("settings.cloudSyncHelp") }}</div>
+            </div>
+          </n-tooltip>
+        </div>
+      </n-space>
+    </n-modal>
+
+    <n-modal
       v-model:show="showUninstallModal"
       preset="dialog"
       :title="t('settings.uninstallClient')"
@@ -626,6 +669,7 @@ import type { AppSettings } from "../../../shared/types";
 import { getFrameImageFileName } from "../../../shared/avatar-frames";
 import { formatBytes } from "../utils/format";
 import { HelpCircleOutline, LogoGithub } from "@vicons/ionicons5";
+import { showUpdatePrompt } from "../composables/useUpdatePrompt";
 
 const { t, te } = useI18n();
 const router = useRouter();
@@ -672,6 +716,9 @@ const isCheckingUpdate = ref(false);
 const isCheckingHealth = ref(false);
 const removingPath = ref("");
 const cloudBusy = ref(false);
+const presenceEnabled = ref(false);
+const presenceBusy = ref(false);
+const showCloudSettingsModal = ref(false);
 const showCloudProgressModal = ref(false);
 const cloudProgress = ref(0);
 const cloudProgressStage = ref("checking");
@@ -850,6 +897,30 @@ const refreshLocalCloudStatus = async () => {
   };
 };
 
+const refreshPresenceStatus = async () => {
+  const status = await window.electronAPI.settings.getPresenceStatus();
+  presenceEnabled.value = status.enabled;
+};
+
+const handlePresenceToggle = async (enabled: boolean) => {
+  if (presenceBusy.value || !cloudStatus.value.authenticated) return;
+  presenceBusy.value = true;
+  try {
+    const status =
+      await window.electronAPI.settings.setPresenceEnabled(enabled);
+    presenceEnabled.value = status.enabled;
+    if (enabled && !status.enabled) {
+      message.warning(t("settings.onlineEnableFailed"));
+    }
+  } catch (error) {
+    presenceEnabled.value = false;
+    message.warning(t("settings.onlineEnableFailed"));
+    console.warn("[SettingsView] Failed to update online status:", error);
+  } finally {
+    presenceBusy.value = false;
+  }
+};
+
 const refreshCloudSnapshotMeta = async () => {
   try {
     const result = await window.electronAPI.settings.getCloudSnapshotMeta();
@@ -871,6 +942,7 @@ onMounted(async () => {
   await settingsStore.loadSettings();
   await refreshStoragePaths();
   await refreshLocalCloudStatus();
+  await refreshPresenceStatus();
   if (settingsStore.settings) {
     formValue.value = JSON.parse(JSON.stringify(settingsStore.settings));
     originalSettings.value = JSON.stringify(formValue.value);
@@ -902,6 +974,7 @@ const removeCloudAuthListener = window.electronAPI.settings.onCloudAuthChanged(
     } else if (payload.reason === "session_invalid") {
       message.error(t("settings.cloudErrors.session_invalid"));
     }
+    void refreshPresenceStatus();
   },
 );
 
@@ -1137,7 +1210,12 @@ watch(cropZoom, () => {
 watch(
   () => cloudStatus.value.authenticated,
   (authenticated) => {
-    if (!authenticated) showFeedbackModal.value = false;
+    if (!authenticated) {
+      showFeedbackModal.value = false;
+      showCloudSettingsModal.value = false;
+      presenceEnabled.value = false;
+      presenceBusy.value = false;
+    }
   },
 );
 
@@ -1284,29 +1362,14 @@ const handleCheckUpdate = async () => {
   if (isCheckingUpdate.value) return;
   isCheckingUpdate.value = true;
   try {
+    if (settingsStore.settings?.skipStartupUpdateCheck) {
+      await settingsStore.savePartialSettings({
+        skipStartupUpdateCheck: false,
+      });
+    }
     const state = await settingsStore.checkUpdateOnly();
     if (state.status === "available") {
-      dialog.warning({
-        title: t("settings.updatePromptTitle"),
-        content: t("settings.updatePromptMessage", {
-          version: state.latestVersion || "",
-        }),
-        positiveText: t("settings.updateNow"),
-        negativeText: t("settings.updateLater"),
-        onPositiveClick: async () => {
-          await settingsStore.checkUpdate();
-        },
-        onNegativeClick: () => {
-          if (!state.latestVersion) return;
-          void settingsStore
-            .ignoreUpdateVersion(state.latestVersion)
-            .catch((error: any) => {
-              message.error(
-                `${t("settings.saveFail")}: ${error?.message || error}`,
-              );
-            });
-        },
-      });
+      showUpdatePrompt(state);
       return;
     }
     if (state.status === "up_to_date") {
@@ -1485,25 +1548,32 @@ const confirmClearCache = async () => {
   height: 28px;
   align-items: center;
 }
-.cloud-sync-row {
+.login-setting-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  width: 100%;
+}
+.cloud-action-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+.cloud-setting-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.cloud-presence-copy {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  width: 100%;
+  gap: 4px;
 }
-.cloud-login-line,
-.cloud-action-line {
-  width: 100%;
-}
-.cloud-login-line {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.cloud-action-line {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.cloud-presence-setting-item {
+  align-items: flex-start;
 }
 .github-token-row {
   display: flex;
@@ -1513,10 +1583,6 @@ const confirmClearCache = async () => {
 }
 .github-token-row .n-input {
   flex: 1;
-}
-.cloud-upload-time {
-  flex: 1;
-  text-align: right;
 }
 .cloud-help-button {
   display: inline-flex;
@@ -1580,13 +1646,6 @@ const confirmClearCache = async () => {
 }
 .avatar-clickable {
   cursor: pointer;
-  transition:
-    transform 0.2s,
-    box-shadow 0.2s;
-}
-.avatar-clickable:hover {
-  transform: scale(1.08);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
 }
 
 .crop-container {

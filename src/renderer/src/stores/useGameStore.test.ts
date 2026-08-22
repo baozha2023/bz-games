@@ -5,7 +5,12 @@ const mocks = vi.hoisted(() => ({
   getAll: vi.fn(),
   getAllRecords: vi.fn(),
   getManifest: vi.fn(),
+  getRunningIds: vi.fn(),
 }));
+
+let processEventHandler:
+  | ((type: "start" | "end", id: string) => void)
+  | undefined;
 
 vi.mock("./useSettingsStore", () => ({
   useSettingsStore: () => ({ loadUserData: vi.fn() }),
@@ -39,13 +44,20 @@ beforeEach(() => {
   mocks.getAll.mockReset();
   mocks.getAllRecords.mockReset();
   mocks.getManifest.mockReset();
+  mocks.getRunningIds.mockReset();
+  mocks.getRunningIds.mockResolvedValue([]);
+  processEventHandler = undefined;
   vi.stubGlobal("window", {
     electronAPI: {
       game: {
         getAll: mocks.getAll,
         getAllRecords: mocks.getAllRecords,
         getManifest: mocks.getManifest,
-        onProcessEvent: vi.fn(() => vi.fn()),
+        getRunningIds: mocks.getRunningIds,
+        onProcessEvent: vi.fn((callback) => {
+          processEventHandler = callback;
+          return vi.fn();
+        }),
         onAchievementUnlocked: vi.fn(() => vi.fn()),
         onImportEvent: vi.fn(() => vi.fn()),
       },
@@ -58,6 +70,33 @@ beforeEach(() => {
 });
 
 describe("useGameStore refresh behavior", () => {
+  it("restores running games from the main-process snapshot", async () => {
+    mocks.getRunningIds.mockResolvedValue(["game.running"]);
+
+    const store = useGameStore();
+
+    await vi.waitFor(() =>
+      expect(store.runningGameIds).toEqual(new Set(["game.running"])),
+    );
+  });
+
+  it("does not let an older snapshot overwrite a process event", async () => {
+    let releaseSnapshot!: (ids: string[]) => void;
+    mocks.getRunningIds.mockReturnValue(
+      new Promise<string[]>((resolve) => {
+        releaseSnapshot = resolve;
+      }),
+    );
+
+    const store = useGameStore();
+    await vi.waitFor(() => expect(processEventHandler).toBeDefined());
+    processEventHandler?.("start", "game.started");
+    releaseSnapshot([]);
+    await vi.waitFor(() =>
+      expect(store.runningGameIds).toEqual(new Set(["game.started"])),
+    );
+  });
+
   it("coalesces concurrent full refresh requests", async () => {
     let release!: (games: any[]) => void;
     mocks.getAll.mockReturnValue(

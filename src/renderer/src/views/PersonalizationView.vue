@@ -73,22 +73,90 @@
                       {{ t("personalization.equip") }}
                     </n-button>
                     <n-button
-                      v-else-if="frame.unlockMethod === 'bzcoin'"
-                      type="warning"
+                      v-else
+                      :type="
+                        frame.unlock.type === 'bzcoin' ? 'warning' : 'primary'
+                      "
                       size="small"
                       block
                       secondary
-                      :disabled="(userData?.bzCoins || 0) < frame.unlockValue"
-                      @click="handleBuy(frame)"
+                      @click="handleUnlockFrame(frame)"
                     >
-                      {{ unlockText(frame) }}
-                    </n-button>
-                    <n-button v-else size="small" block disabled quaternary>
-                      {{ unlockText(frame) }}
+                      {{ conditionActionText(frame.unlock) }}
                     </n-button>
                   </div>
                 </div>
               </div>
+            </n-grid-item>
+          </n-grid>
+        </div>
+      </n-tab-pane>
+      <n-tab-pane name="gameCard" :tab="t('personalization.gameCard')">
+        <div class="game-card-product-panel">
+          <n-grid
+            :x-gap="16"
+            :y-gap="16"
+            :cols="'1 s:2 m:3'"
+            responsive="screen"
+          >
+            <n-grid-item v-for="product in gameCardProducts" :key="product.id">
+              <n-card
+                class="game-card-product-card"
+                :class="{
+                  'game-card-product-equipped': isProductEquipped(product.id),
+                }"
+              >
+                <div class="game-card-product-previews">
+                  <div class="game-card-product-preview square-preview">
+                    <GameIconCard
+                      :game="previewGame"
+                      :frame-product-id="product.id"
+                      :preview-icon-url="defaultIconUrl"
+                      :interactive="false"
+                    />
+                    <span class="preview-ratio">1:1</span>
+                  </div>
+                  <div class="game-card-product-preview wide-preview">
+                    <GameCard
+                      :game="previewGame"
+                      :frame-product-id="product.id"
+                      :preview-cover-url="defaultCoverUrl"
+                      :interactive="false"
+                    />
+                    <span class="preview-ratio">16:9</span>
+                  </div>
+                </div>
+                <div class="game-card-product-title-row">
+                  <div class="game-card-product-title">{{ product.name }}</div>
+                </div>
+                <n-text depth="3" class="game-card-product-description">
+                  {{ product.description }}
+                </n-text>
+                <div class="game-card-product-condition">
+                  <n-icon :component="productUnlockIcon(product)" size="15" />
+                  <span>{{ productUnlockText(product) }}</span>
+                  <span
+                    v-if="
+                      productProgress[product.id] &&
+                      !isProductUnlocked(product.id)
+                    "
+                    class="game-card-product-progress"
+                  >
+                    {{
+                      productProgressText(product, productProgress[product.id])
+                    }}
+                  </span>
+                </div>
+                <n-button
+                  block
+                  secondary
+                  :type="productActionType(product)"
+                  :loading="productBusyId === product.id"
+                  @click="handleProductAction(product)"
+                >
+                  {{ productActionText(product) }}
+                </n-button>
+              </n-card>
             </n-grid-item>
           </n-grid>
         </div>
@@ -207,14 +275,24 @@ import {
 } from "@vicons/ionicons5";
 import AvatarWithFrame from "../components/AvatarWithFrame.vue";
 import NicknameText from "../components/NicknameText.vue";
+import GameCard from "../components/game/GameCard.vue";
+import GameIconCard from "../components/game/GameIconCard.vue";
 import { DEFAULT_NICKNAME_STYLE } from "../../../shared/types";
 import type {
   AvatarFrameDef,
+  GameCardProductDef,
+  ManualUnlockResult,
+  ManualUnlockCondition,
   NicknameEffect,
   NicknameFont,
   NicknameStyle,
 } from "../../../shared/types";
+import { GameType } from "../../../shared/types";
 import { AVATAR_FRAMES } from "../../../shared/avatar-frames";
+import { GAME_CARD_PRODUCTS } from "../../../shared/game-card-products";
+import type { GameManifest } from "../../../shared/game-manifest";
+import defaultCoverUrl from "../../../../resources/default_cover.png";
+import defaultIconUrl from "../../../../resources/default_icon.png";
 import {
   adaptNicknameStyleForTheme,
   isNicknameColorAllowedForTheme,
@@ -227,8 +305,20 @@ const message = useMessage();
 
 const activeTab = ref("avatarFrame");
 const frames = ref<AvatarFrameDef[]>(AVATAR_FRAMES);
+const gameCardProducts = ref<GameCardProductDef[]>(GAME_CARD_PRODUCTS);
 const nicknameStyleForm = ref<NicknameStyle>({ ...DEFAULT_NICKNAME_STYLE });
 const NICKNAME_STYLE_SAVE_COST = 30;
+const productBusyId = ref<string | null>(null);
+const productProgress = ref<Record<string, ManualUnlockResult>>({});
+const previewGame: GameManifest = {
+  id: "com.bz.preview",
+  name: "游戏名",
+  version: "1.0.0",
+  author: "作者",
+  platformVersion: ">=1.0.0",
+  entry: "preview.html",
+  type: GameType.Singleplayer,
+};
 
 const userData = computed(() => settingsStore.userData);
 const equippedFrame = computed(() => userData.value?.equippedFrame);
@@ -326,32 +416,32 @@ function isEquipped(frameId: string): boolean {
 
 function isUnlocked(frame: AvatarFrameDef): boolean {
   if (!userData.value) return false;
-  return (userData.value.ownedFrames || []).includes(frame.id);
+  return userData.value.ownedFrames.includes(frame.id);
 }
 
 function unlockText(frame: AvatarFrameDef): string {
-  switch (frame.unlockMethod) {
+  switch (frame.unlock.type) {
     case "playtime":
       return t("personalization.unlockPlaytime", {
-        hours: Math.max(1, Math.floor(frame.unlockValue / 3600000)),
+        hours: Math.max(1, Math.floor(frame.unlock.durationMs / 3600000)),
       });
     case "consecutive_checkin":
       return t("personalization.unlockConsecutiveCheckIn", {
-        days: frame.unlockValue,
+        days: frame.unlock.days,
       });
     case "total_checkin":
       return t("personalization.unlockTotalCheckIn", {
-        days: frame.unlockValue,
+        days: frame.unlock.days,
       });
     case "bzcoin":
-      return t("personalization.unlockBzCoin", { coins: frame.unlockValue });
+      return t("personalization.unlockBzCoin", { coins: frame.unlock.amount });
     default:
       return "";
   }
 }
 
 function unlockIcon(frame: AvatarFrameDef) {
-  switch (frame.unlockMethod) {
+  switch (frame.unlock.type) {
     case "playtime":
       return TimeOutline;
     case "consecutive_checkin":
@@ -363,6 +453,130 @@ function unlockIcon(frame: AvatarFrameDef) {
     default:
       return TimeOutline;
   }
+}
+
+function formatDuration(durationMs: number): string {
+  const totalMinutes = Math.max(1, Math.ceil(durationMs / 60000));
+  if (totalMinutes < 60) {
+    return t("personalization.durationMinutes", { minutes: totalMinutes });
+  }
+  return t("personalization.durationHoursMinutes", {
+    hours: Math.floor(totalMinutes / 60),
+    minutes: totalMinutes % 60,
+  });
+}
+
+function productUnlockText(product: GameCardProductDef): string {
+  const unlock = product.unlock;
+  switch (unlock.type) {
+    case "bzcoin":
+      return t("personalization.unlockBzCoin", { coins: unlock.amount });
+    case "playtime":
+      return t("personalization.unlockPlaytimeDuration", {
+        duration: formatDuration(unlock.durationMs),
+      });
+    case "total_checkin":
+      return t("personalization.unlockTotalCheckIn", { days: unlock.days });
+    case "consecutive_checkin":
+      return t("personalization.unlockConsecutiveCheckIn", {
+        days: unlock.days,
+      });
+    case "date_playtime":
+      return t("personalization.unlockDatePlaytime", {
+        date: unlock.date,
+        duration: formatDuration(unlock.durationMs),
+      });
+  }
+}
+
+function productUnlockIcon(product: GameCardProductDef) {
+  switch (product.unlock.type) {
+    case "bzcoin":
+      return WalletOutline;
+    case "playtime":
+      return TimeOutline;
+    case "total_checkin":
+      return CalendarOutline;
+    case "consecutive_checkin":
+      return TodayOutline;
+    case "date_playtime":
+      return TodayOutline;
+  }
+}
+
+function productProgressText(
+  product: GameCardProductDef,
+  progress: ManualUnlockResult,
+): string {
+  if (progress.current === undefined || progress.required === undefined) {
+    return "";
+  }
+  const current =
+    product.unlock.type === "playtime" ||
+    product.unlock.type === "date_playtime"
+      ? formatDuration(progress.current)
+      : product.unlock.type === "bzcoin"
+        ? `${progress.current} BZ`
+        : `${progress.current} 天`;
+  const required =
+    product.unlock.type === "playtime" ||
+    product.unlock.type === "date_playtime"
+      ? formatDuration(progress.required)
+      : product.unlock.type === "bzcoin"
+        ? `${progress.required} BZ`
+        : `${progress.required} 天`;
+  return t("personalization.unlockProgress", { current, required });
+}
+
+async function refreshProductProgress() {
+  const progressEntries = await Promise.all(
+    gameCardProducts.value.map(
+      async (product) =>
+        [
+          product.id,
+          await window.electronAPI.user.getGameCardProductProgress(product.id),
+        ] as const,
+    ),
+  );
+  productProgress.value = Object.fromEntries(progressEntries);
+}
+
+function conditionActionText(condition: ManualUnlockCondition): string {
+  return condition.type === "bzcoin"
+    ? t("personalization.buy")
+    : t("personalization.unlock");
+}
+
+function handleUnlockFailure(result: { code?: string }) {
+  if (result.code === "insufficient_coins") {
+    message.error(t("personalization.insufficientCoins"));
+  } else if (result.code === "condition_not_met") {
+    message.warning(t("personalization.conditionNotMet"));
+  } else if (result.code === "already_owned") {
+    message.info(t("personalization.alreadyOwned"));
+  } else {
+    message.error(t("settings.saveFail"));
+  }
+}
+
+function productActionText(product: GameCardProductDef): string {
+  if (isProductEquipped(product.id)) return t("personalization.equipped");
+  if (isProductUnlocked(product.id)) return t("personalization.equip");
+  return conditionActionText(product.unlock);
+}
+
+function productActionType(product: GameCardProductDef) {
+  if (isProductEquipped(product.id)) return "success" as const;
+  if (product.unlock.type === "bzcoin") return "warning" as const;
+  return "primary" as const;
+}
+
+function isProductUnlocked(productId: string): boolean {
+  return Boolean(userData.value?.ownedGameCardProducts.includes(productId));
+}
+
+function isProductEquipped(productId: string): boolean {
+  return userData.value?.equippedGameCardProduct === productId;
 }
 
 function handleEquipOrToggle(frame: AvatarFrameDef) {
@@ -383,10 +597,37 @@ async function handleUnequip(frameId: string) {
   await settingsStore.loadUserData();
 }
 
-async function handleBuy(frame: AvatarFrameDef) {
-  const result = await window.electronAPI.user.buyFrame(frame.id);
-  if (result.success) {
+async function handleUnlockFrame(frame: AvatarFrameDef) {
+  const result = await window.electronAPI.user.unlockFrame(frame.id);
+  if (!result.success) {
+    handleUnlockFailure(result);
+    return;
+  }
+  await settingsStore.loadUserData();
+  message.success(t("personalization.unlockedSuccess"));
+}
+
+async function handleProductAction(product: GameCardProductDef) {
+  productBusyId.value = product.id;
+  try {
+    if (isProductEquipped(product.id)) {
+      await window.electronAPI.user.unequipGameCardProduct(product.id);
+    } else if (isProductUnlocked(product.id)) {
+      await window.electronAPI.user.equipGameCardProduct(product.id);
+    } else {
+      const result = await window.electronAPI.user.unlockGameCardProduct(
+        product.id,
+      );
+      if (!result.success) {
+        handleUnlockFailure(result);
+        return;
+      }
+      message.success(t("personalization.unlockedSuccess"));
+    }
     await settingsStore.loadUserData();
+    await refreshProductProgress();
+  } finally {
+    productBusyId.value = null;
   }
 }
 
@@ -428,6 +669,7 @@ async function resetNicknameStyle() {
 onMounted(async () => {
   await settingsStore.loadSettings();
   await settingsStore.loadUserData();
+  await refreshProductProgress();
   syncNicknameStyleForm();
 });
 
@@ -511,6 +753,105 @@ watch(
 .frame-actions {
   display: flex;
   gap: 8px;
+}
+
+.game-card-product-panel {
+  padding-top: 16px;
+}
+
+.game-card-product-card {
+  height: 100%;
+  border: 2px solid transparent;
+  transition:
+    border-color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.game-card-product-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--bz-border-hover);
+}
+
+.game-card-product-equipped {
+  border-color: var(--bz-green);
+}
+
+.game-card-product-previews {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.game-card-product-preview {
+  position: relative;
+  align-self: start;
+  overflow: visible;
+  border-radius: 10px;
+  background: transparent;
+}
+
+.game-card-product-preview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.wide-preview {
+  align-self: start;
+}
+
+.preview-ratio {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  padding: 2px 5px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.48);
+  color: #fff;
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.game-card-product-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.game-card-product-title {
+  min-width: 0;
+  color: var(--bz-text-title);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.game-card-product-description {
+  display: block;
+  min-height: 40px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.game-card-product-condition {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 6px;
+  min-height: 42px;
+  margin: 12px 0;
+  color: var(--bz-text-hint);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.game-card-product-progress {
+  width: 100%;
+  padding-left: 21px;
+  color: var(--bz-text-tertiary);
 }
 
 .nickname-style-panel {

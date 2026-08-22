@@ -677,6 +677,16 @@ export function createGameHostingService({ config, mySqlService, accessControlSe
         if (gameIdFromRoute && !canManageOwnedResource(auth, gameRows[0].owner_user_id)) throw new GameHostingError("forbidden", 403);
         const [versionRows] = await mySqlService.query("SELECT id FROM hosted_game_versions WHERE game_id = ? AND version = ? LIMIT 1", [gameId, parsed.version.version]);
         if (versionRows[0]) throw new GameHostingError("hosted_game_version_exists", 409);
+        const [versionCountRows] = await mySqlService.query(
+          "SELECT COUNT(*) AS total FROM hosted_game_versions WHERE game_id = ?",
+          [gameId],
+        );
+        if (
+          Number(versionCountRows[0]?.total || 0) > 0 &&
+          parsed.assets.some((asset) => asset.role === "icon" || asset.role === "cover")
+        ) {
+          throw new GameHostingError("hosted_version_images_require_unique");
+        }
         if ((await directoryUsage(filesDir)) + totalBytes > config.MAX_GAME_HOSTING_TOTAL_BYTES) throw new GameHostingError("game_hosting_capacity_exceeded", 507);
         try { await fs.access(finalDirectory); throw new GameHostingError("hosted_game_version_exists", 409); } catch (error) { if (error?.code !== "ENOENT") throw error; }
 
@@ -785,6 +795,16 @@ export function createGameHostingService({ config, mySqlService, accessControlSe
         if (!canManageOwnedResource(auth, existing.owner_user_id)) throw new GameHostingError("forbidden", 403);
         if (!canManageAll(auth)) {
           if (!['pending', 'rejected'].includes(existing.status)) throw new GameHostingError("approved_submission_read_only", 409);
+        }
+        const [versionCountRows] = await mySqlService.query(
+          "SELECT COUNT(*) AS total FROM hosted_game_versions WHERE game_id = ?",
+          [gameId],
+        );
+        if (
+          Number(versionCountRows[0]?.total || 0) !== 1 &&
+          parsed.assets.some((asset) => asset.role === "icon" || asset.role === "cover")
+        ) {
+          throw new GameHostingError("hosted_version_images_require_unique");
         }
         const [oldAssets] = await mySqlService.query(
           "SELECT role, size FROM hosted_game_assets WHERE version_id = ?", [existing.id],
@@ -1398,8 +1418,71 @@ export function createGameHostingService({ config, mySqlService, accessControlSe
     createReadStream(filePath, { start, end }).once("error", () => res.destroy()).pipe(res);
   }
 
+  async function handlePortalDownload(req, res, rawAssetId) {
+    const auth = await accessControlService.requireCapability(req, res, PORTAL_CAPABILITIES.HOSTING_VIEW);
+    if (!auth) return;
+    const assetId = decodeCanonicalSegment(rawAssetId);
+    if (!UUID_PATTERN.test(assetId)) throw new GameHostingError("hosted_game_asset_not_found", 404);
+    const [rows] = await mySqlService.query(
+      `SELECT a.id, a.role, a.original_name, a.storage_name, a.content_type, a.size, a.sha256,
+              v.game_id, v.version, g.owner_user_id
+       FROM hosted_game_assets a
+       JOIN hosted_game_versions v ON v.id = a.version_id
+       JOIN hosted_games g ON g.game_id = v.game_id
+       WHERE a.id = ? LIMIT 1`,
+      [assetId],
+    );
+    const asset = rows[0];
+    if (!asset) throw new GameHostingError("hosted_game_asset_not_found", 404);
+    if (!canManageOwnedResource(auth, asset.owner_user_id)) throw new GameHostingError("forbidden", 403);
+
+    await ensureStorage();
+    const storageName = String(asset.storage_name || "");
+    if (!storageName || path.basename(storageName) !== storageName) {
+      throw new GameHostingError("hosted_game_asset_unavailable", 503);
+    }
+    const filePath = path.join(versionDirectory(asset.game_id, asset.version), storageName);
+    let stat;
+    try {
+      stat = await fs.stat(filePath);
+    } catch (error) {
+      if (error?.code === "ENOENT") throw new GameHostingError("hosted_game_asset_not_found", 404);
+      throw error;
+    }
+    const size = Number(asset.size);
+    if (!stat.isFile() || stat.size !== size) throw new GameHostingError("hosted_game_asset_unavailable", 503);
+    const range = parseRange(req.headers.range, size);
+    if (range === false) {
+      res.writeHead(416, { "content-range": `bytes */${size}`, "accept-ranges": "bytes" });
+      res.end();
+      return;
+    }
+    const start = range?.start ?? 0;
+    const end = range?.end ?? size - 1;
+    const extension = String(asset.content_type || "application/octet-stream").split("/")[1]?.replace("jpeg", "jpg") || "bin";
+    const asciiName = asset.role === "package" ? "game.zip" : `${asset.role}.${extension}`;
+    const headers = {
+      "content-type": asset.content_type,
+      "content-length": String(end - start + 1),
+      "content-disposition": `attachment; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(asset.original_name)}`,
+      "accept-ranges": "bytes",
+      etag: `"${asset.sha256}"`,
+      "x-file-sha256": asset.sha256,
+      "cache-control": "private, max-age=300",
+      "x-content-type-options": "nosniff",
+    };
+    if (range) headers["content-range"] = `bytes ${start}-${end}/${size}`;
+    res.writeHead(range ? 206 : 200, headers);
+    if (req.method === "HEAD") {
+      res.end();
+      return;
+    }
+    createReadStream(filePath, { start, end }).once("error", () => res.destroy()).pipe(res);
+  }
+
   async function handleRequest(req, res, url) {
     const assetMatch = url.pathname.match(/^\/api\/v1\/game-hosting\/assets\/([^/]+)\/([^/]+)\/(package|icon|cover)\/([^/]+)$/);
+    const portalAssetDownloadMatch = url.pathname.match(/^\/api\/portal\/v1\/game-hosting\/assets\/([^/]+)\/download$/);
     const base = "/api/portal/v1/game-hosting";
     const versionMatch = url.pathname.match(/^\/api\/portal\/v1\/game-hosting\/games\/([^/]+)\/versions\/([^/]+)$/);
     const versionsCollectionMatch = url.pathname.match(/^\/api\/portal\/v1\/game-hosting\/games\/([^/]+)\/versions$/);
@@ -1411,11 +1494,12 @@ export function createGameHostingService({ config, mySqlService, accessControlSe
     const revisionMatch = url.pathname.match(/^\/api\/portal\/v1\/game-hosting\/revisions\/([^/]+)$/);
     const gamesCollection = url.pathname === `${base}/games`;
     const treeCollection = url.pathname === `${base}/tree`;
-    if (!assetMatch && !versionMatch && !versionsCollectionMatch && !latestMatch && !configMatch && !gameMatch &&
+    if (!assetMatch && !portalAssetDownloadMatch && !versionMatch && !versionsCollectionMatch && !latestMatch && !configMatch && !gameMatch &&
         !reviewVersionMatch && !reviewRevisionMatch && !revisionMatch && !gamesCollection && !treeCollection) return false;
     if (!mySqlService.isEnabled()) { sendJson(res, 503, { error: "game_hosting_storage_not_configured" }); return true; }
     try {
       if (["GET", "HEAD"].includes(req.method) && assetMatch) await handleDownload(req, res, url, ...assetMatch.slice(1));
+      else if (["GET", "HEAD"].includes(req.method) && portalAssetDownloadMatch) await handlePortalDownload(req, res, ...portalAssetDownloadMatch.slice(1));
       else if (req.method === "POST" && gamesCollection) await createVersion(req, res, null);
       else if (req.method === "POST" && versionsCollectionMatch) await createVersion(req, res, decodeCanonicalSegment(versionsCollectionMatch[1]));
       else if (req.method === "GET" && treeCollection) await handleTree(req, res, url);

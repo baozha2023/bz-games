@@ -46,6 +46,7 @@ function serializeUser(user) {
     githubId: user.github_id,
     login: user.login,
     name: user.name || "",
+    nickname: user.nickname || "",
     avatarUrl: user.avatar_url || "",
     profileUrl: user.profile_url || "",
     email: user.email || "",
@@ -249,7 +250,7 @@ export function createAuthService({ config, mySqlService }) {
     if (!sessionToken) return { status: "missing" };
 
     const [rows] = await mySqlService.query(
-      `SELECT s.*, u.id AS user_id_value, u.github_id, u.login, u.name, u.avatar_url, u.profile_url, u.email, u.role,
+      `SELECT s.*, u.id AS user_id_value, u.github_id, u.login, u.name, u.nickname, u.avatar_url, u.profile_url, u.email, u.role,
               u.created_at AS user_created_at, u.updated_at AS user_updated_at, u.last_login_at
        FROM auth_sessions s
        INNER JOIN users u ON u.id = s.user_id
@@ -282,6 +283,7 @@ export function createAuthService({ config, mySqlService }) {
           github_id: row.github_id,
           login: row.login,
           name: row.name,
+          nickname: row.nickname,
           avatar_url: row.avatar_url,
           profile_url: row.profile_url,
           email: row.email,

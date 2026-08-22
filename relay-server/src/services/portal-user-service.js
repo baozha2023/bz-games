@@ -3,6 +3,7 @@ import {
   ASSIGNABLE_PORTAL_ROLES,
   PORTAL_CAPABILITIES,
 } from "./portal-authorization.js";
+import { isEffectivelyOnline } from "./presence-service.js";
 
 const MAX_ROLE_BODY_BYTES = 4096;
 const MAX_USER_ID = 18_446_744_073_709_551_615n;
@@ -20,6 +21,12 @@ function githubProfileUrl(value) {
   } catch {
     return "";
   }
+}
+
+function isoTime(value) {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
 function parseUserId(value) {
@@ -66,6 +73,9 @@ function serializeUser(row) {
     githubId: row.github_id,
     login: row.login,
     name: row.name || "",
+    nickname: row.nickname || "",
+    isOnline: isEffectivelyOnline(row),
+    lastOnlineAt: isoTime(row.last_online_at),
     avatarUrl: row.avatar_url || "",
     profileUrl: githubProfileUrl(row.profile_url),
     email: row.email || "",
@@ -105,17 +115,19 @@ export function createPortalUserService({
       .trim()
       .slice(0, 200);
     const where = query
-      ? "WHERE github_id LIKE ? ESCAPE '\\\\' OR login LIKE ? ESCAPE '\\\\' OR name LIKE ? ESCAPE '\\\\' OR email LIKE ? ESCAPE '\\\\'"
+      ? "WHERE github_id LIKE ? ESCAPE '\\\\' OR login LIKE ? ESCAPE '\\\\' OR name LIKE ? ESCAPE '\\\\' OR nickname LIKE ? ESCAPE '\\\\' OR email LIKE ? ESCAPE '\\\\'"
       : "";
     const pattern = `%${escapeLike(query)}%`;
-    const params = query ? [pattern, pattern, pattern, pattern] : [];
+    const params = query
+      ? [pattern, pattern, pattern, pattern, pattern]
+      : [];
     const [counts] = await mySqlService.query(
       `SELECT COUNT(*) AS total FROM users ${where}`,
       params,
     );
     const [rows] = await mySqlService.query(
-      `SELECT id, github_id, login, name, avatar_url, profile_url, email, role,
-              created_at, updated_at, last_login_at
+      `SELECT id, github_id, login, name, nickname, is_online, last_online_at,
+              avatar_url, profile_url, email, role, created_at, updated_at, last_login_at
        FROM users ${where}
        ORDER BY last_login_at DESC, id DESC LIMIT ? OFFSET ?`,
       [...params, pageSize, (page - 1) * pageSize],

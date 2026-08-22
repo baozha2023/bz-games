@@ -34,6 +34,9 @@
 | `github_id`     | `VARCHAR(64)`     | GitHub 用户 ID，唯一                                          |
 | `login`         | `VARCHAR(255)`    | GitHub 登录名                                                 |
 | `name`          | `VARCHAR(255)`    | GitHub 显示名                                                 |
+| `nickname`      | `VARCHAR(16)`     | BZ-Games 客户端昵称，默认 `玩家`                              |
+| `is_online`     | `TINYINT(1)`      | 客户端主动开启的在线标记，默认 `0`                             |
+| `last_online_at`| `DATETIME(3)`     | 最近一次在线心跳时间，超过 90 秒后视为离线                     |
 | `avatar_url`    | `TEXT`            | GitHub 头像地址                                               |
 | `profile_url`   | `TEXT`            | GitHub 主页地址                                               |
 | `email`         | `VARCHAR(255)`    | GitHub 邮箱，可能为空                                         |
@@ -51,6 +54,9 @@ id: 1
 github_id: "208792845"
 login: "baozha2023"
 name: "Baozha"
+nickname: "玩家"
+is_online: 0
+last_online_at: NULL
 avatar_url: "https://avatars.githubusercontent.com/u/123456789?v=4"
 profile_url: "https://github.com/baozha2023"
 email: ""

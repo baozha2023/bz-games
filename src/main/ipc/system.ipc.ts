@@ -15,6 +15,10 @@ import { cloudSyncService } from "../services/system/CloudSyncService";
 import { feedbackService } from "../services/system/FeedbackService";
 import { uninstallService } from "../services/system/UninstallService";
 import { AVATAR_FRAMES } from "../../shared/avatar-frames";
+import {
+  getGameCardProduct,
+  getGameCardProductAsset,
+} from "../../shared/game-card-products";
 import { openExternalHttpUrl } from "../utils/externalUrl";
 
 let sensitiveWordCache: string[] | null = null;
@@ -35,6 +39,7 @@ const RENDERER_WRITABLE_SETTING_KEYS = [
   "defaultRoomPort",
   "closeBehavior",
   "autoLaunch",
+  "skipStartupUpdateCheck",
   "downloadFloatBall",
   "sensitiveWordFilter",
   "githubToken",
@@ -164,6 +169,17 @@ export function registerSystemIpc() {
     return cloudSyncService.getLocalStatus();
   });
 
+  ipcMain.handle(IPC.SYSTEM_CLOUD_GET_PRESENCE_STATUS, () => {
+    return cloudSyncService.getPresenceStatus();
+  });
+
+  ipcMain.handle(
+    IPC.SYSTEM_CLOUD_SET_PRESENCE,
+    async (_, enabled: unknown) => {
+      return cloudSyncService.setPresenceEnabled(enabled === true);
+    },
+  );
+
   ipcMain.handle(IPC.SYSTEM_CLOUD_GET_SNAPSHOT_META, async () => {
     return await cloudSyncService.getSnapshotMeta();
   });
@@ -211,7 +227,14 @@ export function registerSystemIpc() {
     logger.info("[SystemIPC] Saving settings");
     try {
       const safeSettings = selectRendererWritableSettings(settings);
+      const previousPlayerName = storeService.getSettings().playerName;
       storeService.saveSettings(safeSettings);
+      if (
+        typeof safeSettings.playerName === "string" &&
+        safeSettings.playerName !== previousPlayerName
+      ) {
+        void cloudSyncService.syncPlayerName(safeSettings.playerName);
+      }
       if (typeof safeSettings.autoLaunch === "boolean") {
         app.setLoginItemSettings({
           openAtLogin: safeSettings.autoLaunch,
@@ -229,7 +252,14 @@ export function registerSystemIpc() {
     IPC.SYSTEM_SAVE_PARTIAL_SETTINGS,
     async (_, partial: unknown) => {
       const safeSettings = selectRendererWritableSettings(partial);
+      const previousPlayerName = storeService.getSettings().playerName;
       storeService.saveSettings(safeSettings);
+      if (
+        typeof safeSettings.playerName === "string" &&
+        safeSettings.playerName !== previousPlayerName
+      ) {
+        void cloudSyncService.syncPlayerName(safeSettings.playerName);
+      }
       applyFloatBallSetting(safeSettings);
     },
   );
@@ -413,8 +443,10 @@ export function registerSystemIpc() {
     return storeService.getUserData();
   });
 
-  ipcMain.handle(IPC.SYSTEM_BUY_FRAME, async (_, frameId: string) => {
-    return storeService.performBuyFrame(frameId);
+  ipcMain.handle(IPC.SYSTEM_UNLOCK_FRAME, async (_, frameId: unknown) => {
+    return storeService.performUnlockFrame(
+      typeof frameId === "string" ? frameId : "",
+    );
   });
 
   ipcMain.handle(IPC.SYSTEM_EQUIP_FRAME, async (_, frameId: string) => {
@@ -426,6 +458,39 @@ export function registerSystemIpc() {
     storeService.performUnequipFrame(frameId);
     return true;
   });
+
+  ipcMain.handle(
+    IPC.SYSTEM_UNLOCK_GAME_CARD_PRODUCT,
+    async (_, productId: unknown) => {
+      return storeService.performUnlockGameCardProduct(
+        typeof productId === "string" ? productId : "",
+      );
+    },
+  );
+
+  ipcMain.handle(
+    IPC.SYSTEM_GET_GAME_CARD_PRODUCT_PROGRESS,
+    async (_, productId: unknown) =>
+      storeService.getGameCardProductUnlockProgress(
+        typeof productId === "string" ? productId : "",
+      ),
+  );
+
+  ipcMain.handle(
+    IPC.SYSTEM_EQUIP_GAME_CARD_PRODUCT,
+    async (_, productId: string) => {
+      storeService.performEquipGameCardProduct(productId);
+      return true;
+    },
+  );
+
+  ipcMain.handle(
+    IPC.SYSTEM_UNEQUIP_GAME_CARD_PRODUCT,
+    async (_, productId: string) => {
+      storeService.performUnequipGameCardProduct(productId);
+      return true;
+    },
+  );
 
   ipcMain.handle(IPC.SYSTEM_CHECK_IN, async () => {
     return storeService.performCheckIn();
@@ -464,6 +529,48 @@ export function registerSystemIpc() {
         return dataUrl;
       } catch (e) {
         logger.error("[SystemIPC] Failed to load avatar frame image:", e);
+        return null;
+      }
+    },
+  );
+
+  ipcMain.handle(
+    IPC.SYSTEM_GET_GAME_CARD_PRODUCT_IMAGE,
+    async (_, productId: unknown, ratio: unknown) => {
+      try {
+        if (
+          typeof productId !== "string" ||
+          (ratio !== "square" && ratio !== "wide")
+        ) {
+          logger.warn("[SystemIPC] Rejected invalid game card product asset");
+          return null;
+        }
+        const product = getGameCardProduct(productId);
+        const asset = getGameCardProductAsset(
+          productId,
+          ratio,
+        );
+        if (!product || !asset) return null;
+        const assetPath = path.join(
+          app.getAppPath(),
+          "resources",
+          "game-card-products",
+          product.id,
+          asset.fileName,
+        );
+        if (!fs.existsSync(assetPath)) {
+          logger.warn(
+            `[SystemIPC] Game card product image not found: ${assetPath}`,
+          );
+          return null;
+        }
+        const buffer = fs.readFileSync(assetPath);
+        return `data:image/png;base64,${buffer.toString("base64")}`;
+      } catch (error) {
+        logger.error(
+          "[SystemIPC] Failed to load game card product image:",
+          error,
+        );
         return null;
       }
     },

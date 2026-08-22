@@ -1,17 +1,58 @@
-export type AvatarFrameUnlockMethod =
-  | "playtime"
-  | "consecutive_checkin"
-  | "total_checkin"
-  | "bzcoin";
+export type ManualUnlockCondition =
+  | { type: "bzcoin"; amount: number }
+  | { type: "playtime"; durationMs: number }
+  | { type: "total_checkin"; days: number }
+  | { type: "consecutive_checkin"; days: number }
+  | { type: "date_playtime"; date: string; durationMs: number };
+
+export type AvatarFrameUnlockCondition = Exclude<
+  ManualUnlockCondition,
+  { type: "date_playtime" }
+>;
+
+export interface ManualUnlockResult {
+  success: boolean;
+  code?:
+    | "invalid_item"
+    | "already_owned"
+    | "insufficient_coins"
+    | "condition_not_met";
+  current?: number;
+  required?: number;
+  targetDate?: string;
+}
 
 export interface AvatarFrameDef {
   id: string;
   name: string;
   description: string;
   imageFileName: string;
+  contentInsetPx: FrameContentInset;
   rarity: "common" | "rare" | "epic" | "legendary";
-  unlockMethod: AvatarFrameUnlockMethod;
-  unlockValue: number;
+  unlock: AvatarFrameUnlockCondition;
+}
+
+export interface FrameContentInset {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
+export interface GameCardFrameAssetDef {
+  fileName: string;
+  contentInsetPercent: FrameContentInset;
+}
+
+export interface GameCardProductDef {
+  id: string;
+  name: string;
+  description: string;
+  assets: {
+    square: GameCardFrameAssetDef;
+    wide: GameCardFrameAssetDef;
+  };
+  unlock: ManualUnlockCondition;
 }
 
 export interface UserData {
@@ -19,10 +60,13 @@ export interface UserData {
   checkIn: {
     lastCheckInDate: string; // YYYY-MM-DD
     consecutiveDays: number;
+    maxConsecutiveDays: number;
     totalDays: number;
   };
   ownedFrames: string[];
   equippedFrame?: string;
+  ownedGameCardProducts: string[];
+  equippedGameCardProduct?: string;
 }
 
 export interface AppStore {
@@ -154,6 +198,10 @@ export interface LocalCloudStatus {
   lastUploadedAt: string;
 }
 
+export interface CloudPresenceStatus {
+  enabled: boolean;
+}
+
 export type CloudAuthChangedReason =
   | "login"
   | "session_expired"
@@ -197,6 +245,7 @@ export interface AppSettings {
   closeBehavior: "tray" | "exit";
   autoLaunch: boolean;
   ignoredUpdateVersion?: string;
+  skipStartupUpdateCheck?: boolean;
   gameStoragePath?: string;
   gameStorageHistory?: string[];
   lastOpenedAt?: number;

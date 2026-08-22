@@ -98,6 +98,7 @@ if (!gotTheLock) {
     requestInterceptor.registerSessionHandler(session.defaultSession);
 
     await storeService.init();
+    void cloudSyncService.resetPresenceOnStartup();
     await gameImportTaskService.restoreTasks();
     appServicesInitialized = true;
     appReadyForProtocol = true;

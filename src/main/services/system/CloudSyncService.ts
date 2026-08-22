@@ -10,11 +10,13 @@ import {
   importCloudSqlDump,
 } from "../storage/database/BzGamesDatabase";
 import { openExternalHttpUrl } from "../../utils/externalUrl";
+import { logger } from "../../utils/logger";
 import { mainWindow } from "../../window";
 import { IPC } from "../../../shared/ipc-channels";
 import type {
   CloudAuthChangedPayload,
   CloudAuthChangedReason,
+  CloudPresenceStatus,
   CloudSnapshotMetaResult,
   CloudSyncResult,
   LocalCloudStatus,
@@ -41,6 +43,9 @@ export interface CloudSyncProgress {
 }
 
 type CloudSyncProgressHandler = (progress: CloudSyncProgress) => void;
+
+const PRESENCE_HEARTBEAT_INTERVAL_MS = 60_000;
+const PRESENCE_REQUEST_TIMEOUT_MS = 10_000;
 
 function normalizeRelayHttpBase(): string {
   const relayUrl = DEFAULT_RELAY_SERVER_URL.trim();
@@ -84,9 +89,12 @@ function parseSnapshot(buffer: Buffer): PlatformCloudSnapshot {
   return parsed as PlatformCloudSnapshot;
 }
 
-class CloudSyncService {
+export class CloudSyncService {
   private readonly baseUrl = normalizeRelayHttpBase();
   private activeOperation: Promise<CloudSyncResult> | null = null;
+  private presenceEnabled = false;
+  private presenceTimer: ReturnType<typeof setTimeout> | null = null;
+  private presenceRequest: Promise<boolean> | null = null;
   private shuttingDown = false;
 
   isConfigured(): boolean {
@@ -130,8 +138,78 @@ class CloudSyncService {
       cloudUserName: params.get("name") || "",
       cloudUserProfileUrl: params.get("profile_url") || "",
     });
+    void this.syncPlayerName(storeService.getSettings().playerName);
     this.emitAuthChanged("login");
     return true;
+  }
+
+  getPresenceStatus(): CloudPresenceStatus {
+    return { enabled: this.presenceEnabled };
+  }
+
+  async setPresenceEnabled(enabled: boolean): Promise<CloudPresenceStatus> {
+    if (!enabled) {
+      this.stopPresenceHeartbeat();
+      this.presenceEnabled = false;
+      await this.sendPresence(false);
+      this.emitPresenceChanged();
+      return this.getPresenceStatus();
+    }
+
+    if (
+      this.shuttingDown ||
+      !this.baseUrl ||
+      !storeService.getSettings().cloudSessionToken
+    ) {
+      return this.getPresenceStatus();
+    }
+
+    const success = await this.sendPresence(true);
+    if (!success || this.shuttingDown) {
+      this.stopPresenceHeartbeat();
+      this.presenceEnabled = false;
+      this.emitPresenceChanged();
+      return this.getPresenceStatus();
+    }
+
+    this.presenceEnabled = true;
+    this.schedulePresenceHeartbeat();
+    this.emitPresenceChanged();
+    return this.getPresenceStatus();
+  }
+
+  async resetPresenceOnStartup(): Promise<void> {
+    this.stopPresenceHeartbeat();
+    this.presenceEnabled = false;
+    if (!this.baseUrl || !storeService.getSettings().cloudSessionToken) return;
+    await this.sendPresence(false);
+  }
+
+  async syncPlayerName(playerName: string): Promise<void> {
+    if (!this.baseUrl || !storeService.getSettings().cloudSessionToken) return;
+
+    const url = `${this.baseUrl}/api/v1/me/profile`;
+    try {
+      const response = await fetch(url, {
+        method: "PATCH",
+        headers: getCloudHeaders(url, {
+          "Content-Type": "application/json; charset=utf-8",
+        }),
+        body: JSON.stringify({ nickname: playerName }),
+      });
+      const body = (await response.json().catch(() => ({}))) as {
+        error?: string;
+      };
+      if (response.ok) return;
+
+      this.handleAuthFailure(body.error);
+      logger.warn(
+        `[CloudSyncService] Failed to sync playerName (${response.status}):`,
+        body.error || "unknown_error",
+      );
+    } catch (error) {
+      logger.warn("[CloudSyncService] Failed to sync playerName:", error);
+    }
   }
 
   getLocalStatus(): LocalCloudStatus {
@@ -193,8 +271,84 @@ class CloudSyncService {
   }
 
   async shutdown(): Promise<void> {
+    this.stopPresenceHeartbeat();
+    this.presenceEnabled = false;
+    if (this.baseUrl && storeService.getSettings().cloudSessionToken) {
+      await this.sendPresence(false);
+    }
     this.shuttingDown = true;
     await this.activeOperation;
+  }
+
+  private schedulePresenceHeartbeat(): void {
+    this.stopPresenceHeartbeat();
+    this.presenceTimer = setTimeout(() => {
+      void this.runPresenceHeartbeat();
+    }, PRESENCE_HEARTBEAT_INTERVAL_MS);
+  }
+
+  private stopPresenceHeartbeat(): void {
+    if (!this.presenceTimer) return;
+    clearTimeout(this.presenceTimer);
+    this.presenceTimer = null;
+  }
+
+  private async runPresenceHeartbeat(): Promise<void> {
+    this.presenceTimer = null;
+    if (!this.presenceEnabled || this.shuttingDown) return;
+    await this.sendPresence(true);
+    if (this.presenceEnabled && !this.shuttingDown) {
+      this.schedulePresenceHeartbeat();
+    }
+  }
+
+  private async sendPresence(online: boolean): Promise<boolean> {
+    if (!this.baseUrl || !storeService.getSettings().cloudSessionToken) {
+      return false;
+    }
+    if (this.presenceRequest) await this.presenceRequest;
+
+    const request = this.performPresenceRequest(online);
+    this.presenceRequest = request;
+    try {
+      return await request;
+    } finally {
+      if (this.presenceRequest === request) this.presenceRequest = null;
+    }
+  }
+
+  private async performPresenceRequest(online: boolean): Promise<boolean> {
+    const url = `${this.baseUrl}/api/v1/me/presence`;
+    const controller = new AbortController();
+    const timeout = setTimeout(
+      () => controller.abort(),
+      PRESENCE_REQUEST_TIMEOUT_MS,
+    );
+    try {
+      const response = await fetch(url, {
+        method: "PUT",
+        headers: getCloudHeaders(url, {
+          "Content-Type": "application/json; charset=utf-8",
+        }),
+        body: JSON.stringify({ online }),
+        signal: controller.signal,
+      });
+      const body = (await response.json().catch(() => ({}))) as {
+        error?: string;
+      };
+      if (response.ok) return true;
+      this.handleAuthFailure(body.error);
+      logger.warn(
+        `[CloudSyncService] Failed to update presence (${response.status}):`,
+        body.error || "unknown_error",
+      );
+      return false;
+    } catch (error) {
+      logger.warn("[CloudSyncService] Failed to update presence:", error);
+      return false;
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   private async performUpload(
@@ -318,6 +472,9 @@ class CloudSyncService {
     if (error !== "session_expired" && error !== "session_invalid") {
       return false;
     }
+    this.stopPresenceHeartbeat();
+    this.presenceEnabled = false;
+    this.emitPresenceChanged();
     storeService.saveSettings({
       cloudSessionToken: "",
       cloudSessionExpiresAt: "",
@@ -333,6 +490,14 @@ class CloudSyncService {
     };
     if (!mainWindow || mainWindow.isDestroyed()) return;
     mainWindow.webContents.send(IPC.SYSTEM_CLOUD_AUTH_CHANGED, payload);
+  }
+
+  private emitPresenceChanged(): void {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.send(
+      IPC.SYSTEM_CLOUD_PRESENCE_CHANGED,
+      this.getPresenceStatus(),
+    );
   }
 }
 

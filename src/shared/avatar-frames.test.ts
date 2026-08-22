@@ -3,6 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   AVATAR_FRAMES,
+  getAvatarFrameByFileName,
   getFrameImageFileName,
   normalizeAvatarFrameFileName,
   normalizeAvatarFrameId,
@@ -15,6 +16,20 @@ describe("avatar frame catalog", () => {
 
     expect(new Set(ids).size).toBe(ids.length);
     expect(new Set(fileNames).size).toBe(fileNames.length);
+  });
+
+  it("uses only manual unlock conditions", () => {
+    expect(
+      AVATAR_FRAMES.every((frame) =>
+        [
+          "bzcoin",
+          "playtime",
+          "total_checkin",
+          "consecutive_checkin",
+        ].includes(frame.unlock.type),
+      ),
+    ).toBe(true);
+    expect(AVATAR_FRAMES.every((frame) => Boolean(frame.unlock))).toBe(true);
   });
 
   it("keeps every catalog image present in the packaged resource directory", () => {
@@ -39,6 +54,13 @@ describe("avatar frame catalog", () => {
       frame.imageFileName,
     );
     expect(getFrameImageFileName(frame.id)).toBe(frame.imageFileName);
+    expect(getAvatarFrameByFileName(frame.imageFileName)).toBe(frame);
+    expect(frame.contentInsetPx).toEqual({
+      top: 60,
+      right: 60,
+      bottom: 60,
+      left: 60,
+    });
   });
 
   it.each(["removed-frame", "../frame.png", "", null, undefined, 1])(

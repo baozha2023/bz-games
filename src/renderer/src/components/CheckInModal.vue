@@ -8,6 +8,9 @@
         <div class="total-info">
           {{ t('checkIn.totalDays', { days: userData?.checkIn?.totalDays || 0 }) }}
         </div>
+        <div class="max-streak-info">
+          {{ t('checkIn.maxStreak', { days: userData?.checkIn?.maxConsecutiveDays || 0 }) }}
+        </div>
         <div class="coins-info">
           <img :src="bzCoinIcon" style="width: 24px; height: 24px;" />
           <span>{{ userData?.bzCoins || 0 }}</span>

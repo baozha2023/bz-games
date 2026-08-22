@@ -46,6 +46,7 @@ export function createSystemMonitorService({
   config,
   state,
   accessControlService,
+  mySqlService = null,
   osModule = os,
   fsModule = fs,
   now = () => Date.now(),
@@ -87,6 +88,22 @@ export function createSystemMonitorService({
     }
   }
 
+  async function countOnlineUsers() {
+    if (!mySqlService?.isEnabled?.()) return 0;
+    try {
+      const [rows] = await mySqlService.query(
+        `SELECT COUNT(*) AS online_users
+         FROM users
+         WHERE is_online = 1
+           AND last_online_at IS NOT NULL
+           AND last_online_at >= DATE_SUB(NOW(3), INTERVAL 90 SECOND)`,
+      );
+      return Number(rows[0]?.online_users || 0);
+    } catch {
+      return 0;
+    }
+  }
+
   async function collect() {
     const sampledAt = now();
     const cpus = osModule.cpus();
@@ -115,6 +132,11 @@ export function createSystemMonitorService({
     const totalMemory = osModule.totalmem();
     const availableMemory = osModule.freemem();
     const usedMemory = Math.max(0, totalMemory - availableMemory);
+    const [disk, onlineUsers] = await Promise.all([
+      readDisk(),
+      countOnlineUsers(),
+    ]);
+
     return {
       timestamp: new Date(sampledAt).toISOString(),
       cpu: {
@@ -125,7 +147,7 @@ export function createSystemMonitorService({
         usedBytes: usedMemory,
         usagePercent: totalMemory ? (usedMemory / totalMemory) * 100 : 0,
       },
-      disk: await readDisk(),
+      disk,
       network: {
         receiveBytesPerSecond,
         transmitBytesPerSecond,
@@ -136,6 +158,7 @@ export function createSystemMonitorService({
         maxRooms: config.MAX_ROOMS,
         maxClients: config.MAX_CLIENTS,
       },
+      onlineUsers,
       runtime: {
         processUptimeSeconds: process.uptime(),
       },

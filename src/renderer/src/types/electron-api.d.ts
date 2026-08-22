@@ -22,9 +22,11 @@ import type {
   FeedbackHistoryItem,
   FeedbackDetail,
   CloudAuthChangedPayload,
+  CloudPresenceStatus,
   CloudSnapshotMetaResult,
   CloudSyncResult,
   LocalCloudStatus,
+  ManualUnlockResult,
   GameImportStartResult,
   GameImportTaskEvent,
   GameImportTaskState,
@@ -36,11 +38,21 @@ declare global {
     electronAPI: {
       user: {
         getData: () => Promise<UserData>;
-        buyFrame: (
-          frameId: string,
-        ) => Promise<{ success: boolean; code?: string }>;
+        unlockFrame: (frameId: string) => Promise<ManualUnlockResult>;
         equipFrame: (frameId: string) => Promise<boolean>;
         unequipFrame: (frameId: string) => Promise<boolean>;
+        unlockGameCardProduct: (
+          productId: string,
+        ) => Promise<ManualUnlockResult>;
+        getGameCardProductProgress: (
+          productId: string,
+        ) => Promise<ManualUnlockResult>;
+        equipGameCardProduct: (productId: string) => Promise<boolean>;
+        unequipGameCardProduct: (productId: string) => Promise<boolean>;
+        getGameCardProductImage: (
+          productId: string,
+          ratio: "square" | "wide",
+        ) => Promise<string | null>;
         checkIn: () => Promise<{
           success: boolean;
           coins: number;
@@ -117,6 +129,7 @@ declare global {
         getPathForFile: (file: File) => string;
         remove: (id: string, versions?: string[]) => Promise<void>;
         launch: (id: string, version?: string) => Promise<boolean>;
+        getRunningIds: () => Promise<string[]>;
         getAll: () => Promise<GameManifest[]>;
         getAllRecords: () => Promise<GameRecord[]>;
         getVersions: (id: string) => Promise<string[]>;
@@ -233,6 +246,8 @@ declare global {
         getAppVersion: () => Promise<string>;
         getSensitiveWords: () => Promise<string[]>;
         getLocalCloudStatus: () => Promise<LocalCloudStatus>;
+        getPresenceStatus: () => Promise<CloudPresenceStatus>;
+        setPresenceEnabled: (enabled: boolean) => Promise<CloudPresenceStatus>;
         getCloudSnapshotMeta: () => Promise<CloudSnapshotMetaResult>;
         loginWithGitHub: () => Promise<{ success: boolean; error?: string }>;
         uploadCloudData: () => Promise<CloudSyncResult>;
@@ -352,6 +367,9 @@ declare global {
         ) => () => void;
         onCloudAuthChanged: (
           callback: (payload: CloudAuthChangedPayload) => void,
+        ) => () => void;
+        onPresenceChanged: (
+          callback: (payload: CloudPresenceStatus) => void,
         ) => () => void;
       };
       stats: {

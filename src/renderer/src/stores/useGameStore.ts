@@ -22,6 +22,7 @@ export const useGameStore = defineStore("game", () => {
   const isRefreshing = ref(false);
   const importTasks = ref<GameImportTaskState[]>([]);
   const pendingStopTimers = new Map<string, number>();
+  let runningGameIdsRevision = 0;
   let importRefreshTimer: number | null = null;
   let hasLoadedGames = false;
   let activeBackgroundRefreshes = 0;
@@ -387,8 +388,25 @@ export const useGameStore = defineStore("game", () => {
     newAchievements.value.clear();
   }
 
+  async function syncRunningGameIds() {
+    const revision = runningGameIdsRevision;
+    try {
+      const ids = new Set(await window.electronAPI.game.getRunningIds());
+      if (revision !== runningGameIdsRevision) return;
+      for (const [id, timer] of pendingStopTimers) {
+        if (!ids.has(id)) continue;
+        window.clearTimeout(timer);
+        pendingStopTimers.delete(id);
+      }
+      runningGameIds.value = ids;
+    } catch (error) {
+      console.error("[GameStore] Failed to sync running games", error);
+    }
+  }
+
   // Listen for process events
   window.electronAPI.game.onProcessEvent((type, id) => {
+    runningGameIdsRevision += 1;
     if (type === "start") {
       const pending = pendingStopTimers.get(id);
       if (pending) {
@@ -411,6 +429,7 @@ export const useGameStore = defineStore("game", () => {
       settingsStore.loadUserData();
     }
   });
+  void syncRunningGameIds();
 
   // Listen for achievement events and update local state
   // Notification is handled in App.vue to avoid using useMessage in store
@@ -472,6 +491,7 @@ export const useGameStore = defineStore("game", () => {
     removeGame,
     toggleFavorite,
     launchGame,
+    syncRunningGameIds,
     reorderGames,
     getGameRecord,
     getUnlockedAchievements,

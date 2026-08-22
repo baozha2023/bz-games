@@ -16,6 +16,8 @@ import { createGameHostingService } from "./services/game-hosting-service.js";
 import { createReleaseDownloadService } from "./services/release-download-service.js";
 import { createPortalUserService } from "./services/portal-user-service.js";
 import { createSystemMonitorService } from "./services/system-monitor-service.js";
+import { createUserProfileService } from "./services/user-profile-service.js";
+import { createPresenceService } from "./services/presence-service.js";
 import { createRelayState } from "./state.js";
 import { send } from "./utils/ws.js";
 import { registerWebSocketHandlers } from "./ws-server.js";
@@ -54,10 +56,21 @@ const portalUserService = createPortalUserService({
   mySqlService,
   accessControlService,
 });
+const userProfileService = createUserProfileService({
+  config,
+  authService,
+  mySqlService,
+});
+const presenceService = createPresenceService({
+  config,
+  authService,
+  mySqlService,
+});
 const systemMonitorService = createSystemMonitorService({
   config,
   state,
   accessControlService,
+  mySqlService,
 });
 const adminStaticService = createAdminStaticService({ config });
 const roomService = createRoomService({ config, state, send });
@@ -78,6 +91,8 @@ const server = createHttpServer({
   releaseDownloadService,
   feedbackService,
   portalUserService,
+  userProfileService,
+  presenceService,
   systemMonitorService,
   adminStaticService,
 });
@@ -91,6 +106,8 @@ registerWebSocketHandlers({ wss, config, roomService, messageRouter });
 if (mySqlService.isEnabled()) {
   await mySqlService.ensureReady();
 }
+
+presenceService.start();
 
 server.listen(config.PORT, () => {
   console.log(`BZ-Games relay server listening on ${config.PORT}`);

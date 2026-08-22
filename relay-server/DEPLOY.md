@@ -607,6 +607,6 @@ install -d -m 0750 /var/lib/bz-games-hosting/files
 install -d -m 0700 /var/lib/bz-games-hosting/tmp
 ```
 
-服务启动时初始化 `hosted_games`、`hosted_game_metadata_revisions`、`hosted_game_versions`、`hosted_game_assets` 四张表。`users.role` 固定为 `player/creator/administrator/super_administrator`，服务端将角色映射为管理端 capability：管理员不能修改角色或上传桌面客户端版本，超级管理员拥有全部 capability。桌面客户端 Bearer 接口只校验是否登录，不读取角色。所有 OAuth 新用户为玩家，登录永不改变已有角色；GitHub ID `208792845` 由初始化定义幂等设为初始超级管理员。仓库只维护 `mysql-service.js` 中的最新初始化定义，不保存 `ALTER TABLE` 或迁移脚本。
+服务启动时初始化 `hosted_games`、`hosted_game_metadata_revisions`、`hosted_game_versions`、`hosted_game_assets` 四张表。`users.nickname` 是独立于 GitHub `name` 的客户端昵称字段，`users.is_online` 与 `users.last_online_at` 用于客户端主动在线状态；线上已有数据库需在本次发布前人工执行一次对应的 `ALTER TABLE`，该过程性 SQL 不写入仓库或服务启动代码。`users.role` 固定为 `player/creator/administrator/super_administrator`，服务端将角色映射为管理端 capability：管理员不能修改角色或上传桌面客户端版本，超级管理员拥有全部 capability。桌面客户端 Bearer 接口只校验是否登录，不读取角色。所有 OAuth 新用户为玩家，登录永不改变已有角色；GitHub ID `208792845` 由初始化定义幂等设为初始超级管理员。仓库只维护 `mysql-service.js` 中的最新初始化定义，不保存 ALTER 脚本。
 
 逻辑前缀 `games.bzgames.top/` 不需要 DNS 或 Nginx 配置。ZIP 与市场图片均由客户端解析到 `relayServerUrl`，并要求 `RELAY_TOKEN`。
