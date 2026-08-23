@@ -1,5 +1,11 @@
+function parseBoolean(value, fallback = false) {
+  if (value === undefined) return fallback;
+  return ["1", "true", "yes", "on"].includes(String(value).trim().toLowerCase());
+}
+
 export const config = {
-  PORT: Number(process.env.PORT || 38090),
+  PORT: Number(process.env.PORT || 38091),
+  HOST: (process.env.HOST || "127.0.0.1").trim(),
   ROOM_TTL_MS: Number(process.env.ROOM_TTL_MS || 60000),
   HEARTBEAT_INTERVAL_MS: Number(process.env.HEARTBEAT_INTERVAL_MS || 30000),
   MAX_TEXT_BYTES: Number(process.env.MAX_TEXT_BYTES || 1024 * 1024),
@@ -42,7 +48,51 @@ export const config = {
     process.env.DESKTOP_RELEASE_BANDWIDTH_BPS || 100_000_000,
   ),
   FEEDBACK_AUTHENTICATED_COOLDOWN_MS: Number(
-    process.env.FEEDBACK_AUTHENTICATED_COOLDOWN_MS || 6 * 60 * 60 * 1000,
+    process.env.FEEDBACK_AUTHENTICATED_COOLDOWN_MS || 12 * 60 * 60 * 1000,
+  ),
+  RATE_LIMIT_RESERVATION_TTL_MS: Number(
+    process.env.RATE_LIMIT_RESERVATION_TTL_MS || 5 * 60 * 1000,
+  ),
+  MAX_FORUM_REQUEST_BYTES: Number(
+    process.env.MAX_FORUM_REQUEST_BYTES || 24 * 1024 * 1024,
+  ),
+  MAX_FORUM_TITLE_LENGTH: Number(
+    process.env.MAX_FORUM_TITLE_LENGTH || 80,
+  ),
+  MAX_FORUM_BODY_LENGTH: Number(
+    process.env.MAX_FORUM_BODY_LENGTH || 5000,
+  ),
+  MAX_FORUM_COMMENT_LENGTH: Number(
+    process.env.MAX_FORUM_COMMENT_LENGTH || 1000,
+  ),
+  MAX_FORUM_IMAGES: Number(process.env.MAX_FORUM_IMAGES || 4),
+  MAX_FORUM_IMAGE_BYTES: Number(
+    process.env.MAX_FORUM_IMAGE_BYTES || 5 * 1024 * 1024,
+  ),
+  FORUM_PLAYER_POST_COOLDOWN_MS: Number(
+    process.env.FORUM_PLAYER_POST_COOLDOWN_MS || 24 * 60 * 60 * 1000,
+  ),
+  FORUM_ADMIN_POST_COOLDOWN_MS: Number(
+    process.env.FORUM_ADMIN_POST_COOLDOWN_MS || 60 * 60 * 1000,
+  ),
+  FORUM_PLAYER_COMMENT_COOLDOWN_MS: Number(
+    process.env.FORUM_PLAYER_COMMENT_COOLDOWN_MS || 30 * 60 * 1000,
+  ),
+  FORUM_ADMIN_COMMENT_COOLDOWN_MS: Number(
+    process.env.FORUM_ADMIN_COMMENT_COOLDOWN_MS || 5 * 60 * 1000,
+  ),
+  ELASTICSEARCH_ENABLED: parseBoolean(process.env.ELASTICSEARCH_ENABLED),
+  ELASTICSEARCH_URL: (process.env.ELASTICSEARCH_URL || "").trim(),
+  ELASTICSEARCH_USERNAME: (process.env.ELASTICSEARCH_USERNAME || "").trim(),
+  ELASTICSEARCH_PASSWORD: process.env.ELASTICSEARCH_PASSWORD || "",
+  ELASTICSEARCH_INDEX_ALIAS: (
+    process.env.ELASTICSEARCH_INDEX_ALIAS || "bz_forum_posts"
+  ).trim(),
+  ELASTICSEARCH_REQUEST_TIMEOUT_MS: Number(
+    process.env.ELASTICSEARCH_REQUEST_TIMEOUT_MS || 5000,
+  ),
+  FORUM_SEARCH_WORKER_INTERVAL_MS: Number(
+    process.env.FORUM_SEARCH_WORKER_INTERVAL_MS || 5000,
   ),
   PORTAL_PUBLIC_URL: (process.env.PORTAL_PUBLIC_URL || "").trim(),
   ADMIN_STATIC_DIR: (process.env.ADMIN_STATIC_DIR || "").trim(),

@@ -10,6 +10,7 @@ import { ObjectId } from "mongodb";
 
 import { requireHttpRelayToken } from "../utils/relay-auth.js";
 import { sendJson } from "../utils/ws.js";
+import { RateLimitError } from "./rate-limit-service.js";
 import { PORTAL_CAPABILITIES } from "./portal-authorization.js";
 
 const ALLOWED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
@@ -22,6 +23,7 @@ const ALLOWED_STATUSES = new Set([
 ]);
 const MAX_IMAGE_DIMENSION = 16_384;
 const MAX_IMAGE_PIXELS = 40_000_000;
+const FEEDBACK_SUBMIT_RATE_LIMIT_KEY = "feedback.submit";
 
 class FeedbackError extends Error {
   constructor(code, status = 400, details = {}) {
@@ -459,62 +461,6 @@ function readJson(req, maxBytes) {
   });
 }
 
-export function createFeedbackRateLimiter(cooldownMs) {
-  const entries = new Map();
-
-  function cleanup(now = Date.now()) {
-    for (const [key, entry] of entries) {
-      if (entry.kind === "success" && entry.timestamp + cooldownMs <= now) {
-        entries.delete(key);
-      }
-    }
-  }
-
-  const cleanupTimer = setInterval(
-    cleanup,
-    Math.min(cooldownMs, 60 * 60 * 1000),
-  );
-  cleanupTimer.unref();
-
-  function reserve(key, now = Date.now()) {
-    cleanup(now);
-    const existing = entries.get(key);
-    if (existing) {
-      const expiresAt =
-        existing.kind === "success"
-          ? existing.timestamp + cooldownMs
-          : now + 1000;
-      return {
-        ok: false,
-        retryAfterSeconds: Math.max(1, Math.ceil((expiresAt - now) / 1000)),
-        resetAt: new Date(expiresAt).toISOString(),
-      };
-    }
-    const token = crypto.randomUUID();
-    entries.set(key, { kind: "pending", token });
-    return { ok: true, token };
-  }
-
-  function release(key, token) {
-    const entry = entries.get(key);
-    if (entry?.kind === "pending" && entry.token === token) entries.delete(key);
-  }
-
-  function commit(key, token, now = Date.now()) {
-    const entry = entries.get(key);
-    if (entry?.kind !== "pending" || entry.token !== token) return false;
-    entries.set(key, { kind: "success", timestamp: now });
-    return true;
-  }
-
-  function dispose() {
-    clearInterval(cleanupTimer);
-    entries.clear();
-  }
-
-  return { reserve, release, commit, dispose };
-}
-
 function serializeFeedbackSummary(row) {
   return {
     id: row.id,
@@ -562,10 +508,8 @@ export function createFeedbackService({
   mongoService,
   authService,
   accessControlService,
+  rateLimitService,
 }) {
-  const authenticatedLimiter = createFeedbackRateLimiter(
-    config.FEEDBACK_AUTHENTICATED_COOLDOWN_MS,
-  );
   const adminAccess = accessControlService;
 
   async function requireClientAuth(req, res) {
@@ -624,24 +568,29 @@ export function createFeedbackService({
   }
 
   async function submitFeedback(req, res, auth, parsePayload) {
-    const limiter = authenticatedLimiter;
-    const limiterKey = String(auth.user.github_id);
-    const reservation = limiter.reserve(limiterKey);
-    if (!reservation.ok) {
-      sendJson(res, 429, {
-        error: "feedback_too_frequent",
-        retryAfterSeconds: reservation.retryAfterSeconds,
-        resetAt: reservation.resetAt,
-      });
-      req.resume();
-      return true;
-    }
-
     let parsed = null;
     let bucket = null;
     const uploaded = [];
+    let reservation = null;
+    const limiterKey = String(auth.user.github_id);
     try {
+      reservation = await rateLimitService.reserve({
+        githubId: limiterKey,
+        endpointKey: FEEDBACK_SUBMIT_RATE_LIMIT_KEY,
+        cooldownMs: config.FEEDBACK_AUTHENTICATED_COOLDOWN_MS,
+      });
+      if (!reservation.ok) {
+        req.resume();
+        sendJson(res, 429, {
+          error: "feedback_too_frequent",
+          retryAfterSeconds: reservation.retryAfterSeconds,
+          resetAt: reservation.resetAt,
+        });
+        return true;
+      }
+
       parsed = await parsePayload();
+
       if (parsed.files.length > 0) {
         if (!mongoService.isEnabled()) {
           throw new FeedbackError("image_storage_not_configured", 503);
@@ -698,20 +647,50 @@ export function createFeedbackService({
             ],
           );
         }
+        const committed = await rateLimitService.commit({
+          githubId: limiterKey,
+          endpointKey: FEEDBACK_SUBMIT_RATE_LIMIT_KEY,
+          token: reservation.token,
+          now,
+          connection,
+        });
+        if (!committed) {
+          throw new RateLimitError("rate_limit_reservation_lost");
+        }
       });
 
-      limiter.commit(limiterKey, reservation.token);
       sendJson(res, 201, {
         ok: true,
         id: feedbackId,
       });
     } catch (error) {
       await deleteUploadedFiles(bucket, uploaded);
-      limiter.release(limiterKey, reservation.token);
+      if (reservation?.ok) {
+        try {
+          await rateLimitService.release({
+            githubId: limiterKey,
+            endpointKey: FEEDBACK_SUBMIT_RATE_LIMIT_KEY,
+            token: reservation.token,
+          });
+        } catch (releaseError) {
+          console.error(
+            "[relay-server] failed to release feedback rate limit reservation",
+            releaseError,
+          );
+        }
+      } else {
+        req.resume();
+      }
       const feedbackError =
         error instanceof FeedbackError
           ? error
-          : new FeedbackError("feedback_storage_failed", 500);
+          : error instanceof RateLimitError &&
+              error.code === "rate_limit_storage_failed"
+            ? new FeedbackError("rate_limit_unavailable", 503)
+            : error instanceof RateLimitError &&
+                error.code === "rate_limit_reservation_lost"
+              ? new FeedbackError("feedback_too_frequent", 429)
+              : new FeedbackError("feedback_storage_failed", 500);
       if (!(error instanceof FeedbackError)) {
         console.error("[relay-server] feedback submission failed", error);
       }
@@ -1113,7 +1092,12 @@ export function createFeedbackService({
       }
       return true;
     }
-    if (!url.pathname.startsWith("/api/admin/v1/")) return false;
+    const isAdminFeedbackPath =
+      url.pathname === "/api/admin/v1/feedback" ||
+      /^\/api\/admin\/v1\/feedback\/[^/]+(?:\/images\/[^/]+)?$/.test(
+        url.pathname,
+      );
+    if (!isAdminFeedbackPath) return false;
     if (!mySqlService.isEnabled()) {
       sendJson(res, 503, { error: "feedback_storage_not_configured" });
       return true;
@@ -1163,8 +1147,6 @@ export function createFeedbackService({
 
   return {
     handleRequest,
-    dispose: () => {
-      authenticatedLimiter.dispose();
-    },
+    dispose: () => {},
   };
 }

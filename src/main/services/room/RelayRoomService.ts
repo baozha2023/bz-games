@@ -11,6 +11,7 @@ import { mainWindow } from "../../window";
 import { IPC } from "../../../shared/ipc-channels";
 import { requestInterceptor } from "../../utils/requestInterceptor";
 import { mapRelayCloseError } from "../../utils/relayCloseError";
+import { toRelayWebSocketUrl } from "./relayWebSocketUrl";
 
 export interface RelayHostResult {
   success: boolean;
@@ -29,7 +30,7 @@ export class RelayRoomService {
       return { success: false, error: "no_room" };
     }
     this.disconnect();
-    const relayUrl = this.toWebSocketUrl(DEFAULT_RELAY_SERVER_URL);
+    const relayUrl = toRelayWebSocketUrl(DEFAULT_RELAY_SERVER_URL);
     if (!relayUrl) {
       return { success: false, error: "relay_not_configured" };
     }
@@ -253,15 +254,6 @@ export class RelayRoomService {
     const decoded = decodeBinaryEnvelope<RoomMessage & { __relayTo?: string }>(data);
     if (!decoded) return data;
     return encodeBinaryEnvelope({ ...decoded.header, __relayTo: targetPlayerId }, decoded.body);
-  }
-
-  private toWebSocketUrl(url: string) {
-    const trimmed = url.trim();
-    if (!trimmed) return "";
-    if (trimmed.startsWith("ws://") || trimmed.startsWith("wss://")) return trimmed;
-    if (trimmed.startsWith("https://")) return `wss://${trimmed.slice("https://".length)}`;
-    if (trimmed.startsWith("http://")) return `ws://${trimmed.slice("http://".length)}`;
-    return `ws://${trimmed}`;
   }
 
   private toPublicAddress(roomCode: string) {

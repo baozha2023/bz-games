@@ -41,6 +41,11 @@ const router = createRouter({
       component: () => import("../views/SocialView.vue"),
     },
     {
+      path: "/social/post/:postId",
+      name: "SocialPost",
+      component: () => import("../views/SocialPostDetailView.vue"),
+    },
+    {
       path: "/settings",
       name: "Settings",
       component: () => import("../views/SettingsView.vue"),

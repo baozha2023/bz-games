@@ -13,20 +13,23 @@ BZ-Games 官方服务端提供中继联机、GitHub OAuth 登录和云端数据�
 
 ## 基础地址
 
-默认监听端口：
+Relay 默认内部监听端口：
 
 ```text
-38090
+38091
 ```
 
 默认本地地址：
 
 ```text
-http://127.0.0.1:38090
-ws://127.0.0.1:38090
+http://127.0.0.1:38091
+ws://127.0.0.1:38091
 ```
 
-平台侧生产配置由 `DEFAULT_RELAY_SERVER_URL` 指向中继服务器 HTTP/WebSocket 入口。
+平台侧生产配置由 `DEFAULT_RELAY_SERVER_URL` 指向公网 Nginx HTTP 入口，例如
+`http://relay.example.com:38090`；WebSocket 客户端必须连接同一公网入口的 `/ws/` 路径：
+`ws://relay.example.com:38090/ws/`。只有服务器本机调试或 Nginx 反向代理目标允许直接使用
+`127.0.0.1:38091`，该端口不得暴露到公网。
 
 ## 核心字段
 
@@ -50,7 +53,7 @@ ws://127.0.0.1:38090
 
 ```http
 GET /health HTTP/1.1
-Host: 127.0.0.1:38090
+Host: 127.0.0.1:38091
 X-Relay-Token: <relayToken>
 ```
 
@@ -91,7 +94,7 @@ X-Relay-Token: <relayToken>
 
 ```http
 GET /rooms HTTP/1.1
-Host: 127.0.0.1:38090
+Host: 127.0.0.1:38091
 X-Relay-Token: <relayToken>
 ```
 
@@ -160,7 +163,7 @@ X-Relay-Token: <relayToken>
 
 ```http
 GET /auth/github/start?returnTo=bzgames%3A%2F%2Foauth-complete HTTP/1.1
-Host: 127.0.0.1:38090
+Host: 127.0.0.1:38091
 ```
 
 查询参数：
@@ -357,10 +360,12 @@ Upload and download are independently limited to once per GitHub account per 24 
 
 ## WebSocket 接口
 
-WebSocket 连接地址与 HTTP 服务使用同一入口。
+WebSocket 公网连接地址与 HTTP 服务使用同一 Nginx 入口，但必须使用 `/ws/` 路径；本机直连
+Relay 时才使用内部端口。
 
 ```text
-ws://127.0.0.1:38090
+公网：ws://relay.example.com:38090/ws/
+本机：ws://127.0.0.1:38091
 ```
 
 文本消息统一为 JSON：
@@ -689,7 +694,8 @@ __relayTo -> relayTo -> to -> targetPlayerId -> payload.__relayTo
 
 | 变量                      | 默认值     | 说明                                             |
 | ------------------------- | ---------- | ------------------------------------------------ |
-| `PORT`                    | `38090`    | HTTP/WebSocket 监听端口                          |
+| `PORT`                    | `38091`    | Relay 内部 HTTP/WebSocket 监听端口；公网由 Nginx 使用 `38090` |
+| `HOST`                    | `127.0.0.1` | HTTP/WebSocket 监听地址；公网访问统一经过 Nginx |
 | `ROOM_TTL_MS`             | `60000`    | 房间活跃超时时间（毫秒）                         |
 | `HEARTBEAT_INTERVAL_MS`   | `30000`    | WebSocket ping 与清理间隔（毫秒）                |
 | `MAX_TEXT_BYTES`          | `1048576`  | 单条文本消息最大字节数                           |
@@ -699,6 +705,13 @@ __relayTo -> relayTo -> to -> targetPlayerId -> payload.__relayTo
 | `MAX_CLIENTS`             | `400`      | 最大已登记客户端数                               |
 | `MAX_CLIENTS_PER_ROOM`    | `8`        | 单房间最大中继客户端数上限                       |
 | `MAX_EVENT_LOOP_DELAY_MS` | `250`      | 事件循环延迟限制（毫秒）                         |
+
+### 建言献策与通用限流
+
+| 变量                                 | 默认值     | 说明                                               |
+| ------------------------------------ | ---------- | -------------------------------------------------- |
+| `FEEDBACK_AUTHENTICATED_COOLDOWN_MS` | `43200000` | 已登录用户建言献策成功后的冷却时间（默认 12 小时） |
+| `RATE_LIMIT_RESERVATION_TTL_MS`      | `300000`   | 通用限流 reservation 租约时间（默认 5 分钟）       |
 
 ### 云同步
 
@@ -839,7 +852,7 @@ sequenceDiagram
 - 文件字段：`images`，最多 4 个 PNG/JPEG/WebP 文件，单个最大 5 MiB
 - 文字和图片至少存在一种，文字最多 5,000 字
 
-有效 GitHub 会话以 GitHub ID为键进行进程内 6 小时冷却。冷却状态不会跨服务重启或多实例共享。
+有效 GitHub 会话以 GitHub ID 为键进行持久化 12 小时冷却。冷却状态跨服务重启生效，并通过 MySQL 记录支持多实例共享。
 
 成功响应：
 
@@ -923,7 +936,7 @@ sequenceDiagram
 
 # 最新桌面版下载 API
 
-### `GET|HEAD /bz-games/api/v1/releases/latest/download`
+### `GET|HEAD /api/v1/releases/latest/download`
 
 公开下载当前正式版 Windows NSIS 安装器，不要求登录或 `X-Relay-Token`。接口使用固定地址，实际文件名由服务端
 `latest.json` 决定，支持单段 `Range`、`206 Partial Content`、`416 Range Not Satisfiable`、`ETag`、
@@ -970,6 +983,59 @@ sequenceDiagram
 - `GET|HEAD /api/v1/game-hosting/assets/:gameId/:version/:role/:encodedFileName`
 
 资源请求要求 `X-Relay-Token`，只提供 `approved` 版本，支持单段 `Range`、`206 Partial Content`、`416 Range Not Satisfiable`、`ETag`、`If-None-Match`、`Accept-Ranges` 和 `X-File-Sha256`。
+
+# 论坛 API
+
+论坛客户端接口均要求 relay token 和已登录用户 Bearer Session：
+
+```text
+GET    /api/v1/forum/posts?limit=10&cursor=&q=
+GET    /api/v1/forum/search-status
+GET    /api/v1/forum/posts/:id
+GET    /api/v1/forum/posts/:id/images/:imageId
+POST   /api/v1/forum/posts                 multipart: title, body, images[]
+DELETE /api/v1/forum/posts/:id             作者删除自己的帖子
+GET    /api/v1/forum/posts/:id/comments?limit=10&cursor=
+POST   /api/v1/forum/posts/:id/comments    JSON: { content }
+DELETE /api/v1/forum/comments/:id          作者删除自己的评论
+PUT    /api/v1/forum/posts/:id/like
+DELETE /api/v1/forum/posts/:id/like
+PUT    /api/v1/forum/comments/:id/like
+DELETE /api/v1/forum/comments/:id/like
+```
+
+帖子列表固定返回 10 条轻量数据，每条包含作者昵称字段 `authorNickname`。帖子详情也包含同名作者昵称字段。
+无搜索词时按 `created_at DESC, id DESC` 使用
+MySQL 游标；有搜索词时使用 Elasticsearch `search_after`，标题和正文经过服务端
+敏感词替换后才会写入 MySQL 与搜索索引。图片只做真实类型、尺寸、像素和大小校验。
+`search-status` 返回 `{ "enabled": true|false }`；ES 未部署、未就绪或异步同步失败时为
+`false`，客户端应隐藏搜索框。普通信息流不依赖 ES。
+
+帖子和评论使用 `status` 作为逻辑删除状态：`0` 为正常、`1` 为作者删除、`2` 为管理员删除。
+`deleted_at` 仅记录删除时间，`deleted_by` 记录实际操作人 ID。普通客户端只返回 `status=0`
+的内容；作者删除接口只允许内容作者调用。
+
+管理端接口使用 portal session 和 capability `forum.view` / `forum.manage` / `forum.restore`：
+
+```text
+GET    /api/admin/v1/forum/posts
+GET    /api/admin/v1/forum/posts/:id
+GET    /api/admin/v1/forum/posts/:id/comments?limit=10
+GET    /api/admin/v1/forum/posts/:id/images/:imageId
+DELETE /api/admin/v1/forum/posts/:id
+DELETE /api/admin/v1/forum/comments/:id
+POST   /api/admin/v1/forum/posts/:id/restore       仅超级管理员
+POST   /api/admin/v1/forum/comments/:id/restore    仅超级管理员
+```
+
+恢复接口成功返回 `{ "ok": true }`。恢复帖子不会自动恢复已删除评论；恢复评论要求所属帖子为正常状态，
+并在同一事务中增加帖子评论数。恢复帖子会写入搜索 outbox 的 `upsert` 操作。
+
+管理端帖子列表支持 `page`、`pageSize`、`status` 和 `q` 查询参数，返回的每条帖子包含
+`title`、`authorGithubName`、`createdAt`、`status`、`likeCount`、`commentCount`、
+`deletedBy`、`deletedByGithubName` 和 `deletedAt`，供管理端表格直接展示；管理端展示
+`deletedByGithubName`，数据库操作人 ID 仍保留在 `deletedBy`。`q` 使用 MySQL 查询标题、正文、
+帖子 ID 和作者 GitHub 登录名；管理端搜索不依赖 Elasticsearch。
 
 # Portal 用户 API
 

@@ -86,6 +86,7 @@
             >{{ t("nav.rooms") }}</n-button
           >
           <n-button
+            v-if="isLoggedIn"
             :type="activeNavKey === 'social' ? 'primary' : 'default'"
             @click="router.push('/social')"
             >{{ t("nav.social") }}</n-button
@@ -183,6 +184,9 @@ const { showUpdatePrompt } = useUpdatePrompt();
 const showCheckIn = ref(false);
 const showBzCoinGuide = ref(false);
 const isOnline = ref(false);
+const isLoggedIn = computed(() =>
+  Boolean(settingsStore.settings?.cloudSessionToken),
+);
 
 const topBarFrameFileName = computed(() => {
   const frameId = settingsStore.userData?.equippedFrame;
@@ -203,7 +207,7 @@ const activeNavKey = computed(() => {
   if (route.name === "Library" || route.name === "GameDetail") return "library";
   if (route.name === "Career") return "career";
   if (route.name === "RoomDiscovery" || route.name === "Room") return "rooms";
-  if (route.name === "Social") return "social";
+  if (route.name === "Social" || route.name === "SocialPost") return "social";
   if (route.name === "Settings") return "settings";
   return "";
 });

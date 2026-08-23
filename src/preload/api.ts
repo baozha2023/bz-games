@@ -27,6 +27,12 @@ import type {
   GameImportStartResult,
   GameImportTaskEvent,
   GameImportTaskState,
+  ForumComment,
+  ForumImageSelectionResult,
+  ForumMutationResult,
+  ForumPage,
+  ForumPostDetail,
+  ForumPostSummary,
 } from "../shared/types";
 
 installErrorForwarding("main-window");
@@ -399,6 +405,36 @@ export const electronAPI = {
       return () =>
         ipcRenderer.removeListener(IPC.SYSTEM_CLOUD_PRESENCE_CHANGED, handler);
     },
+  },
+  forum: {
+    selectImages: (selectionId?: string): Promise<ForumImageSelectionResult> =>
+      ipcRenderer.invoke(IPC.FORUM_SELECT_IMAGES, selectionId),
+    releaseImages: (selectionId: string, imageId?: string): Promise<void> =>
+      ipcRenderer.invoke(IPC.FORUM_RELEASE_IMAGES, selectionId, imageId),
+    getSearchAvailability: (): Promise<boolean> =>
+      ipcRenderer.invoke(IPC.FORUM_GET_SEARCH_AVAILABILITY),
+    listPosts: (query?: string, cursor?: string): Promise<ForumPage<ForumPostSummary>> =>
+      ipcRenderer.invoke(IPC.FORUM_LIST_POSTS, query, cursor),
+    getPost: (postId: string): Promise<ForumPostDetail> =>
+      ipcRenderer.invoke(IPC.FORUM_GET_POST, postId),
+    getComments: (postId: string, cursor?: string): Promise<ForumPage<ForumComment>> =>
+      ipcRenderer.invoke(IPC.FORUM_GET_COMMENTS, postId, cursor),
+    createPost: (payload: { title: string; body: string; selectionId?: string }): Promise<ForumMutationResult> =>
+      ipcRenderer.invoke(IPC.FORUM_CREATE_POST, payload),
+    createComment: (postId: string, content: string): Promise<ForumMutationResult> =>
+      ipcRenderer.invoke(IPC.FORUM_CREATE_COMMENT, postId, content),
+    deletePost: (postId: string): Promise<ForumMutationResult> =>
+      ipcRenderer.invoke(IPC.FORUM_DELETE_POST, postId),
+    deleteComment: (commentId: string): Promise<ForumMutationResult> =>
+      ipcRenderer.invoke(IPC.FORUM_DELETE_COMMENT, commentId),
+    likePost: (postId: string): Promise<ForumMutationResult> =>
+      ipcRenderer.invoke(IPC.FORUM_LIKE_POST, postId),
+    unlikePost: (postId: string): Promise<ForumMutationResult> =>
+      ipcRenderer.invoke(IPC.FORUM_UNLIKE_POST, postId),
+    likeComment: (commentId: string): Promise<ForumMutationResult> =>
+      ipcRenderer.invoke(IPC.FORUM_LIKE_COMMENT, commentId),
+    unlikeComment: (commentId: string): Promise<ForumMutationResult> =>
+      ipcRenderer.invoke(IPC.FORUM_UNLIKE_COMMENT, commentId),
   },
   user: {
     getData: () => ipcRenderer.invoke(IPC.SYSTEM_GET_USER_DATA),

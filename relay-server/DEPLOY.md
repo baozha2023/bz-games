@@ -38,7 +38,7 @@ relay-server/
 
 - Node.js `18` 或更高版本。
 - Linux 服务器。
-- 公网 TCP 端口，默认 `38090`。
+- Relay 本机监听地址默认 `127.0.0.1:38091`，Nginx 公网入口统一使用 `38090` 端口。
 - npm。
 - MySQL 8+（保存用户基础数据和文件元数据）。
 - MongoDB 6+（保存完整平台快照与反馈图片）。
@@ -47,7 +47,8 @@ relay-server/
 
 | 变量                                | 默认值                 | 说明                                                                        |
 | ----------------------------------- | ---------------------- | --------------------------------------------------------------------------- |
-| `PORT`                              | `38090`                | HTTP/WebSocket 监听端口                                                     |
+| `PORT`                              | `38091`                | Relay 内部 HTTP/WebSocket 监听端口；公网由 Nginx 使用 `38090`                |
+| `HOST`                              | `127.0.0.1`            | HTTP/WebSocket 监听地址；生产环境不得绑定公网网卡                             |
 | `ROOM_TTL_MS`                       | `60000`                | 房间活跃超时时间                                                            |
 | `HEARTBEAT_INTERVAL_MS`             | `30000`                | WebSocket ping 与清理间隔                                                   |
 | `MAX_TEXT_BYTES`                    | `1048576`              | 单条文本消息最大字节数                                                      |
@@ -59,6 +60,8 @@ relay-server/
 | `MAX_CLIENTS`                       | `400`                  | 最大已登记客户端数                                                          |
 | `MAX_CLIENTS_PER_ROOM`              | `8`                    | 单房间最大中继客户端数上限                                                  |
 | `MAX_EVENT_LOOP_DELAY_MS`           | `250`                  | 事件循环延迟限制                                                            |
+| `FEEDBACK_AUTHENTICATED_COOLDOWN_MS` | `43200000`             | 已登录用户建言献策成功后的冷却时间，默认 12 小时                           |
+| `RATE_LIMIT_RESERVATION_TTL_MS`      | `300000`               | 通用限流 reservation 租约时间，默认 5 分钟                                 |
 | `MYSQL_HOST`                        | `127.0.0.1`            | MySQL 主机                                                                  |
 | `MYSQL_PORT`                        | `3306`                 | MySQL 端口                                                                  |
 | `MYSQL_USER`                        | 空字符串               | MySQL 用户名；为空时登录和云同步接口不可用                                  |
@@ -75,6 +78,13 @@ relay-server/
 | `OAUTH_SESSION_TTL_MS`              | `2592000000`           | 登录会话有效期，默认 30 天                                                  |
 | `AUTH_EXPIRED_SESSION_RETENTION_MS` | `604800000`            | 已过期会话保留期，默认 7 天，用于区分过期与无效令牌                         |
 | `OAUTH_STATE_TTL_MS`                | `600000`               | OAuth state 有效期，默认 10 分钟                                            |
+| `ELASTICSEARCH_ENABLED`             | `false`                | ES 总开关；为 `false` 时关闭论坛搜索、ES worker 和客户端搜索框                  |
+| `ELASTICSEARCH_URL`                 | 空字符串               | ES 地址；仅在 `ELASTICSEARCH_ENABLED=true` 时生效                             |
+| `ELASTICSEARCH_USERNAME`            | 空字符串               | 可选；Relay 访问 ES 的最小权限账号                                             |
+| `ELASTICSEARCH_PASSWORD`            | 空字符串               | 可选；Relay 访问 ES 的账号密码                                                 |
+| `ELASTICSEARCH_INDEX_ALIAS`         | `bz_forum_posts`      | 论坛搜索 alias                                                                |
+| `ELASTICSEARCH_REQUEST_TIMEOUT_MS`  | `5000`                | ES 单次请求超时                                                                |
+| `FORUM_SEARCH_WORKER_INTERVAL_MS`   | `5000`                | outbox worker 检查间隔                                                         |
 
 公网部署必须配置 `RELAY_TOKEN`，并与平台侧构建注入的 `relayToken` 保持一致。服务端不会兼容未携带 token 的旧版平台。
 如需启用 GitHub 登录，必须额外配置 `MYSQL_USER`、`MYSQL_PASSWORD`、`MYSQL_DATABASE`、`GITHUB_CLIENT_ID`、`GITHUB_CLIENT_SECRET`、`GITHUB_CALLBACK_URL`。
@@ -85,7 +95,7 @@ relay-server/
 ```bash
 cd relay-server
 npm install --production
-PORT=38090 \
+PORT=38091 \
 RELAY_TOKEN=your-relay-token \
 MYSQL_HOST=127.0.0.1 \
 MYSQL_PORT=3306 \
@@ -102,14 +112,14 @@ npm start
 验证：
 
 ```bash
-curl -H "X-Relay-Token: your-relay-token" http://127.0.0.1:38090/health
-curl -H "X-Relay-Token: your-relay-token" http://127.0.0.1:38090/rooms
+curl -H "X-Relay-Token: your-relay-token" http://127.0.0.1:38091/health
+curl -H "X-Relay-Token: your-relay-token" http://127.0.0.1:38091/rooms
 ```
 
 本地测试 GitHub 登录地址：
 
 ```text
-http://127.0.0.1:38090/auth/github/start
+http://127.0.0.1:38091/auth/github/start
 ```
 
 ## 服务器部署
@@ -222,7 +232,7 @@ mongosh "mongodb://bz_games:your-mongodb-password@127.0.0.1:27017/bz_games" --ev
 启动验证：
 
 ```bash
-PORT=38090 \
+PORT=38091 \
 RELAY_TOKEN=your-relay-token \
 MYSQL_HOST=127.0.0.1 \
 MYSQL_PORT=3306 \
@@ -238,7 +248,7 @@ npm start
 
 ## 防火墙
 
-云服务器安全组放行 TCP `38090`。
+云服务器安全组只放行 Nginx 的公网端口 `38090`（启用 HTTPS 时再另行规划 `443`）；不要放行 Relay 的内部端口 `38091`。
 
 Ubuntu 防火墙放行端口：
 
@@ -331,7 +341,7 @@ private-build.config.json
 
 1. 先确定你的最终公网域名。
 2. 在 GitHub 创建 OAuth App。
-3. 将 callback 填成 `http://你的域名:38090/auth/github/callback`。
+3. 将 callback 填成 `http://你的域名/auth/github/callback`。
 4. 把 GitHub 给你的 `Client ID` 写到服务端 `GITHUB_CLIENT_ID`。
 5. 把 GitHub 给你的 `Client Secret` 写到服务端 `GITHUB_CLIENT_SECRET`。
 6. 重启 `bz-games-relay` 服务。
@@ -350,7 +360,7 @@ http://relay.example.com:38090/auth/github/start?returnTo=bzgames://oauth-comple
 
 让服务端在 GitHub 登录成功后跳回桌面端自定义协议。
 
-如果你修改了 `private-build.config.json`，需要重新构建客户端，确保新的 `oauthReturnUrl` 被注入到主进程。
+如果你修改了 `private-build.config.json`，需要重新构建客户端，确保新的 `relayServerUrl` 被注入到主进程。
 
 ## 容量配置
 
@@ -379,8 +389,8 @@ Environment=MAX_EVENT_LOOP_DELAY_MS=250
 本机检查：
 
 ```bash
-curl -H "X-Relay-Token: your-relay-token" http://127.0.0.1:38090/health
-curl -H "X-Relay-Token: your-relay-token" http://127.0.0.1:38090/rooms
+curl -H "X-Relay-Token: your-relay-token" http://127.0.0.1:38091/health
+curl -H "X-Relay-Token: your-relay-token" http://127.0.0.1:38091/rooms
 ```
 
 公网检查：
@@ -423,7 +433,7 @@ systemctl status bz-games-relay
 验证：
 
 ```bash
-curl -H "X-Relay-Token: your-relay-token" http://127.0.0.1:38090/health
+curl -H "X-Relay-Token: your-relay-token" http://127.0.0.1:38091/health
 ```
 
 ## 故障排查
@@ -447,15 +457,15 @@ journalctl -u bz-games-relay -n 100
 ### 端口无法访问
 
 ```bash
-ss -lntp | grep 38090
+ss -lntp | grep -E ':38090 |:38091 '
 ufw status
 ```
 
 检查项：
 
-- 进程是否监听 `38090`。
-- 云服务器安全组是否放行 TCP `38090`。
-- 系统防火墙是否放行 TCP `38090`。
+- Nginx 是否监听公网 `38090`，Relay 是否只监听本机 `38091`。
+- 云服务器安全组是否放行 Nginx 的公网端口 `38090`；当前部署不使用 `80`，未来启用 HTTPS 时另行规划 `443`。
+- 系统防火墙是否放行 Nginx 的公网端口。
 - 公网 IP / 域名是否正确指向当前服务器。
 
 ### 客户端无法注册或加入
@@ -482,7 +492,7 @@ ufw status
 检查项：
 
 - GitHub OAuth App 的 callback 地址是否与 `GITHUB_CALLBACK_URL` 完全一致。
-- 域名与端口是否能直接访问 `38090`。
+- `/auth/github/start` 与 `/auth/github/callback` 是否均经 Nginx 转发到 Relay。
 - `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` 是否填错。
 - `MYSQL_HOST` / `MYSQL_USER` / `MYSQL_PASSWORD` / `MYSQL_DATABASE` 是否可连接。
 - 服务器是否能访问 `github.com` 和 `api.github.com`。
@@ -519,15 +529,61 @@ ufw status
 - 房主开始游戏、踢出玩家、解散房间正常同步。
 - Game API v1 JSON 消息和 v2 binary frame 正常通过中继转发。
 
-## 建言献策和管理后台
+## 论坛、建言献策和管理后台
 
 反馈与管理配置已完整列入 `relay-server/bz-games-relay.service.example`，无需在其他文档
 维护第二份字段清单。部署时将对应值写入同一个
 `/etc/systemd/system/bz-games-relay.service` 的 `[Service]` 段。
 
 MySQL已配置时，服务启动会执行统一 Schema 初始化并自动创建反馈表。
-管理前端生产构建产物放入 `ADMIN_STATIC_DIR`，随后访问 `/admin/`。
-建言献策仅允许已登录用户提交，并按 GitHub ID冷却 6 小时。冷却只存在于当前 Node进程，重启后清空；对应配置以 `bz-games-relay.service.example` 为准。
+管理前端生产构建产物部署到 Nginx 静态目录 `/var/www/campusmate/admin`，随后访问 `/admin/`；Relay 的 `ADMIN_STATIC_DIR` 仍用于本机直连或开发回退，不是当前公网 Nginx 的静态根目录。替换静态目录前创建独立备份，完成页面、响应头、权限和服务健康检查后再删除本次备份与临时文件。
+建言献策仅允许已登录用户提交，并按 GitHub ID 冷却 12 小时。限流状态持久化在
+MySQL 的 `rate_limit_records` 表中，服务重启或多实例部署不会清空；对应配置以
+`bz-games-relay.service.example` 为准。该表会在服务启动时由统一 Schema 初始化自动创建。
+
+论坛图片复用 MongoDB GridFS；论坛文字和计数使用 MySQL。论坛搜索可选用本仓库提供的
+单节点 Elasticsearch 部署文件：
+
+```bash
+cd /opt/bz-games-relay/deploy/elasticsearch
+cp .env.example .env
+editor .env
+docker compose build
+docker compose up -d
+curl --max-time 30 -u elastic:YOUR_ELASTICSEARCH_PASSWORD http://127.0.0.1:9200/_cluster/health
+```
+
+这是一次可回滚的试探部署，不应阻塞 Relay 上线：先观察健康检查是否在 30 秒内返回。如果
+服务器内存不足、容器启动卡住或健康检查失败，立即执行 `docker compose down`，然后将
+systemd 中的 `ELASTICSEARCH_ENABLED=false` 并清空 `ELASTICSEARCH_URL` 后重启 Relay。此时普通论坛信息流、发帖、评论和
+点赞继续可用，客户端通过 `GET /api/v1/forum/search-status` 隐藏搜索框；后台 ES outbox
+同步失败不打印错误、不影响主请求，仅保留数据库中的重试状态。只有健康检查稳定通过后，
+才在 systemd 中设置 `ELASTICSEARCH_ENABLED=true`，填写 `ELASTICSEARCH_URL`、账号和密码并重启 Relay。
+
+该 Compose 固定 Elasticsearch `8.19.0`，Docker 数据卷持久化，HTTP 只绑定
+`127.0.0.1:9200`，并在镜像构建时安装同为 `8.19.0` 的 analysis-ik。Relay 的
+`ELASTICSEARCH_USERNAME` 应配置为仅能访问论坛索引的独立账号；生产环境应在 ES 中
+创建该账号并授予最小索引权限，不要让 Relay 使用 `elastic` 超级账号。Kibana 不属于
+本部署，也不对公网开放。
+
+启动 Relay 时配置 `ELASTICSEARCH_ENABLED=true`、`ELASTICSEARCH_URL`、账号和密码。首次启动会创建
+`bz_forum_posts_v1` 及 `bz_forum_posts` 别名；帖子创建和软删除通过
+`forum_search_outbox` 异步同步。ES 暂时不可用时，最新帖子流、发帖和评论仍可用，
+带搜索词的请求返回可重试错误；不会回退到 MySQL `LIKE`。需要重建索引时应先创建
+新的版本化索引，再原子切换别名。
+
+手动全量重建当前索引可执行：
+
+```bash
+cd /opt/bz-games-relay
+ELASTICSEARCH_ENABLED=true \
+ELASTICSEARCH_URL=http://127.0.0.1:9200 \
+ELASTICSEARCH_USERNAME=relay_forum \
+ELASTICSEARCH_PASSWORD=YOUR_ELASTICSEARCH_PASSWORD \
+MYSQL_HOST=127.0.0.1 MYSQL_PORT=3306 MYSQL_USER=bz_games \
+MYSQL_PASSWORD=your-mysql-password MYSQL_DATABASE=bz_games \
+npm run rebuild:forum-search
+```
 
 示例中的值均不是生产配置。真实域名、数据库连接串、OAuth Secret和
 中继令牌只能写入服务器的 `/etc/systemd/system/bz-games-relay.service`，不得提交到仓库。
@@ -566,17 +622,137 @@ semver、规范文件名、大小、PE 文件头和 SHA-256，原子切换 `late
 设置为不小于 513 MiB。管理端同样在读取请求体前非阻塞取锁；已有上传时立即返回
 `409 desktop_release_upload_busy`，不会等待或暂存第二个文件。
 
-现有 IP 站点增加精确 Nginx 路由，不能复用已经代理给其他服务的 `/api/`：
+生产环境只保留 Nginx 这一套公网入口。Nginx 监听公网 `38090`，直接托管 `/admin/` 静态页面，并将当前 `/api/...`、`/auth/...`、房间 HTTP 接口和 `/ws/` WebSocket 请求转发到本机 Relay `127.0.0.1:38091`；不再保留旧服务前缀或 Relay `38091` 的公网兼容转发。外部客户端统一使用 `http://39.106.221.85:38090`（正式环境应替换为域名），官网和客户端发行版下载统一使用 `/api/v1/releases/latest/download`。GitHub Actions 发布仍通过 SSH 将安装包交给服务器上的发布脚本，不新增 HTTP 上传兼容入口。
+
+现有 IP 站点使用以下统一路由：
 
 ```nginx
-location = /bz-games/api/v1/releases/latest/download {
-    proxy_pass http://127.0.0.1:38090;
+location /admin/ {
+    root /var/www/campusmate;
+    try_files $uri $uri/ /admin/index.html;
+    add_header Content-Security-Policy "default-src 'self'; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'" always;
+    add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+    add_header Referrer-Policy "no-referrer" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+}
+
+location = /api/v1/releases/latest/download {
+        proxy_pass http://127.0.0.1:38091;
     proxy_http_version 1.1;
+    proxy_request_buffering off;
     proxy_buffering off;
     proxy_read_timeout 3600s;
     proxy_send_timeout 3600s;
 }
+
+location = /api/admin/v1/desktop-release {
+        proxy_pass http://127.0.0.1:38091;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    client_max_body_size 513m;
+    proxy_request_buffering off;
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
+}
+
+location ^~ /api/portal/v1/game-hosting/ {
+        proxy_pass http://127.0.0.1:38091;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    client_max_body_size 220m;
+    proxy_request_buffering off;
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
+}
+
+location ^~ /api/v1/game-hosting/assets/ {
+        proxy_pass http://127.0.0.1:38091;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_buffering off;
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
+}
+
+location ^~ /api/admin/v1/ {
+        proxy_pass http://127.0.0.1:38091;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    client_max_body_size 24m;
+    proxy_request_buffering off;
+    proxy_read_timeout 180s;
+    proxy_send_timeout 180s;
+}
+
+location ^~ /api/portal/v1/ {
+        proxy_pass http://127.0.0.1:38091;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    client_max_body_size 24m;
+    proxy_request_buffering off;
+    proxy_read_timeout 180s;
+    proxy_send_timeout 180s;
+}
+
+location ^~ /api/v1/ {
+        proxy_pass http://127.0.0.1:38091;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    client_max_body_size 24m;
+    proxy_request_buffering off;
+    proxy_read_timeout 180s;
+    proxy_send_timeout 180s;
+}
+
+location ^~ /auth/ {
+        proxy_pass http://127.0.0.1:38091;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_request_buffering off;
+    proxy_read_timeout 180s;
+}
+
+location /ws/ {
+        proxy_pass http://127.0.0.1:38091;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_read_timeout 3600s;
+}
 ```
+
+特殊接口的边界保持明确：
+
+- GitHub Actions：SSH 到服务器后写入发布暂存目录，再调用 `publish-desktop-release.js`，不经过 Nginx。
+- 超级管理员上传桌面版本：`POST /api/admin/v1/desktop-release`，经 Nginx 精确转发，最大请求体 513 MiB。
+- 客户端下载托管游戏：`GET|HEAD /api/v1/game-hosting/assets/...`，经 Nginx 转发并保留长超时与 Range。
+- 创作者上传托管游戏：`/api/portal/v1/game-hosting/...`，经 Nginx 转发，最大请求体 220 MiB。
 
 修改后先执行 `nginx -t`，通过后再 reload。Nginx 不配置 `limit_rate`；所有下载共享的 100 Mbps 总上限由单实例
 Relay 内的 `GlobalBandwidthLimiter` 统一执行。若未来运行多个 Relay 实例，必须把限流迁移到共享网关，不能把每个
@@ -585,8 +761,20 @@ Relay 内的 `GlobalBandwidthLimiter` 统一执行。若未来运行多个 Relay
 公网验证：
 
 ```bash
-curl -I http://39.106.221.85/bz-games/api/v1/releases/latest/download
-curl -H 'Range: bytes=0-1023' -o /dev/null -D - http://39.106.221.85/bz-games/api/v1/releases/latest/download
+curl -I http://39.106.221.85:38090/api/v1/releases/latest/download
+curl -H 'Range: bytes=0-1023' -o /dev/null -D - http://39.106.221.85:38090/api/v1/releases/latest/download
+```
+
+旧配置中的以下内容必须删除，而不是继续保留作兜底：
+
+```nginx
+location /api/ {
+    proxy_pass http://127.0.0.1:8000;
+}
+
+location /ws/ {
+    proxy_pass http://127.0.0.1:8000;
+}
 ```
 
 # 游戏托管部署补充

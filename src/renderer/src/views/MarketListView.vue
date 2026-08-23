@@ -134,6 +134,7 @@ import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { SearchOutline } from "@vicons/ionicons5";
 import type { MarketSource } from "../../../shared/types";
+import { searchMarketSources } from "../../../shared/market-search";
 import CachedImg from "../components/CachedImg.vue";
 
 interface DisplaySource extends MarketSource {
@@ -159,19 +160,13 @@ async function openGameHosting() {
 }
 
 const displayedSources = computed(() => {
-  const text = keyword.value.trim().toLowerCase();
-  const sorted = [...sources.value].sort((a, b) => {
-    if (a.featured && !b.featured) return -1;
-    if (!a.featured && b.featured) return 1;
-    return a.marketName.localeCompare(b.marketName, "zh-CN");
-  });
-  if (!text) return sorted;
-  return sorted.filter((source) => {
-    return (
-      source.marketName.toLowerCase().includes(text) ||
-      source.marketId.toLowerCase().includes(text)
-    );
-  });
+  const sortedSources = searchMarketSources(sources.value, keyword.value);
+  return sortedSources.map((source) => ({
+    ...source,
+    originalIndex: sources.value.findIndex(
+      (item) => item.marketId === source.marketId,
+    ),
+  }));
 });
 
 function formatTime(iso: string): string {

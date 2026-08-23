@@ -11,7 +11,6 @@ export default {
   feedback: {
     button: "Feedback",
     title: "Feedback und Vorschläge",
-    loggedInHint: "Angemeldet kannst du einmal alle 6 Stunden Feedback senden.",
     placeholder:
       "Teile einen Vorschlag, ein Problem oder eine gewünschte Funktion mit…",
     selectImages: "Bilder auswählen",

@@ -16,7 +16,7 @@
 
 | 原则                 | 说明                                                                                                 |
 | -------------------- | ---------------------------------------------------------------------------------------------------- |
-| **本地优先**         | 用户配置、游戏记录、经济数据与统计数据存储于本地；登录、云同步与反馈属于可选在线能力，不影响核心功能 |
+| **本地优先**         | 用户配置、游戏记录、经济数据与统计数据存储于本地；登录、云同步、论坛与反馈属于可选在线能力，不影响核心功能 |
 | **便携式存储**       | 配置默认存储在应用根目录，游戏可存放在默认目录或用户维护的多路径目录中                               |
 | **开放式游戏管理**   | 用户可将符合平台规范的游戏载入平台，平台会自动复制并管理游戏文件                                     |
 | **统一联机基础设施** | 平台提供房间管理、玩家状态、聊天、游戏消息中继、断线重连与公网入口能力                               |
@@ -39,8 +39,9 @@
 - 个性化系统（头像框解锁、装备、预览，支持多场景展示）
 - 系统设置（玩家信息、主题、端口、语言、更新、游戏库列表、GitHub Token）
 - 官方登录与云同步服务（GitHub OAuth 登录；脱敏配置与三张业务表 SQL 逻辑备份组成单一平台快照，原子发布并在本地幂等合并）
-- 建言献策（仅 GitHub 登录用户可提交文字与图片，每个账号每 6 小时一次）
-- 创作者中心（所有 GitHub 用户可登录；数据库 RBAC 控制反馈管理、游戏投稿、审核和发布；Vue 3 + Vite 独立构建，中继服务 `/admin/` 同源提供）
+- 建言献策（仅 GitHub 登录用户可提交文字与图片，每个账号每 12 小时一次）
+- 论坛（仅登录用户；帖子纯文本+图片、服务端敏感词过滤、点赞/评论、游标信息流与独立详情页）
+- 创作者中心（所有 GitHub 用户可登录；数据库 RBAC 控制反馈管理、游戏投稿、审核和发布；Vue 3 + Vite 独立构建为 `/admin/` 同源静态站点；生产由 Nginx 直接托管页面并将接口转发给本机 Relay）
 - 客户端卸载系统（游戏进程批量收口、游戏库可选择删除、路径安全校验、符号链接防护）
 - 默认封面/图标静态回退（`GameCover.vue` / `GameIcon.vue` 在无自定义资源时使用内置静态图片）
 - 官网最新安装包下载（正式 GitHub Release 原子同步到官方服务器，固定接口支持断点续传并对全部并发下载合计限速 100 Mbps）
@@ -65,9 +66,10 @@
 | 进程间通信      | Electron IPC（contextBridge）                | <br />                                                                           |
 | 本地数据存储    | electron-store                               | v10+ (ESM)，需在构建中配置 include                                               |
 | SQLite 数据存储 | better-sqlite3-multiple-ciphers              | ChaCha20 加密的游戏实体、会话、成就与统计事件                                    |
-| 在线服务元数据  | MySQL                                        | 用户、OAuth、会话、云文件元数据以及反馈正文/状态/图片索引                        |
-| 云文件对象存储  | MongoDB GridFS                               | 保存云同步文件与反馈图片                                                         |
-| Multipart 解析  | busboy                                       | 中继服务流式接收反馈图片并限制字段、文件数量及大小                               |
+| 在线服务元数据  | MySQL                                        | 用户、OAuth、会话、云文件元数据、反馈以及论坛帖子/评论/点赞/搜索 outbox           |
+| 云文件对象存储  | MongoDB GridFS                               | 保存云同步文件、反馈图片与论坛帖子图片                                           |
+| Multipart 解析  | busboy                                       | 中继服务流式接收反馈和论坛图片并限制字段、文件数量及大小                         |
+| 论坛搜索        | 可选 Elasticsearch 8.19.x + analysis-ik        | MySQL 为事实源；ES 未配置或未就绪时隐藏搜索，标题/正文使用 `ik_max_word`/`ik_smart` |
 | 管理前端        | Vue 3 + TypeScript + Vite + Pinia + Naive UI | 构建为 `/admin/` 同源静态站点                                                    |
 | 客户端更新      | electron-updater                             | GitHub Releases 作为更新源                                                       |
 | WebSocket 服务  | ws                                           | Game API、Room Server、Room Client 均基于 WebSocket，v2 高频通信支持原始二进制帧 |
@@ -87,11 +89,11 @@ bz-games/
 ├── DEVELOPER_GUIDE.md                    # 面向游戏接入方的开发接入指南
 ├── docs/
 │   └── GAME_API_V1_V2_REFERENCE.md        # Game API v1/v2 接口说明文档
-├── bz-games-admin/                        # 公开源码的反馈管理前端（生产构建由中继服务同源提供）
+├── bz-games-admin/                        # 公开源码的反馈与论坛管理前端（生产构建由中继服务同源提供）
 │   ├── .env.example                       # 当前零字段环境配置声明
-│   ├── src/                               # 路由、管理员会话、反馈列表与详情界面
+│   ├── src/                               # 路由、管理员会话、反馈/论坛列表与详情界面
 │   └── vite.config.ts                     # `/admin/` 构建与本机中继开发代理
-├── relay-server/                          # 官方服务端（中继 / OAuth / 云同步 / 反馈 / 管理 API）
+├── relay-server/                          # 官方服务端（中继 / OAuth / 云同步 / 反馈 / 论坛 / 管理 API）
 │   ├── API.md                             # 中继服务器接口规范
 │   ├── DATA_MODEL.md                      # MySQL/MongoDB 数据模型说明
 │   ├── DEPLOY.md                          # 中继服务器部署手册
@@ -101,6 +103,7 @@ bz-games/
 │   │   ├── relay-e2e-test.js              # 房间中继端到端测试
 │   │   ├── cloud-data-service.test.js     # 单一平台快照原子发布与旧端点收口测试
 │   │   ├── feedback-service.test.js       # 反馈限流、上传与管理接口测试
+│   │   ├── forum-service.test.js          # 论坛鉴权、轻量游标和搜索降级测试
 │   │   ├── auth-service.test.js           # OAuth 回跳白名单测试
 │   │   ├── access-control-service.test.js # Portal RBAC 与 Cookie 写请求同源校验测试
 │   │   ├── game-hosting-service.test.js   # 游戏托管、审核、容量与文件回滚测试
@@ -115,9 +118,11 @@ bz-games/
 │       ├── services/
 │       │   ├── auth-service.js            # GitHub OAuth 认证与会话管理
 │       │   ├── access-control-service.js  # Portal 认证、RBAC、所有权与同源写入校验
-│       │   ├── admin-static-service.js     # `/admin/` 静态资源、SPA fallback 与安全响应头
+│       │   ├── admin-static-service.js     # Relay 直连/开发时的 `/admin/` 静态资源、SPA fallback 与安全响应头
 │       │   ├── cloud-data-service.js      # 单一平台快照上传、下载与原子指针发布
 │       │   ├── feedback-service.js        # 登录反馈上传、限流、GridFS 图片与管理 API
+│       │   ├── forum-service.js           # 论坛帖子、评论、点赞、限流、GridFS 图片与管理 API
+│       │   ├── forum-search-service.js    # Elasticsearch 索引、search_after 与 alias 适配
 │       │   ├── game-hosting-service.js    # 游戏投稿、审核、托管资源与市场配置导出
 │       │   ├── message-router.js          # WebSocket 消息路由分发（含中继侧敏感词过滤与图片拦截）
 │       │   ├── mongo-service.js           # MongoDB GridFS 连接管理
@@ -127,7 +132,7 @@ bz-games/
 │       │   ├── room-service.js            # 房间创建、加入、密码、清理
 │       │   ├── system-monitor-service.js  # CPU、内存、磁盘、网络和连接状态监控
 │       │   └── sensitive-word-service.js  # 中继侧敏感词过滤服务（词库加载 + Unicode 安全字符级掩码）
-│       ├── vocabulary/                    # 敏感词词库目录（15 个分类 .txt 文件）
+│       ├── vocabulary/                    # 敏感词词库目录（7 个高置信分类 .txt 文件）
 │       ├── utils/
 │           ├── http.js                    # HTTP 工具（Cookie / Bearer / redirect / JSON 响应）
 │           ├── protocol.js                # 通信协议常量（relay:* 指令集）
@@ -236,7 +241,8 @@ bz-games/
 │   │       │   ├── LibraryView.vue        # 游戏库首页
 │   │       │   ├── MarketListView.vue      # 市场列表页面（一级界面）
 │   │       │   ├── MarketView.vue          # 市场游戏详情页面（二级界面）
-│   │       │   ├── SocialView.vue          # 社交占位页面（论坛/好友）
+│   │       │   ├── SocialView.vue          # 论坛搜索、轻量信息流、无限滚动与发帖
+│   │       │   ├── SocialPostDetailView.vue # 帖子正文、图片、点赞与评论详情
 │   │       │   ├── ChatPopoutView.vue    # 聊天弹窗独立窗口页面
 │   │       │   ├── NotificationView.vue   # 通知窗口页面
 │   │       │   ├── FloatBallView.vue       # 下载悬浮球独立窗口页面
@@ -310,7 +316,7 @@ bz-games/
 │   ├── avatar-frames/                      # 头像框图片资源（16款透明 PNG，平台运行时读取）
 │   ├── default_cover.png                   # 默认游戏封面回退图片（16:9，GameCover.vue 在无自定义封面时使用）
 │   ├── default_icon.png                    # 默认游戏图标回退图片（1:1，GameIcon.vue 在无自定义图标时使用）
-│   └── vocabulary/                         # 客户端侧敏感词库（15 个分类 .txt 文件）
+│   └── vocabulary/                         # 客户端侧敏感词库（7 个高置信分类 .txt 文件）
 ```
 
 ---
@@ -1034,7 +1040,7 @@ interface AppSettings {
   - **公网入口模型**：房间模式仅允许 `lan` 与 `relay` 两种。`RoomServer` 优先监听 `settings.defaultRoomPort`（默认 38080）；若该端口已被其他进程占用，则原子回退到系统分配端口，并由房间创建结果和局域网发现统一使用实际监听端口。无论房主当前选择局域网还是官方服务器模式，本地物理局域网 IP、虚拟局域网 IP 和用户自备 frp 地址都仍然可以直连；官方服务器模式只是在此基础上额外注册一个短地址入口。
   - **中继服务职责**：`relay-server/src/index.js` 处理 `relay:host`、`relay:join`、`relay:leave`、`relay:latency:ping`、`relay:latency:probe`、`relay:latency:pong` 等控制信令；RoomMessage、Game API v1 JSON 和 Game API v2 binary frame 均透明转发。中继服务端使用 `roomId` 管理内部房间，只发送和识别 `roomCode`。
   - **中继聊天内容安全**：中继服务器对转发的聊天消息执行内容安全过滤，作为独立于客户端过滤的第二道防线：
-    - **敏感词过滤**：`sensitive-word-service.js` 从 `vocabulary/` 目录加载 15 个分类词库文件，按长度降序排序后使用 Unicode 安全算法（`Array.from()` + code-unit→char-index 映射表）对 `contentType` 为 `text` 或 `mixed` 的聊天消息执行字符级掩码替换（敏感词 → `*`）。词库文件缺失时 `hasWords()` 返回 `false`，`message-router.js` 通过 `canFilterRelayChatMessage()` 门控静默丢弃无法过滤的文字消息（fail-closed 安全设计）。
+    - **敏感词过滤**：`sensitive-word-service.js` 从 `vocabulary/` 目录加载 7 个高置信分类词库文件（涉政、极不文明脏话、极度色情、赌博、毒品），按长度降序排序后使用 Unicode 安全算法（`Array.from()` + code-unit→char-index 映射表）对 `contentType` 为 `text` 或 `mixed` 的聊天消息执行字符级掩码替换（敏感词 → `*`）。词库不包含单字词和广告、武器、疫情、泛生活等类别。词库文件缺失时 `hasWords()` 返回 `false`，`message-router.js` 通过 `canFilterRelayChatMessage()` 门控静默丢弃无法过滤的文字消息（fail-closed 安全设计）。
     - **图片拦截**：`isBlockedRelayChatMessage()` 拦截并静默丢弃以下三类聊天消息：① `contentType === "image"` 的纯图片消息；② content 字段为 `data:image/` base64 的嵌入式图片；③ `images[]` 数组非空的带图消息。拦截在消息级执行，不等同于逐图片扫描。
     - **透传放行**：`contentType === "audio"` 的语音消息不经过滤直接转发。
     - **游戏消息不受影响**：`game:message:relay`、`game:broadcast:relay`、`game:message:ack` 等游戏中继消息不经过上述过滤管线。
@@ -1071,6 +1077,14 @@ interface AppSettings {
   - **联机传递**：`RoomJoinPayload` 新增 `playerNicknameStyle` 字段，`PlayerInRoom` 新增 `nicknameStyle` 字段，`DiscoveredRoom` 新增 `hostStyle` 字段，`ChatPayload` 新增 `senderStyle` 字段。`RoomServer`/`RoomClient` 创建玩家对象时写入，`PlayerCard.vue` 和 `RoomChat.vue` 使用 `NicknameText` 渲染。房间发现页（`RoomDiscoveryView.vue`）房间名称使用 `NicknameText` 展示房主昵称样式。
   - **`effectiveTheme` 响应式**：`useSettingsStore` 新增 `effectiveTheme` computed（跟随 `settings.theme` 和 `prefersDark` 系统偏好），新增 `setPrefersDark()` 方法供 `App.vue` 的 `matchMedia` 监听器调用。`PersonalizationView` 中 watch `effectiveTheme` 自动适配预览颜色。
 
+- **论坛系统设计（ForumService）**：
+  - **运行边界**：论坛客户端接口必须同时携带 relayToken 和有效 GitHub Bearer Session；管理端只使用同源 Portal Cookie。MySQL 是帖子、评论、计数、点赞和软删除的事实源，MongoDB GridFS 仅保存帖子图片。帖子和评论的 `status` 为 0/1/2，分别表示正常、作者删除、管理员删除；`deleted_at` 只记录删除时间，`deleted_by` 记录实际操作人。
+  - **信息流与详情**：`SocialView.vue` 只读取每页 10 条标题/时间/点赞数/评论数，使用 MySQL 最新流游标或 Elasticsearch `search_after` 搜索；`SocialPostDetailView.vue` 读取正文、图片和按点赞数/时间/ID排序的评论。列表、搜索词、游标和实际 `.n-layout-scroll-container` 滚动位置由 `useForumStore` 保留，返回详情不重新加载首页。
+  - **文字与图片**：标题、正文和评论在服务端使用现有敏感词服务替换为等量 `*` 后存储；客户端主进程和服务端都必须校验图片真实 MIME、扩展名、大小、尺寸和像素数，详情图片还必须校验响应 MIME 与声明大小。帖子最多 4 张、单张最多 5 MiB，正文与评论分别受服务端长度限制。
+  - **互动与限流**：帖子和评论点赞通过复合唯一键与事务内计数更新保证幂等。发帖限流使用 `forum.post.create`，管理员/超级管理员 1 小时、其他登录用户 24 小时；评论使用 `forum.comment.create`，分别为 5 分钟和 30 分钟。multipart 发帖在读取图片前 reservation，失败释放，业务事务提交后 commit。
+  - **搜索同步**：ES 仅索引过滤后的标题和正文，不索引图片、评论、点赞或原始敏感词。帖子创建/软删除与 `forum_search_outbox` 同事务，worker 失败重试；ES 不可用时最新流、发帖和评论不受影响，带搜索词请求返回可重试错误，不回退 `LIKE`。`GET /api/v1/forum/search-status` 是客户端搜索开关：ES 未配置、未就绪或同步异常时返回 `enabled: false`，客户端隐藏搜索框。后台 ES 调用静默失败，仅保留 outbox 重试状态。部署固定 Elasticsearch 8.19.0 与同版本 analysis-ik，`ik_max_word` 索引、`ik_smart` 查询，端口只监听本机。
+  - **删除、恢复与管理端**：客户端作者可通过 `DELETE /api/v1/forum/posts/:id` 和 `DELETE /api/v1/forum/comments/:id` 删除自己的内容；服务端按作者 ID 和 `status=0` 最终校验，作者删除帖子会级联标记其有效评论。`forum.view` 控制查看，`forum.manage` 控制管理员删除，`forum.restore` 仅授予超级管理员并控制恢复；管理员与超级管理员拥有前两项 capability，超级管理员额外拥有恢复能力。管理员删除写入 `status=2`，删除帖子同时标记其有效评论并写入 ES 删除 outbox。恢复帖子只将帖子恢复为 `status=0` 并写入 ES upsert outbox，不自动恢复已删除评论；恢复评论要求所属帖子正常，并在事务内增加评论计数。普通客户端永远只读取 `status=0` 内容。
+
 - **反馈系统设计（FeedbackService）**：
   - **图片选择与验证（v3.1.3 追加模式）**：`selectImages(existingSelectionId?)` 支持传入已有选区 ID 时以追加模式在现有图片上叠加新图片。读取文件后：① 魔术字节检测实际 MIME；② 比对实际格式与扩展名声明是否一致（`getDeclaredContentType`）；③ `nativeImage.createFromBuffer` 验证图形有效性；④ 每张图片生成 SHA-256 哈希用于跨批次去重（同一选区中哈希重复的图片被拒绝，前端弹出 `duplicate_image` 提示）。追加时若原选区已满 4 张或总图片数超限则返回 `too_many_images`；传入已过期选区 ID 返回 `feedback_images_expired`。通过后将 Buffer 与哈希存入进程内存 Map（`selectionId` 为键），供后续 multipart 上传引用。整组图片 30 分钟后自动清理；单张移除后刷新 `createdAt`。
   - **释放语义**：`releaseImages(selectionId, imageId?)` 支持单张移除或整组释放；单张移除后若 selection 为空则自动删除 Map 条目，否则刷新 `createdAt` 时间戳。
@@ -1079,7 +1093,7 @@ interface AppSettings {
   - **反馈详情查询**：`getDetail(feedbackId)` 通过 `/api/v1/feedback/:id` 获取用户可见详情。主进程校验 UUID 格式反馈 ID，然后校验响应结构（id、content、status、reply、imageCount、createdAt、updatedAt 及 images 数组的每个元素的类型与大小）。随后逐个通过 `/api/v1/feedback/:id/images/:imageId` 下载图片，校验实际 Content-Type 与 MySQL 记录的 MIME 一致、实际 body 长度与声明 size 一致、不超 MAX_IMAGE_BYTES。任一步不通过返回 `feedback_invalid_response`。通过 auth 失败或权限不足由 `handleAuthFailure` 统一收口。
   - **IPC 边界**：渲染进程仅通过 `FeedbackModal.vue` → `electronAPI.settings.selectFeedbackImages / releaseFeedbackImages / submitFeedback / getFeedbackHistory / getFeedbackDetail` 与主进程交互，不直接接触文件路径或服务端 relayToken / GitHub 会话。`getFeedbackHistory` 从服务端查询当前账号列表，主进程必须校验历史和详情响应结构、图片数量、大小、MIME 和实际响应长度后再生成 Data URL。
   - **服务端并联（v3.1.3 用户详情接口）**：`POST /api/v1/feedback`、`GET /api/v1/feedback`、`GET /api/v1/feedback/:id` 和图片读取接口均要求发行版 relayToken、有效 GitHub Bearer Token，并对历史、详情和图片校验反馈所有者。历史接口只返回当前账号的 `id/submittedAt`；详情返回 `id/content/status/reply/imageCount/createdAt/updatedAt/images`，不含 `adminNote`；图片接口返回单张图片原始流。管理 API 详情额外包含 `adminNote`，更新接口接受 `status/adminNote/reply`，备注与回复均不超过 5000 字符。提交采用 busboy 流式 multipart、魔法字节校验、GitHub ID 进程内冷却、MySQL 事务 + GridFS。
-  - **Portal 前端**：`bz-games-admin/` 为独立 Vue 3 + Vite + Pinia 项目，构建为 `/admin/` 同源静态站点。服务端会话接口返回唯一 capability 集合，前端 `rbac.ts` 只校验能力契约，不维护角色到能力的映射；菜单、路由、按钮和提交前置检查均调用 `auth.can(capability)`。玩家进入欢迎页并管理自己的反馈，创作者仅管理自己的游戏托管，管理员无用户角色调整、托管容量查看、系统监控和桌面客户端版本上传能力，超级管理员拥有全部界面与操作。服务端仍是唯一授权决策源，并独立执行 capability、资源所有权、状态机和精确 Origin 校验。中继侧 `admin-static-service.js` 提供 SPA fallback、路径穿越防护、CSP/`nosniff`/`DENY` iframe 等安全响应头。
+  - **Portal 前端**：`bz-games-admin/` 为独立 Vue 3 + Vite + Pinia 项目，构建为 `/admin/` 同源静态站点。生产环境由 Nginx 直接从 `/var/www/campusmate/admin` 托管页面，Relay 的 `ADMIN_STATIC_DIR` 保留为本机直连或开发回退；Nginx 与 Relay 静态服务都必须提供 SPA fallback、路径穿越防护和 CSP/`nosniff`/`DENY` iframe 等安全响应头。服务端会话接口返回唯一 capability 集合，前端 `rbac.ts` 只校验能力契约，不维护角色到能力的映射；菜单、路由、按钮和提交前置检查均调用 `auth.can(capability)`。玩家进入欢迎页并管理自己的反馈，创作者仅管理自己的游戏托管，管理员无用户角色调整、托管容量查看、系统监控和桌面客户端版本上传能力，超级管理员拥有全部界面与操作。服务端仍是唯一授权决策源，并独立执行 capability、资源所有权、状态机和精确 Origin 校验。
 - **卸载系统设计（UninstallService）**：
   - **状态互斥**：`running` 布尔标志防止重复卸载调用。
   - **游戏进程收口**：`shutdownForUninstall()` 设置 `shuttingDownForUninstall = true` 拒新启，等待 `launchingGames` 清空（5s 超时），然后调用 `GameManager.shutdownForUninstall()` 通过统一运行时记录停止所有原生进程树、Web 游戏窗口及本地游戏服务。
@@ -1273,6 +1287,10 @@ interface AppSettings {
 - `system:feedback:submit`：文本 ≤ 5000 字 + 可选图片 multipart 上传。
 - `system:feedback:getHistory`：从服务端读取当前登录账号的反馈历史编号与提交时间戳，并在查询前清理旧版本地历史。
 - `system:feedback:getDetail`：从服务端查询反馈详情（正文、处理状态、回复、图片），主进程侧校验响应结构后再返回 Data URL。
+- `forum:listPosts` / `forum:getPost` / `forum:getComments`：主进程携带 relayToken 与登录 Bearer Session 读取论坛轻量列表、帖子详情和评论游标页。
+- `forum:getSearchAvailability`：主进程读取服务端 ES 可用性；不可用时客户端不显示论坛搜索框。
+- `forum:selectImages` / `forum:releaseImages` / `forum:createPost`：主进程管理论坛图片选区并以 multipart 发帖，渲染进程不接触本地路径、relayToken 或会话令牌。
+- `forum:createComment` / `forum:deletePost` / `forum:deleteComment` / `forum:likePost` / `forum:unlikePost` / `forum:likeComment` / `forum:unlikeComment`：论坛评论、作者删除和幂等点赞 IPC。
 - `system:saveSettings`：保存应用设置并应用相关系统行为。
 - `system:savePartialSettings`：保存部分应用设置（合并写入，不会覆盖未传入的字段）。
 - `system:uploadAvatar`：选择图片并返回原始 data URL（JPEG/PNG/WebP），不做缩放，裁切由前端 Crop 弹窗完成。
@@ -1409,7 +1427,7 @@ interface AppSettings {
 - **设置页主题跟随系统**：主题选择器提供"跟随系统"选项（`themeAuto`）。当选择 `auto` 时，平台自动跟随操作系统亮/暗模式切换。
 - **设置页官网链接**：设置页需展示官方网址，使用 NaiveUI `n-a` 组件渲染为可点击链接，`
 @click.prevent` 拦截默认跳转后通过 `system:openUrl` IPC 调用 `shell.openExternal` 打开系统默认浏览器。
-- **设置页建言献策**：仅登录用户可见底部入口，入口打开固定 72vw × 72vh 的 `FeedbackModal`，使用“建言献策 / 历史记录”两个 Tab，不再打开第二层历史弹窗。文字最多 5,000 字，可选最多 4 张 PNG/JPEG/WebP（单张 5 MiB）；重复选择通过顶部 message 提示，新增图片追加到当前选择，缩略图按最长边 `contain`，文件名完整换行显示。渲染进程只持有主进程生成的预览和选择 ID，不接触文件路径、发行版中继令牌或 GitHub 会话令牌。已登录用户每 6 小时可提交一次；触发限制时只展示服务端 `resetAt` 对应的一条提示。历史列表默认全部收起，右侧只显示展开按钮；展开时从服务端查询正文、图片、处理状态和回复，详情区内部显示状态，历史较多时在固定弹窗内容区滚动。
+  - **设置页建言献策**：仅登录用户可见底部入口，入口打开固定 72vw × 72vh 的 `FeedbackModal`，使用“建言献策 / 历史记录”两个 Tab，不再打开第二层历史弹窗。文字最多 5,000 字，可选最多 4 张 PNG/JPEG/WebP（单张 5 MiB）；重复选择通过顶部 message 提示，新增图片追加到当前选择，缩略图按最长边 `contain`，文件名完整换行显示。渲染进程只持有主进程生成的预览和选择 ID，不接触文件路径、发行版中继令牌或 GitHub 会话令牌。已登录用户每 12 小时可提交一次；触发限制时只展示服务端 `resetAt` 对应的一条提示。历史列表默认全部收起，右侧只显示展开按钮；展开时从服务端查询正文、图片、处理状态和回复，详情区内部显示状态，历史较多时在固定弹窗内容区滚动。
 - **GitHub Token 设置**：设置页提供 `githubToken` 字段（`n-input type="password"`，`@copy.prevent` + `@cut.prevent` 防剪贴板泄漏）。填写有效的 GitHub Personal Access Token 后，平台所有 GitHub API 请求自动携带 `Authorization: Bearer <token>`，将 API 限流从 60 次/小时提升至 5000 次/小时（用于 Release Asset 解析）。
 - **云端同步说明**：设置页 GitHub 登录区域在上传/下载按钮旁提供 `?` 帮助按钮，hover 展示 `cloudSyncHelp` tooltip，说明上传会排除 GitHub Token 与登录会话字段、下载 config.json 仅更新云端存在的字段。
 - **设置页数据自检**：设置页需提供“数据自检”按钮。清单检查必须复用 `GameManifestFileService`，在不迁移或覆盖原文件的前提下识别明文/密文、验证密文信封/密钥/认证标签和最新 `GameManifestSchema`，并核对游戏 ID/版本、平台兼容范围、入口及图标/封面/视频/成就图标文件。明文为警告，解密、格式、密钥或 Schema 问题为错误；主进程返回稳定错误码和参数，渲染层使用六语 i18n 展示，不直接显示主进程硬编码文案。
@@ -1460,7 +1478,7 @@ interface AppSettings {
 
 - **客户端边界**：`FeedbackService` 在主进程完成登录状态检查、图片读取、实际格式校验、multipart 构造、发行版中继令牌和必需 GitHub Bearer Token 注入；IPC 输入必须视为不可信并进行运行时校验。
 - **开发模式 OAuth 回跳**：`process.defaultApp` 下注册 `bzgames://` 时必须使用 `process.execPath` 加 `path.resolve(process.argv[1])`，确保协议启动命令与 `electron-vite dev` 当前的 `electron.exe .` 应用入口一致。禁止改用构建产物 `out/main/index.js` 或手写 Windows 注册表命令，否则回跳会启动不同应用身份，无法通过 `second-instance` 把 OAuth URL 交给当前开发实例。打包模式继续直接注册当前 EXE。
-- **反馈限制**：客户端反馈接口必须携带有效 GitHub Bearer Session，服务端以 GitHub 用户 ID 作为唯一限流身份并限制每 6 小时一次；待处理占位必须持续到成功提交或失败释放，防止并发穿透。匿名提交路径和匿名限流状态均不存在。
+- **反馈限制**：客户端反馈接口必须携带有效 GitHub Bearer Session，服务端以 GitHub 用户 ID 作为唯一限流身份并限制每 12 小时一次；待处理占位必须在读取 multipart 之前建立，并持续到成功提交或失败释放，防止并发穿透和限流前资源消耗。匿名提交路径和匿名限流状态均不存在。
 - **上传安全**：服务端使用 busboy 流式解析，总请求、字段、文件数量及单文件大小都必须设限；图片必须同时校验声明 MIME、文件签名、容器结构和合理尺寸。MySQL 失败时尽力删除本次 GridFS 文件，临时目录始终清理。
 - **会话错误协议**：受保护 HTTP 接口统一区分 `authenticated / missing / expired / invalid`。缺少令牌返回 `401 unauthorized`，过期返回 `401 session_expired`，无效、撤销或未知令牌返回 `401 session_invalid`，并同时返回稳定 `error` 与可读 `message`。过期会话默认保留 7 天以便识别，由 `AUTH_EXPIRED_SESSION_RETENTION_MS` 配置；普通 `unauthorized` 不触发客户端清理登录。
 - **Portal RBAC 与认证边界**：`users.role` 是唯一角色来源，只允许 `player`、`creator`、`administrator`、`super_administrator`。服务端唯一授权模块把角色映射为固定 capability 集合，未知角色和未知能力默认拒绝；超级管理员拥有全部能力，管理员无用户角色调整、托管容量查看、系统监控和桌面客户端版本上传能力，创作者仅能托管自己的游戏且提交必须审核，玩家仅能进入欢迎页并管理自己的反馈。`GET /api/portal/v1/session` 只通过同源 Session Cookie 返回当前用户、能力集合和过期时间，Portal 接口拒绝 Bearer 或混合凭据，写接口还必须校验精确 Origin；前端只消费能力集合，不得按角色推断授权。桌面客户端接口只接受 Bearer Session，需要登录的接口仅校验会话有效性，不读取角色或 capability。OAuth 只负责创建默认玩家、刷新 GitHub 资料和建立会话，永不自动修改已有角色。角色修改只允许超级管理员操作其他非超级管理员，且不能授予超级管理员。GitHub OAuth 的 Portal 回跳只允许 `PORTAL_PUBLIC_URL` 同源 `/admin/` 路径，Cookie 使用 HttpOnly、SameSite=Lax。管理静态文件必须阻止路径穿越和符号链接越界，并发送 CSP、`nosniff`、拒绝 iframe 等安全响应头。
@@ -1468,7 +1486,8 @@ interface AppSettings {
 - **三端接口**：反馈提交成功仅返回 `{ ok, id }`；登录账号限流返回 `429 + error + retryAfterSeconds + resetAt`。玩家列表与详情只能访问自己的反馈，详情返回 `id/content/status/reply/imageCount/createdAt/updatedAt/images`，不得包含 `adminNote`；玩家图片和删除接口复用同一所有权规则。管理详情额外返回 `adminNote`，更新接受 `status/adminNote/reply`，管理删除需要对应 capability。所有字段以 `relay-server/API.md` 为准，服务端测试、客户端共享类型、预加载声明与管理端 TypeScript 类型必须同步。
 - **托管接口对齐**：逻辑地址的 `gameId/version/role/encodedFileName` 规则、市场导出结构、Portal 请求/响应类型和服务端校验必须保持同一字段语义；新增、替换、审核、设为最新、删除及下载分别使用最小职责接口，写接口由服务端执行角色、所有权、状态机和精确 Origin 校验，不能依赖前端隐藏按钮。客户端仅可把规范逻辑地址改写到配置的 Relay `origin`。
 - **令牌注入边界**：客户端附加 GitHub Token、Relay Token 或专用 Referer 前，必须使用 `URL` 解析并精确校验协议、`origin` 与允许的路径边界；禁止使用字符串 `startsWith` 判断可信主机，禁止向相似前缀域名、用户信息段、重定向后的第三方地址或任意市场 URL 发送凭据。
-- **配置唯一来源**：客户端真实关键配置只允许出现在被 Git 忽略的 `private-build.config.json`；服务端真实关键配置只允许存在于服务器 `/etc/systemd/system/bz-games-relay.service`，权限必须为 `root:root 0600`；管理端生产环境使用同源 `/api` 与 `/auth`，当前无环境字段。
+  - **配置唯一来源**：客户端真实关键配置只允许出现在被 Git 忽略的 `private-build.config.json`；服务端真实关键配置只允许存在于服务器的 systemd 主单元及 drop-in 配置，权限必须为 `root:root 0600`；管理端生产环境使用同源 `/api` 与 `/auth`，当前无环境字段。生产管理端构建产物只部署到 Nginx 的 `/var/www/campusmate/admin`，不把服务器真实配置回写仓库。
+  - **生产公网入口唯一化**：Nginx 只监听公网 `:38090`，Relay 只监听本机 `127.0.0.1:38091`；Nginx 直接托管 `/admin/` 静态页面，并将当前 `/api/...`、`/auth/...`、房间 HTTP 接口和 `/ws/` WebSocket 转发到本机 Relay。不得保留旧服务前缀或 Relay `:38091` 的公网兼容入口。官网和客户端发行版下载统一使用 `/api/v1/releases/latest/download`；GitHub Actions 发布通过 SSH 调用服务器发布脚本，超级管理员桌面版本上传使用 `/api/admin/v1/desktop-release`，客户端托管游戏下载使用 `/api/v1/game-hosting/assets/*`，创作者上传使用 `/api/portal/v1/game-hosting/*`。
 - **示例同步**：`private-build.config.example.json`、`relay-server/bz-games-relay.service.example` 和 `bz-games-admin/.env.example` 分别对应三端。新增或删除配置字段后必须运行 `npm run check:config`（对应 `scripts/check-config-examples.mjs`，自动校验三端配置字段一致性、`.gitignore` 敏感路径覆盖及 SERVICE 示例完整性），禁止在源码或文档写入真实公网地址、管理员 ID、令牌、数据库连接串或 OAuth Secret。
 
 ---

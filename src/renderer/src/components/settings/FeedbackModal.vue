@@ -24,15 +24,13 @@
     >
       <n-tab-pane name="submit" :tab="t('feedback.title')">
         <n-space vertical :size="16" class="feedback-tab-content">
-          <n-alert type="success">{{ t("feedback.loggedInHint") }}</n-alert>
-
           <template v-if="!successId">
             <n-input
               v-model:value="content"
               type="textarea"
               :placeholder="t('feedback.placeholder')"
               :maxlength="5000"
-              :autosize="{ minRows: 5, maxRows: 10 }"
+              :autosize="{ minRows: 8, maxRows: 12 }"
               show-count
               :disabled="busy"
             />

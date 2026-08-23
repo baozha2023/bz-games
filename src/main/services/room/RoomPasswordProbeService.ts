@@ -6,6 +6,7 @@ import {
 } from "../../../shared/AppConstants";
 import { requestInterceptor } from "../../utils/requestInterceptor";
 import { mapRelayCloseError } from "../../utils/relayCloseError";
+import { toRelayWebSocketUrl } from "./relayWebSocketUrl";
 
 export interface RoomPasswordProbeResult {
   success: boolean;
@@ -83,7 +84,7 @@ class RoomPasswordProbeService {
   }
 
   private probeRelayRoom(address: string): Promise<RoomPasswordProbeResult> {
-    const relayUrl = this.toWebSocketUrl(DEFAULT_RELAY_SERVER_URL);
+    const relayUrl = toRelayWebSocketUrl(DEFAULT_RELAY_SERVER_URL);
     const roomCode = address.trim().split(":").pop() || "";
     return new Promise((resolve) => {
       const ws = new WebSocket(requestInterceptor.buildWebSocketUrl(relayUrl), {

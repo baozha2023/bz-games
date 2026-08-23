@@ -12,6 +12,7 @@ export function createHttpServer({
   gameHostingService,
   releaseDownloadService,
   feedbackService,
+  forumService,
   portalUserService,
   userProfileService,
   presenceService,
@@ -38,6 +39,9 @@ export function createHttpServer({
         return;
       }
       if (await feedbackService.handleRequest(req, res, url)) {
+        return;
+      }
+      if (await forumService.handleRequest(req, res, url)) {
         return;
       }
       if (await portalUserService.handleRequest(req, res, url)) {

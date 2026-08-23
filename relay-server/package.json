@@ -9,6 +9,7 @@
     "test:admin-static": "node --test scripts/admin-static-service.test.js",
     "test:cloud": "node --test scripts/cloud-data-service.test.js",
     "test:e2e": "node scripts/relay-e2e-test.js",
+    "rebuild:forum-search": "node scripts/rebuild-forum-search.js",
     "test:auth": "node --test scripts/auth-service.test.js",
     "test:feedback": "node --test scripts/feedback-service.test.js",
     "test:release": "node --test scripts/release-download-service.test.js",

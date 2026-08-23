@@ -40,6 +40,8 @@ const expected = {
     "hosting.review",
     "hosting.publish.direct",
     "release.view",
+    "forum.view",
+    "forum.manage",
   ],
   super_administrator: Object.values(PORTAL_CAPABILITIES),
 };

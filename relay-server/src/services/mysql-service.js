@@ -95,6 +95,20 @@ export function createMySqlService({ config }) {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
     await pool.query(`
+      CREATE TABLE IF NOT EXISTS rate_limit_records (
+        github_id VARCHAR(64) NOT NULL,
+        endpoint_key VARCHAR(128) NOT NULL,
+        last_success_at DATETIME(3) NULL,
+        reservation_token CHAR(36) NULL,
+        reservation_expires_at DATETIME(3) NULL,
+        created_at DATETIME(3) NOT NULL,
+        updated_at DATETIME(3) NOT NULL,
+        PRIMARY KEY (github_id, endpoint_key),
+        KEY idx_rate_limit_records_updated_at (updated_at),
+        KEY idx_rate_limit_records_reservation_expires_at (reservation_expires_at)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS feedback (
         id CHAR(36) NOT NULL,
         content TEXT NOT NULL,
@@ -126,6 +140,90 @@ export function createMySqlService({ config }) {
         created_at DATETIME(3) NOT NULL,
         PRIMARY KEY (id),
         KEY idx_feedback_images_feedback_id (feedback_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS forum_posts (
+        id CHAR(36) NOT NULL,
+        author_user_id BIGINT UNSIGNED NOT NULL,
+        title VARCHAR(80) NOT NULL,
+        body TEXT NOT NULL,
+        like_count INT UNSIGNED NOT NULL DEFAULT 0,
+        comment_count INT UNSIGNED NOT NULL DEFAULT 0,
+        created_at DATETIME(3) NOT NULL,
+        updated_at DATETIME(3) NOT NULL,
+        status TINYINT UNSIGNED NOT NULL DEFAULT 0,
+        deleted_at DATETIME(3) NULL,
+        deleted_by BIGINT UNSIGNED NULL,
+        PRIMARY KEY (id),
+        KEY idx_forum_posts_status_feed (status, created_at, id),
+        KEY idx_forum_posts_author (author_user_id, created_at, id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS forum_post_images (
+        id CHAR(36) NOT NULL,
+        post_id CHAR(36) NOT NULL,
+        storage_id VARCHAR(64) NOT NULL,
+        file_name VARCHAR(255) NOT NULL,
+        content_type VARCHAR(64) NOT NULL,
+        size BIGINT UNSIGNED NOT NULL,
+        width INT UNSIGNED NOT NULL,
+        height INT UNSIGNED NOT NULL,
+        created_at DATETIME(3) NOT NULL,
+        PRIMARY KEY (id),
+        KEY idx_forum_post_images_post (post_id, created_at)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS forum_post_likes (
+        post_id CHAR(36) NOT NULL,
+        user_id BIGINT UNSIGNED NOT NULL,
+        created_at DATETIME(3) NOT NULL,
+        PRIMARY KEY (post_id, user_id),
+        KEY idx_forum_post_likes_user (user_id, post_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS forum_comments (
+        id CHAR(36) NOT NULL,
+        post_id CHAR(36) NOT NULL,
+        author_user_id BIGINT UNSIGNED NOT NULL,
+        content TEXT NOT NULL,
+        like_count INT UNSIGNED NOT NULL DEFAULT 0,
+        created_at DATETIME(3) NOT NULL,
+        updated_at DATETIME(3) NOT NULL,
+        status TINYINT UNSIGNED NOT NULL DEFAULT 0,
+        deleted_at DATETIME(3) NULL,
+        deleted_by BIGINT UNSIGNED NULL,
+        PRIMARY KEY (id),
+        KEY idx_forum_comments_status_rank (post_id, status, like_count, created_at, id),
+        KEY idx_forum_comments_author (author_user_id, created_at, id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS forum_comment_likes (
+        comment_id CHAR(36) NOT NULL,
+        user_id BIGINT UNSIGNED NOT NULL,
+        created_at DATETIME(3) NOT NULL,
+        PRIMARY KEY (comment_id, user_id),
+        KEY idx_forum_comment_likes_user (user_id, comment_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS forum_search_outbox (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        post_id CHAR(36) NOT NULL,
+        operation ENUM('upsert', 'delete') NOT NULL,
+        attempts INT UNSIGNED NOT NULL DEFAULT 0,
+        next_attempt_at DATETIME(3) NOT NULL,
+        locked_until DATETIME(3) NULL,
+        last_error TEXT NOT NULL,
+        created_at DATETIME(3) NOT NULL,
+        processed_at DATETIME(3) NULL,
+        PRIMARY KEY (id),
+        KEY idx_forum_search_outbox_ready (processed_at, next_attempt_at, locked_until, id),
+        KEY idx_forum_search_outbox_post (post_id, id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
     await pool.query(`

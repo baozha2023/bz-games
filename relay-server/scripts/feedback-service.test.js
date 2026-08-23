@@ -5,68 +5,68 @@ import test from "node:test";
 
 import { ObjectId } from "mongodb";
 
-import {
-  createFeedbackRateLimiter,
-  createFeedbackService,
-} from "../src/services/feedback-service.js";
+import { createFeedbackService } from "../src/services/feedback-service.js";
 
 const VALID_PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
   "base64",
 );
 
-test("feedback limiter commits a successful cooldown", () => {
-  const limiter = createFeedbackRateLimiter(48 * 60 * 60 * 1000);
-  try {
-    const first = limiter.reserve("203.0.113.10", 1_000);
-    assert.equal(first.ok, true);
-    assert.equal(limiter.commit("203.0.113.10", first.token, 2_000), true);
-    const blocked = limiter.reserve("203.0.113.10", 3_000);
-    assert.equal(blocked.ok, false);
-    assert.equal(blocked.retryAfterSeconds, 172_799);
-  } finally {
-    limiter.dispose();
-  }
-});
+function createMockRateLimitService() {
+  const records = new Map();
 
-test("feedback limiter blocks concurrent requests and releases failures", () => {
-  const limiter = createFeedbackRateLimiter(21_600_000);
-  try {
-    const first = limiter.reserve("203.0.113.11", 1_000);
-    assert.equal(first.ok, true);
-    assert.equal(limiter.reserve("203.0.113.11", 1_001).ok, false);
-    assert.equal(limiter.reserve("203.0.113.11", 601_000).ok, false);
-    limiter.release("203.0.113.11", first.token);
-    assert.equal(limiter.reserve("203.0.113.11", 1_002).ok, true);
-  } finally {
-    limiter.dispose();
+  function keyOf(githubId, endpointKey) {
+    return `${githubId}:${endpointKey}`;
   }
-});
 
-test("feedback limiter keeps different identities independent", () => {
-  const limiter = createFeedbackRateLimiter(21_600_000);
-  try {
-    assert.equal(limiter.reserve("203.0.113.12", 1_000).ok, true);
-    assert.equal(limiter.reserve("203.0.113.13", 1_000).ok, true);
-  } finally {
-    limiter.dispose();
-  }
-});
-
-test("feedback limiter state is cleared when the service is recreated", () => {
-  const firstLimiter = createFeedbackRateLimiter(21_600_000);
-  const first = firstLimiter.reserve("github-1", 1_000);
-  assert.equal(firstLimiter.commit("github-1", first.token, 2_000), true);
-  assert.equal(firstLimiter.reserve("github-1", 3_000).ok, false);
-  firstLimiter.dispose();
-
-  const restartedLimiter = createFeedbackRateLimiter(21_600_000);
-  try {
-    assert.equal(restartedLimiter.reserve("github-1", 3_000).ok, true);
-  } finally {
-    restartedLimiter.dispose();
-  }
-});
+  return {
+    reserve: async ({
+      githubId,
+      endpointKey,
+      cooldownMs,
+      now = new Date(),
+    }) => {
+      const key = keyOf(githubId, endpointKey);
+      const currentTime = now.getTime();
+      const record = records.get(key);
+      if (record?.pending) {
+        return {
+          ok: false,
+          retryAfterSeconds: 1,
+          resetAt: new Date(currentTime + 1000).toISOString(),
+        };
+      }
+      if (record?.lastSuccessAt + cooldownMs > currentTime) {
+        const resetAt = new Date(record.lastSuccessAt + cooldownMs);
+        return {
+          ok: false,
+          retryAfterSeconds: Math.max(
+            1,
+            Math.ceil((resetAt.getTime() - currentTime) / 1000),
+          ),
+          resetAt: resetAt.toISOString(),
+        };
+      }
+      const token = `${key}-${Math.random()}`;
+      records.set(key, { ...record, pending: token });
+      return { ok: true, token };
+    },
+    commit: async ({ githubId, endpointKey, token, now = new Date() }) => {
+      const key = keyOf(githubId, endpointKey);
+      const record = records.get(key);
+      if (!record || record.pending !== token) return false;
+      records.set(key, { lastSuccessAt: now.getTime(), pending: null });
+      return true;
+    },
+    release: async ({ githubId, endpointKey, token }) => {
+      const key = keyOf(githubId, endpointKey);
+      const record = records.get(key);
+      if (!record || record.pending !== token) return false;
+      records.set(key, { ...record, pending: null });
+      return true;
+    },
+  };
+}
 
 test("feedback endpoint requires login and applies authenticated cooldowns", async () => {
   const inserted = [];
@@ -144,6 +144,7 @@ test("feedback endpoint requires login and applies authenticated cooldowns", asy
       }),
     },
     authService,
+    rateLimitService: createMockRateLimitService(),
     accessControlService: {
       requirePortalSession: async () => ({
         user: {
@@ -318,6 +319,7 @@ test("user feedback history requires login and returns only the current user's I
       },
     },
     mongoService: { isEnabled: () => false },
+    rateLimitService: createMockRateLimitService(),
     authService: {
       getClientSessionFromRequest: async (req) => {
         const token = String(req.headers.authorization || "").replace(
@@ -410,6 +412,7 @@ test("user feedback history reports unavailable storage", async () => {
     },
     mySqlService: { isEnabled: () => false },
     mongoService: { isEnabled: () => false },
+    rateLimitService: createMockRateLimitService(),
     authService: {
       getClientSessionFromRequest: async () => {
         throw new Error("authentication should not be checked");
@@ -532,6 +535,7 @@ test("admin endpoints validate pagination and keep response fields aligned", asy
         delete: async (id) => deletedStorageIds.push(id.toHexString()),
       }),
     },
+    rateLimitService: createMockRateLimitService(),
     authService: {
       getClientSessionFromRequest: async (req) =>
         req.headers.authorization === "Bearer owner-session"

@@ -1,6 +1,6 @@
 <template>
   <div class="market-root">
-    <n-space justify="space-between" align="center" style="margin-bottom: 20px;">
+    <n-space justify="space-between" align="center" style="margin-bottom: 20px">
       <div>
         <n-space size="small" align="center">
           <n-button text @click="$router.push('/markets')">
@@ -8,8 +8,8 @@
               <n-icon><ChevronBack /></n-icon>
             </template>
           </n-button>
-          <h1 style="margin: 0;">{{ marketName || t("market.title") }}</h1>
-          <n-text v-if="updatedAtLabel" depth="3" style="font-size: 14px;">
+          <h1 style="margin: 0">{{ marketName || t("market.title") }}</h1>
+          <n-text v-if="updatedAtLabel" depth="3" style="font-size: 14px">
             {{ updatedAtLabel }}
           </n-text>
         </n-space>
@@ -24,7 +24,7 @@
           clearable
           autofocus
           :placeholder="t('market.searchPlaceholder')"
-          style="width: 260px;"
+          style="width: 260px"
           @blur="handleSearchBlur"
         />
         <n-button quaternary circle @click="toggleSearch">
@@ -43,8 +43,8 @@
       </n-space>
     </n-space>
 
-    <n-alert v-if="loadError" type="error" style="margin-bottom: 16px;">
-      <n-space justify="space-between" align="center" style="width: 100%;">
+    <n-alert v-if="loadError" type="error" style="margin-bottom: 16px">
+      <n-space justify="space-between" align="center" style="width: 100%">
         <span>{{ loadError }}</span>
         <n-button quaternary size="small" @click="loadIndex(true)">
           {{ t("market.retry") }}
@@ -52,7 +52,11 @@
       </n-space>
     </n-alert>
 
-    <n-space v-if="isLoading && filteredGames.length === 0" vertical size="large">
+    <n-space
+      v-if="isLoading && filteredGames.length === 0"
+      vertical
+      size="large"
+    >
       <n-skeleton v-for="index in 5" :key="index" text :repeat="2" />
     </n-space>
     <n-empty
@@ -60,377 +64,546 @@
       :description="t('market.empty')"
     />
     <div v-else class="market-game-list">
+      <div
+        v-for="game in filteredGames"
+        :key="game.id"
+        class="market-game-entry"
+        :data-market-game-id="game.id"
+      >
         <div
-          v-for="game in filteredGames"
-          :key="game.id"
-          class="market-game-entry"
+          class="market-game-item"
+          :class="{ active: expandedGames[game.id] }"
+          @click="toggleExpand(game.id)"
         >
-          <div
-            class="market-game-item"
-            :class="{ active: expandedGames[game.id] }"
-            @click="toggleExpand(game.id)"
-          >
-            <CachedImg
-              v-if="game.iconUrl"
-              :key="`thumb-${game.id}-${refreshCounter}`"
-              :src="game.iconUrl!"
-              class="market-thumb"
-            />
-            <div v-else class="market-thumb market-thumb-placeholder">
-              {{ t("market.noImage") }}
-            </div>
-            <div class="market-game-text">
-              <n-space justify="space-between" align="center">
-                <n-space align="center" :size="8">
-                  <strong>{{ game.name }}</strong>
-                  <n-tag v-if="game.featured" size="small" type="warning">
-                    {{ t("market.featured") }}
-                  </n-tag>
-                </n-space>
-                <n-button text style="font-size: 20px;" @click.stop="toggleExpand(game.id)">
-                  <n-icon>
-                    <ChevronUp v-if="expandedGames[game.id]" />
-                    <ChevronDown v-else />
-                  </n-icon>
-                </n-button>
-              </n-space>
-              <n-text depth="3">{{ game.author }}</n-text>
-              <n-text depth="3" class="market-summary">{{ game.summary }}</n-text>
-              <n-space size="small" wrap>
-                <n-tag size="small" :bordered="false">{{ typeLabel(game.type) }}</n-tag>
-                <n-tag
-                  v-for="tag in game.tags || []"
-                  :key="tag"
-                  size="small"
-                  :bordered="false"
-                  type="success"
-                >
-                  {{ tag }}
+          <CachedImg
+            v-if="game.iconUrl"
+            :key="`thumb-${game.id}-${refreshCounter}`"
+            :src="game.iconUrl!"
+            class="market-thumb"
+          />
+          <div v-else class="market-thumb market-thumb-placeholder">
+            {{ t("market.noImage") }}
+          </div>
+          <div class="market-game-text">
+            <n-space justify="space-between" align="center">
+              <n-space align="center" :size="8">
+                <strong>{{ game.name }}</strong>
+                <n-tag v-if="game.featured" size="small" type="warning">
+                  {{ t("market.featured") }}
                 </n-tag>
               </n-space>
-            </div>
+              <n-button
+                text
+                style="font-size: 20px"
+                @click.stop="toggleExpand(game.id)"
+              >
+                <n-icon>
+                  <ChevronUp v-if="expandedGames[game.id]" />
+                  <ChevronDown v-else />
+                </n-icon>
+              </n-button>
+            </n-space>
+            <n-text depth="3">{{ game.author }}</n-text>
+            <n-text depth="3" class="market-summary">{{ game.summary }}</n-text>
+            <n-space size="small" wrap>
+              <n-tag size="small" :bordered="false">{{
+                typeLabel(game.type)
+              }}</n-tag>
+              <n-tag
+                v-for="tag in game.tags || []"
+                :key="tag"
+                size="small"
+                :bordered="false"
+                type="success"
+              >
+                {{ tag }}
+              </n-tag>
+            </n-space>
           </div>
+        </div>
 
-          <n-collapse-transition :show="expandedGames[game.id]">
-            <n-card
-              size="small"
-              embedded
-              class="market-inline-detail"
-            >
-              <n-space vertical size="large">
-                <div class="market-detail-header">
-                  <CachedImg
-                    v-if="game.coverUrl"
-                    :key="`cover-${game.id}-${refreshCounter}`"
-                    :src="game.coverUrl!"
-                    class="market-cover"
-                  />
-                  <div v-else class="market-cover market-cover-placeholder">
-                    {{ t("market.noImage") }}
-                  </div>
-                  <div class="market-detail-meta">
-                    <n-space align="center" wrap>
-                      <n-tag :bordered="false">{{ typeLabel(game.type) }}</n-tag>
-                      <n-tag v-if="game.featured" type="warning" :bordered="false">
-                        {{ t("market.featured") }}
-                      </n-tag>
-                      <n-tag
-                        v-if="game.visibility === 'deprecated'"
-                        type="error"
-                        :bordered="false"
-                      >
-                        {{ t("market.deprecated") }}
-                      </n-tag>
-                    </n-space>
-                    <n-space align="center" :size="4">
-                      <n-text depth="3">{{ t("market.author", { author: game.author }) }}</n-text>
-                      <n-button v-if="game.author_url" text size="tiny" @click.stop="handleOpenAuthorUrl(game.author_url!)" style="font-size: 16px;">
-                        <n-icon><OpenOutline /></n-icon>
-                      </n-button>
-                    </n-space>
-                    <n-text>{{ game.summary }}</n-text>
-                    <n-space size="small" wrap>
-                      <n-tag
-                        v-for="tag in game.tags || []"
-                        :key="tag"
-                        size="small"
-                        type="success"
-                        :bordered="false"
-                      >
-                        {{ tag }}
-                      </n-tag>
-                    </n-space>
-                  </div>
+        <n-collapse-transition :show="expandedGames[game.id]">
+          <n-card size="small" embedded class="market-inline-detail">
+            <n-space vertical size="large">
+              <div class="market-detail-header">
+                <CachedImg
+                  v-if="game.coverUrl"
+                  :key="`cover-${game.id}-${refreshCounter}`"
+                  :src="game.coverUrl!"
+                  class="market-cover"
+                />
+                <div v-else class="market-cover market-cover-placeholder">
+                  {{ t("market.noImage") }}
                 </div>
+                <div class="market-detail-meta">
+                  <n-space align="center" wrap>
+                    <n-tag :bordered="false">{{ typeLabel(game.type) }}</n-tag>
+                    <n-tag
+                      v-if="game.featured"
+                      type="warning"
+                      :bordered="false"
+                    >
+                      {{ t("market.featured") }}
+                    </n-tag>
+                    <n-tag
+                      v-if="game.visibility === 'deprecated'"
+                      type="error"
+                      :bordered="false"
+                    >
+                      {{ t("market.deprecated") }}
+                    </n-tag>
+                  </n-space>
+                  <n-space align="center" :size="4">
+                    <n-text depth="3">{{
+                      t("market.author", { author: game.author })
+                    }}</n-text>
+                    <n-button
+                      v-if="game.author_url"
+                      text
+                      size="tiny"
+                      @click.stop="handleOpenAuthorUrl(game.author_url!)"
+                      style="font-size: 16px"
+                    >
+                      <n-icon><OpenOutline /></n-icon>
+                    </n-button>
+                  </n-space>
+                  <n-text>{{ game.summary }}</n-text>
+                  <n-space size="small" wrap>
+                    <n-tag
+                      v-for="tag in game.tags || []"
+                      :key="tag"
+                      size="small"
+                      type="success"
+                      :bordered="false"
+                    >
+                      {{ tag }}
+                    </n-tag>
+                  </n-space>
+                </div>
+              </div>
 
-                <n-card
-                  v-if="getSelectedVersionInfo(game)"
-                  size="small"
-                  embedded
-                  class="market-selected-version-card"
-                >
-                  <n-space vertical size="small">
-                    <strong>{{ t("market.selectedVersion", { version: getSelectedVersionInfo(game)?.version }) }}</strong>
-                    <n-text>{{ getSelectedVersionInfo(game)?.releaseNotes || getSelectedVersionInfo(game)?.description }}</n-text>
-                    <n-space size="small" wrap>
-                      <n-tag
-                        v-if="game.latestVersion === getSelectedVersionInfo(game)?.version"
-                        size="small"
-                        type="success"
-                        :bordered="false"
-                      >
-                        {{ t("market.latest") }}
-                      </n-tag>
-                      <n-tag
-                        v-if="getSelectedVersionInfo(game)?.isPrerelease"
-                        size="small"
-                        type="warning"
-                        :bordered="false"
-                      >
-                        {{ t("market.prerelease") }}
-                      </n-tag>
-                      <n-tag
-                        v-if="getSelectedVersionInfo(game) && getVersionIntegrity(getSelectedVersionInfo(game)!) === 'invalid'"
-                        size="small"
-                        type="error"
-                        :bordered="false"
-                      >
-                        {{ t("market.versionInvalid") }}
-                      </n-tag>
-                      <n-tag
-                        v-if="getSelectedVersionInfo(game) && getVersionIntegrity(getSelectedVersionInfo(game)!) === 'missingSha256'"
-                        size="small"
-                        type="warning"
-                        :bordered="false"
-                      >
-                        {{ t("market.missingSha256") }}
-                      </n-tag>
-                      <n-tag
-                        v-if="getSelectedVersionInfo(game) && getVersionIntegrity(getSelectedVersionInfo(game)!) === 'missingSize'"
-                        size="small"
-                        type="warning"
-                        :bordered="false"
-                      >
-                        {{ t("market.missingSize") }}
-                      </n-tag>
-                      <n-tag
-                        v-if="getSelectedVersionInfo(game) && isInstalled(game.id, getSelectedVersionInfo(game)!.version, game.type)"
-                        size="small"
-                        type="info"
-                        :bordered="false"
-                      >
-                        {{ t("market.installed") }}
-                      </n-tag>
-                    </n-space>
+              <n-card
+                v-if="getSelectedVersionInfo(game)"
+                size="small"
+                embedded
+                class="market-selected-version-card"
+              >
+                <n-space vertical size="small">
+                  <strong>{{
+                    t("market.selectedVersion", {
+                      version: getSelectedVersionInfo(game)?.version,
+                    })
+                  }}</strong>
+                  <n-text>{{
+                    getSelectedVersionInfo(game)?.releaseNotes ||
+                    getSelectedVersionInfo(game)?.description
+                  }}</n-text>
+                  <n-space size="small" wrap>
+                    <n-tag
+                      v-if="
+                        game.latestVersion ===
+                        getSelectedVersionInfo(game)?.version
+                      "
+                      size="small"
+                      type="success"
+                      :bordered="false"
+                    >
+                      {{ t("market.latest") }}
+                    </n-tag>
+                    <n-tag
+                      v-if="getSelectedVersionInfo(game)?.isPrerelease"
+                      size="small"
+                      type="warning"
+                      :bordered="false"
+                    >
+                      {{ t("market.prerelease") }}
+                    </n-tag>
+                    <n-tag
+                      v-if="
+                        getSelectedVersionInfo(game) &&
+                        getVersionIntegrity(getSelectedVersionInfo(game)!) ===
+                          'invalid'
+                      "
+                      size="small"
+                      type="error"
+                      :bordered="false"
+                    >
+                      {{ t("market.versionInvalid") }}
+                    </n-tag>
+                    <n-tag
+                      v-if="
+                        getSelectedVersionInfo(game) &&
+                        getVersionIntegrity(getSelectedVersionInfo(game)!) ===
+                          'missingSha256'
+                      "
+                      size="small"
+                      type="warning"
+                      :bordered="false"
+                    >
+                      {{ t("market.missingSha256") }}
+                    </n-tag>
+                    <n-tag
+                      v-if="
+                        getSelectedVersionInfo(game) &&
+                        getVersionIntegrity(getSelectedVersionInfo(game)!) ===
+                          'missingSize'
+                      "
+                      size="small"
+                      type="warning"
+                      :bordered="false"
+                    >
+                      {{ t("market.missingSize") }}
+                    </n-tag>
+                    <n-tag
+                      v-if="
+                        getSelectedVersionInfo(game) &&
+                        isInstalled(
+                          game.id,
+                          getSelectedVersionInfo(game)!.version,
+                          game.type,
+                        )
+                      "
+                      size="small"
+                      type="info"
+                      :bordered="false"
+                    >
+                      {{ t("market.installed") }}
+                    </n-tag>
+                  </n-space>
+                  <n-text depth="3">
+                    {{
+                      t("market.platformVersion", {
+                        version: getSelectedVersionInfo(game)?.platformVersion,
+                      })
+                    }}
+                  </n-text>
+                  <div class="market-version-meta-row">
                     <n-text depth="3">
-                      {{ t("market.platformVersion", { version: getSelectedVersionInfo(game)?.platformVersion }) }}
-                    </n-text>
-                    <div class="market-version-meta-row">
-                      <n-text depth="3">
-                        <n-space align="center" :size="4">
-                          <template v-if="getSelectedVersionInfo(game) && isAssetLoading(getSelectedVersionInfo(game)!)">
-                            <n-skeleton text :repeat="1" width="120px" />
-                          </template>
-                          <template v-else>
-                            <span>{{ t("market.packageSize", { size: formatSize(getSelectedVersionInfo(game)) }) }}</span>
-                          </template>
-                          <n-button
-                            v-if="getSelectedVersionInfo(game) && isAssetRefreshable(getSelectedVersionInfo(game)!)"
-                            text
-                            size="tiny"
-                            :disabled="isAssetLoading(getSelectedVersionInfo(game)!)"
-                            @click.stop="handleRefreshAsset(getSelectedVersionInfo(game)!.downloadUrl)"
-                          >
-                            <template #icon>
-                              <n-icon><RefreshOutline /></n-icon>
-                            </template>
-                          </n-button>
-                        </n-space>
-                      </n-text>
-                      <n-text v-if="getSelectedVersionInfo(game)?.publishedAt" depth="3" class="market-version-published-at">
-                        {{ t("market.publishedAt", { time: formatDateTime(getSelectedVersionInfo(game)?.publishedAt) }) }}
-                      </n-text>
-                    </div>
-                    <template v-if="getCurrentTask(game)">
-                      <n-tag :type="taskTagType(getCurrentTask(game)!.status)" :bordered="false">
-                        {{ taskStatusLabel(getCurrentTask(game)!.status) }}
-                      </n-tag>
-                      <n-progress
-                        type="line"
-                        :percentage="getCurrentTask(game)!.progress"
-                        :indicator-placement="'inside'"
-                      />
-                      <n-text depth="3">
-                        {{ errorMessage(getCurrentTask(game)!) || "" }}
-                      </n-text>
-                    </template>
-                    <n-space>
-                      <n-button
-                        v-if="getSelectedVersionInfo(game)"
-                        type="primary"
-                        :disabled="isInstalled(game.id, getSelectedVersionInfo(game)!.version, game.type) || isPlatformIncompatible(game) || isSelectedVersionInvalid(game) || isTaskActive(game)"
-                        :loading="isTaskActive(game) && getCurrentTask(game)?.status !== 'paused' && getCurrentTask(game)?.status !== 'interrupted'"
-                        @click="handleDownload(game.id, getSelectedVersionInfo(game)!.version)"
-                      >
-                        <template v-if="isTaskActive(game) && (getCurrentTask(game)?.status === 'paused' || getCurrentTask(game)?.status === 'interrupted')">
-                          {{ t("market.taskStatus.paused") }}
-                        </template>
-                        <template v-else-if="isInstalled(game.id, getSelectedVersionInfo(game)!.version, game.type)">
-                          {{ t("market.installed") }}
-                        </template>
-                        <template v-else-if="isPlatformIncompatible(game)">
-                          {{ t("market.platformIncompatible") }}
+                      <n-space align="center" :size="4">
+                        <template
+                          v-if="
+                            getSelectedVersionInfo(game) &&
+                            isAssetLoading(getSelectedVersionInfo(game)!)
+                          "
+                        >
+                          <n-skeleton text :repeat="1" width="120px" />
                         </template>
                         <template v-else>
-                          {{ t("market.downloadInstall") }}
+                          <span>{{
+                            t("market.packageSize", {
+                              size: formatSize(getSelectedVersionInfo(game)),
+                            })
+                          }}</span>
                         </template>
-                      </n-button>
-                      <n-button
-                        v-if="isTaskActive(game) && getCurrentTask(game) && canPause(getCurrentTask(game)!)"
-                        secondary
-                        @click="handlePause(getCurrentTask(game)!.taskId)"
+                        <n-button
+                          v-if="
+                            getSelectedVersionInfo(game) &&
+                            isAssetRefreshable(getSelectedVersionInfo(game)!)
+                          "
+                          text
+                          size="tiny"
+                          :disabled="
+                            isAssetLoading(getSelectedVersionInfo(game)!)
+                          "
+                          @click.stop="
+                            handleRefreshAsset(
+                              getSelectedVersionInfo(game)!.downloadUrl,
+                            )
+                          "
+                        >
+                          <template #icon>
+                            <n-icon><RefreshOutline /></n-icon>
+                          </template>
+                        </n-button>
+                      </n-space>
+                    </n-text>
+                    <n-text
+                      v-if="getSelectedVersionInfo(game)?.publishedAt"
+                      depth="3"
+                      class="market-version-published-at"
+                    >
+                      {{
+                        t("market.publishedAt", {
+                          time: formatDateTime(
+                            getSelectedVersionInfo(game)?.publishedAt,
+                          ),
+                        })
+                      }}
+                    </n-text>
+                  </div>
+                  <template v-if="getCurrentTask(game)">
+                    <n-tag
+                      :type="taskTagType(getCurrentTask(game)!.status)"
+                      :bordered="false"
+                    >
+                      {{ taskStatusLabel(getCurrentTask(game)!.status) }}
+                    </n-tag>
+                    <n-progress
+                      type="line"
+                      :percentage="getCurrentTask(game)!.progress"
+                      :indicator-placement="'inside'"
+                    />
+                    <n-text depth="3">
+                      {{ errorMessage(getCurrentTask(game)!) || "" }}
+                    </n-text>
+                  </template>
+                  <n-space>
+                    <n-button
+                      v-if="getSelectedVersionInfo(game)"
+                      type="primary"
+                      :disabled="
+                        isInstalled(
+                          game.id,
+                          getSelectedVersionInfo(game)!.version,
+                          game.type,
+                        ) ||
+                        isPlatformIncompatible(game) ||
+                        isSelectedVersionInvalid(game) ||
+                        isTaskActive(game)
+                      "
+                      :loading="
+                        isTaskActive(game) &&
+                        getCurrentTask(game)?.status !== 'paused' &&
+                        getCurrentTask(game)?.status !== 'interrupted'
+                      "
+                      @click="
+                        handleDownload(
+                          game.id,
+                          getSelectedVersionInfo(game)!.version,
+                        )
+                      "
+                    >
+                      <template
+                        v-if="
+                          isTaskActive(game) &&
+                          (getCurrentTask(game)?.status === 'paused' ||
+                            getCurrentTask(game)?.status === 'interrupted')
+                        "
                       >
-                        {{ t("market.pauseTask") }}
-                      </n-button>
-                      <n-tooltip v-if="isTaskActive(game) && getCurrentTask(game) && isNonPausableRunning(getCurrentTask(game)!)" trigger="hover">
-                        <template #trigger>
-                          <n-button secondary disabled>
-                            <n-icon><CloseOutline /></n-icon>
-                            {{ t("market.pauseTask") }}
-                          </n-button>
-                        </template>
-                        {{ t("market.cannotPauseExtracting") }}
-                      </n-tooltip>
-                      <n-button
-                        v-if="getCurrentTask(game) && (getCurrentTask(game)!.status === 'paused' || getCurrentTask(game)!.status === 'interrupted')"
-                        secondary
-                        type="warning"
-                        @click="handleResume(getCurrentTask(game)!.taskId)"
+                        {{ t("market.taskStatus.paused") }}
+                      </template>
+                      <template
+                        v-else-if="
+                          isInstalled(
+                            game.id,
+                            getSelectedVersionInfo(game)!.version,
+                            game.type,
+                          )
+                        "
                       >
-                        {{ t("market.resumeTask") }}
-                      </n-button>
-                      <n-button
-                        v-if="isTaskCancelable(game) && getCurrentTask(game)"
-                        secondary
-                        @click="handleCancel(getCurrentTask(game)!.taskId)"
-                      >
-                        {{ t("market.cancelTask") }}
-                      </n-button>
-                    </n-space>
+                        {{ t("market.installed") }}
+                      </template>
+                      <template v-else-if="isPlatformIncompatible(game)">
+                        {{ t("market.platformIncompatible") }}
+                      </template>
+                      <template v-else>
+                        {{ t("market.downloadInstall") }}
+                      </template>
+                    </n-button>
+                    <n-button
+                      v-if="
+                        isTaskActive(game) &&
+                        getCurrentTask(game) &&
+                        canPause(getCurrentTask(game)!)
+                      "
+                      secondary
+                      @click="handlePause(getCurrentTask(game)!.taskId)"
+                    >
+                      {{ t("market.pauseTask") }}
+                    </n-button>
+                    <n-tooltip
+                      v-if="
+                        isTaskActive(game) &&
+                        getCurrentTask(game) &&
+                        isNonPausableRunning(getCurrentTask(game)!)
+                      "
+                      trigger="hover"
+                    >
+                      <template #trigger>
+                        <n-button secondary disabled>
+                          <n-icon><CloseOutline /></n-icon>
+                          {{ t("market.pauseTask") }}
+                        </n-button>
+                      </template>
+                      {{ t("market.cannotPauseExtracting") }}
+                    </n-tooltip>
+                    <n-button
+                      v-if="
+                        getCurrentTask(game) &&
+                        (getCurrentTask(game)!.status === 'paused' ||
+                          getCurrentTask(game)!.status === 'interrupted')
+                      "
+                      secondary
+                      type="warning"
+                      @click="handleResume(getCurrentTask(game)!.taskId)"
+                    >
+                      {{ t("market.resumeTask") }}
+                    </n-button>
+                    <n-button
+                      v-if="isTaskCancelable(game) && getCurrentTask(game)"
+                      secondary
+                      @click="handleCancel(getCurrentTask(game)!.taskId)"
+                    >
+                      {{ t("market.cancelTask") }}
+                    </n-button>
                   </n-space>
-                </n-card>
+                </n-space>
+              </n-card>
 
-                <n-space vertical size="small" class="market-version-list">
-                  <strong>{{ t("market.versions") }}</strong>
-                  <n-radio-group v-model:value="selectedVersions[game.id]" class="market-version-radio-group">
-                    <n-space vertical size="small" class="market-version-stack">
-                      <div
-                        v-for="version in game.versions"
-                        :key="version.version"
-                        class="market-version-item"
-                      >
-                        <div class="market-version-content">
-                          <div class="market-version-main">
-                            <n-radio :value="version.version">
-                              {{ version.version }}
-                            </n-radio>
-                            <n-space size="small" wrap style="margin-top: 8px;">
-                              <n-tag
-                                v-if="game.latestVersion === version.version"
-                                size="small"
-                                type="success"
-                                :bordered="false"
-                              >
-                                {{ t("market.latest") }}
-                              </n-tag>
-                              <n-tag
-                                v-if="version.isPrerelease"
-                                size="small"
-                                type="warning"
-                                :bordered="false"
-                              >
-                                {{ t("market.prerelease") }}
-                              </n-tag>
-                              <n-tag
-                                v-if="isInstalled(game.id, version.version, game.type)"
-                                size="small"
-                                type="info"
-                                :bordered="false"
-                              >
-                                {{ t("market.installed") }}
-                              </n-tag>
-                              <n-tag
-                                v-if="getVersionIntegrity(version) === 'invalid'"
-                                size="small"
-                                type="error"
-                                :bordered="false"
-                              >
-                                {{ t("market.versionInvalid") }}
-                              </n-tag>
-                              <n-tag
-                                v-if="getVersionIntegrity(version) === 'missingSha256'"
-                                size="small"
-                                type="warning"
-                                :bordered="false"
-                              >
-                                {{ t("market.missingSha256") }}
-                              </n-tag>
-                              <n-tag
-                                v-if="getVersionIntegrity(version) === 'missingSize'"
-                                size="small"
-                                type="warning"
-                                :bordered="false"
-                              >
-                                {{ t("market.missingSize") }}
-                              </n-tag>
-                            </n-space>
-                            <div class="market-version-desc">{{ version.description }}</div>
+              <n-space vertical size="small" class="market-version-list">
+                <strong>{{ t("market.versions") }}</strong>
+                <n-radio-group
+                  v-model:value="selectedVersions[game.id]"
+                  class="market-version-radio-group"
+                >
+                  <n-space vertical size="small" class="market-version-stack">
+                    <div
+                      v-for="version in game.versions"
+                      :key="version.version"
+                      class="market-version-item"
+                    >
+                      <div class="market-version-content">
+                        <div class="market-version-main">
+                          <n-radio :value="version.version">
+                            {{ version.version }}
+                          </n-radio>
+                          <n-space size="small" wrap style="margin-top: 8px">
+                            <n-tag
+                              v-if="game.latestVersion === version.version"
+                              size="small"
+                              type="success"
+                              :bordered="false"
+                            >
+                              {{ t("market.latest") }}
+                            </n-tag>
+                            <n-tag
+                              v-if="version.isPrerelease"
+                              size="small"
+                              type="warning"
+                              :bordered="false"
+                            >
+                              {{ t("market.prerelease") }}
+                            </n-tag>
+                            <n-tag
+                              v-if="
+                                isInstalled(game.id, version.version, game.type)
+                              "
+                              size="small"
+                              type="info"
+                              :bordered="false"
+                            >
+                              {{ t("market.installed") }}
+                            </n-tag>
+                            <n-tag
+                              v-if="getVersionIntegrity(version) === 'invalid'"
+                              size="small"
+                              type="error"
+                              :bordered="false"
+                            >
+                              {{ t("market.versionInvalid") }}
+                            </n-tag>
+                            <n-tag
+                              v-if="
+                                getVersionIntegrity(version) === 'missingSha256'
+                              "
+                              size="small"
+                              type="warning"
+                              :bordered="false"
+                            >
+                              {{ t("market.missingSha256") }}
+                            </n-tag>
+                            <n-tag
+                              v-if="
+                                getVersionIntegrity(version) === 'missingSize'
+                              "
+                              size="small"
+                              type="warning"
+                              :bordered="false"
+                            >
+                              {{ t("market.missingSize") }}
+                            </n-tag>
+                          </n-space>
+                          <div class="market-version-desc">
+                            {{ version.description }}
+                          </div>
+                          <n-text depth="3">
+                            {{
+                              t("market.platformVersion", {
+                                version: version.platformVersion,
+                              })
+                            }}
+                          </n-text>
+                          <br />
+                          <div class="market-version-meta-row">
                             <n-text depth="3">
-                              {{ t("market.platformVersion", { version: version.platformVersion }) }}
+                              <n-space align="center" :size="4">
+                                <template v-if="isAssetLoading(version)">
+                                  <n-skeleton text :repeat="1" width="100px" />
+                                </template>
+                                <template v-else>
+                                  <span>{{
+                                    t("market.packageSize", {
+                                      size: formatSize(version),
+                                    })
+                                  }}</span>
+                                </template>
+                                <n-button
+                                  v-if="isAssetRefreshable(version)"
+                                  text
+                                  size="tiny"
+                                  :disabled="isAssetLoading(version)"
+                                  @click.stop="
+                                    handleRefreshAsset(version.downloadUrl)
+                                  "
+                                >
+                                  <template #icon>
+                                    <n-icon><RefreshOutline /></n-icon>
+                                  </template>
+                                </n-button>
+                              </n-space>
                             </n-text>
-                            <br />
-                            <div class="market-version-meta-row">
-                              <n-text depth="3">
-                                <n-space align="center" :size="4">
-                                  <template v-if="isAssetLoading(version)">
-                                    <n-skeleton text :repeat="1" width="100px" />
-                                  </template>
-                                  <template v-else>
-                                    <span>{{ t("market.packageSize", { size: formatSize(version) }) }}</span>
-                                  </template>
-                                  <n-button
-                                    v-if="isAssetRefreshable(version)"
-                                    text
-                                    size="tiny"
-                                    :disabled="isAssetLoading(version)"
-                                    @click.stop="handleRefreshAsset(version.downloadUrl)"
-                                  >
-                                    <template #icon>
-                                      <n-icon><RefreshOutline /></n-icon>
-                                    </template>
-                                  </n-button>
-                                </n-space>
-                              </n-text>
-                              <n-text v-if="version.publishedAt" depth="3" class="market-version-published-at">
-                                {{ t("market.publishedAt", { time: formatDateTime(version.publishedAt) }) }}
-                              </n-text>
-                            </div>
+                            <n-text
+                              v-if="version.publishedAt"
+                              depth="3"
+                              class="market-version-published-at"
+                            >
+                              {{
+                                t("market.publishedAt", {
+                                  time: formatDateTime(version.publishedAt),
+                                })
+                              }}
+                            </n-text>
                           </div>
                         </div>
                       </div>
-                    </n-space>
-                  </n-radio-group>
-                </n-space>
+                    </div>
+                  </n-space>
+                </n-radio-group>
               </n-space>
-            </n-card>
-          </n-collapse-transition>
-        </div>
+            </n-space>
+          </n-card>
+        </n-collapse-transition>
       </div>
+    </div>
   </div>
 
-  <n-modal v-model:show="showInfoModal" preset="card" :title="t('market.sourceInfo')" style="width: 680px;">
-    <n-descriptions v-if="marketIndex" :column="1" label-placement="left" bordered>
-      <n-descriptions-item v-for="item in marketInfoItems" :key="item.label" :label="item.label">
+  <n-modal
+    v-model:show="showInfoModal"
+    preset="card"
+    :title="t('market.sourceInfo')"
+    style="width: 680px"
+  >
+    <n-descriptions
+      v-if="marketIndex"
+      :column="1"
+      label-placement="left"
+      bordered
+    >
+      <n-descriptions-item
+        v-for="item in marketInfoItems"
+        :key="item.label"
+        :label="item.label"
+      >
         <template v-if="item.label === 'repository' && item.value !== '-'">
           <n-button text type="info" @click="handleOpenRepo(item.value)">
             {{ item.value }}
@@ -445,11 +618,20 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { useDialog, useMessage } from "naive-ui";
-import { ChevronBack, ChevronDown, ChevronUp, CloseOutline, InformationCircleOutline, OpenOutline, RefreshOutline, SearchOutline } from "@vicons/ionicons5";
+import {
+  ChevronBack,
+  ChevronDown,
+  ChevronUp,
+  CloseOutline,
+  InformationCircleOutline,
+  OpenOutline,
+  RefreshOutline,
+  SearchOutline,
+} from "@vicons/ionicons5";
 import semver from "semver";
 import type {
   MarketGame,
@@ -458,7 +640,16 @@ import type {
   MarketTaskState,
   MarketTaskStatus,
 } from "../../../shared/types";
-import { GameType, isGitHubReleaseUrl, isMissingSha256, isMissingSize, isValidDownloadUrl, isValidSha256Format, isVersionDownloadable } from "../../../shared/types";
+import {
+  GameType,
+  isGitHubReleaseUrl,
+  isMissingSha256,
+  isMissingSize,
+  isValidDownloadUrl,
+  isValidSha256Format,
+  isVersionDownloadable,
+} from "../../../shared/types";
+import { searchMarketGames } from "../../../shared/market-search";
 import { useSettingsStore } from "../stores/useSettingsStore";
 import CachedImg from "../components/CachedImg.vue";
 import { useImageCache } from "../composables/useImageCache";
@@ -493,7 +684,9 @@ const updatedAt = ref("");
 const marketIndex = ref<MarketIndex | null>(null);
 const showInfoModal = ref(false);
 const refreshCounter = ref(0);
-const resolvedAssets = ref<Record<string, { sha256?: string; size?: number }>>({});
+const resolvedAssets = ref<Record<string, { sha256?: string; size?: number }>>(
+  {},
+);
 const loadingAssetUrls = ref(new Set<string>());
 const timeoutIds: number[] = [];
 const pendingDownloads = new Set<string>();
@@ -519,21 +712,11 @@ const ERROR_CODE_KEYS: Record<string, string> = {
 let cleanupMarketEvent: (() => void) | undefined;
 
 const filteredGames = computed(() => {
-  const text = keyword.value.trim().toLowerCase();
-  const sorted = [...games.value].sort((a, b) => {
-    if (a.featured && !b.featured) return -1;
-    if (!a.featured && b.featured) return 1;
-    return a.name.localeCompare(b.name, "zh-CN");
-  });
-  if (!text) return sorted;
-  return sorted.filter((game) => {
-    return (
-      game.name.toLowerCase().includes(text) ||
-      game.id.toLowerCase().includes(text) ||
-      game.author.toLowerCase().includes(text) ||
-      (game.tags || []).some((tag) => tag.toLowerCase().includes(text))
-    );
-  });
+  if (!marketIndex.value) return games.value;
+  return searchMarketGames(
+    [{ sourceIdx: sourceIdx.value, index: marketIndex.value }],
+    keyword.value,
+  ).map((result) => result.game);
 });
 
 const installPathLabel = computed(() => {
@@ -592,20 +775,30 @@ function resolveMissingAssetInfo(gameId: string): void {
   const game = games.value.find((g) => g.id === gameId);
   if (!game) return;
   for (const version of game.versions) {
-    if ((!version.sha256 || version.size == null) && isGitHubReleaseUrl(version.downloadUrl)) {
+    if (
+      (!version.sha256 || version.size == null) &&
+      isGitHubReleaseUrl(version.downloadUrl)
+    ) {
       loadAssetInfo(version.downloadUrl);
     }
   }
 }
 
-async function loadAssetInfo(downloadUrl: string, force?: boolean): Promise<void> {
+async function loadAssetInfo(
+  downloadUrl: string,
+  force?: boolean,
+): Promise<void> {
   if (force) {
     const next = { ...resolvedAssets.value };
     delete next[downloadUrl];
     resolvedAssets.value = next;
   }
-  if ((resolvedAssets.value[downloadUrl] && resolvedAssets.value[downloadUrl]!.size != null)
-    || loadingAssetUrls.value.has(downloadUrl)) return;
+  if (
+    (resolvedAssets.value[downloadUrl] &&
+      resolvedAssets.value[downloadUrl]!.size != null) ||
+    loadingAssetUrls.value.has(downloadUrl)
+  )
+    return;
   loadingAssetUrls.value = new Set(loadingAssetUrls.value).add(downloadUrl);
   try {
     const info = await window.electronAPI.market.resolveAssetInfo(downloadUrl);
@@ -623,18 +816,33 @@ function handleRefreshAsset(downloadUrl: string): void {
   loadAssetInfo(downloadUrl, true);
 }
 
-function getResolvedSize(version: { downloadUrl: string; size?: number }): number | null {
+function getResolvedSize(version: {
+  downloadUrl: string;
+  size?: number;
+}): number | null {
   if (version.size != null) return version.size;
   const resolved = resolvedAssets.value[version.downloadUrl];
   return resolved?.size != null ? resolved.size : null;
 }
 
-function isAssetLoading(version: { downloadUrl: string; size?: number }): boolean {
-  return version.size == null && loadingAssetUrls.value.has(version.downloadUrl);
+function isAssetLoading(version: {
+  downloadUrl: string;
+  size?: number;
+}): boolean {
+  return (
+    version.size == null && loadingAssetUrls.value.has(version.downloadUrl)
+  );
 }
 
-function isAssetRefreshable(version: { downloadUrl: string; sha256?: string; size?: number }): boolean {
-  return (!version.sha256 || version.size == null) && isGitHubReleaseUrl(version.downloadUrl);
+function isAssetRefreshable(version: {
+  downloadUrl: string;
+  sha256?: string;
+  size?: number;
+}): boolean {
+  return (
+    (!version.sha256 || version.size == null) &&
+    isGitHubReleaseUrl(version.downloadUrl)
+  );
 }
 
 function toggleSearch(): void {
@@ -649,7 +857,9 @@ function handleSearchBlur(): void {
 
 function getSelectedVersionInfo(game: MarketGame): MarketGameVersion | null {
   return (
-    game.versions.find((item) => item.version === selectedVersions.value[game.id]) ||
+    game.versions.find(
+      (item) => item.version === selectedVersions.value[game.id],
+    ) ||
     game.versions.find((item) => item.version === game.latestVersion) ||
     game.versions[0] ||
     null
@@ -665,7 +875,14 @@ function getCurrentTask(game: MarketGame): MarketTaskState | null {
 function isTaskActive(game: MarketGame): boolean {
   const task = getCurrentTask(game);
   return task
-    ? ["downloading", "verifying", "extracting", "installing", "paused", "interrupted"].includes(task.status)
+    ? [
+        "downloading",
+        "verifying",
+        "extracting",
+        "installing",
+        "paused",
+        "interrupted",
+      ].includes(task.status)
     : false;
 }
 
@@ -677,11 +894,11 @@ function isTaskCancelable(game: MarketGame): boolean {
 }
 
 function canPause(task: MarketTaskState): boolean {
-  return ["downloading", "verifying"].includes(task.status)
+  return ["downloading", "verifying"].includes(task.status);
 }
 
 function isNonPausableRunning(task: MarketTaskState): boolean {
-  return ["extracting", "installing"].includes(task.status)
+  return ["extracting", "installing"].includes(task.status);
 }
 
 function typeLabel(type: MarketGame["type"]): string {
@@ -696,7 +913,9 @@ function handleOpenRepo(url: string) {
   window.electronAPI.settings.openUrl(url);
 }
 
-function formatSize(version: { downloadUrl: string; size?: number } | null): string {
+function formatSize(
+  version: { downloadUrl: string; size?: number } | null,
+): string {
   if (!version) return "-";
   const resolvedSize = getResolvedSize(version);
   if (resolvedSize != null) return formatBytes(resolvedSize);
@@ -707,7 +926,9 @@ function taskStatusLabel(status: MarketTaskStatus): string {
   return t(`market.taskStatus.${status}`);
 }
 
-function taskTagType(status: MarketTaskStatus): "default" | "success" | "warning" | "error" | "info" {
+function taskTagType(
+  status: MarketTaskStatus,
+): "default" | "success" | "warning" | "error" | "info" {
   if (status === "completed") return "success";
   if (status === "error") return "error";
   if (status === "canceled") return "warning";
@@ -733,18 +954,28 @@ function isPlatformIncompatible(game: MarketGame): boolean {
   }
 }
 
-function isInstalled(gameId: string, version: string, gameType?: string): boolean {
+function isInstalled(
+  gameId: string,
+  version: string,
+  gameType?: string,
+): boolean {
   if (gameType === GameType.NetworkGame) {
     return Boolean(gameStore.getGameRecord(gameId));
   }
   return Boolean(
-    gameStore.getGameRecord(gameId)?.versions.some((item) => item.version === version),
+    gameStore
+      .getGameRecord(gameId)
+      ?.versions.some((item) => item.version === version),
   );
 }
 
 type VersionIntegrity = "ok" | "missingSha256" | "missingSize" | "invalid";
 
-function getVersionIntegrity(v: { downloadUrl: string; sha256?: string; size?: number }): VersionIntegrity | null {
+function getVersionIntegrity(v: {
+  downloadUrl: string;
+  sha256?: string;
+  size?: number;
+}): VersionIntegrity | null {
   if (!isValidDownloadUrl(v.downloadUrl)) return "invalid";
   if (!isValidSha256Format(v.sha256)) return "invalid";
 
@@ -799,7 +1030,16 @@ async function syncExistingTasks(): Promise<void> {
   const completedGameIds = new Set<string>();
   for (const state of states) {
     if (!state) continue;
-    if (["downloading", "verifying", "extracting", "installing", "paused", "interrupted"].includes(state.status)) {
+    if (
+      [
+        "downloading",
+        "verifying",
+        "extracting",
+        "installing",
+        "paused",
+        "interrupted",
+      ].includes(state.status)
+    ) {
       next[state.taskId] = state;
     } else if (state.status === "completed") {
       completedGameIds.add(state.gameId);
@@ -821,7 +1061,10 @@ async function loadIndex(forceRefresh = false): Promise<void> {
     refreshCounter.value++;
   }
   try {
-    const index = await window.electronAPI.market.getIndex(sourceIdx.value, forceRefresh);
+    const index = await window.electronAPI.market.getIndex(
+      sourceIdx.value,
+      forceRefresh,
+    );
     marketIndex.value = index;
     games.value = index.games;
     marketName.value = index.marketName || "";
@@ -832,11 +1075,16 @@ async function loadIndex(forceRefresh = false): Promise<void> {
         expandedGames.value[game.id] = false;
       }
       const selectedVersion = selectedVersions.value[game.id];
-      if (!selectedVersion || !game.versions.some((item) => item.version === selectedVersion)) {
-        selectedVersions.value[game.id] = game.latestVersion || game.versions[0]?.version || "";
+      if (
+        !selectedVersion ||
+        !game.versions.some((item) => item.version === selectedVersion)
+      ) {
+        selectedVersions.value[game.id] =
+          game.latestVersion || game.versions[0]?.version || "";
       }
     }
     await syncExistingTasks();
+    await scrollToRouteGame();
   } catch (error) {
     const text = error instanceof Error ? error.message : String(error);
     const friendly = friendlyLoadError(text);
@@ -857,15 +1105,44 @@ async function loadIndex(forceRefresh = false): Promise<void> {
   }
 }
 
+async function scrollToRouteGame(): Promise<void> {
+  const gameId =
+    typeof route.query.gameId === "string" ? route.query.gameId : "";
+  if (!gameId || !games.value.some((game) => game.id === gameId)) return;
+  expandedGames.value[gameId] = true;
+  const game = games.value.find((item) => item.id === gameId);
+  if (game) {
+    selectedVersions.value[gameId] =
+      game.latestVersion || game.versions[0]?.version || "";
+    resolveMissingAssetInfo(gameId);
+  }
+  await nextTick();
+  const target = Array.from(
+    document.querySelectorAll<HTMLElement>("[data-market-game-id]"),
+  ).find((element) => element.dataset.marketGameId === gameId);
+  target?.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
 async function handleDownload(gameId: string, version: string): Promise<void> {
   const taskId = taskKey(gameId, version);
   if (pendingDownloads.has(taskId)) return;
-  const activeStatuses: MarketTaskStatus[] = ["downloading", "verifying", "extracting", "installing", "paused", "interrupted"];
+  const activeStatuses: MarketTaskStatus[] = [
+    "downloading",
+    "verifying",
+    "extracting",
+    "installing",
+    "paused",
+    "interrupted",
+  ];
   const current = taskStates.value[taskId];
   if (current && activeStatuses.includes(current.status)) return;
   pendingDownloads.add(taskId);
   try {
-    const task = await window.electronAPI.market.downloadAndInstall(gameId, version, sourceIdx.value);
+    const task = await window.electronAPI.market.downloadAndInstall(
+      gameId,
+      version,
+      sourceIdx.value,
+    );
     taskStates.value = {
       ...taskStates.value,
       [task.taskId]: task,
@@ -887,7 +1164,18 @@ async function handleDownload(gameId: string, version: string): Promise<void> {
 async function handleCancel(taskId: string): Promise<void> {
   if (pendingCancels.has(taskId)) return;
   const current = taskStates.value[taskId];
-  if (!current || !["downloading", "verifying", "extracting", "installing", "paused", "interrupted"].includes(current.status)) return;
+  if (
+    !current ||
+    ![
+      "downloading",
+      "verifying",
+      "extracting",
+      "installing",
+      "paused",
+      "interrupted",
+    ].includes(current.status)
+  )
+    return;
   pendingCancels.add(taskId);
   try {
     await window.electronAPI.market.cancelTask(taskId);
@@ -959,7 +1247,10 @@ onMounted(async () => {
           gameId: snap.gameId,
           version: snap.version,
           status: snap.status,
-          progress: snap.size > 0 ? Math.min(65, Math.round((snap.bytesReceived / snap.size) * 65)) : 0,
+          progress:
+            snap.size > 0
+              ? Math.min(65, Math.round((snap.bytesReceived / snap.size) * 65))
+              : 0,
           bytesReceived: snap.bytesReceived,
           totalBytes: snap.size,
           createdAt: snap.updatedAt,
@@ -1002,6 +1293,11 @@ onUnmounted(() => {
   }
   timeoutIds.length = 0;
 });
+
+watch(
+  () => route.query.gameId,
+  () => void scrollToRouteGame(),
+);
 </script>
 
 <style scoped>

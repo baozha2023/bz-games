@@ -11,7 +11,6 @@ export default {
   feedback: {
     button: "建言獻策",
     title: "建言獻策",
-    loggedInHint: "已登入，每 6 小時可以傳送一次。",
     placeholder: "請輸入你的建議、問題或期待的功能……",
     selectImages: "選擇圖片",
     clearImages: "清空圖片",

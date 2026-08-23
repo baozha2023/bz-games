@@ -22,6 +22,7 @@ import {
 import { RoomConstants } from "../../../shared/RoomConstants";
 import { DEFAULT_RELAY_PUBLIC_HOST, DEFAULT_RELAY_SERVER_URL, DEFAULT_RELAY_TOKEN } from "../../../shared/AppConstants";
 import { requestInterceptor } from "../../utils/requestInterceptor";
+import { toRelayWebSocketUrl } from "./relayWebSocketUrl";
 import { mapRelayCloseError } from "../../utils/relayCloseError";
 
 type BinaryRelayPayload = GameRelayPayload & { binaryData?: Buffer };
@@ -71,7 +72,10 @@ export class RoomClient {
     this.relayRoomCode = this.relayMode ? this.resolveRelayRoomCode(url) : "";
     this.relayHostId = "";
     if (this.relayMode) {
-      url = DEFAULT_RELAY_SERVER_URL.trim();
+      url = toRelayWebSocketUrl(DEFAULT_RELAY_SERVER_URL);
+      if (!url) {
+        return { success: false, error: "relay_not_configured" };
+      }
     }
     if (!url.startsWith("ws://") && !url.startsWith("wss://")) {
       if (url.startsWith("https://")) url = `wss://${url.slice("https://".length)}`;

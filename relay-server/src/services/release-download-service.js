@@ -13,7 +13,7 @@ import { PORTAL_CAPABILITIES } from "./portal-authorization.js";
 
 import { sendJson } from "../utils/ws.js";
 
-const DOWNLOAD_PATH = "/bz-games/api/v1/releases/latest/download";
+const DOWNLOAD_PATH = "/api/v1/releases/latest/download";
 const ADMIN_PATH = "/api/admin/v1/desktop-release";
 const MANIFEST_KEYS = ["filename", "sha256", "size", "version"];
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;

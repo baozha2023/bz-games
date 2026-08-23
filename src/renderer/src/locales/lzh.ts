@@ -11,7 +11,6 @@ export default {
   feedback: {
     button: "献策",
     title: "建言献策",
-    loggedInHint: "已入者，六时辰可呈言一次。",
     placeholder: "请陈所议、所患、所愿之能……",
     selectImages: "择图",
     clearImages: "尽去诸图",

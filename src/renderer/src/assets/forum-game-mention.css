@@ -1,0 +1,32 @@
+.forum-game-mention {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  margin: 0 2px;
+  padding: 1px 8px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font: inherit;
+  line-height: 1.6;
+  vertical-align: baseline;
+}
+
+.forum-game-mention--resolved {
+  color: var(--bz-green);
+  border-color: var(--bz-green-soft);
+  background: var(--bz-green-soft);
+}
+
+.forum-game-mention--resolved:hover {
+  border-color: var(--bz-green);
+}
+
+.forum-game-mention--unknown {
+  color: var(--bz-text-secondary);
+  border-color: var(--bz-border-subtle);
+  background: var(--bz-bg-overlay);
+}
+
+.forum-game-mention-prefix {
+  margin-right: 2px;
+}

@@ -13,6 +13,7 @@ import {
 } from "../window";
 import { cloudSyncService } from "../services/system/CloudSyncService";
 import { feedbackService } from "../services/system/FeedbackService";
+import { forumService } from "../services/system/ForumService";
 import { uninstallService } from "../services/system/UninstallService";
 import { AVATAR_FRAMES } from "../../shared/avatar-frames";
 import {
@@ -221,6 +222,52 @@ export function registerSystemIpc() {
 
   ipcMain.handle(IPC.SYSTEM_FEEDBACK_GET_DETAIL, (_, feedbackId: unknown) =>
     feedbackService.getDetail(feedbackId),
+  );
+
+  ipcMain.handle(IPC.FORUM_SELECT_IMAGES, (_, selectionId: unknown) =>
+    forumService.selectImages(selectionId),
+  );
+  ipcMain.handle(IPC.FORUM_RELEASE_IMAGES, (_, selectionId: unknown, imageId?: unknown) => {
+    forumService.releaseImages(selectionId, imageId);
+  });
+  ipcMain.handle(IPC.FORUM_GET_SEARCH_AVAILABILITY, () => forumService.getSearchAvailability());
+  ipcMain.handle(IPC.FORUM_LIST_POSTS, (_, query?: unknown, cursor?: unknown) =>
+    forumService.listPosts(typeof query === "string" ? query : "", typeof cursor === "string" ? cursor : ""),
+  );
+  ipcMain.handle(IPC.FORUM_GET_POST, (_, postId: unknown) =>
+    forumService.getPost(typeof postId === "string" ? postId : ""),
+  );
+  ipcMain.handle(IPC.FORUM_GET_COMMENTS, (_, postId: unknown, cursor?: unknown) =>
+    forumService.getComments(typeof postId === "string" ? postId : "", typeof cursor === "string" ? cursor : ""),
+  );
+  ipcMain.handle(IPC.FORUM_CREATE_POST, (_, payload: unknown) => {
+    const value = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
+    return forumService.createPost({
+      title: typeof value.title === "string" ? value.title : "",
+      body: typeof value.body === "string" ? value.body : "",
+      selectionId: typeof value.selectionId === "string" ? value.selectionId : undefined,
+    });
+  });
+  ipcMain.handle(IPC.FORUM_CREATE_COMMENT, (_, postId: unknown, content: unknown) =>
+    forumService.createComment(typeof postId === "string" ? postId : "", typeof content === "string" ? content : ""),
+  );
+  ipcMain.handle(IPC.FORUM_DELETE_POST, (_, postId: unknown) =>
+    forumService.deletePost(typeof postId === "string" ? postId : ""),
+  );
+  ipcMain.handle(IPC.FORUM_DELETE_COMMENT, (_, commentId: unknown) =>
+    forumService.deleteComment(typeof commentId === "string" ? commentId : ""),
+  );
+  ipcMain.handle(IPC.FORUM_LIKE_POST, (_, postId: unknown) =>
+    forumService.togglePostLike(typeof postId === "string" ? postId : "", true),
+  );
+  ipcMain.handle(IPC.FORUM_UNLIKE_POST, (_, postId: unknown) =>
+    forumService.togglePostLike(typeof postId === "string" ? postId : "", false),
+  );
+  ipcMain.handle(IPC.FORUM_LIKE_COMMENT, (_, commentId: unknown) =>
+    forumService.toggleCommentLike(typeof commentId === "string" ? commentId : "", true),
+  );
+  ipcMain.handle(IPC.FORUM_UNLIKE_COMMENT, (_, commentId: unknown) =>
+    forumService.toggleCommentLike(typeof commentId === "string" ? commentId : "", false),
   );
 
   ipcMain.handle(IPC.SYSTEM_SAVE_SETTINGS, async (_, settings: unknown) => {

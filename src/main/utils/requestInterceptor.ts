@@ -34,6 +34,38 @@ function normalizeWebSocketBase(url: string): string {
 const RELAY_HTTP_BASE = normalizeHttpBase(DEFAULT_RELAY_SERVER_URL);
 const RELAY_WS_BASE = normalizeWebSocketBase(DEFAULT_RELAY_SERVER_URL);
 
+function isUrlWithinBase(url: string, base: string): boolean {
+  if (!base) return false;
+
+  try {
+    const target = new URL(url);
+    const trusted = new URL(base);
+    const trustedPath = trusted.pathname.replace(/\/+$/, "") || "/";
+
+    if (
+      target.origin !== trusted.origin ||
+      target.username ||
+      target.password ||
+      trusted.username ||
+      trusted.password
+    ) {
+      return false;
+    }
+
+    return (
+      trustedPath === "/" ||
+      target.pathname === trustedPath ||
+      target.pathname.startsWith(`${trustedPath}/`)
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isUrlWithinAnyBase(url: string, bases: readonly string[]): boolean {
+  return bases.some((base) => isUrlWithinBase(url, base));
+}
+
 export class RequestInterceptor {
   private getTokenFn: () => string | null;
 
@@ -44,18 +76,18 @@ export class RequestInterceptor {
   buildHeaders(url: string, extra?: Record<string, string>): Record<string, string> {
     const headers: Record<string, string> = { ...extra };
 
-    if (REFERER_DOMAINS.some((d) => url.startsWith(d))) {
+    if (isUrlWithinAnyBase(url, REFERER_DOMAINS)) {
       headers["Referer"] = REFERER;
     }
 
-    if (TOKEN_DOMAINS.some((d) => url.startsWith(d))) {
+    if (isUrlWithinAnyBase(url, TOKEN_DOMAINS)) {
       const token = this.getTokenFn();
       if (token) {
         headers["Authorization"] = `Bearer ${token}`;
       }
     }
 
-    if (RELAY_HTTP_BASE && url.startsWith(RELAY_HTTP_BASE) && DEFAULT_RELAY_TOKEN) {
+    if (isUrlWithinBase(url, RELAY_HTTP_BASE) && DEFAULT_RELAY_TOKEN) {
       headers["x-relay-token"] = DEFAULT_RELAY_TOKEN;
     }
 
@@ -63,7 +95,7 @@ export class RequestInterceptor {
   }
 
   buildWebSocketUrl(url: string): string {
-    if (!RELAY_WS_BASE || !url.startsWith(RELAY_WS_BASE) || !DEFAULT_RELAY_TOKEN) return url;
+    if (!isUrlWithinBase(url, RELAY_WS_BASE) || !DEFAULT_RELAY_TOKEN) return url;
     const target = new URL(url);
     target.searchParams.set("relayToken", DEFAULT_RELAY_TOKEN);
     return target.toString();
@@ -73,7 +105,9 @@ export class RequestInterceptor {
     session.webRequest.onBeforeSendHeaders(
       { urls: REFERER_DOMAINS.map((d) => `${d}*`) },
       (details, callback) => {
-        details.requestHeaders["Referer"] = REFERER;
+        if (isUrlWithinAnyBase(details.url, REFERER_DOMAINS)) {
+          details.requestHeaders["Referer"] = REFERER;
+        }
         callback({ requestHeaders: details.requestHeaders });
       },
     );

@@ -134,6 +134,25 @@ Publication uploads the complete GridFS object first, then uses `SELECT ... FOR 
 
 Stores the most recent upload/download time by `user_id + action_type`. The single-snapshot protocol does not use operation IDs or a per-file operation table.
 
+### 6. rate_limit_records
+
+Stores persistent per-user and per-endpoint rate-limit state. The primary key is
+`github_id + endpoint_key`, so all relay-server instances sharing this MySQL
+database observe the same cooldown.
+
+- `github_id`: authenticated GitHub account identifier;
+- `endpoint_key`: stable business identifier such as `feedback.submit`;
+- `last_success_at`: last successfully committed operation time;
+- `reservation_token` and `reservation_expires_at`: short-lived reservation
+  state used to prevent concurrent submissions and recover from a crashed
+  request;
+- `created_at` and `updated_at`: record lifecycle timestamps.
+
+Reservations are acquired and committed with MySQL row locks. A successful
+business write and its rate-limit commit are performed in the same transaction
+when the caller supports it. Failed operations release their reservation.
+Expired reservation leases can be taken over safely after the lease expires.
+
 ## MongoDB cloud object boundary
 
 The shared GridFS bucket is isolated by `metadata.kind`:
@@ -167,6 +186,21 @@ The SQL dump omits the local autoincrement implementation column `stats_reports.
 
 两张表都由 `createMySqlService().ensureSchema()` 使用完整的
 `CREATE TABLE IF NOT EXISTS` 自动初始化，不提供独立迁移脚本。
+
+### 论坛
+
+论坛事实数据保存在 MySQL，帖子图片保存在 MongoDB GridFS。`forum_posts`、
+`forum_comments` 使用 `status` 软删除：`0` 为正常、`1` 为作者删除、`2` 为管理员删除；
+`deleted_at` 保留删除时间，`deleted_by` 记录实际操作人。点赞表使用 `(post_id, user_id)` 或
+`(comment_id, user_id)` 复合主键，计数更新和点赞记录写入在同一事务中完成。
+
+论坛表由 `CREATE TABLE IF NOT EXISTS` 初始化。已有服务器数据库需要在部署前人工增加
+`status` 字段并将历史 `deleted_at IS NOT NULL` 记录回填为 `status=2`；应用代码不包含
+过程性迁移 SQL，也不使用 `deleted_at` 作为可见性判断。
+
+`forum_search_outbox` 与帖子创建、软删除共用 MySQL 事务。后台 worker 将已过滤的
+标题和正文同步到 Elasticsearch，图片、评论、点赞和原始敏感词内容均不进入索引。
+搜索服务不可用时不降级到 `LIKE`，普通最新帖子流仍然使用 MySQL 游标分页。
 
 客户端不持久化反馈历史。打开历史记录时，客户端按当前登录用户从
 `GET /api/v1/feedback` 查询反馈编号和提交时间；展开历史记录时，再通过用户反馈详情接口

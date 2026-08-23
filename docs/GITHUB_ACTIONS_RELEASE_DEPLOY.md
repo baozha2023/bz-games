@@ -16,7 +16,7 @@
 | `RELEASE_SERVER_HOST` | `39.106.221.85`                                                 |
 | `RELEASE_SERVER_PORT` | `22`                                                            |
 | `RELEASE_SERVER_USER` | `bz-release-deploy`                                             |
-| `RELEASE_PUBLIC_URL`  | `http://39.106.221.85/bz-games/api/v1/releases/latest/download` |
+| `RELEASE_PUBLIC_URL`  | `http://39.106.221.85:38090/api/v1/releases/latest/download` |
 
 添加 Environment secrets：
 

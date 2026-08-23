@@ -27,6 +27,9 @@ export const PORTAL_CAPABILITIES = Object.freeze({
   SYSTEM_MONITOR_VIEW: "system.monitor.view",
   RELEASE_VIEW: "release.view",
   RELEASE_UPLOAD: "release.upload",
+  FORUM_VIEW: "forum.view",
+  FORUM_MANAGE: "forum.manage",
+  FORUM_RESTORE: "forum.restore",
 });
 
 const ALL_CAPABILITIES = Object.freeze(Object.values(PORTAL_CAPABILITIES));
@@ -49,6 +52,8 @@ const ROLE_CAPABILITIES = Object.freeze({
     PORTAL_CAPABILITIES.HOSTING_REVIEW,
     PORTAL_CAPABILITIES.HOSTING_PUBLISH_DIRECT,
     PORTAL_CAPABILITIES.RELEASE_VIEW,
+    PORTAL_CAPABILITIES.FORUM_VIEW,
+    PORTAL_CAPABILITIES.FORUM_MANAGE,
   ]),
   super_administrator: ALL_CAPABILITIES,
 });

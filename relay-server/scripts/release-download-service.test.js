@@ -49,7 +49,9 @@ async function createHarness({
     body,
     sha256,
     storageRoot,
-    url: `http://127.0.0.1:${address.port}/bz-games/api/v1/releases/latest/download`,
+    url: `http://127.0.0.1:${address.port}/api/v1/releases/latest/download`,
+    legacyUrl:
+      `http://127.0.0.1:${address.port}/bz-games/api/v1/releases/latest/download`,
     close: async () => {
       await new Promise((resolve) => server.close(resolve));
       await fs.rm(storageRoot, { recursive: true, force: true });
@@ -62,6 +64,7 @@ test("release endpoint supports GET, HEAD, ranges and validators", async () => {
   try {
     const head = await fetch(harness.url, { method: "HEAD" });
     assert.equal(head.status, 200);
+    assert.equal((await fetch(harness.legacyUrl)).status, 404);
     assert.equal(
       head.headers.get("content-length"),
       String(harness.body.length),
@@ -130,7 +133,7 @@ test("release endpoint reports unavailable storage without exposing paths", asyn
   try {
     const address = server.address();
     const response = await fetch(
-      `http://127.0.0.1:${address.port}/bz-games/api/v1/releases/latest/download`,
+      `http://127.0.0.1:${address.port}/api/v1/releases/latest/download`,
     );
     assert.equal(response.status, 503);
     assert.deepEqual(await response.json(), { error: "release_unavailable" });

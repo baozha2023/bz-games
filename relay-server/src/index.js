@@ -18,6 +18,9 @@ import { createPortalUserService } from "./services/portal-user-service.js";
 import { createSystemMonitorService } from "./services/system-monitor-service.js";
 import { createUserProfileService } from "./services/user-profile-service.js";
 import { createPresenceService } from "./services/presence-service.js";
+import { createRateLimitService } from "./services/rate-limit-service.js";
+import { createForumSearchService } from "./services/forum-search-service.js";
+import { createForumService } from "./services/forum-service.js";
 import { createRelayState } from "./state.js";
 import { send } from "./utils/ws.js";
 import { registerWebSocketHandlers } from "./ws-server.js";
@@ -29,6 +32,10 @@ const authService = createAuthService({ config, mySqlService });
 const accessControlService = createAccessControlService({
   config,
   authService,
+});
+const rateLimitService = createRateLimitService({
+  mySqlService,
+  reservationTtlMs: config.RATE_LIMIT_RESERVATION_TTL_MS,
 });
 const cloudDataService = createCloudDataService({
   config,
@@ -42,6 +49,7 @@ const feedbackService = createFeedbackService({
   mongoService,
   authService,
   accessControlService,
+  rateLimitService,
 });
 const gameHostingService = createGameHostingService({
   config,
@@ -75,6 +83,17 @@ const systemMonitorService = createSystemMonitorService({
 const adminStaticService = createAdminStaticService({ config });
 const roomService = createRoomService({ config, state, send });
 const sensitiveWordService = createSensitiveWordService();
+const forumSearchService = createForumSearchService({ config });
+const forumService = createForumService({
+  config,
+  mySqlService,
+  mongoService,
+  authService,
+  accessControlService,
+  rateLimitService,
+  sensitiveWordService,
+  searchService: forumSearchService,
+});
 const messageRouter = createMessageRouter({
   config,
   roomService,
@@ -90,6 +109,7 @@ const server = createHttpServer({
   gameHostingService,
   releaseDownloadService,
   feedbackService,
+  forumService,
   portalUserService,
   userProfileService,
   presenceService,
@@ -107,10 +127,12 @@ if (mySqlService.isEnabled()) {
   await mySqlService.ensureReady();
 }
 
+forumService.startSearchWorker();
+
 presenceService.start();
 
-server.listen(config.PORT, () => {
-  console.log(`BZ-Games relay server listening on ${config.PORT}`);
+server.listen(config.PORT, config.HOST, () => {
+  console.log(`BZ-Games relay server listening on ${config.HOST}:${config.PORT}`);
 });
 
 setInterval(() => {

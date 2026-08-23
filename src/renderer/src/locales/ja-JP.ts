@@ -11,7 +11,6 @@ export default {
   feedback: {
     button: "ご意見・ご提案",
     title: "ご意見・ご提案",
-    loggedInHint: "ログイン中は、6 時間に 1 回送信できます。",
     placeholder: "ご意見、不具合、追加してほしい機能をご記入ください……",
     selectImages: "画像を選択",
     clearImages: "画像をクリア",
