@@ -79,7 +79,7 @@ function startServer() {
       ROOM_TTL_MS: "60000",
       MAX_ROOMS: "10",
       MAX_CLIENTS: "30",
-      MAX_CLIENTS_PER_ROOM: "8",
+      MAX_CLIENTS_PER_ROOM: "10",
       MAX_EVENT_LOOP_DELAY_MS: "10000",
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -241,6 +241,10 @@ async function main() {
 
   const health = await httpJson("/health");
   assert(health.ok === true, "/health ok 应为 true");
+  assert(
+    health.limits.maxClientsPerRoom === 10,
+    "/health 应返回单房 10 人上限",
+  );
 
   const host = await connectClient("host");
   const roomCode = await hostRoom(host, "room-main");

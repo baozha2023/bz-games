@@ -107,6 +107,7 @@ export const IPC = {
   FORUM_GET_SEARCH_AVAILABILITY: "forum:getSearchAvailability",
   FORUM_LIST_POSTS: "forum:listPosts",
   FORUM_GET_POST: "forum:getPost",
+  FORUM_RESOLVE_POST_REFERENCES: "forum:resolvePostReferences",
   FORUM_GET_COMMENTS: "forum:getComments",
   FORUM_CREATE_POST: "forum:createPost",
   FORUM_CREATE_COMMENT: "forum:createComment",

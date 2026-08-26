@@ -5,7 +5,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-v5-blue)](https://www.typescriptlang.org/)
 [![SQLite](https://img.shields.io/badge/SQLite-multiple--ciphers-orange)](https://www.npmjs.com/package/better-sqlite3-multiple-ciphers)
 
-[简体中文](./README.md) | English | [日本語](./README.ja.md) | [Deutsch](./README.de.md) | [繁體中文](./README.zh-TW.md) | [文言文](./README.lzh.md)
+[简体中文](./README.md) | English | [日本語](./README.ja.md) | [Deutsch](./README.de.md) | [繁體中文](./README.zh-TW.md)
 
 **BZ-Games** is a **local-first Windows game platform** designed for Windows. It allows users to import local games and play multiplayer with friends through the built-in P2P room system. It supports LAN discovery, user-provided frp direct connections, and official relay short addresses as connectivity options, with optional GitHub OAuth login and cloud data sync.
 
@@ -21,7 +21,7 @@
 - **🪙 Economy System**: Daily check-in for BZ Coins, automatic rewards for cumulative playtime. Avatar frame unlocks, nickname color/font/effect personalization.
 - **🚀 Process Management**: Auto start/stop game processes with crash and abnormal exit handling.
 - **🎨 Game API**: Local Game API service (V1/V2 protocols) for games to read saves, report stats, and unlock achievements via HTTP.
-- **🌍 Internationalization**: Supports Simplified Chinese, Traditional Chinese, English, Japanese, German, and Classical Chinese.
+- **🌍 Internationalization**: Supports Simplified Chinese, Traditional Chinese, English, Japanese, and German.
 
 ## 📸 Screenshots
 

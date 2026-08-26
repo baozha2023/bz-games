@@ -4,7 +4,6 @@ import zhCN from "./locales/zh-CN";
 import enUS from "./locales/en-US";
 import jaJP from "./locales/ja-JP";
 import zhTW from "./locales/zh-TW";
-import lzh from "./locales/lzh";
 import deDE from "./locales/de-DE";
 
 const i18n = createI18n({
@@ -16,7 +15,6 @@ const i18n = createI18n({
     "en-US": enUS,
     "ja-JP": jaJP,
     "zh-TW": zhTW,
-    "lzh": lzh,
     "de-DE": deDE,
   },
 });

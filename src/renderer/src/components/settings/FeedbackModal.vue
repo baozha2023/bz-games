@@ -35,48 +35,19 @@
               :disabled="busy"
             />
 
-            <div>
-              <n-space align="center">
-                <n-button
-                  secondary
-                  :loading="selecting"
-                  :disabled="busy || images.length >= 4"
-                  @click="selectImages"
-                >
-                  {{ t("feedback.selectImages") }}
-                </n-button>
-                <n-text depth="3">{{ t("feedback.imageLimits") }}</n-text>
-                <n-button
-                  v-if="images.length"
-                  text
-                  type="error"
-                  :disabled="submitting"
-                  @click="clearImages"
-                >
-                  {{ t("feedback.clearImages") }}
-                </n-button>
-              </n-space>
-              <div v-if="images.length" class="feedback-images">
-                <div
-                  v-for="image in images"
-                  :key="image.id"
-                  class="feedback-image"
-                >
-                  <img :src="image.previewUrl" :alt="image.fileName" />
-                  <button
-                    type="button"
-                    :aria-label="t('feedback.removeImage')"
-                    :disabled="busy"
-                    @click="removeImage(image.id)"
-                  >
-                    ×
-                  </button>
-                  <div class="feedback-image-name" :title="image.fileName">
-                    {{ image.fileName }}
-                  </div>
-                </div>
-              </div>
-            </div>
+            <ImageSelectionPanel
+              :images="images"
+              :select-label="t('feedback.selectImages')"
+              :limits-label="t('feedback.imageLimits')"
+              :clear-label="t('feedback.clearImages')"
+              :remove-label="t('feedback.removeImage')"
+              :selecting="selecting"
+              :disabled="busy"
+              :clear-disabled="submitting"
+              @select="selectImages"
+              @clear="clearImages"
+              @remove="removeImage"
+            />
 
             <n-alert v-if="errorText" type="error">{{ errorText }}</n-alert>
             <n-alert v-if="cooldownText" type="warning">{{
@@ -231,6 +202,14 @@
                 </n-collapse-transition>
               </n-list-item>
             </n-list>
+            <div
+              v-if="historyHasMore"
+              ref="historySentinel"
+              class="feedback-history-sentinel"
+              aria-hidden="true"
+            >
+              <n-spin v-if="historyLoadingMore" size="small" />
+            </div>
           </n-scrollbar>
         </div>
       </n-tab-pane>
@@ -260,10 +239,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useMessage } from "naive-ui";
 import { ChevronDown, ChevronUp } from "@vicons/ionicons5";
+import ImageSelectionPanel from "../common/ImageSelectionPanel.vue";
 import type {
   FeedbackDetail,
   FeedbackHistoryItem,
@@ -296,12 +276,17 @@ const resetAt = ref("");
 const successId = ref("");
 const activeTab = ref<"submit" | "history">("submit");
 const historyLoading = ref(false);
+const historyLoadingMore = ref(false);
 const history = ref<FeedbackHistoryItem[]>([]);
+const historyNextCursor = ref<string | null>(null);
+const historyHasMore = ref(false);
+const historySentinel = ref<HTMLElement | null>(null);
 const expandedHistory = ref<Record<string, boolean>>({});
 const historyDetails = ref<Record<string, FeedbackDetail | undefined>>({});
 const historyDetailLoading = ref<Record<string, boolean>>({});
 const historyDetailErrors = ref<Record<string, string>>({});
 let historyRequestGeneration = 0;
+let historyObserver: IntersectionObserver | null = null;
 
 const visible = computed({
   get: () => props.show,
@@ -381,22 +366,84 @@ async function clearImages() {
 
 async function loadHistory() {
   if (historyLoading.value) return;
-  const generation = historyRequestGeneration;
+  const generation = ++historyRequestGeneration;
   history.value = [];
+  historyNextCursor.value = null;
+  historyHasMore.value = false;
   expandedHistory.value = {};
   historyDetails.value = {};
   historyDetailErrors.value = {};
   historyLoading.value = true;
   try {
-    const nextHistory = await window.electronAPI.settings.getFeedbackHistory();
+    const page = await window.electronAPI.settings.getFeedbackHistory();
     if (generation !== historyRequestGeneration) return;
-    history.value = nextHistory;
+    history.value = page.items;
+    historyNextCursor.value = page.nextCursor;
+    historyHasMore.value = page.hasMore;
   } catch {
     if (generation !== historyRequestGeneration) return;
     history.value = [];
+    historyNextCursor.value = null;
+    historyHasMore.value = false;
   } finally {
     if (generation === historyRequestGeneration) historyLoading.value = false;
+    if (generation === historyRequestGeneration) void resetHistoryObserver();
   }
+}
+
+async function loadMoreHistory() {
+  if (
+    historyLoading.value ||
+    historyLoadingMore.value ||
+    !historyHasMore.value ||
+    !historyNextCursor.value
+  ) {
+    return;
+  }
+  const generation = historyRequestGeneration;
+  const cursor = historyNextCursor.value;
+  let succeeded = false;
+  historyLoadingMore.value = true;
+  try {
+    const page = await window.electronAPI.settings.getFeedbackHistory(cursor);
+    if (generation !== historyRequestGeneration) return;
+    const byId = new Map(history.value.map((item) => [item.id, item]));
+    for (const item of page.items) byId.set(item.id, item);
+    history.value = Array.from(byId.values());
+    historyNextCursor.value = page.nextCursor;
+    historyHasMore.value = page.hasMore;
+    succeeded = true;
+  } catch {
+    if (generation !== historyRequestGeneration) return;
+    message.error(t("feedback.errors.feedback_network_failed"));
+  } finally {
+    if (generation === historyRequestGeneration) {
+      historyLoadingMore.value = false;
+      if (succeeded) void resetHistoryObserver();
+    }
+  }
+}
+
+function disconnectHistoryObserver() {
+  historyObserver?.disconnect();
+  historyObserver = null;
+}
+
+async function resetHistoryObserver() {
+  await nextTick();
+  disconnectHistoryObserver();
+  const target = historySentinel.value;
+  if (!target || activeTab.value !== "history" || !props.show) return;
+  const root = target.closest<HTMLElement>(".n-scrollbar-container");
+  historyObserver = new IntersectionObserver(
+    (entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        void loadMoreHistory();
+      }
+    },
+    { root, rootMargin: "320px 0px" },
+  );
+  historyObserver.observe(target);
 }
 
 function statusTagType(
@@ -505,13 +552,17 @@ async function close() {
 
 function resetState() {
   historyRequestGeneration += 1;
+  disconnectHistoryObserver();
   content.value = "";
   errorCode.value = "";
   resetAt.value = "";
   successId.value = "";
   activeTab.value = "submit";
   historyLoading.value = false;
+  historyLoadingMore.value = false;
   history.value = [];
+  historyNextCursor.value = null;
+  historyHasMore.value = false;
   expandedHistory.value = {};
   historyDetails.value = {};
   historyDetailLoading.value = {};
@@ -519,7 +570,11 @@ function resetState() {
 }
 
 watch(activeTab, (tab) => {
-  if (tab === "history") void loadHistory();
+  if (tab === "history") {
+    void loadHistory();
+  } else {
+    disconnectHistoryObserver();
+  }
 });
 
 watch(
@@ -533,6 +588,7 @@ watch(
 );
 
 onBeforeUnmount(() => {
+  disconnectHistoryObserver();
   void releaseSelection();
 });
 </script>
@@ -572,6 +628,13 @@ onBeforeUnmount(() => {
   background: transparent;
 }
 
+.feedback-history-sentinel {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+}
+
 .feedback-history-content {
   overflow: hidden;
 }
@@ -596,50 +659,6 @@ onBeforeUnmount(() => {
   flex: 1;
   flex-direction: column;
   gap: 8px;
-}
-
-.feedback-images {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, 144px);
-  gap: 12px;
-  margin-top: 12px;
-}
-
-.feedback-image {
-  position: relative;
-  min-width: 0;
-}
-
-.feedback-image img {
-  display: block;
-  width: 100%;
-  aspect-ratio: 1;
-  border-radius: 8px;
-  object-fit: contain;
-  background: var(--n-color-modal);
-}
-
-.feedback-image button {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  color: #fff;
-  background: rgba(0, 0, 0, 0.65);
-  cursor: pointer;
-}
-
-.feedback-image-name {
-  display: block;
-  margin-top: 4px;
-  font-size: 12px;
-  line-height: 1.4;
-  overflow-wrap: anywhere;
-  word-break: break-word;
 }
 
 .feedback-history-item {

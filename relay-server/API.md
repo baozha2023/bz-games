@@ -69,7 +69,7 @@ X-Relay-Token: <relayToken>
   "limits": {
     "maxRooms": 80,
     "maxClients": 400,
-    "maxClientsPerRoom": 8,
+    "maxClientsPerRoom": 10,
     "maxEventLoopDelayMs": 250
   }
 }
@@ -692,19 +692,19 @@ __relayTo -> relayTo -> to -> targetPlayerId -> payload.__relayTo
 
 ### 中继服务
 
-| 变量                      | 默认值     | 说明                                             |
-| ------------------------- | ---------- | ------------------------------------------------ |
-| `PORT`                    | `38091`    | Relay 内部 HTTP/WebSocket 监听端口；公网由 Nginx 使用 `38090` |
-| `HOST`                    | `127.0.0.1` | HTTP/WebSocket 监听地址；公网访问统一经过 Nginx |
-| `ROOM_TTL_MS`             | `60000`    | 房间活跃超时时间（毫秒）                         |
-| `HEARTBEAT_INTERVAL_MS`   | `30000`    | WebSocket ping 与清理间隔（毫秒）                |
-| `MAX_TEXT_BYTES`          | `1048576`  | 单条文本消息最大字节数                           |
-| `MAX_BINARY_BYTES`        | `12582912` | 单条二进制消息最大字节数                         |
-| `RELAY_TOKEN`             | 空字符串   | 房主注册和客机加入鉴权 token；空字符串表示不校验 |
-| `MAX_ROOMS`               | `80`       | 最大同时房间数                                   |
-| `MAX_CLIENTS`             | `400`      | 最大已登记客户端数                               |
-| `MAX_CLIENTS_PER_ROOM`    | `8`        | 单房间最大中继客户端数上限                       |
-| `MAX_EVENT_LOOP_DELAY_MS` | `250`      | 事件循环延迟限制（毫秒）                         |
+| 变量                      | 默认值      | 说明                                                          |
+| ------------------------- | ----------- | ------------------------------------------------------------- |
+| `PORT`                    | `38091`     | Relay 内部 HTTP/WebSocket 监听端口；公网由 Nginx 使用 `38090` |
+| `HOST`                    | `127.0.0.1` | HTTP/WebSocket 监听地址；公网访问统一经过 Nginx               |
+| `ROOM_TTL_MS`             | `60000`     | 房间活跃超时时间（毫秒）                                      |
+| `HEARTBEAT_INTERVAL_MS`   | `30000`     | WebSocket ping 与清理间隔（毫秒）                             |
+| `MAX_TEXT_BYTES`          | `1048576`   | 单条文本消息最大字节数                                        |
+| `MAX_BINARY_BYTES`        | `12582912`  | 单条二进制消息最大字节数                                      |
+| `RELAY_TOKEN`             | 空字符串    | 房主注册和客机加入鉴权 token；空字符串表示不校验              |
+| `MAX_ROOMS`               | `80`        | 最大同时房间数                                                |
+| `MAX_CLIENTS`             | `400`       | 最大已登记客户端数                                            |
+| `MAX_CLIENTS_PER_ROOM`    | `10`        | 单房间最大中继客户端数上限                                    |
+| `MAX_EVENT_LOOP_DELAY_MS` | `250`       | 事件循环延迟限制（毫秒）                                      |
 
 ### 建言献策与通用限流
 
@@ -825,11 +825,13 @@ sequenceDiagram
 
 ## 建言献策
 
-### `GET /api/v1/feedback`
+### `GET /api/v1/feedback?limit=10&cursor=`
 
 读取当前登录用户的反馈历史。请求必须同时携带发行版 `X-Relay-Token` 和当前有效的
 `Authorization: Bearer <session token>`；服务端只按会话用户 ID 查询，不接受客户端传入用户 ID。
-响应只包含反馈编号和提交时间，一次返回该账号的全部记录，按提交时间倒序排列。
+响应固定返回最多 10 条反馈编号和提交时间，按 `created_at DESC, id DESC` 排列。
+首次请求省略 `cursor`；后续请求原样携带上一页的 `nextCursor`。游标只对当前账号有效，
+服务端使用 `(created_at, id)` 键集分页，不接受其他 `limit`。
 
 ```json
 {
@@ -838,7 +840,9 @@ sequenceDiagram
       "id": "uuid",
       "submittedAt": 1735689600000
     }
-  ]
+  ],
+  "hasMore": true,
+  "nextCursor": "opaque-base64url-cursor"
 }
 ```
 
@@ -991,6 +995,7 @@ sequenceDiagram
 ```text
 GET    /api/v1/forum/posts?limit=10&cursor=&q=
 GET    /api/v1/forum/search-status
+POST   /api/v1/forum/post-references/resolve
 GET    /api/v1/forum/posts/:id
 GET    /api/v1/forum/posts/:id/images/:imageId
 POST   /api/v1/forum/posts                 multipart: title, body, images[]
@@ -1004,12 +1009,20 @@ PUT    /api/v1/forum/comments/:id/like
 DELETE /api/v1/forum/comments/:id/like
 ```
 
-帖子列表固定返回 10 条轻量数据，每条包含作者昵称字段 `authorNickname`。帖子详情也包含同名作者昵称字段。
+帖子列表固定返回 10 条轻量数据，每条包含作者昵称 `authorNickname` 和 GitHub 登录名
+`authorGithubLogin`。帖子详情返回相同字段；评论作者对象包含 `nickname`、`githubLogin` 和
+`avatarUrl`。客户端将作者显示为“昵称@GitHub登录名”，GitHub 登录名可链接到对应公开主页。
 无搜索词时按 `created_at DESC, id DESC` 使用
 MySQL 游标；有搜索词时使用 Elasticsearch `search_after`，标题和正文经过服务端
 敏感词替换后才会写入 MySQL 与搜索索引。图片只做真实类型、尺寸、像素和大小校验。
 `search-status` 返回 `{ "enabled": true|false }`；ES 未部署、未就绪或异步同步失败时为
 `false`，客户端应隐藏搜索框。普通信息流不依赖 ES。
+
+`POST /api/v1/forum/post-references/resolve` 独立于 Elasticsearch，直接按帖子 UUID 从
+MySQL 批量解析正文中的 `/post<UUID>` 引用。请求体为 `{ "ids": ["UUID"] }`，单次最多
+20 个去重 ID。响应 `items` 按请求顺序返回：正常帖子为
+`{ id, status: "active", title, body }`，逻辑删除帖子为 `{ id, status: "deleted" }`，
+不存在的 UUID 为 `{ id, status: "missing" }`；删除状态不会返回标题或正文。
 
 帖子和评论使用 `status` 作为逻辑删除状态：`0` 为正常、`1` 为作者删除、`2` 为管理员删除。
 `deleted_at` 仅记录删除时间，`deleted_by` 记录实际操作人 ID。普通客户端只返回 `status=0`
@@ -1032,7 +1045,7 @@ POST   /api/admin/v1/forum/comments/:id/restore    仅超级管理员
 并在同一事务中增加帖子评论数。恢复帖子会写入搜索 outbox 的 `upsert` 操作。
 
 管理端帖子列表支持 `page`、`pageSize`、`status` 和 `q` 查询参数，返回的每条帖子包含
-`title`、`authorGithubName`、`createdAt`、`status`、`likeCount`、`commentCount`、
+`title`、`authorNickname`、`authorGithubLogin`、`createdAt`、`status`、`likeCount`、`commentCount`、
 `deletedBy`、`deletedByGithubName` 和 `deletedAt`，供管理端表格直接展示；管理端展示
 `deletedByGithubName`，数据库操作人 ID 仍保留在 `deletedBy`。`q` 使用 MySQL 查询标题、正文、
 帖子 ID 和作者 GitHub 登录名；管理端搜索不依赖 Elasticsearch。

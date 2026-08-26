@@ -2,6 +2,7 @@ export interface ForumPostSummary {
   id: string;
   title: string;
   authorNickname: string;
+  authorGithubLogin: string;
   createdAt: string | null;
   likeCount: number;
   commentCount: number;
@@ -29,9 +30,19 @@ export interface ForumPostDetail extends ForumPostSummary {
   images: ForumImage[];
 }
 
+export type ForumPostReference =
+  | { id: string; status: "active"; title: string; body: string }
+  | { id: string; status: "deleted" }
+  | { id: string; status: "missing" };
+
+export interface ForumPostReferenceResult {
+  items: ForumPostReference[];
+}
+
 export interface ForumAuthor {
   id: string;
   nickname: string;
+  githubLogin: string;
   avatarUrl: string;
 }
 
@@ -73,4 +84,9 @@ export interface ForumImageSelectionResult {
 
 export type ForumMutationResult =
   | { success: true; id?: string; liked?: boolean; likeCount?: number }
-  | { success: false; error: string; retryAfterSeconds?: number; resetAt?: string };
+  | {
+      success: false;
+      error: string;
+      retryAfterSeconds?: number;
+      resetAt?: string;
+    };

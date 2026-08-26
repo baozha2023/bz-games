@@ -19,7 +19,7 @@ import type {
   GameLaunchFailurePayload,
   RoomConnectResult,
   RoomCreateResult,
-  FeedbackHistoryItem,
+  FeedbackHistoryPage,
   FeedbackDetail,
   CloudAuthChangedPayload,
   CloudPresenceStatus,
@@ -33,6 +33,7 @@ import type {
   ForumComment,
   ForumImageSelectionResult,
   ForumMutationResult,
+  ForumPostReferenceResult,
   ForumPage,
   ForumPostDetail,
   ForumPostSummary,
@@ -288,7 +289,7 @@ declare global {
               message?: string;
             }
         >;
-        getFeedbackHistory: () => Promise<FeedbackHistoryItem[]>;
+        getFeedbackHistory: (cursor?: string) => Promise<FeedbackHistoryPage>;
         getFeedbackDetail: (
           feedbackId: string,
         ) => Promise<
@@ -379,14 +380,32 @@ declare global {
         ) => () => void;
       };
       forum: {
-        selectImages: (selectionId?: string) => Promise<ForumImageSelectionResult>;
+        selectImages: (
+          selectionId?: string,
+        ) => Promise<ForumImageSelectionResult>;
         releaseImages: (selectionId: string, imageId?: string) => Promise<void>;
         getSearchAvailability: () => Promise<boolean>;
-        listPosts: (query?: string, cursor?: string) => Promise<ForumPage<ForumPostSummary>>;
+        listPosts: (
+          query?: string,
+          cursor?: string,
+        ) => Promise<ForumPage<ForumPostSummary>>;
         getPost: (postId: string) => Promise<ForumPostDetail>;
-        getComments: (postId: string, cursor?: string) => Promise<ForumPage<ForumComment>>;
-        createPost: (payload: { title: string; body: string; selectionId?: string }) => Promise<ForumMutationResult>;
-        createComment: (postId: string, content: string) => Promise<ForumMutationResult>;
+        resolvePostReferences: (
+          ids: string[],
+        ) => Promise<ForumPostReferenceResult>;
+        getComments: (
+          postId: string,
+          cursor?: string,
+        ) => Promise<ForumPage<ForumComment>>;
+        createPost: (payload: {
+          title: string;
+          body: string;
+          selectionId?: string;
+        }) => Promise<ForumMutationResult>;
+        createComment: (
+          postId: string,
+          content: string,
+        ) => Promise<ForumMutationResult>;
         deletePost: (postId: string) => Promise<ForumMutationResult>;
         deleteComment: (commentId: string) => Promise<ForumMutationResult>;
         likePost: (postId: string) => Promise<ForumMutationResult>;

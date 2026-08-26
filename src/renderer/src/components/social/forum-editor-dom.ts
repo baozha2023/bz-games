@@ -1,7 +1,17 @@
 import type {
-  ForumEditorGameSegment,
+  ForumEditorReferenceSegment,
   ForumEditorSegment,
 } from "./forum-editor-document";
+import {
+  FORUM_COMMAND_NAMES,
+  getForumCommandProtocol,
+  parseForumCommandDraftArguments,
+  type ForumCommandName,
+} from "../../../../shared/forum-references";
+import {
+  forumReferenceKey,
+  type ForumReferenceViewModel,
+} from "../../services/forum-reference-view-model";
 
 export interface EditorDomState {
   segments: ForumEditorSegment[];
@@ -9,22 +19,106 @@ export interface EditorDomState {
   spans: Array<HTMLElement | null>;
 }
 
-function createMentionSpan(segment: ForumEditorGameSegment): HTMLSpanElement {
+export interface SlashCommandDraft {
+  kind: "query" | "draft";
+  raw: string;
+  query: string;
+  command?: ForumCommandName;
+  args: string[];
+}
+
+export interface SlashCommandContext extends SlashCommandDraft {
+  segmentIndex: number;
+  start: number;
+  end: number;
+}
+
+const commandDraftPattern = new RegExp(
+  `^/(${FORUM_COMMAND_NAMES.join("|")})<([^<>\\r\\n]*)>$`,
+  "i",
+);
+
+export function parseSlashCommandDraft(raw: string): SlashCommandDraft | null {
+  const queryMatch = /^\/([A-Za-z]*)$/u.exec(raw);
+  if (queryMatch) {
+    const query = queryMatch[1];
+    const normalized = query.toLowerCase();
+    const protocol = getForumCommandProtocol(normalized);
+    if (!protocol) return { kind: "query", raw, query, args: [] };
+    return {
+      kind: "draft",
+      raw,
+      query: "",
+      command: protocol.name,
+      args: [],
+    };
+  }
+  const draftMatch = commandDraftPattern.exec(raw);
+  if (!draftMatch) return null;
+  const command = getForumCommandProtocol(draftMatch[1])?.name;
+  const args = parseForumCommandDraftArguments(draftMatch[1], draftMatch[2]);
+  if (!command || !args) return null;
+  return {
+    kind: "draft",
+    raw,
+    query: "",
+    command,
+    args,
+  };
+}
+
+function referenceText(
+  segment: ForumEditorReferenceSegment,
+  viewModel: ForumReferenceViewModel | undefined,
+  loadingLabel: string,
+): string {
+  const label = viewModel?.label || loadingLabel;
+  switch (segment.reference.type) {
+    case "game":
+      return `@${label}`;
+    case "version":
+      return label;
+    case "market":
+      return label;
+    case "post":
+      return viewModel?.type === "post" && viewModel.excerpt
+        ? `${label}\n${viewModel.excerpt}`
+        : label;
+    case "page":
+      return label;
+  }
+}
+
+function createReferenceSpan(
+  segment: ForumEditorReferenceSegment,
+  viewModel: ForumReferenceViewModel | undefined,
+  loadingLabel: string,
+): HTMLSpanElement {
   const span = document.createElement("span");
-  span.className = "forum-game-mention forum-game-mention--resolved";
+  span.className = `forum-reference forum-reference--${segment.reference.type}`;
+  if (segment.reference.type === "game") {
+    span.classList.add("forum-game-mention", "forum-game-mention--resolved");
+  }
+  const status = viewModel?.status || "loading";
+  if (status !== "resolved") {
+    span.classList.add(`forum-reference--${status}`);
+  }
   span.contentEditable = "false";
-  span.dataset.marketId = segment.marketId;
-  span.dataset.gameId = segment.gameId;
-  span.dataset.marketName = segment.marketName;
-  span.dataset.gameName = segment.gameName;
+  span.dataset.forumReference = "true";
+  span.dataset.segment = JSON.stringify(segment);
+  const text = referenceText(segment, viewModel, loadingLabel);
+  span.title = text;
+  span.setAttribute("aria-label", text);
   if (segment.autoSeparator) span.dataset.autoSeparator = "true";
-  span.textContent = `@${segment.marketName} / ${segment.gameName}`;
+  span.textContent = text;
   return span;
 }
 
 export function renderEditorDocument(
   editor: HTMLElement,
   segments: ForumEditorSegment[],
+  viewModels: ReadonlyMap<string, ForumReferenceViewModel>,
+  loadingLabel: string,
 ): EditorDomState {
   editor.replaceChildren();
   const nodes: Node[] = [];
@@ -40,7 +134,11 @@ export function renderEditorDocument(
       continue;
     }
 
-    const span = createMentionSpan(segment);
+    const span = createReferenceSpan(
+      segment,
+      viewModels.get(forumReferenceKey(segment.reference)),
+      loadingLabel,
+    );
     editor.appendChild(span);
     nodes.push(span);
     spans.push(span);
@@ -49,17 +147,24 @@ export function renderEditorDocument(
   return { segments, nodes, spans };
 }
 
-function readMentionSpan(element: HTMLElement): ForumEditorGameSegment | null {
-  const { marketId, gameId } = element.dataset;
-  if (!marketId || !gameId) return null;
-  return {
-    type: "game",
-    marketId,
-    gameId,
-    marketName: element.dataset.marketName || marketId,
-    gameName: element.dataset.gameName || gameId,
-    autoSeparator: element.dataset.autoSeparator === "true",
-  };
+function readReferenceSpan(
+  element: HTMLElement,
+): ForumEditorReferenceSegment | null {
+  if (element.dataset.forumReference !== "true" || !element.dataset.segment) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(
+      element.dataset.segment,
+    ) as ForumEditorReferenceSegment;
+    if (!parsed || typeof parsed !== "object") return null;
+    return {
+      ...parsed,
+      autoSeparator: element.dataset.autoSeparator === "true",
+    };
+  } catch {
+    return null;
+  }
 }
 
 export function readEditorDocument(editor: HTMLElement): EditorDomState {
@@ -87,9 +192,9 @@ export function readEditorDocument(editor: HTMLElement): EditorDomState {
     if (node.nodeType !== Node.ELEMENT_NODE) return;
 
     const element = node as HTMLElement;
-    const mention = readMentionSpan(element);
-    if (mention) {
-      segments.push(mention);
+    const reference = readReferenceSpan(element);
+    if (reference) {
+      segments.push(reference);
       nodes.push(element);
       spans.push(element);
       return;
@@ -110,35 +215,63 @@ export function readEditorDocument(editor: HTMLElement): EditorDomState {
   return { segments, nodes, spans };
 }
 
+function currentTextCaret(
+  nodes: Node[],
+  segments: ForumEditorSegment[],
+): { segmentIndex: number; text: string; offset: number } | null {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0 || !selection.isCollapsed)
+    return null;
+  const node = selection.anchorNode;
+  const segmentIndex = nodes.indexOf(node as Node);
+  if (segmentIndex < 0 || segments[segmentIndex]?.type !== "text") return null;
+  const text = node?.textContent || "";
+  return {
+    segmentIndex,
+    text,
+    offset: Math.min(selection.anchorOffset, text.length),
+  };
+}
+
 export function findMentionContext(
   editor: HTMLElement,
   nodes: Node[],
   segments: ForumEditorSegment[],
 ): { segmentIndex: number; start: number; end: number; query: string } | null {
-  const selection = window.getSelection();
-  if (
-    !selection ||
-    selection.rangeCount === 0 ||
-    !selection.isCollapsed ||
-    !editor
-  )
-    return null;
-
-  const node = selection.anchorNode;
-  const segmentIndex = nodes.indexOf(node as Node);
-  if (segmentIndex < 0 || segments[segmentIndex]?.type !== "text") return null;
-
-  const text = node?.textContent || "";
-  const offset = Math.min(selection.anchorOffset, text.length);
-  const beforeCaret = text.slice(0, offset);
+  void editor;
+  const caret = currentTextCaret(nodes, segments);
+  if (!caret) return null;
+  const beforeCaret = caret.text.slice(0, caret.offset);
   const atIndex = beforeCaret.lastIndexOf("@");
   if (atIndex < 0 || beforeCaret.slice(atIndex + 1).includes("\n")) return null;
-  if (atIndex > 0 && /[A-Za-z0-9_]/.test(beforeCaret[atIndex - 1] || "")) return null;
+  if (atIndex > 0 && /[A-Za-z0-9_]/.test(beforeCaret[atIndex - 1] || ""))
+    return null;
   return {
-    segmentIndex,
+    segmentIndex: caret.segmentIndex,
     start: atIndex,
-    end: offset,
+    end: caret.offset,
     query: beforeCaret.slice(atIndex + 1),
+  };
+}
+
+export function findSlashCommandContext(
+  editor: HTMLElement,
+  nodes: Node[],
+  segments: ForumEditorSegment[],
+): SlashCommandContext | null {
+  void editor;
+  const caret = currentTextCaret(nodes, segments);
+  if (!caret) return null;
+  const beforeCaret = caret.text.slice(0, caret.offset);
+  const slashIndex = beforeCaret.lastIndexOf("/");
+  if (slashIndex < 0) return null;
+  const draft = parseSlashCommandDraft(beforeCaret.slice(slashIndex));
+  if (!draft) return null;
+  return {
+    ...draft,
+    segmentIndex: caret.segmentIndex,
+    start: slashIndex,
+    end: caret.offset,
   };
 }
 
@@ -173,7 +306,7 @@ export function findAdjacentMention(
   }
 
   if (!(target instanceof HTMLElement)) return null;
-  return target.dataset.marketId && target.dataset.gameId ? target : null;
+  return target.dataset.forumReference === "true" ? target : null;
 }
 
 export function placeCaretAfterNode(
@@ -234,7 +367,8 @@ export function insertTextAtCaret(editor: HTMLElement, value: string): boolean {
 }
 
 export function normalizeEmptyEditorCaret(editor: HTMLElement): void {
-  if (editor.textContent || editor.querySelector("[data-market-id]")) return;
+  if (editor.textContent || editor.querySelector("[data-forum-reference]"))
+    return;
   editor.replaceChildren();
   const selection = window.getSelection();
   if (!selection) return;

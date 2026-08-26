@@ -153,11 +153,20 @@ export async function publishDesktopRelease(options, runtimeConfig = config) {
   )
     throw new Error("refusing to publish an older release");
   if (current?.version === options.version) {
-    if (current.sha256 !== options.sha256)
-      throw new Error("same version has a different sha256");
     await fs.rm(stagedPath, { force: true });
     await cleanStorage(storageRoot, current.filename);
-    return current;
+    if (current.sha256 !== options.sha256) {
+      return {
+        status: "current_retained",
+        message: "desktop_release_same_version_different_sha256",
+        release: current,
+      };
+    }
+    return {
+      status: "already_current",
+      message: "desktop_release_already_current",
+      release: current,
+    };
   }
 
   const filename = `BZ-Games-Setup-${options.version}.exe`;
@@ -181,16 +190,18 @@ export async function publishDesktopRelease(options, runtimeConfig = config) {
   await normalizePublishedFile(manifestTemp, storageOwner);
   await fs.rename(manifestTemp, path.join(storageRoot, "latest.json"));
   await cleanStorage(storageRoot, filename);
-  return manifest;
+  return {
+    status: "published",
+    message: "desktop_release_published",
+    release: manifest,
+  };
 }
 
 async function main() {
-  const manifest = await publishDesktopRelease(
+  const result = await publishDesktopRelease(
     parseArguments(process.argv.slice(2)),
   );
-  console.log(
-    `published desktop release ${manifest.version} (${manifest.size} bytes, ${manifest.sha256})`,
-  );
+  console.log(JSON.stringify({ ok: true, ...result }));
 }
 
 if (

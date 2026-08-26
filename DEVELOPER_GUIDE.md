@@ -95,7 +95,7 @@ my-game/
 | `entry` | string | 是 | 最长 500 字符的启动入口。支持游戏目录内的安全相对路径（如 `index.html`、`play.htm`、`game.exe`）、`serve` 或 `url`；`serve` 要求根目录存在 `index.html` |
 | `web_url` | string | `entry=url` 时必填 | 最长 2048 字符的远程网页地址，必须为合法 HTTP(S) URL |
 | `type` | string | 是 | `"singleplayer"` (单机) / `"multiplayer"` (仅从匹配房间启动) / `"singlemultiple"` (可单人或联机) / `"networkgame"` (远程网页游戏，必须使用 `entry=url`，安装仅以 ID 去重) |
-| `multiplayer` | object | 联机必填 | 包含 `minPlayers` 和 `maxPlayers`（正整数且 `minPlayers <= maxPlayers`），`type` 为 `multiplayer` 或 `singlemultiple` 时必填；主进程会据此限制开局人数与房间容量 |
+| `multiplayer` | object | 联机必填 | 包含 `minPlayers` 和 `maxPlayers`（正整数且 `minPlayers <= maxPlayers`），`type` 为 `multiplayer` 或 `singlemultiple` 时必填；主进程会据此限制开局人数与房间容量，使用官方中继时 `maxPlayers` 不得超过 10 |
 | `icon` | string | 否 | 最长 500 字符的游戏图标安全相对路径 |
 | `cover` | string | 否 | 最长 500 字符的游戏封面安全相对路径 |
 | `video` | string | 否 | 最长 500 字符的预览视频安全相对路径，支持 `mp4/webm/ogv/mov/m4v` |
@@ -113,7 +113,9 @@ my-game/
 | 字段 | 类型 | 必填 | 说明 |
 | :--- | :--- | :--- | :--- |
 | `minPlayers` | integer | 是 | 最少开局人数，必须大于等于 1；允许设为 `1` 以支持通过房间启动的单人玩法 |
-| `maxPlayers` | integer | 是 | 房间最大人数，必须大于等于 `minPlayers` |
+| `maxPlayers` | integer | 是 | 房间最大人数，必须大于等于 `minPlayers`；官方中继单房最多 10 人，需使用官方中继的游戏不得配置超过 10 |
+
+> 官方中继服务对每个房间强制执行 10 个客户端的总上限，房主也计入人数。即使 Manifest 声明了更大的 `maxPlayers`，第 11 个客户端仍会被中继拒绝；需要超过 10 人的游戏应使用自行部署的联机基础设施。
 
 #### 成就定义
 

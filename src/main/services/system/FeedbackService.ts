@@ -11,6 +11,7 @@ import { cloudSyncService } from "./CloudSyncService";
 import type {
   FeedbackDetail,
   FeedbackHistoryItem,
+  FeedbackHistoryPage,
   FeedbackStatus,
 } from "../../../shared/types";
 
@@ -261,36 +262,54 @@ export class FeedbackService {
     }
   }
 
-  async getHistory(): Promise<FeedbackHistoryItem[]> {
-    try {
-      storeService.clearLegacyFeedbackHistory();
-    } catch (error) {
-      logger.warn(
-        "[FeedbackService] Failed to clear legacy feedback history",
-        error,
-      );
+  async getHistory(cursor = ""): Promise<FeedbackHistoryPage> {
+    if (!cursor) {
+      try {
+        storeService.clearLegacyFeedbackHistory();
+      } catch (error) {
+        logger.warn(
+          "[FeedbackService] Failed to clear legacy feedback history",
+          error,
+        );
+      }
     }
 
     const settings = storeService.getSettings();
-    if (!settings.cloudSessionToken || !this.baseUrl) return [];
+    if (!settings.cloudSessionToken || !this.baseUrl) {
+      return { items: [], nextCursor: null, hasMore: false };
+    }
 
-    const url = `${this.baseUrl}/api/v1/feedback`;
+    const url = new URL(`${this.baseUrl}/api/v1/feedback`);
+    url.searchParams.set("limit", "10");
+    if (cursor) url.searchParams.set("cursor", cursor);
+    const requestUrl = url.toString();
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     try {
-      const response = await fetch(url, {
-        headers: requestInterceptor.buildHeaders(url, {
+      const response = await fetch(requestUrl, {
+        headers: requestInterceptor.buildHeaders(requestUrl, {
           Authorization: `Bearer ${settings.cloudSessionToken}`,
         }),
         signal: controller.signal,
       });
       const body = (await response.json().catch(() => ({}))) as {
         items?: unknown;
+        nextCursor?: unknown;
+        hasMore?: unknown;
         error?: string;
       };
       cloudSyncService.handleAuthFailure(body.error);
-      if (!response.ok || !Array.isArray(body.items)) {
-        return [];
+      if (!response.ok) {
+        throw new Error(body.error || `feedback_http_${response.status}`);
+      }
+      if (
+        !Array.isArray(body.items) ||
+        typeof body.hasMore !== "boolean" ||
+        (body.nextCursor !== null && typeof body.nextCursor !== "string") ||
+        (body.hasMore && !body.nextCursor) ||
+        (!body.hasMore && body.nextCursor !== null)
+      ) {
+        throw new Error("feedback_invalid_response");
       }
 
       const items = body.items.map((item) => {
@@ -313,10 +332,20 @@ export class FeedbackService {
           submittedAt: value.submittedAt,
         } satisfies FeedbackHistoryItem;
       });
-      return items;
+      return {
+        items,
+        nextCursor: body.nextCursor,
+        hasMore: body.hasMore,
+      };
     } catch (error) {
       logger.warn("[FeedbackService] Failed to load feedback history", error);
-      return [];
+      throw new Error(
+        error instanceof Error && error.name === "AbortError"
+          ? "feedback_timeout"
+          : error instanceof Error && /^[a-z][a-z0-9_]+$/.test(error.message)
+            ? error.message
+            : "feedback_network_failed",
+      );
     } finally {
       clearTimeout(timeout);
     }

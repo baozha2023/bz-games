@@ -1,4 +1,7 @@
+import { forumCommandLocales } from "./forum-commands";
+
 export default {
+  forumCommands: forumCommandLocales["zh-CN"],
   nav: {
     myGames: "我的游戏库",
     market: "游戏市场",
@@ -576,7 +579,6 @@ export default {
     langEnUS: "English",
     langJaJP: "日本語",
     langZhTW: "繁體中文",
-    langLzh: "文言文",
     langDeDE: "Deutsch",
     idHint: "(自动生成，不可修改)",
     save: "保存设置",

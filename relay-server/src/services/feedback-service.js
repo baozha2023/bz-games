@@ -24,6 +24,8 @@ const ALLOWED_STATUSES = new Set([
 const MAX_IMAGE_DIMENSION = 16_384;
 const MAX_IMAGE_PIXELS = 40_000_000;
 const FEEDBACK_SUBMIT_RATE_LIMIT_KEY = "feedback.submit";
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 class FeedbackError extends Error {
   constructor(code, status = 400, details = {}) {
@@ -502,6 +504,32 @@ function serializeUserFeedbackHistory(row) {
   };
 }
 
+function encodeUserFeedbackCursor(value) {
+  return Buffer.from(JSON.stringify(value), "utf8").toString("base64url");
+}
+
+function decodeUserFeedbackCursor(value) {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(value, "base64url").toString("utf8"));
+    const createdAt = new Date(parsed?.createdAt);
+    if (
+      !parsed ||
+      typeof parsed !== "object" ||
+      Array.isArray(parsed) ||
+      parsed.kind !== "feedback-history" ||
+      typeof parsed.id !== "string" ||
+      !UUID_PATTERN.test(parsed.id) ||
+      Number.isNaN(createdAt.getTime())
+    ) {
+      throw new Error();
+    }
+    return { createdAt, id: parsed.id };
+  } catch {
+    throw new FeedbackError("invalid_feedback_cursor");
+  }
+}
+
 export function createFeedbackService({
   config,
   mySqlService,
@@ -555,16 +583,52 @@ export function createFeedbackService({
     const auth = await requireClientAuth(req, res);
     if (!auth) return;
 
-    const [rows] = await mySqlService.query(
-      `SELECT id, created_at
-       FROM feedback
-       WHERE user_id = ?
-       ORDER BY created_at DESC, id DESC`,
-      [auth.user.id],
-    );
-    sendJson(res, 200, {
-      items: rows.map(serializeUserFeedbackHistory),
-    });
+    const rawLimit = url.searchParams.get("limit");
+    if (rawLimit && rawLimit !== "10") {
+      sendJson(res, 400, { error: "invalid_feedback_limit" });
+      return;
+    }
+
+    try {
+      const cursor = decodeUserFeedbackCursor(
+        url.searchParams.get("cursor") || "",
+      );
+      const clauses = ["user_id = ?"];
+      const params = [auth.user.id];
+      if (cursor) {
+        clauses.push("(created_at < ? OR (created_at = ? AND id < ?))");
+        params.push(cursor.createdAt, cursor.createdAt, cursor.id);
+      }
+      const [rows] = await mySqlService.query(
+        `SELECT id, created_at
+         FROM feedback
+         WHERE ${clauses.join(" AND ")}
+         ORDER BY created_at DESC, id DESC
+         LIMIT 11`,
+        params,
+      );
+      const hasMore = rows.length > 10;
+      const items = rows.slice(0, 10).map(serializeUserFeedbackHistory);
+      const last = items[items.length - 1];
+      sendJson(res, 200, {
+        items,
+        hasMore,
+        nextCursor:
+          hasMore && last
+            ? encodeUserFeedbackCursor({
+                kind: "feedback-history",
+                createdAt: new Date(last.submittedAt).toISOString(),
+                id: last.id,
+              })
+            : null,
+      });
+    } catch (error) {
+      const feedbackError =
+        error instanceof FeedbackError
+          ? error
+          : new FeedbackError("feedback_history_failed", 500);
+      sendJson(res, feedbackError.status, { error: feedbackError.code });
+    }
   }
 
   async function submitFeedback(req, res, auth, parsePayload) {

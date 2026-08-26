@@ -80,13 +80,18 @@ function safeFileName(value) {
 function detectImageType(header) {
   if (
     header.length >= 8 &&
-    header.subarray(0, 8).equals(
-      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-    )
+    header
+      .subarray(0, 8)
+      .equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
   ) {
     return "image/png";
   }
-  if (header.length >= 3 && header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff) {
+  if (
+    header.length >= 3 &&
+    header[0] === 0xff &&
+    header[1] === 0xd8 &&
+    header[2] === 0xff
+  ) {
     return "image/jpeg";
   }
   if (
@@ -113,7 +118,12 @@ function validDimensions(width, height) {
 
 function inspectPng(buffer) {
   if (buffer.length < 33) return null;
-  if (!buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return null;
+  if (
+    !buffer
+      .subarray(0, 8)
+      .equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+  )
+    return null;
   let offset = 8;
   let dimensions = null;
   let hasImageData = false;
@@ -132,8 +142,16 @@ function inspectPng(buffer) {
     } else if (type === "IDAT") {
       hasImageData = true;
     } else if (type === "IEND") {
-      if (length !== 0 || !dimensions || !hasImageData || dataEnd + 4 !== buffer.length) return null;
-      return validDimensions(dimensions.width, dimensions.height) ? dimensions : null;
+      if (
+        length !== 0 ||
+        !dimensions ||
+        !hasImageData ||
+        dataEnd + 4 !== buffer.length
+      )
+        return null;
+      return validDimensions(dimensions.width, dimensions.height)
+        ? dimensions
+        : null;
     }
     offset = dataEnd + 4;
   }
@@ -141,7 +159,9 @@ function inspectPng(buffer) {
 }
 
 function isJpegStartOfFrame(marker) {
-  return marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker);
+  return (
+    marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker)
+  );
 }
 
 function inspectJpeg(buffer) {
@@ -151,7 +171,8 @@ function inspectJpeg(buffer) {
     buffer[1] !== 0xd8 ||
     buffer[buffer.length - 2] !== 0xff ||
     buffer[buffer.length - 1] !== 0xd9
-  ) return null;
+  )
+    return null;
   let offset = 2;
   while (offset < buffer.length - 2) {
     if (buffer[offset] !== 0xff) return null;
@@ -161,7 +182,8 @@ function inspectJpeg(buffer) {
     if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) continue;
     if (offset + 2 > buffer.length) return null;
     const segmentLength = buffer.readUInt16BE(offset);
-    if (segmentLength < 2 || offset + segmentLength > buffer.length) return null;
+    if (segmentLength < 2 || offset + segmentLength > buffer.length)
+      return null;
     if (isJpegStartOfFrame(marker)) {
       if (segmentLength < 7) return null;
       const height = buffer.readUInt16BE(offset + 3);
@@ -179,7 +201,8 @@ function inspectWebp(buffer) {
     buffer.subarray(0, 4).toString("ascii") !== "RIFF" ||
     buffer.subarray(8, 12).toString("ascii") !== "WEBP" ||
     buffer.readUInt32LE(4) + 8 !== buffer.length
-  ) return null;
+  )
+    return null;
   let offset = 12;
   while (offset + 8 <= buffer.length) {
     const type = buffer.subarray(offset, offset + 4).toString("ascii");
@@ -187,7 +210,13 @@ function inspectWebp(buffer) {
     const dataStart = offset + 8;
     const dataEnd = dataStart + length;
     if (dataEnd > buffer.length) return null;
-    if (type === "VP8 " && length >= 10 && buffer.subarray(dataStart + 3, dataStart + 6).equals(Buffer.from([0x9d, 0x01, 0x2a]))) {
+    if (
+      type === "VP8 " &&
+      length >= 10 &&
+      buffer
+        .subarray(dataStart + 3, dataStart + 6)
+        .equals(Buffer.from([0x9d, 0x01, 0x2a]))
+    ) {
       const width = buffer.readUInt16LE(dataStart + 6) & 0x3fff;
       const height = buffer.readUInt16LE(dataStart + 8) & 0x3fff;
       return validDimensions(width, height) ? { width, height } : null;
@@ -210,15 +239,19 @@ function inspectWebp(buffer) {
 
 async function inspectImage(file) {
   const buffer = await fs.readFile(file.tempPath);
-  if (buffer.length !== file.size || !buffer.length) throw new ForumError("invalid_image");
+  if (buffer.length !== file.size || !buffer.length)
+    throw new ForumError("invalid_image");
   const contentType = detectImageType(buffer);
-  if (!contentType || !ALLOWED_IMAGE_TYPES.has(contentType)) throw new ForumError("unsupported_image_type");
-  if (file.declaredType && file.declaredType !== contentType) throw new ForumError("image_type_mismatch");
-  const dimensions = contentType === "image/png"
-    ? inspectPng(buffer)
-    : contentType === "image/jpeg"
-      ? inspectJpeg(buffer)
-      : inspectWebp(buffer);
+  if (!contentType || !ALLOWED_IMAGE_TYPES.has(contentType))
+    throw new ForumError("unsupported_image_type");
+  if (file.declaredType && file.declaredType !== contentType)
+    throw new ForumError("image_type_mismatch");
+  const dimensions =
+    contentType === "image/png"
+      ? inspectPng(buffer)
+      : contentType === "image/jpeg"
+        ? inspectJpeg(buffer)
+        : inspectWebp(buffer);
   if (!dimensions) throw new ForumError("invalid_image");
   return { ...file, contentType, ...dimensions };
 }
@@ -230,7 +263,10 @@ async function parseMultipart(req, config) {
     throw new ForumError("multipart_required", 415);
   }
   const declaredLength = Number(req.headers["content-length"] || 0);
-  if (Number.isFinite(declaredLength) && declaredLength > config.MAX_FORUM_REQUEST_BYTES) {
+  if (
+    Number.isFinite(declaredLength) &&
+    declaredLength > config.MAX_FORUM_REQUEST_BYTES
+  ) {
     req.resume();
     throw new ForumError("payload_too_large", 413);
   }
@@ -260,7 +296,11 @@ async function parseMultipart(req, config) {
         return;
       }
       const fail = (error) => {
-        if (!parseError) parseError = error instanceof ForumError ? error : new ForumError("invalid_multipart");
+        if (!parseError)
+          parseError =
+            error instanceof ForumError
+              ? error
+              : new ForumError("invalid_multipart");
       };
       req.on("data", (chunk) => {
         receivedBytes += chunk.length;
@@ -296,7 +336,9 @@ async function parseMultipart(req, config) {
           size: 0,
         };
         files.push(file);
-        stream.on("data", (chunk) => { file.size += chunk.length; });
+        stream.on("data", (chunk) => {
+          file.size += chunk.length;
+        });
         stream.on("limit", () => fail(new ForumError("image_too_large", 413)));
         const writer = createWriteStream(file.tempPath, { flags: "wx" });
         writes.push(pipeline(stream, writer).catch((error) => fail(error)));
@@ -304,7 +346,13 @@ async function parseMultipart(req, config) {
       busboy.on("filesLimit", () => fail(new ForumError("too_many_images")));
       busboy.on("fieldsLimit", () => fail(new ForumError("too_many_fields")));
       busboy.on("partsLimit", () => fail(new ForumError("too_many_parts")));
-      busboy.on("error", (error) => reject(error instanceof ForumError ? error : parseError || new ForumError("invalid_multipart")));
+      busboy.on("error", (error) =>
+        reject(
+          error instanceof ForumError
+            ? error
+            : parseError || new ForumError("invalid_multipart"),
+        ),
+      );
       busboy.on("close", async () => {
         await Promise.all(writes);
         if (parseError) reject(parseError);
@@ -315,10 +363,13 @@ async function parseMultipart(req, config) {
 
     const title = cleanText(result.fields.title);
     const body = cleanText(result.fields.body);
-    if (!title || charLength(title) > config.MAX_FORUM_TITLE_LENGTH) throw new ForumError("forum_title_invalid");
-    if (charLength(body) > config.MAX_FORUM_BODY_LENGTH) throw new ForumError("forum_body_too_long");
+    if (!title || charLength(title) > config.MAX_FORUM_TITLE_LENGTH)
+      throw new ForumError("forum_title_invalid");
+    if (charLength(body) > config.MAX_FORUM_BODY_LENGTH)
+      throw new ForumError("forum_body_too_long");
     const inspectedFiles = [];
-    for (const file of result.files) inspectedFiles.push(await inspectImage(file));
+    for (const file of result.files)
+      inspectedFiles.push(await inspectImage(file));
     return { tempDir, title, body, files: inspectedFiles };
   } catch (error) {
     await fs.rm(tempDir, { recursive: true, force: true });
@@ -339,7 +390,8 @@ function uploadFile(bucket, file, postId) {
       settled = true;
       source.destroy();
       stream.destroy();
-      if (ObjectId.isValid(stream.id)) await bucket.delete(new ObjectId(stream.id)).catch(() => {});
+      if (ObjectId.isValid(stream.id))
+        await bucket.delete(new ObjectId(stream.id)).catch(() => {});
       reject(error);
     };
     stream.once("error", fail);
@@ -380,8 +432,11 @@ function readJson(req, maxBytes) {
     });
     req.on("end", () => {
       if (exceeded) return;
-      try { resolve(JSON.parse(Buffer.concat(chunks).toString("utf8"))); }
-      catch { reject(new ForumError("invalid_json")); }
+      try {
+        resolve(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+      } catch {
+        reject(new ForumError("invalid_json"));
+      }
     });
     req.on("error", reject);
   });
@@ -395,7 +450,8 @@ function decodeCursor(value) {
   if (!value) return null;
   try {
     const parsed = JSON.parse(Buffer.from(value, "base64url").toString("utf8"));
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error();
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+      throw new Error();
     return parsed;
   } catch {
     throw new ForumError("invalid_forum_cursor");
@@ -413,11 +469,15 @@ function serializePost(row, likedByMe = false, ownedByMe = false) {
     id: String(row.id),
     title: row.title,
     authorNickname: row.author_nickname || "玩家",
+    authorGithubLogin: row.author_login || "",
     body: row.body,
     createdAt: isoTime(row.created_at),
     updatedAt: isoTime(row.updated_at),
     deletedAt: isoTime(row.deleted_at),
-    deletedBy: row.deleted_by === null || row.deleted_by === undefined ? null : String(row.deleted_by),
+    deletedBy:
+      row.deleted_by === null || row.deleted_by === undefined
+        ? null
+        : String(row.deleted_by),
     deletedByGithubName: row.deleted_by_login || null,
     status: Number(row.status ?? FORUM_STATUS.ACTIVE),
     likeCount: Number(row.like_count || 0),
@@ -435,7 +495,10 @@ function serializeComment(row, likedByMe = false, ownedByMe = false) {
     createdAt: isoTime(row.created_at),
     updatedAt: isoTime(row.updated_at),
     deletedAt: isoTime(row.deleted_at),
-    deletedBy: row.deleted_by === null || row.deleted_by === undefined ? null : String(row.deleted_by),
+    deletedBy:
+      row.deleted_by === null || row.deleted_by === undefined
+        ? null
+        : String(row.deleted_by),
     deletedByGithubName: row.deleted_by_login || null,
     status: Number(row.status ?? FORUM_STATUS.ACTIVE),
     likeCount: Number(row.like_count || 0),
@@ -444,17 +507,23 @@ function serializeComment(row, likedByMe = false, ownedByMe = false) {
     author: {
       id: String(row.author_user_id),
       nickname: row.nickname || "玩家",
+      githubLogin: row.author_login || "",
       avatarUrl: row.avatar_url || "",
     },
   };
 }
 
 function roleCooldown(role, adminMs, playerMs) {
-  return role === "administrator" || role === "super_administrator" ? adminMs : playerMs;
+  return role === "administrator" || role === "super_administrator"
+    ? adminMs
+    : playerMs;
 }
 
 function isRateLimitStorageError(error) {
-  return error instanceof RateLimitError && error.code === "rate_limit_storage_failed";
+  return (
+    error instanceof RateLimitError &&
+    error.code === "rate_limit_storage_failed"
+  );
 }
 
 export function createForumService({
@@ -529,7 +598,10 @@ export function createForumService({
           [lockedUntil, row.id],
         );
       }
-      return rows.map((row) => ({ ...row, attempts: Number(row.attempts || 0) + 1 }));
+      return rows.map((row) => ({
+        ...row,
+        attempts: Number(row.attempts || 0) + 1,
+      }));
     });
   }
 
@@ -541,7 +613,11 @@ export function createForumService({
         [item.post_id],
       );
       const post = rows[0];
-      if (item.operation === "delete" || !post || Number(post.status) !== FORUM_STATUS.ACTIVE) {
+      if (
+        item.operation === "delete" ||
+        !post ||
+        Number(post.status) !== FORUM_STATUS.ACTIVE
+      ) {
         await searchService.deletePost(item.post_id);
       } else {
         await searchService.upsertPost({
@@ -560,13 +636,22 @@ export function createForumService({
       return true;
     } catch (error) {
       const now = new Date();
-      const delay = Math.min(60 * 60 * 1000, 1000 * 2 ** Math.min(item.attempts, 10));
-      await mySqlService.query(
-        `UPDATE forum_search_outbox
+      const delay = Math.min(
+        60 * 60 * 1000,
+        1000 * 2 ** Math.min(item.attempts, 10),
+      );
+      await mySqlService
+        .query(
+          `UPDATE forum_search_outbox
          SET next_attempt_at = ?, locked_until = NULL, last_error = ?
          WHERE id = ?`,
-        [new Date(now.getTime() + delay), String(error?.message || "search_sync_failed").slice(0, 2000), item.id],
-      ).catch(() => {});
+          [
+            new Date(now.getTime() + delay),
+            String(error?.message || "search_sync_failed").slice(0, 2000),
+            item.id,
+          ],
+        )
+        .catch(() => {});
       searchAvailable = false;
       return false;
     }
@@ -587,7 +672,12 @@ export function createForumService({
   }
 
   async function processOutbox() {
-    if (workerRunning || !searchService.isEnabled() || !mySqlService.isEnabled()) return;
+    if (
+      workerRunning ||
+      !searchService.isEnabled() ||
+      !mySqlService.isEnabled()
+    )
+      return;
     workerRunning = true;
     try {
       if (!searchAvailable && !(await refreshSearchAvailability())) return;
@@ -605,7 +695,10 @@ export function createForumService({
   function startSearchWorker() {
     if (!searchService.isEnabled() || workerTimer) return;
     void refreshSearchAvailability();
-    workerTimer = setInterval(processOutbox, config.FORUM_SEARCH_WORKER_INTERVAL_MS);
+    workerTimer = setInterval(
+      processOutbox,
+      config.FORUM_SEARCH_WORKER_INTERVAL_MS,
+    );
     workerTimer.unref();
   }
 
@@ -626,22 +719,26 @@ export function createForumService({
     try {
       const cursor = decodeCursor(url.searchParams.get("cursor") || "");
       if (query) {
-        if (cursor && (cursor.kind !== "search" || cursor.query !== query)) throw new ForumError("invalid_forum_cursor");
+        if (cursor && (cursor.kind !== "search" || cursor.query !== query))
+          throw new ForumError("invalid_forum_cursor");
         const result = await searchPosts(query, cursor);
         sendJson(res, 200, result);
         return true;
       }
-      if (cursor && cursor.kind !== "feed") throw new ForumError("invalid_forum_cursor");
+      if (cursor && cursor.kind !== "feed")
+        throw new ForumError("invalid_forum_cursor");
       const params = [FORUM_STATUS.ACTIVE];
       const clauses = ["p.status = ?"];
       if (cursor) {
         const date = new Date(cursor.createdAt);
-        if (!UUID_PATTERN.test(cursor.id) || Number.isNaN(date.getTime())) throw new ForumError("invalid_forum_cursor");
+        if (!UUID_PATTERN.test(cursor.id) || Number.isNaN(date.getTime()))
+          throw new ForumError("invalid_forum_cursor");
         clauses.push("(p.created_at < ? OR (p.created_at = ? AND p.id < ?))");
         params.push(date, date, cursor.id);
       }
       const [rows] = await mySqlService.query(
-        `SELECT p.id, p.title, u.nickname AS author_nickname, p.created_at, p.like_count, p.comment_count
+        `SELECT p.id, p.title, u.nickname AS author_nickname, u.login AS author_login,
+                p.created_at, p.like_count, p.comment_count
          FROM forum_posts p
          INNER JOIN users u ON u.id = p.author_user_id
          WHERE ${clauses.join(" AND ")}
@@ -653,6 +750,7 @@ export function createForumService({
         id: String(row.id),
         title: row.title,
         authorNickname: row.author_nickname || "玩家",
+        authorGithubLogin: row.author_login || "",
         createdAt: isoTime(row.created_at),
         likeCount: Number(row.like_count || 0),
         commentCount: Number(row.comment_count || 0),
@@ -661,7 +759,14 @@ export function createForumService({
       sendJson(res, 200, {
         items,
         hasMore,
-        nextCursor: hasMore && last ? encodeCursor({ kind: "feed", createdAt: last.createdAt, id: last.id }) : null,
+        nextCursor:
+          hasMore && last
+            ? encodeCursor({
+                kind: "feed",
+                createdAt: last.createdAt,
+                id: last.id,
+              })
+            : null,
       });
     } catch (error) {
       sendJson(res, error instanceof ForumError ? error.status : 500, {
@@ -681,7 +786,11 @@ export function createForumService({
     let hasMore = false;
     const collected = [];
     try {
-      for (let attempt = 0; attempt < 4 && collected.length < 10; attempt += 1) {
+      for (
+        let attempt = 0;
+        attempt < 4 && collected.length < 10;
+        attempt += 1
+      ) {
         const result = await searchService.search(query, after, 20);
         if (!result.hits.length) {
           hasMore = false;
@@ -690,7 +799,8 @@ export function createForumService({
         const ids = result.hits.map((hit) => hit.id);
         const placeholders = ids.map(() => "?").join(",");
         const [rows] = await mySqlService.query(
-          `SELECT p.id, p.title, u.nickname AS author_nickname, p.created_at, p.like_count, p.comment_count
+          `SELECT p.id, p.title, u.nickname AS author_nickname, u.login AS author_login,
+                  p.created_at, p.like_count, p.comment_count
            FROM forum_posts p
            INNER JOIN users u ON u.id = p.author_user_id
            WHERE p.status = ? AND p.id IN (${placeholders})`,
@@ -704,6 +814,7 @@ export function createForumService({
             id: hit.id,
             title: row.title,
             authorNickname: row.author_nickname || "玩家",
+            authorGithubLogin: row.author_login || "",
             createdAt: isoTime(row.created_at),
             likeCount: Number(row.like_count || 0),
             commentCount: Number(row.comment_count || 0),
@@ -728,7 +839,10 @@ export function createForumService({
     return {
       items,
       hasMore,
-      nextCursor: hasMore && cursorSort ? encodeCursor({ kind: "search", query, after: cursorSort }) : null,
+      nextCursor:
+        hasMore && cursorSort
+          ? encodeCursor({ kind: "search", query, after: cursorSort })
+          : null,
     };
   }
 
@@ -740,21 +854,75 @@ export function createForumService({
     return true;
   }
 
+  async function resolvePostReferences(req, res, url) {
+    if (!requireHttpRelayToken(config, req, res, url)) {
+      req.resume();
+      return true;
+    }
+    const auth = await requireClientAuth(req, res);
+    if (!auth) {
+      req.resume();
+      return true;
+    }
+    try {
+      const body = await readJson(req, 32 * 1024);
+      if (!body || typeof body !== "object" || !Array.isArray(body.ids)) {
+        throw new ForumError("invalid_forum_post_reference_ids");
+      }
+      const ids = [...new Set(body.ids.map((value) => parseId(value)))];
+      if (ids.length > 20)
+        throw new ForumError("too_many_forum_post_references");
+      if (ids.length === 0) {
+        sendJson(res, 200, { items: [] });
+        return true;
+      }
+      const placeholders = ids.map(() => "?").join(",");
+      const [rows] = await mySqlService.query(
+        `SELECT id, title, body, status FROM forum_posts WHERE id IN (${placeholders})`,
+        ids,
+      );
+      const byId = new Map(rows.map((row) => [String(row.id), row]));
+      sendJson(res, 200, {
+        items: ids.map((id) => {
+          const row = byId.get(id);
+          if (!row) return { id, status: "missing" };
+          if (Number(row.status) !== FORUM_STATUS.ACTIVE)
+            return { id, status: "deleted" };
+          return { id, status: "active", title: row.title, body: row.body };
+        }),
+      });
+    } catch (error) {
+      const responseError =
+        error instanceof ForumError
+          ? error
+          : new ForumError("forum_post_reference_resolve_failed", 500);
+      sendJson(res, responseError.status, { error: responseError.code });
+    }
+    return true;
+  }
+
   async function getPost(req, res, postId, allowDeleted = false) {
     if (!allowDeleted) {
-      const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+      const url = new URL(
+        req.url || "/",
+        `http://${req.headers.host || "localhost"}`,
+      );
       if (!requireHttpRelayToken(config, req, res, url)) return true;
     }
     const auth = allowDeleted
-      ? await accessControlService.requireCapability(req, res, PORTAL_CAPABILITIES.FORUM_VIEW)
+      ? await accessControlService.requireCapability(
+          req,
+          res,
+          PORTAL_CAPABILITIES.FORUM_VIEW,
+        )
       : await requireClientAuth(req, res);
     if (!auth) return true;
     const id = parseIdOrSend(res, postId);
     if (!id) return true;
     const [rows] = await mySqlService.query(
-       `SELECT p.id, p.author_user_id, p.title, p.body, p.like_count, p.comment_count,
+      `SELECT p.id, p.author_user_id, p.title, p.body, p.like_count, p.comment_count,
               p.created_at, p.updated_at, p.status, p.deleted_at, p.deleted_by,
-              u.nickname AS author_nickname,
+              u.nickname AS author_nickname, u.login AS author_login,
               du.login AS deleted_by_login
        FROM forum_posts p
        INNER JOIN users u ON u.id = p.author_user_id
@@ -781,7 +949,11 @@ export function createForumService({
       likedByMe = Boolean(likes[0]);
     }
     sendJson(res, 200, {
-      ...serializePost(post, likedByMe, !allowDeleted && String(post.author_user_id) === String(auth.user.id)),
+      ...serializePost(
+        post,
+        likedByMe,
+        !allowDeleted && String(post.author_user_id) === String(auth.user.id),
+      ),
       images: images.map((image) => ({
         id: String(image.id),
         fileName: image.file_name,
@@ -796,11 +968,18 @@ export function createForumService({
 
   async function listComments(req, res, postId, allowDeleted = false) {
     if (!allowDeleted) {
-      const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+      const url = new URL(
+        req.url || "/",
+        `http://${req.headers.host || "localhost"}`,
+      );
       if (!requireHttpRelayToken(config, req, res, url)) return true;
     }
     const auth = allowDeleted
-      ? await accessControlService.requireCapability(req, res, PORTAL_CAPABILITIES.FORUM_VIEW)
+      ? await accessControlService.requireCapability(
+          req,
+          res,
+          PORTAL_CAPABILITIES.FORUM_VIEW,
+        )
       : await requireClientAuth(req, res);
     if (!auth) return true;
     const id = parseIdOrSend(res, postId);
@@ -818,7 +997,10 @@ export function createForumService({
       sendJson(res, 400, { error: "invalid_forum_limit" });
       return true;
     }
-    const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+    const url = new URL(
+      req.url || "/",
+      `http://${req.headers.host || "localhost"}`,
+    );
     const cursor = decodeCursor(url.searchParams.get("cursor") || "");
     if (cursor && cursor.kind !== "comments") {
       sendJson(res, 400, { error: "invalid_forum_cursor" });
@@ -827,7 +1009,11 @@ export function createForumService({
     const params = [id];
     let rankClause = "";
     if (cursor) {
-      if (!Number.isInteger(cursor.likeCount) || !UUID_PATTERN.test(cursor.id) || Number.isNaN(new Date(cursor.createdAt).getTime())) {
+      if (
+        !Number.isInteger(cursor.likeCount) ||
+        !UUID_PATTERN.test(cursor.id) ||
+        Number.isNaN(new Date(cursor.createdAt).getTime())
+      ) {
         sendJson(res, 400, { error: "invalid_forum_cursor" });
         return true;
       }
@@ -840,7 +1026,7 @@ export function createForumService({
       `SELECT c.id, c.post_id, c.author_user_id, c.content, c.like_count,
               c.created_at, c.updated_at, c.status, c.deleted_at, c.deleted_by,
               du.login AS deleted_by_login,
-              u.nickname, u.avatar_url,
+              u.nickname, u.login AS author_login, u.avatar_url,
               EXISTS(
                 SELECT 1 FROM forum_comment_likes cl
                 WHERE cl.comment_id = c.id AND cl.user_id = ?
@@ -854,16 +1040,28 @@ export function createForumService({
       [auth.user.id, ...params],
     );
     const hasMore = rows.length > 10;
-    const items = rows.slice(0, 10).map((row) => serializeComment(
-      row,
-      Number(row.liked_by_me) === 1,
-      !allowDeleted && String(row.author_user_id) === String(auth.user.id),
-    ));
+    const items = rows
+      .slice(0, 10)
+      .map((row) =>
+        serializeComment(
+          row,
+          Number(row.liked_by_me) === 1,
+          !allowDeleted && String(row.author_user_id) === String(auth.user.id),
+        ),
+      );
     const last = rows[9];
     sendJson(res, 200, {
       items,
       hasMore,
-      nextCursor: hasMore && last ? encodeCursor({ kind: "comments", likeCount: Number(last.like_count), createdAt: isoTime(last.created_at), id: String(last.id) }) : null,
+      nextCursor:
+        hasMore && last
+          ? encodeCursor({
+              kind: "comments",
+              likeCount: Number(last.like_count),
+              createdAt: isoTime(last.created_at),
+              id: String(last.id),
+            })
+          : null,
     });
     return true;
   }
@@ -885,14 +1083,19 @@ export function createForumService({
     } catch (error) {
       req.resume();
       sendJson(res, isRateLimitStorageError(error) ? 503 : 500, {
-        error: isRateLimitStorageError(error) ? "rate_limit_unavailable" : "forum_rate_limit_failed",
+        error: isRateLimitStorageError(error)
+          ? "rate_limit_unavailable"
+          : "forum_rate_limit_failed",
       });
       return null;
     }
     if (!reservation.ok) {
       req.resume();
       sendJson(res, 429, {
-        error: endpointKey === POST_RATE_LIMIT_KEY ? "forum_post_too_frequent" : "forum_comment_too_frequent",
+        error:
+          endpointKey === POST_RATE_LIMIT_KEY
+            ? "forum_post_too_frequent"
+            : "forum_comment_too_frequent",
         retryAfterSeconds: reservation.retryAfterSeconds,
         resetAt: reservation.resetAt,
       });
@@ -911,7 +1114,13 @@ export function createForumService({
       req.resume();
       return true;
     }
-    const reservation = await reserveRate(auth, POST_RATE_LIMIT_KEY, postCooldown(auth), req, res);
+    const reservation = await reserveRate(
+      auth,
+      POST_RATE_LIMIT_KEY,
+      postCooldown(auth),
+      req,
+      res,
+    );
     if (!reservation) return true;
     let parsed = null;
     let bucket = null;
@@ -919,14 +1128,23 @@ export function createForumService({
     try {
       parsed = await parseMultipart(req, config);
       if (parsed.files.length) {
-        if (!mongoService.isEnabled()) throw new ForumError("image_storage_not_configured", 503);
+        if (!mongoService.isEnabled())
+          throw new ForumError("image_storage_not_configured", 503);
         await mongoService.ensureReady();
         bucket = mongoService.getBucket();
       }
       const postId = crypto.randomUUID();
       for (const file of parsed.files) {
         const storageId = await uploadFile(bucket, file, postId);
-        uploaded.push({ id: crypto.randomUUID(), storageId, fileName: file.fileName, contentType: file.contentType, size: file.size, width: file.width, height: file.height });
+        uploaded.push({
+          id: crypto.randomUUID(),
+          storageId,
+          fileName: file.fileName,
+          contentType: file.contentType,
+          size: file.size,
+          width: file.width,
+          height: file.height,
+        });
       }
       const title = sensitiveWordService.filterText(parsed.title);
       const body = sensitiveWordService.filterText(parsed.body);
@@ -944,7 +1162,17 @@ export function createForumService({
             `INSERT INTO forum_post_images
                (id, post_id, storage_id, file_name, content_type, size, width, height, created_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [image.id, postId, image.storageId, image.fileName, image.contentType, image.size, image.width, image.height, now],
+            [
+              image.id,
+              postId,
+              image.storageId,
+              image.fileName,
+              image.contentType,
+              image.size,
+              image.width,
+              image.height,
+              now,
+            ],
           );
         }
         await enqueueSearch(connection, postId, "upsert", now);
@@ -961,27 +1189,49 @@ export function createForumService({
     } catch (error) {
       await deleteUploadedFiles(bucket, uploaded);
       try {
-        await rateLimitService.release({ githubId: String(auth.user.github_id), endpointKey: POST_RATE_LIMIT_KEY, token: reservation.token });
+        await rateLimitService.release({
+          githubId: String(auth.user.github_id),
+          endpointKey: POST_RATE_LIMIT_KEY,
+          token: reservation.token,
+        });
       } catch (releaseError) {
-        console.error("[relay-server] failed to release forum post reservation", releaseError);
+        console.error(
+          "[relay-server] failed to release forum post reservation",
+          releaseError,
+        );
       }
-      const responseError = error instanceof ForumError
-        ? error
-        : error instanceof RateLimitError && error.code === "rate_limit_reservation_lost"
-          ? new ForumError("forum_post_too_frequent", 429)
-          : error instanceof RateLimitError && error.code === "rate_limit_storage_failed"
-            ? new ForumError("rate_limit_unavailable", 503)
-            : new ForumError("forum_post_failed", 500);
-      if (!(error instanceof ForumError)) console.error("[relay-server] forum post failed", error);
-      sendJson(res, responseError.status, { error: responseError.code, ...responseError.details });
+      const responseError =
+        error instanceof ForumError
+          ? error
+          : error instanceof RateLimitError &&
+              error.code === "rate_limit_reservation_lost"
+            ? new ForumError("forum_post_too_frequent", 429)
+            : error instanceof RateLimitError &&
+                error.code === "rate_limit_storage_failed"
+              ? new ForumError("rate_limit_unavailable", 503)
+              : new ForumError("forum_post_failed", 500);
+      if (!(error instanceof ForumError))
+        console.error("[relay-server] forum post failed", error);
+      sendJson(res, responseError.status, {
+        error: responseError.code,
+        ...responseError.details,
+      });
     } finally {
-      if (parsed?.tempDir) await fs.rm(parsed.tempDir, { recursive: true, force: true });
+      if (parsed?.tempDir)
+        await fs.rm(parsed.tempDir, { recursive: true, force: true });
     }
     return true;
   }
 
   async function createComment(req, res, postId) {
-    if (!requireHttpRelayToken(config, req, res, new URL(req.url || "/", `http://${req.headers.host || "localhost"}`))) {
+    if (
+      !requireHttpRelayToken(
+        config,
+        req,
+        res,
+        new URL(req.url || "/", `http://${req.headers.host || "localhost"}`),
+      )
+    ) {
       req.resume();
       return true;
     }
@@ -990,14 +1240,21 @@ export function createForumService({
       req.resume();
       return true;
     }
-    const reservation = await reserveRate(auth, COMMENT_RATE_LIMIT_KEY, commentCooldown(auth), req, res);
+    const reservation = await reserveRate(
+      auth,
+      COMMENT_RATE_LIMIT_KEY,
+      commentCooldown(auth),
+      req,
+      res,
+    );
     if (!reservation) return true;
     try {
       const id = parseId(postId);
       const body = await readJson(req, 128 * 1024);
       const content = cleanText(body?.content);
       if (!content) throw new ForumError("forum_comment_empty");
-      if (charLength(content) > config.MAX_FORUM_COMMENT_LENGTH) throw new ForumError("forum_comment_too_long");
+      if (charLength(content) > config.MAX_FORUM_COMMENT_LENGTH)
+        throw new ForumError("forum_comment_too_long");
       const filtered = sensitiveWordService.filterText(content);
       const commentId = crypto.randomUUID();
       const now = new Date();
@@ -1013,7 +1270,10 @@ export function createForumService({
            VALUES (?, ?, ?, ?, 0, ?, ?, 0, NULL, NULL)`,
           [commentId, id, auth.user.id, filtered, now, now],
         );
-        await connection.query("UPDATE forum_posts SET comment_count = comment_count + 1, updated_at = ? WHERE id = ?", [now, id]);
+        await connection.query(
+          "UPDATE forum_posts SET comment_count = comment_count + 1, updated_at = ? WHERE id = ?",
+          [now, id],
+        );
         const committed = await rateLimitService.commit({
           githubId: String(auth.user.github_id),
           endpointKey: COMMENT_RATE_LIMIT_KEY,
@@ -1027,24 +1287,45 @@ export function createForumService({
     } catch (error) {
       req.resume();
       try {
-        await rateLimitService.release({ githubId: String(auth.user.github_id), endpointKey: COMMENT_RATE_LIMIT_KEY, token: reservation.token });
+        await rateLimitService.release({
+          githubId: String(auth.user.github_id),
+          endpointKey: COMMENT_RATE_LIMIT_KEY,
+          token: reservation.token,
+        });
       } catch (releaseError) {
-        console.error("[relay-server] failed to release forum comment reservation", releaseError);
+        console.error(
+          "[relay-server] failed to release forum comment reservation",
+          releaseError,
+        );
       }
-      const responseError = error instanceof ForumError
-        ? error
-        : error instanceof RateLimitError && error.code === "rate_limit_reservation_lost"
-          ? new ForumError("forum_comment_too_frequent", 429)
-          : error instanceof RateLimitError && error.code === "rate_limit_storage_failed"
-            ? new ForumError("rate_limit_unavailable", 503)
-            : new ForumError("forum_comment_failed", 500);
-      sendJson(res, responseError.status, { error: responseError.code, ...responseError.details });
+      const responseError =
+        error instanceof ForumError
+          ? error
+          : error instanceof RateLimitError &&
+              error.code === "rate_limit_reservation_lost"
+            ? new ForumError("forum_comment_too_frequent", 429)
+            : error instanceof RateLimitError &&
+                error.code === "rate_limit_storage_failed"
+              ? new ForumError("rate_limit_unavailable", 503)
+              : new ForumError("forum_comment_failed", 500);
+      sendJson(res, responseError.status, {
+        error: responseError.code,
+        ...responseError.details,
+      });
     }
     return true;
   }
 
   async function toggleLike(req, res, rawId, type, liked) {
-    if (!requireHttpRelayToken(config, req, res, new URL(req.url || "/", `http://${req.headers.host || "localhost"}`))) return true;
+    if (
+      !requireHttpRelayToken(
+        config,
+        req,
+        res,
+        new URL(req.url || "/", `http://${req.headers.host || "localhost"}`),
+      )
+    )
+      return true;
     const auth = await requireClientAuth(req, res);
     if (!auth) return true;
     const id = parseIdOrSend(res, rawId);
@@ -1057,20 +1338,27 @@ export function createForumService({
     const now = new Date();
     try {
       const result = await mySqlService.transaction(async (connection) => {
-        const [parents] = type === "comment"
-          ? await connection.query(
-            `SELECT c.id
+        const [parents] =
+          type === "comment"
+            ? await connection.query(
+                `SELECT c.id
              FROM forum_comments c
              INNER JOIN forum_posts p ON p.id = c.post_id
              WHERE c.id = ? AND c.status = 0 AND p.status = 0
              LIMIT 1 FOR UPDATE`,
-            [parentId],
-          )
-          : await connection.query(
-            `SELECT id FROM ${parentTable} WHERE id = ? AND status = 0 LIMIT 1 FOR UPDATE`,
-            [parentId],
+                [parentId],
+              )
+            : await connection.query(
+                `SELECT id FROM ${parentTable} WHERE id = ? AND status = 0 LIMIT 1 FOR UPDATE`,
+                [parentId],
+              );
+        if (!parents[0])
+          throw new ForumError(
+            type === "post"
+              ? "forum_post_not_found"
+              : "forum_comment_not_found",
+            404,
           );
-        if (!parents[0]) throw new ForumError(type === "post" ? "forum_post_not_found" : "forum_comment_not_found", 404);
         let affectedRows = 0;
         if (liked) {
           const [result] = await connection.query(
@@ -1093,22 +1381,38 @@ export function createForumService({
             [now, parentId],
           );
         }
-        const [counts] = await connection.query(`SELECT ${countColumn} AS like_count FROM ${parentTable} WHERE id = ? LIMIT 1`, [parentId]);
+        const [counts] = await connection.query(
+          `SELECT ${countColumn} AS like_count FROM ${parentTable} WHERE id = ? LIMIT 1`,
+          [parentId],
+        );
         return Number(counts[0]?.like_count || 0);
       });
       sendJson(res, 200, { ok: true, liked, likeCount: result });
     } catch (error) {
-      sendJson(res, error instanceof ForumError ? error.status : 500, { error: error instanceof ForumError ? error.code : "forum_like_failed" });
+      sendJson(res, error instanceof ForumError ? error.status : 500, {
+        error: error instanceof ForumError ? error.code : "forum_like_failed",
+      });
     }
     return true;
   }
 
   async function listAdminPosts(req, res, url) {
-    const auth = await accessControlService.requireCapability(req, res, PORTAL_CAPABILITIES.FORUM_VIEW);
+    const auth = await accessControlService.requireCapability(
+      req,
+      res,
+      PORTAL_CAPABILITIES.FORUM_VIEW,
+    );
     if (!auth) return true;
     const page = Number(url.searchParams.get("page") || 1);
     const pageSize = Number(url.searchParams.get("pageSize") || 20);
-    if (!Number.isInteger(page) || page < 1 || page > 1_000_000 || !Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100) {
+    if (
+      !Number.isInteger(page) ||
+      page < 1 ||
+      page > 1_000_000 ||
+      !Number.isInteger(pageSize) ||
+      pageSize < 1 ||
+      pageSize > 100
+    ) {
       sendJson(res, 400, { error: "invalid_pagination" });
       return true;
     }
@@ -1125,40 +1429,74 @@ export function createForumService({
       return true;
     }
     if (query) {
-      clauses.push("(p.id LIKE ? OR p.title LIKE ? OR p.body LIKE ? OR u.login LIKE ?)");
+      clauses.push(
+        "(p.id LIKE ? OR p.title LIKE ? OR p.body LIKE ? OR u.login LIKE ?)",
+      );
       const pattern = `%${query}%`;
       params.push(pattern, pattern, pattern, pattern);
     }
-    const from = "forum_posts p LEFT JOIN users u ON u.id = p.author_user_id LEFT JOIN users du ON du.id = p.deleted_by";
+    const from =
+      "forum_posts p LEFT JOIN users u ON u.id = p.author_user_id LEFT JOIN users du ON du.id = p.deleted_by";
     const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
-    const [counts] = await mySqlService.query(`SELECT COUNT(*) AS total FROM ${from} ${where}`, params);
+    const [counts] = await mySqlService.query(
+      `SELECT COUNT(*) AS total FROM ${from} ${where}`,
+      params,
+    );
     const [rows] = await mySqlService.query(
       `SELECT p.id, p.title, p.like_count, p.comment_count, p.created_at, p.status,
-              p.deleted_at, p.deleted_by, u.login AS author_login, du.login AS deleted_by_login
+              p.deleted_at, p.deleted_by, u.nickname AS author_nickname,
+              u.login AS author_login, du.login AS deleted_by_login
        FROM ${from} ${where}
        ORDER BY p.created_at DESC, p.id DESC LIMIT ? OFFSET ?`,
       [...params, pageSize, (page - 1) * pageSize],
     );
     sendJson(res, 200, {
       items: rows.map((row) => ({
-        id: String(row.id), title: row.title, authorGithubName: row.author_login || "", likeCount: Number(row.like_count || 0), commentCount: Number(row.comment_count || 0), createdAt: isoTime(row.created_at), status: Number(row.status ?? FORUM_STATUS.ACTIVE), deletedAt: isoTime(row.deleted_at), deletedBy: row.deleted_by === null || row.deleted_by === undefined ? null : String(row.deleted_by), deletedByGithubName: row.deleted_by_login || "",
+        id: String(row.id),
+        title: row.title,
+        authorNickname: row.author_nickname || "玩家",
+        authorGithubLogin: row.author_login || "",
+        likeCount: Number(row.like_count || 0),
+        commentCount: Number(row.comment_count || 0),
+        createdAt: isoTime(row.created_at),
+        status: Number(row.status ?? FORUM_STATUS.ACTIVE),
+        deletedAt: isoTime(row.deleted_at),
+        deletedBy:
+          row.deleted_by === null || row.deleted_by === undefined
+            ? null
+            : String(row.deleted_by),
+        deletedByGithubName: row.deleted_by_login || "",
       })),
-      total: Number(counts[0]?.total || 0), page, pageSize,
+      total: Number(counts[0]?.total || 0),
+      page,
+      pageSize,
     });
     return true;
   }
 
   async function deletePost(req, res, postId) {
-    const auth = await accessControlService.requireCapability(req, res, PORTAL_CAPABILITIES.FORUM_MANAGE, { requireOrigin: true });
+    const auth = await accessControlService.requireCapability(
+      req,
+      res,
+      PORTAL_CAPABILITIES.FORUM_MANAGE,
+      { requireOrigin: true },
+    );
     if (!auth) return true;
     const id = parseIdOrSend(res, postId);
     if (!id) return true;
     const now = new Date();
     const result = await mySqlService.transaction(async (connection) => {
-      const [rows] = await connection.query("SELECT id, status FROM forum_posts WHERE id = ? LIMIT 1 FOR UPDATE", [id]);
+      const [rows] = await connection.query(
+        "SELECT id, status FROM forum_posts WHERE id = ? LIMIT 1 FOR UPDATE",
+        [id],
+      );
       if (!rows[0]) return { status: 404 };
-      if (Number(rows[0].status) !== FORUM_STATUS.ACTIVE) return { status: 200 };
-      await connection.query("UPDATE forum_posts SET status = 2, deleted_at = ?, deleted_by = ?, updated_at = ? WHERE id = ? AND status = 0", [now, auth.user.id, now, id]);
+      if (Number(rows[0].status) !== FORUM_STATUS.ACTIVE)
+        return { status: 200 };
+      await connection.query(
+        "UPDATE forum_posts SET status = 2, deleted_at = ?, deleted_by = ?, updated_at = ? WHERE id = ? AND status = 0",
+        [now, auth.user.id, now, id],
+      );
       await connection.query(
         "UPDATE forum_comments SET status = 2, deleted_at = ?, deleted_by = ?, updated_at = ? WHERE post_id = ? AND status = 0",
         [now, auth.user.id, now, id],
@@ -1170,7 +1508,11 @@ export function createForumService({
       await enqueueSearch(connection, id, "delete", now);
       return { status: 200 };
     });
-    sendJson(res, result.status, result.status === 200 ? { ok: true } : { error: "forum_post_not_found" });
+    sendJson(
+      res,
+      result.status,
+      result.status === 200 ? { ok: true } : { error: "forum_post_not_found" },
+    );
     return true;
   }
 
@@ -1193,7 +1535,12 @@ export function createForumService({
   }
 
   async function deleteComment(req, res, commentId) {
-    const auth = await accessControlService.requireCapability(req, res, PORTAL_CAPABILITIES.FORUM_MANAGE, { requireOrigin: true });
+    const auth = await accessControlService.requireCapability(
+      req,
+      res,
+      PORTAL_CAPABILITIES.FORUM_MANAGE,
+      { requireOrigin: true },
+    );
     if (!auth) return true;
     const id = parseIdOrSend(res, commentId);
     if (!id) return true;
@@ -1201,17 +1548,35 @@ export function createForumService({
     const result = await mySqlService.transaction(async (connection) => {
       const { comment, post } = await lockCommentAndPost(connection, id);
       if (!comment || !post) return { status: 404 };
-      if (Number(comment.status) !== FORUM_STATUS.ACTIVE) return { status: 200 };
-      await connection.query("UPDATE forum_comments SET status = 2, deleted_at = ?, deleted_by = ?, updated_at = ? WHERE id = ? AND status = 0", [now, auth.user.id, now, id]);
-      await connection.query("UPDATE forum_posts SET comment_count = GREATEST(0, comment_count - 1), updated_at = ? WHERE id = ?", [now, comment.post_id]);
+      if (Number(comment.status) !== FORUM_STATUS.ACTIVE)
+        return { status: 200 };
+      await connection.query(
+        "UPDATE forum_comments SET status = 2, deleted_at = ?, deleted_by = ?, updated_at = ? WHERE id = ? AND status = 0",
+        [now, auth.user.id, now, id],
+      );
+      await connection.query(
+        "UPDATE forum_posts SET comment_count = GREATEST(0, comment_count - 1), updated_at = ? WHERE id = ?",
+        [now, comment.post_id],
+      );
       return { status: 200 };
     });
-    sendJson(res, result.status, result.status === 200 ? { ok: true } : { error: "forum_comment_not_found" });
+    sendJson(
+      res,
+      result.status,
+      result.status === 200
+        ? { ok: true }
+        : { error: "forum_comment_not_found" },
+    );
     return true;
   }
 
   async function restorePost(req, res, postId) {
-    const auth = await accessControlService.requireCapability(req, res, PORTAL_CAPABILITIES.FORUM_RESTORE, { requireOrigin: true });
+    const auth = await accessControlService.requireCapability(
+      req,
+      res,
+      PORTAL_CAPABILITIES.FORUM_RESTORE,
+      { requireOrigin: true },
+    );
     if (!auth) return true;
     const id = parseIdOrSend(res, postId);
     if (!id) return true;
@@ -1231,12 +1596,21 @@ export function createForumService({
       await enqueueSearch(connection, id, "upsert", now);
       return { status: 200 };
     });
-    sendJson(res, result.status, result.status === 200 ? { ok: true } : { error: "forum_post_not_found" });
+    sendJson(
+      res,
+      result.status,
+      result.status === 200 ? { ok: true } : { error: "forum_post_not_found" },
+    );
     return true;
   }
 
   async function restoreComment(req, res, commentId) {
-    const auth = await accessControlService.requireCapability(req, res, PORTAL_CAPABILITIES.FORUM_RESTORE, { requireOrigin: true });
+    const auth = await accessControlService.requireCapability(
+      req,
+      res,
+      PORTAL_CAPABILITIES.FORUM_RESTORE,
+      { requireOrigin: true },
+    );
     if (!auth) return true;
     const id = parseIdOrSend(res, commentId);
     if (!id) return true;
@@ -1245,8 +1619,10 @@ export function createForumService({
       const { comment, post } = await lockCommentAndPost(connection, id);
       if (!comment) return { status: 404 };
       if (!post) return { status: 404 };
-      if (Number(post.status) !== FORUM_STATUS.ACTIVE) return { status: 409, error: "forum_post_not_active" };
-      if (Number(comment.status) === FORUM_STATUS.ACTIVE) return { status: 200 };
+      if (Number(post.status) !== FORUM_STATUS.ACTIVE)
+        return { status: 409, error: "forum_post_not_active" };
+      if (Number(comment.status) === FORUM_STATUS.ACTIVE)
+        return { status: 200 };
       await connection.query(
         "UPDATE forum_comments SET status = 0, deleted_at = NULL, deleted_by = NULL, updated_at = ? WHERE id = ? AND status <> 0",
         [now, id],
@@ -1257,12 +1633,26 @@ export function createForumService({
       );
       return { status: 200 };
     });
-    sendJson(res, result.status, result.status === 200 ? { ok: true } : { error: result.error || "forum_comment_not_found" });
+    sendJson(
+      res,
+      result.status,
+      result.status === 200
+        ? { ok: true }
+        : { error: result.error || "forum_comment_not_found" },
+    );
     return true;
   }
 
   async function deleteOwnPost(req, res, postId) {
-    if (!requireHttpRelayToken(config, req, res, new URL(req.url || "/", `http://${req.headers.host || "localhost"}`))) return true;
+    if (
+      !requireHttpRelayToken(
+        config,
+        req,
+        res,
+        new URL(req.url || "/", `http://${req.headers.host || "localhost"}`),
+      )
+    )
+      return true;
     const auth = await requireClientAuth(req, res);
     if (!auth) return true;
     const id = parseIdOrSend(res, postId);
@@ -1274,7 +1664,11 @@ export function createForumService({
         [id],
       );
       const post = rows[0];
-      if (!post || Number(post.status) !== FORUM_STATUS.ACTIVE || String(post.author_user_id) !== String(auth.user.id)) {
+      if (
+        !post ||
+        Number(post.status) !== FORUM_STATUS.ACTIVE ||
+        String(post.author_user_id) !== String(auth.user.id)
+      ) {
         return { status: 404 };
       }
       await connection.query(
@@ -1292,12 +1686,24 @@ export function createForumService({
       await enqueueSearch(connection, id, "delete", now);
       return { status: 200 };
     });
-    sendJson(res, result.status, result.status === 200 ? { ok: true } : { error: "forum_post_not_found" });
+    sendJson(
+      res,
+      result.status,
+      result.status === 200 ? { ok: true } : { error: "forum_post_not_found" },
+    );
     return true;
   }
 
   async function deleteOwnComment(req, res, commentId) {
-    if (!requireHttpRelayToken(config, req, res, new URL(req.url || "/", `http://${req.headers.host || "localhost"}`))) return true;
+    if (
+      !requireHttpRelayToken(
+        config,
+        req,
+        res,
+        new URL(req.url || "/", `http://${req.headers.host || "localhost"}`),
+      )
+    )
+      return true;
     const auth = await requireClientAuth(req, res);
     if (!auth) return true;
     const id = parseIdOrSend(res, commentId);
@@ -1305,7 +1711,13 @@ export function createForumService({
     const now = new Date();
     const result = await mySqlService.transaction(async (connection) => {
       const { comment, post } = await lockCommentAndPost(connection, id);
-      if (!comment || !post || Number(post.status) !== FORUM_STATUS.ACTIVE || Number(comment.status) !== FORUM_STATUS.ACTIVE || String(comment.author_user_id) !== String(auth.user.id)) {
+      if (
+        !comment ||
+        !post ||
+        Number(post.status) !== FORUM_STATUS.ACTIVE ||
+        Number(comment.status) !== FORUM_STATUS.ACTIVE ||
+        String(comment.author_user_id) !== String(auth.user.id)
+      ) {
         return { status: 404 };
       }
       await connection.query(
@@ -1318,17 +1730,30 @@ export function createForumService({
       );
       return { status: 200 };
     });
-    sendJson(res, result.status, result.status === 200 ? { ok: true } : { error: "forum_comment_not_found" });
+    sendJson(
+      res,
+      result.status,
+      result.status === 200
+        ? { ok: true }
+        : { error: "forum_comment_not_found" },
+    );
     return true;
   }
 
   async function sendImage(req, res, postId, imageId, allowAdmin) {
     if (!allowAdmin) {
-      const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+      const url = new URL(
+        req.url || "/",
+        `http://${req.headers.host || "localhost"}`,
+      );
       if (!requireHttpRelayToken(config, req, res, url)) return true;
     }
     const auth = allowAdmin
-      ? await accessControlService.requireCapability(req, res, PORTAL_CAPABILITIES.FORUM_VIEW)
+      ? await accessControlService.requireCapability(
+          req,
+          res,
+          PORTAL_CAPABILITIES.FORUM_VIEW,
+        )
       : await requireClientAuth(req, res);
     if (!auth) return true;
     const id = parseIdOrSend(res, postId);
@@ -1343,7 +1768,11 @@ export function createForumService({
       [image, id],
     );
     const row = rows[0];
-    if (!row || !ObjectId.isValid(row.storage_id) || !mongoService.isEnabled()) {
+    if (
+      !row ||
+      !ObjectId.isValid(row.storage_id) ||
+      !mongoService.isEnabled()
+    ) {
       sendJson(res, 404, { error: "forum_image_not_found" });
       return true;
     }
@@ -1355,7 +1784,11 @@ export function createForumService({
       "cache-control": "private, max-age=300",
       "x-content-type-options": "nosniff",
     });
-    mongoService.getBucket().openDownloadStream(new ObjectId(row.storage_id)).once("error", () => res.destroy()).pipe(res);
+    mongoService
+      .getBucket()
+      .openDownloadStream(new ObjectId(row.storage_id))
+      .once("error", () => res.destroy())
+      .pipe(res);
     return true;
   }
 
@@ -1365,46 +1798,118 @@ export function createForumService({
       sendJson(res, 503, { error: "forum_storage_not_configured" });
       return true;
     }
-    if (req.method === "GET" && url.pathname === "/api/v1/forum/search-status") return getSearchStatus(req, res, url);
-    if (req.method === "GET" && url.pathname === "/api/v1/forum/posts") return listPosts(req, res, url);
-    if (req.method === "POST" && url.pathname === "/api/v1/forum/posts") return createPost(req, res, url);
+    if (req.method === "GET" && url.pathname === "/api/v1/forum/search-status")
+      return getSearchStatus(req, res, url);
+    if (
+      req.method === "POST" &&
+      url.pathname === "/api/v1/forum/post-references/resolve"
+    )
+      return resolvePostReferences(req, res, url);
+    if (req.method === "GET" && url.pathname === "/api/v1/forum/posts")
+      return listPosts(req, res, url);
+    if (req.method === "POST" && url.pathname === "/api/v1/forum/posts")
+      return createPost(req, res, url);
 
-    const postImage = url.pathname.match(/^\/api\/v1\/forum\/posts\/([^/]+)\/images\/([^/]+)$/);
-    if (req.method === "GET" && postImage) return sendImage(req, res, safePathSegment(postImage[1]), safePathSegment(postImage[2]), false);
-    const postComments = url.pathname.match(/^\/api\/v1\/forum\/posts\/([^/]+)\/comments$/);
-    if (postComments && req.method === "GET") return listComments(req, res, safePathSegment(postComments[1]), false);
-    if (postComments && req.method === "POST") return createComment(req, res, safePathSegment(postComments[1]));
-    const postLike = url.pathname.match(/^\/api\/v1\/forum\/posts\/([^/]+)\/like$/);
-    if (postLike && req.method === "PUT") return toggleLike(req, res, safePathSegment(postLike[1]), "post", true);
-    if (postLike && req.method === "DELETE") return toggleLike(req, res, safePathSegment(postLike[1]), "post", false);
-    const commentLike = url.pathname.match(/^\/api\/v1\/forum\/comments\/([^/]+)\/like$/);
-    if (commentLike && req.method === "PUT") return toggleLike(req, res, safePathSegment(commentLike[1]), "comment", true);
-    if (commentLike && req.method === "DELETE") return toggleLike(req, res, safePathSegment(commentLike[1]), "comment", false);
-    const ownComment = url.pathname.match(/^\/api\/v1\/forum\/comments\/([^/]+)$/);
-    if (req.method === "DELETE" && ownComment) return deleteOwnComment(req, res, safePathSegment(ownComment[1]));
+    const postImage = url.pathname.match(
+      /^\/api\/v1\/forum\/posts\/([^/]+)\/images\/([^/]+)$/,
+    );
+    if (req.method === "GET" && postImage)
+      return sendImage(
+        req,
+        res,
+        safePathSegment(postImage[1]),
+        safePathSegment(postImage[2]),
+        false,
+      );
+    const postComments = url.pathname.match(
+      /^\/api\/v1\/forum\/posts\/([^/]+)\/comments$/,
+    );
+    if (postComments && req.method === "GET")
+      return listComments(req, res, safePathSegment(postComments[1]), false);
+    if (postComments && req.method === "POST")
+      return createComment(req, res, safePathSegment(postComments[1]));
+    const postLike = url.pathname.match(
+      /^\/api\/v1\/forum\/posts\/([^/]+)\/like$/,
+    );
+    if (postLike && req.method === "PUT")
+      return toggleLike(req, res, safePathSegment(postLike[1]), "post", true);
+    if (postLike && req.method === "DELETE")
+      return toggleLike(req, res, safePathSegment(postLike[1]), "post", false);
+    const commentLike = url.pathname.match(
+      /^\/api\/v1\/forum\/comments\/([^/]+)\/like$/,
+    );
+    if (commentLike && req.method === "PUT")
+      return toggleLike(
+        req,
+        res,
+        safePathSegment(commentLike[1]),
+        "comment",
+        true,
+      );
+    if (commentLike && req.method === "DELETE")
+      return toggleLike(
+        req,
+        res,
+        safePathSegment(commentLike[1]),
+        "comment",
+        false,
+      );
+    const ownComment = url.pathname.match(
+      /^\/api\/v1\/forum\/comments\/([^/]+)$/,
+    );
+    if (req.method === "DELETE" && ownComment)
+      return deleteOwnComment(req, res, safePathSegment(ownComment[1]));
     const detail = url.pathname.match(/^\/api\/v1\/forum\/posts\/([^/]+)$/);
-    if (req.method === "DELETE" && detail) return deleteOwnPost(req, res, safePathSegment(detail[1]));
-    if (req.method === "GET" && detail) return getPost(req, res, safePathSegment(detail[1]), false);
+    if (req.method === "DELETE" && detail)
+      return deleteOwnPost(req, res, safePathSegment(detail[1]));
+    if (req.method === "GET" && detail)
+      return getPost(req, res, safePathSegment(detail[1]), false);
 
     if (!url.pathname.startsWith("/api/admin/v1/forum")) return false;
     if (!mySqlService.isEnabled()) {
       sendJson(res, 503, { error: "forum_storage_not_configured" });
       return true;
     }
-    if (req.method === "GET" && url.pathname === "/api/admin/v1/forum/posts") return listAdminPosts(req, res, url);
-    const adminPostImage = url.pathname.match(/^\/api\/admin\/v1\/forum\/posts\/([^/]+)\/images\/([^/]+)$/);
-    if (req.method === "GET" && adminPostImage) return sendImage(req, res, safePathSegment(adminPostImage[1]), safePathSegment(adminPostImage[2]), true);
-    const adminComments = url.pathname.match(/^\/api\/admin\/v1\/forum\/posts\/([^/]+)\/comments$/);
-    if (req.method === "GET" && adminComments) return listComments(req, res, safePathSegment(adminComments[1]), true);
-    const adminPost = url.pathname.match(/^\/api\/admin\/v1\/forum\/posts\/([^/]+)$/);
-    const adminPostRestore = url.pathname.match(/^\/api\/admin\/v1\/forum\/posts\/([^/]+)\/restore$/);
-    if (req.method === "POST" && adminPostRestore) return restorePost(req, res, safePathSegment(adminPostRestore[1]));
-    if (req.method === "GET" && adminPost) return getPost(req, res, safePathSegment(adminPost[1]), true);
-    if (req.method === "DELETE" && adminPost) return deletePost(req, res, safePathSegment(adminPost[1]));
-    const adminComment = url.pathname.match(/^\/api\/admin\/v1\/forum\/comments\/([^/]+)$/);
-    const adminCommentRestore = url.pathname.match(/^\/api\/admin\/v1\/forum\/comments\/([^/]+)\/restore$/);
-    if (req.method === "POST" && adminCommentRestore) return restoreComment(req, res, safePathSegment(adminCommentRestore[1]));
-    if (req.method === "DELETE" && adminComment) return deleteComment(req, res, safePathSegment(adminComment[1]));
+    if (req.method === "GET" && url.pathname === "/api/admin/v1/forum/posts")
+      return listAdminPosts(req, res, url);
+    const adminPostImage = url.pathname.match(
+      /^\/api\/admin\/v1\/forum\/posts\/([^/]+)\/images\/([^/]+)$/,
+    );
+    if (req.method === "GET" && adminPostImage)
+      return sendImage(
+        req,
+        res,
+        safePathSegment(adminPostImage[1]),
+        safePathSegment(adminPostImage[2]),
+        true,
+      );
+    const adminComments = url.pathname.match(
+      /^\/api\/admin\/v1\/forum\/posts\/([^/]+)\/comments$/,
+    );
+    if (req.method === "GET" && adminComments)
+      return listComments(req, res, safePathSegment(adminComments[1]), true);
+    const adminPost = url.pathname.match(
+      /^\/api\/admin\/v1\/forum\/posts\/([^/]+)$/,
+    );
+    const adminPostRestore = url.pathname.match(
+      /^\/api\/admin\/v1\/forum\/posts\/([^/]+)\/restore$/,
+    );
+    if (req.method === "POST" && adminPostRestore)
+      return restorePost(req, res, safePathSegment(adminPostRestore[1]));
+    if (req.method === "GET" && adminPost)
+      return getPost(req, res, safePathSegment(adminPost[1]), true);
+    if (req.method === "DELETE" && adminPost)
+      return deletePost(req, res, safePathSegment(adminPost[1]));
+    const adminComment = url.pathname.match(
+      /^\/api\/admin\/v1\/forum\/comments\/([^/]+)$/,
+    );
+    const adminCommentRestore = url.pathname.match(
+      /^\/api\/admin\/v1\/forum\/comments\/([^/]+)\/restore$/,
+    );
+    if (req.method === "POST" && adminCommentRestore)
+      return restoreComment(req, res, safePathSegment(adminCommentRestore[1]));
+    if (req.method === "DELETE" && adminComment)
+      return deleteComment(req, res, safePathSegment(adminComment[1]));
     sendJson(res, 404, { error: "not_found" });
     return true;
   }

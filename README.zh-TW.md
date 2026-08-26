@@ -5,7 +5,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-v5-blue)](https://www.typescriptlang.org/)
 [![SQLite](https://img.shields.io/badge/SQLite-multiple--ciphers-orange)](https://www.npmjs.com/package/better-sqlite3-multiple-ciphers)
 
-[简体中文](./README.md) | [English](./README.en.md) | [日本語](./README.ja.md) | [Deutsch](./README.de.md) | 繁體中文 | [文言文](./README.lzh.md)
+[简体中文](./README.md) | [English](./README.en.md) | [日本語](./README.ja.md) | [Deutsch](./README.de.md) | 繁體中文
 
 **BZ-Games** 是一個**本地優先的 Windows 遊戲平台**，專為 Windows 設計。它允許使用者匯入本地遊戲，並透過內建的 P2P 聯機房間系統與好友進行多人遊戲。支援區域網路自動發現、使用者自備 frp 直連、官方中繼短位址三種聯機入口，並提供 GitHub OAuth 登入與雲端資料同步服務。
 
@@ -21,7 +21,7 @@
 - **🪙 經濟系統**：簽到領 BZ 幣，累計遊玩時長自動獎勵。頭像框解鎖與裝備、暱稱顏色／字型／特效個性化裝扮。
 - **🚀 程序管理**：自動啟動／關閉遊戲程序，處理異常退出與崩潰恢復。
 - **🎨 遊戲 API**：提供本地 Game API 服務（V1/V2 協定），遊戲可透過 HTTP 讀取存檔、上報統計與成就。
-- **🌍 國際化**：支援簡體中文、繁體中文、英文、日文、德文、文言文。
+- **🌍 國際化**：支援簡體中文、繁體中文、英文、日文和德文。
 
 ## 📸 介面預覽
 

@@ -140,7 +140,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import {
   NSpace,
@@ -186,6 +186,23 @@ const showBzCoinGuide = ref(false);
 const isOnline = ref(false);
 const isLoggedIn = computed(() =>
   Boolean(settingsStore.settings?.cloudSessionToken),
+);
+
+async function consumeForumAction(): Promise<void> {
+  const action =
+    typeof route.query.forumAction === "string" ? route.query.forumAction : "";
+  if (action !== "check-in" && action !== "bz-coin-guide") return;
+  if (action === "check-in") showCheckIn.value = true;
+  else showBzCoinGuide.value = true;
+  const query = { ...route.query };
+  delete query.forumAction;
+  await router.replace({ query });
+}
+
+watch(
+  () => route.query.forumAction,
+  () => void consumeForumAction(),
+  { immediate: true },
 );
 
 const topBarFrameFileName = computed(() => {

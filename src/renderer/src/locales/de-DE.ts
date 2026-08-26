@@ -1,4 +1,7 @@
+import { forumCommandLocales } from "./forum-commands";
+
 export default {
+  forumCommands: forumCommandLocales["de-DE"],
   nav: {
     myGames: "Meine Spiele",
     market: "Markt",
@@ -526,7 +529,6 @@ export default {
     langEnUS: "English",
     langJaJP: "日本語",
     langZhTW: "繁體中文",
-    langLzh: "文言文",
     langDeDE: "Deutsch",
     idHint: "(Automatisch generiert, unveränderlich)",
     save: "Einstellungen speichern",
@@ -554,10 +556,12 @@ export default {
     cloudSettings: "Cloud-Einstellungen",
     cloudData: "Cloud-Daten",
     onlineStatus: "Online-Status",
-    onlineStatusHint: "Bei Aktivierung wird jede Minute ein Online-Heartbeat an den Server gesendet",
+    onlineStatusHint:
+      "Bei Aktivierung wird jede Minute ein Online-Heartbeat an den Server gesendet",
     online: "Online",
     offline: "Offline",
-    onlineEnableFailed: "Online-Status konnte nicht aktiviert werden. Netzwerk oder Anmeldung prüfen.",
+    onlineEnableFailed:
+      "Online-Status konnte nicht aktiviert werden. Netzwerk oder Anmeldung prüfen.",
     githubLoginOpened:
       "GitHub-Autorisierungsseite geöffnet. Die Sitzung wird nach der Anmeldung automatisch gespeichert.",
     cloudUpload: "Cloud-Upload",
@@ -837,7 +841,8 @@ export default {
     equipped: "Ausgestattet",
     locked: "Gesperrt",
     unlockPlaytime: "Freischaltung nach {hours} Stunden Spielzeit",
-    unlockConsecutiveCheckIn: "Freischaltung bei einer Bestserie von {days} Check-in-Tagen",
+    unlockConsecutiveCheckIn:
+      "Freischaltung bei einer Bestserie von {days} Check-in-Tagen",
     unlockTotalCheckIn: "Freischaltung nach insgesamt {days} Tagen",
     unlockBzCoin: "Kauf für {coins} BZ-Münzen",
     unlockPlaytimeDuration: "Freischaltung nach insgesamt {duration} Spielzeit",

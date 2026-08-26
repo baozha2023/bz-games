@@ -5,7 +5,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-v5-blue)](https://www.typescriptlang.org/)
 [![SQLite](https://img.shields.io/badge/SQLite-multiple--ciphers-orange)](https://www.npmjs.com/package/better-sqlite3-multiple-ciphers)
 
-[简体中文](./README.md) | [English](./README.en.md) | 日本語 | [Deutsch](./README.de.md) | [繁體中文](./README.zh-TW.md) | [文言文](./README.lzh.md)
+[简体中文](./README.md) | [English](./README.en.md) | 日本語 | [Deutsch](./README.de.md) | [繁體中文](./README.zh-TW.md)
 
 **BZ-Games** は、Windows 向けに設計された**ローカルファーストのゲームプラットフォーム**です。ユーザーはローカルゲームをインポートし、内蔵の P2P ルームシステムを通じて友人とマルチプレイを楽しめます。LAN 自動検出、自前の frp ダイレクト接続、公式リレーショートアドレスの 3 つの接続方式をサポートし、オプションで GitHub OAuth ログインとクラウドデータ同期も利用できます。
 

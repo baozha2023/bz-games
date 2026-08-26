@@ -1061,7 +1061,7 @@ class StoreService {
         const langContent = fsSync.readFileSync(initialLangFile, "utf-8");
         const lang = langContent.trim();
         if (
-          ["zh-CN", "en-US", "ja-JP", "zh-TW", "lzh", "de-DE"].includes(lang)
+          ["zh-CN", "en-US", "ja-JP", "zh-TW", "de-DE"].includes(lang)
         ) {
           merged.language = lang as AppSettings["language"];
           logger.info(`[StoreService] Detected installer language: ${lang}`);

@@ -1,4 +1,7 @@
+import { forumCommandLocales } from "./forum-commands";
+
 export default {
+  forumCommands: forumCommandLocales["ja-JP"],
   nav: {
     myGames: "マイゲーム",
     market: "ゲーム市場",
@@ -517,7 +520,6 @@ export default {
     langEnUS: "English",
     langJaJP: "日本語",
     langZhTW: "繁體中文",
-    langLzh: "文言文",
     langDeDE: "Deutsch",
     idHint: "(自動生成、変更不可)",
     save: "設定を保存",
@@ -547,7 +549,8 @@ export default {
     onlineStatusHint: "有効にすると毎分サーバーへオンライン状態を送信します",
     online: "オンライン",
     offline: "オフライン",
-    onlineEnableFailed: "オンライン状態を有効にできません。ネットワークまたはログインを確認してください",
+    onlineEnableFailed:
+      "オンライン状態を有効にできません。ネットワークまたはログインを確認してください",
     githubLoginOpened:
       "GitHub認証ページを開きました。ログイン完了後にセッションが保存されます。",
     cloudUpload: "クラウドアップロード",

@@ -1,4 +1,7 @@
+import { forumCommandLocales } from "./forum-commands";
+
 export default {
+  forumCommands: forumCommandLocales["en-US"],
   nav: {
     myGames: "My Games",
     market: "Market",
@@ -45,7 +48,8 @@ export default {
     cancel: "Cancel",
     deletePost: "Delete post",
     deleteComment: "Delete comment",
-    deletePostConfirm: "The post and its comments will be hidden from regular users. Continue?",
+    deletePostConfirm:
+      "The post and its comments will be hidden from regular users. Continue?",
     deleteCommentConfirm: "This comment will no longer be visible. Continue?",
     deleteSuccess: "Deleted",
     errors: {
@@ -57,7 +61,8 @@ export default {
       forum_storage_not_configured: "Forum storage is not configured",
       forum_post_too_frequent: "Posting too frequently",
       forum_comment_too_frequent: "Commenting too frequently",
-      forum_title_invalid: "A title is required and must be at most 80 characters",
+      forum_title_invalid:
+        "A title is required and must be at most 80 characters",
       forum_body_too_long: "Content must be at most 5,000 characters",
       forum_comment_too_long: "Comments must be at most 1,000 characters",
       forum_comment_empty: "Comment cannot be empty",
@@ -607,7 +612,6 @@ export default {
     langEnUS: "English",
     langJaJP: "日本語",
     langZhTW: "繁體中文",
-    langLzh: "文言文",
     langDeDE: "Deutsch",
     idHint: "(Auto-generated, immutable)",
     save: "Save Settings",
@@ -633,10 +637,12 @@ export default {
     cloudSettings: "Cloud Settings",
     cloudData: "Cloud Data",
     onlineStatus: "Online Status",
-    onlineStatusHint: "Sends an online heartbeat to the server every minute when enabled",
+    onlineStatusHint:
+      "Sends an online heartbeat to the server every minute when enabled",
     online: "Online",
     offline: "Offline",
-    onlineEnableFailed: "Failed to enable online status. Check your network or login.",
+    onlineEnableFailed:
+      "Failed to enable online status. Check your network or login.",
     githubLoginOpened:
       "GitHub authorization page opened. The session will be saved after login.",
     cloudUpload: "Cloud Upload",
@@ -906,7 +912,8 @@ export default {
     equipped: "Equipped",
     locked: "Locked",
     unlockPlaytime: "Play {hours} hours to unlock",
-    unlockConsecutiveCheckIn: "Reach a best streak of {days} check-in days to unlock",
+    unlockConsecutiveCheckIn:
+      "Reach a best streak of {days} check-in days to unlock",
     unlockTotalCheckIn: "Check in {days} total days to unlock",
     unlockBzCoin: "Purchase with {coins} BZ Coins",
     unlockPlaytimeDuration: "Play for {duration} total to unlock",

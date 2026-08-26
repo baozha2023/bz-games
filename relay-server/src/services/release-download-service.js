@@ -278,11 +278,7 @@ async function parseReleaseUpload(req, storageRoot, maxFileBytes) {
   return { stagedPath, version, size: fileSize };
 }
 
-async function publishUploadedRelease({
-  stagedPath,
-  version,
-  size,
-}) {
+async function publishUploadedRelease({ stagedPath, version, size }) {
   const args = [
     PUBLISH_SCRIPT,
     "--staged",
@@ -296,29 +292,37 @@ async function publishUploadedRelease({
     "--allow-downgrade",
     "true",
   ];
-  await new Promise((resolve, reject) => {
+  return await new Promise((resolve, reject) => {
     const child = spawn(process.execPath, args, {
       cwd: path.resolve(SERVICE_DIR, "../.."),
       stdio: ["ignore", "pipe", "pipe"],
     });
-    let stderr = "";
-    child.stderr.setEncoding("utf8");
-    child.stderr.on("data", (chunk) => {
-      stderr = `${stderr}${chunk}`.slice(-4096);
+    let stdout = "";
+    child.stdout.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => {
+      stdout = `${stdout}${chunk}`.slice(-16384);
     });
+    child.stderr.resume();
     child.once("error", reject);
-    child.once("exit", (code) =>
-      code === 0
-        ? resolve()
-        : reject(
-            new ReleaseUploadError(
-              stderr.includes("same version")
-                ? "desktop_release_version_conflict"
-                : "desktop_release_publish_failed",
-              stderr.includes("same version") ? 409 : 500,
-            ),
-          ),
-    );
+    child.once("exit", (code) => {
+      if (code !== 0) {
+        reject(new ReleaseUploadError("desktop_release_publish_failed", 500));
+        return;
+      }
+      try {
+        const result = JSON.parse(stdout.trim().split(/\r?\n/).at(-1));
+        if (
+          result?.ok !== true ||
+          typeof result.status !== "string" ||
+          typeof result.message !== "string"
+        ) {
+          throw new Error("invalid publisher result");
+        }
+        resolve(result);
+      } catch {
+        reject(new ReleaseUploadError("desktop_release_publish_failed", 500));
+      }
+    });
   });
 }
 
@@ -504,7 +508,14 @@ export function createReleaseDownloadService({
     async handleRequest(req, res, url) {
       if (url.pathname === ADMIN_PATH) {
         if (req.method === "GET") {
-          if (!(await accessControlService.requireCapability(req, res, PORTAL_CAPABILITIES.RELEASE_VIEW))) return true;
+          if (
+            !(await accessControlService.requireCapability(
+              req,
+              res,
+              PORTAL_CAPABILITIES.RELEASE_VIEW,
+            ))
+          )
+            return true;
           try {
             const { handle, manifest } = await openCurrentRelease(
               storageRoot,
@@ -522,7 +533,14 @@ export function createReleaseDownloadService({
           sendJson(res, 405, { error: "method_not_allowed" });
           return true;
         }
-        if (!(await accessControlService.requireCapability(req, res, PORTAL_CAPABILITIES.RELEASE_UPLOAD, { requireOrigin: true }))) {
+        if (
+          !(await accessControlService.requireCapability(
+            req,
+            res,
+            PORTAL_CAPABILITIES.RELEASE_UPLOAD,
+            { requireOrigin: true },
+          ))
+        ) {
           req.resume();
           return true;
         }
@@ -539,13 +557,27 @@ export function createReleaseDownloadService({
         let upload;
         try {
           upload = await parseReleaseUpload(req, storageRoot, maxFileBytes);
-          await publishRelease({ storageRoot, ...upload });
+          const publishResult = await publishRelease({
+            storageRoot,
+            ...upload,
+          });
+          if (publishResult?.status === "current_retained") {
+            throw new ReleaseUploadError(
+              "desktop_release_version_conflict",
+              409,
+            );
+          }
           const { handle, manifest } = await openCurrentRelease(
             storageRoot,
             maxFileBytes,
           );
           await handle.close();
-          sendJson(res, 200, { ok: true, release: manifest });
+          sendJson(res, 200, {
+            ok: true,
+            status: publishResult?.status || "published",
+            message: publishResult?.message || "desktop_release_published",
+            release: manifest,
+          });
         } catch (error) {
           if (upload?.stagedPath)
             await fs.rm(upload.stagedPath, { force: true });

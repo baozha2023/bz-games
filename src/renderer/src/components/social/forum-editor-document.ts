@@ -1,25 +1,31 @@
 import {
-  serializeForumEditorSegments,
-  type ForumEditorGameSegment as BaseForumEditorGameSegment,
-  type ForumEditorSegment as BaseForumEditorSegment,
-} from "../../../../shared/forum-game-mentions";
+  serializeForumReference,
+  type ForumReferenceInput,
+} from "../../../../shared/forum-references";
 
-export type ForumEditorGameSegment = BaseForumEditorGameSegment & {
-  /** Internal editor metadata; it is never serialized to the server. */
+export interface ForumEditorTextSegment {
+  type: "text";
+  value: string;
+}
+
+export interface ForumEditorReferenceSegment {
+  type: "reference";
+  reference: ForumReferenceInput;
+  /** Editor-only marker used to remove an automatically inserted separator. */
   autoSeparator?: boolean;
-};
+}
 
 export type ForumEditorSegment =
-  | Extract<BaseForumEditorSegment, { type: "text" }>
-  | ForumEditorGameSegment;
+  | ForumEditorTextSegment
+  | ForumEditorReferenceSegment;
 
-export interface ForumMentionContext {
+export interface ForumReferenceContext {
   segmentIndex: number;
   start: number;
   end: number;
 }
 
-export interface ForumMentionReplacement {
+export interface ForumReferenceReplacement {
   segments: ForumEditorSegment[];
   replacementIndex: number;
   caretOffset: number;
@@ -28,31 +34,39 @@ export interface ForumMentionReplacement {
 export function serializeEditorDocument(
   segments: ForumEditorSegment[],
 ): string {
-  return serializeForumEditorSegments(segments);
+  return segments
+    .map((segment) =>
+      segment.type === "text"
+        ? segment.value
+        : serializeForumReference(segment.reference),
+    )
+    .join("");
 }
 
-export function replaceMentionInDocument(
+export function replaceReferenceInDocument(
   segments: ForumEditorSegment[],
-  context: ForumMentionContext,
+  context: ForumReferenceContext,
   value: string,
-  game?: Omit<ForumEditorGameSegment, "type">,
-): ForumMentionReplacement | null {
+  reference?: ForumReferenceInput,
+): ForumReferenceReplacement | null {
   const segment = segments[context.segmentIndex];
   if (!segment || segment.type !== "text") return null;
 
-  const replacement: ForumEditorSegment = game
-    ? { type: "game", ...game, autoSeparator: true }
+  const replacement: ForumEditorSegment = reference
+    ? { type: "reference", reference, autoSeparator: true }
     : { type: "text", value };
   const nextText = segment.value.slice(0, context.start);
   const tailText = segment.value.slice(context.end);
   const prefixSegments = segments.slice(0, context.segmentIndex);
   const needsPrefixSeparator = Boolean(
-    game &&
+    reference &&
     ((nextText.length > 0 && !/\s$/u.test(nextText)) ||
-      (nextText.length === 0 && prefixSegments.at(-1)?.type === "game")),
+      (nextText.length === 0 &&
+        prefixSegments.length > 0 &&
+        prefixSegments.at(-1)?.type === "reference")),
   );
   const renderedNextText = needsPrefixSeparator ? `${nextText} ` : nextText;
-  const renderedTailText = game
+  const renderedTailText = reference
     ? `${/^\s/u.test(tailText) ? "" : " "}${tailText}` || " "
     : tailText;
   const next: ForumEditorSegment[] = [
@@ -70,23 +84,23 @@ export function replaceMentionInDocument(
   return {
     segments: next,
     replacementIndex,
-    caretOffset: game ? renderedTailText.match(/^\s*/u)?.[0].length || 0 : 0,
+    caretOffset: reference
+      ? renderedTailText.match(/^\s*/u)?.[0].length || 0
+      : 0,
   };
 }
 
-export function removeMentionFromDocument(
+export function removeReferenceFromDocument(
   segments: ForumEditorSegment[],
   index: number,
 ): { segments: ForumEditorSegment[]; caretIndex: number } | null {
-  const mention = segments[index];
-  if (!mention || mention.type !== "game") return null;
+  const reference = segments[index];
+  if (!reference || reference.type !== "reference") return null;
 
-  const next = segments.map((segment) => ({
-    ...segment,
-  })) as ForumEditorSegment[];
+  const next = segments.map((segment) => ({ ...segment }));
   const following = next[index + 1];
   const removeAutomaticSeparator = Boolean(
-    mention.autoSeparator &&
+    reference.autoSeparator &&
     following?.type === "text" &&
     following.value.startsWith(" "),
   );

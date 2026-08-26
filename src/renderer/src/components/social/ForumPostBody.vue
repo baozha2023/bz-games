@@ -1,113 +1,176 @@
 <template>
   <div class="forum-post-body">
-    <template v-for="(part, index) in parts" :key="`${part.type}-${index}`">
+    <template
+      v-for="(part, index) in parts"
+      :key="`${part.type}-${index}-${part.type === 'text' ? part.value : part.raw}`"
+    >
       <span v-if="part.type === 'text'">{{ part.value }}</span>
-      <button
-        v-else-if="displayResolvedMentions[mentionKey(part)]"
-        type="button"
-        class="forum-game-mention forum-game-mention--resolved"
-        :title="`${displayResolvedMentions[mentionKey(part)]?.marketName} / ${displayResolvedMentions[mentionKey(part)]?.gameName}`"
-        @click="openGame(displayResolvedMentions[mentionKey(part)]!)"
-      >
-        <span class="forum-game-mention-prefix">@</span>
-        {{ displayResolvedMentions[mentionKey(part)]?.marketName }} /
-        {{ displayResolvedMentions[mentionKey(part)]?.gameName }}
-      </button>
-      <span
-        v-else
-        class="forum-game-mention forum-game-mention--unknown"
-        :title="part.raw"
-      >
-        {{
-          isResolvingDisplay
-            ? t("social.gameMentionLoading")
-            : t("social.unknownGame")
-        }}
-      </span>
+      <template v-else-if="part.type === 'game'">
+        <button
+          v-if="isResolved(part)"
+          type="button"
+          class="forum-game-mention forum-game-mention--resolved"
+          @click="openReference(part)"
+        >
+          <span class="forum-game-mention-prefix">@</span>{{ labelFor(part) }}
+        </button>
+        <span
+          v-else
+          class="forum-game-mention forum-reference--disabled"
+          :title="labelFor(part)"
+          >{{ labelFor(part) }}</span
+        >
+      </template>
+      <template v-else-if="part.type === 'version'">
+        <button
+          v-if="isResolved(part)"
+          type="button"
+          class="forum-reference forum-reference--version"
+          @click="openReference(part)"
+        >
+          {{ labelFor(part) }}
+        </button>
+        <span
+          v-else
+          class="forum-reference forum-reference--disabled"
+          :title="labelFor(part)"
+          >{{ labelFor(part) }}</span
+        >
+      </template>
+      <template v-else-if="part.type === 'market'">
+        <button
+          v-if="isResolved(part)"
+          type="button"
+          class="forum-reference forum-reference--market"
+          @click="openReference(part)"
+        >
+          {{ labelFor(part) }}
+        </button>
+        <span
+          v-else
+          class="forum-reference forum-reference--disabled"
+          :title="labelFor(part)"
+          >{{ labelFor(part) }}</span
+        >
+      </template>
+      <template v-else-if="part.type === 'post'">
+        <button
+          v-if="isResolved(part)"
+          type="button"
+          class="forum-post-reference"
+          @click="openReference(part)"
+        >
+          <strong>{{ labelFor(part) }}</strong
+          ><span>{{ excerptFor(part) }}</span>
+        </button>
+        <span
+          v-else
+          class="forum-post-reference forum-post-reference--disabled"
+          :title="labelFor(part)"
+          >{{ labelFor(part) }}</span
+        >
+      </template>
+      <template v-else-if="part.type === 'page'">
+        <button
+          v-if="isResolved(part)"
+          type="button"
+          class="forum-reference forum-reference--page"
+          @click="openReference(part)"
+        >
+          {{ labelFor(part) }}
+        </button>
+        <span
+          v-else
+          class="forum-reference forum-reference--disabled"
+          :title="labelFor(part)"
+          >{{ labelFor(part) }}</span
+        >
+      </template>
     </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 import {
-  parseForumGameMentions,
-  type ForumGameMentionToken,
-} from "../../../../shared/forum-game-mentions";
-import type { ResolvedForumGameMention } from "../../services/forum-game-mention-service";
-import { resolveForumGameMentions } from "../../services/forum-game-mention-service";
+  parseForumReferences,
+  type ForumReferenceToken,
+} from "../../../../shared/forum-references";
+import {
+  forumReferenceKey,
+  resolveForumReferenceViewModels,
+  type ForumReferenceViewModel,
+} from "../../services/forum-reference-view-model";
+import { openForumPage } from "../../services/forum-page-registry";
 
-const props = defineProps<{
-  body: string;
-  resolvedMentions?: Record<string, ResolvedForumGameMention>;
-  isResolving?: boolean;
-}>();
-
+const props = defineProps<{ body: string }>();
 const { t } = useI18n();
 const router = useRouter();
-const parts = ref(parseForumGameMentions(props.body));
-const localResolvedMentions = ref<Record<string, ResolvedForumGameMention>>({});
-const isResolvingLocal = ref(false);
-let resolveGeneration = 0;
+const parts = ref(parseForumReferences(props.body));
+const references = ref(new Map<string, ForumReferenceViewModel>());
+let generation = 0;
 
-const displayResolvedMentions = computed(
-  () => props.resolvedMentions ?? localResolvedMentions.value,
-);
-const isResolvingDisplay = computed(
-  () => props.isResolving ?? isResolvingLocal.value,
-);
-
-const mentionTokens = computed(() =>
-  parts.value.filter(
-    (part): part is ForumGameMentionToken => part.type === "game",
-  ),
-);
-
-function mentionKey(token: ForumGameMentionToken): string {
-  return `${token.marketId}/${token.gameId}`;
+function referenceFor(
+  part: ForumReferenceToken,
+): ForumReferenceViewModel | undefined {
+  return references.value.get(forumReferenceKey(part));
+}
+function isResolved(part: ForumReferenceToken): boolean {
+  return referenceFor(part)?.status === "resolved";
+}
+function labelFor(part: ForumReferenceToken): string {
+  return referenceFor(part)?.label || t("forumCommands.loading");
+}
+function excerptFor(part: ForumReferenceToken): string {
+  const value = referenceFor(part);
+  return value?.type === "post" ? value.excerpt : "";
+}
+function openReference(part: ForumReferenceToken): void {
+  const value = referenceFor(part);
+  if (!value || value.status !== "resolved") return;
+  if (value.type === "game" && value.sourceIdx !== undefined)
+    void router.push({
+      name: "Market",
+      params: { sourceIdx: String(value.sourceIdx) },
+      query: { gameId: value.gameId },
+    });
+  else if (value.type === "version" && value.sourceIdx !== undefined)
+    void router.push({
+      name: "Market",
+      params: { sourceIdx: String(value.sourceIdx) },
+      query: { gameId: value.gameId, version: value.version },
+    });
+  else if (value.type === "market" && value.sourceIdx !== undefined)
+    void router.push({
+      name: "Market",
+      params: { sourceIdx: String(value.sourceIdx) },
+    });
+  else if (value.type === "post")
+    void router.push({ name: "SocialPost", params: { postId: value.postId } });
+  else if (value.type === "page" && value.page)
+    void openForumPage(router, value.page);
 }
 
-async function resolveMentions(body: string): Promise<void> {
-  const generation = ++resolveGeneration;
-  parts.value = parseForumGameMentions(body);
-  const tokens = mentionTokens.value;
-  localResolvedMentions.value = {};
-  if (tokens.length === 0) {
-    isResolvingLocal.value = false;
-    return;
-  }
-
-  isResolvingLocal.value = true;
-  try {
-    const resolved = await resolveForumGameMentions(
-      tokens,
-      window.electronAPI.market,
-    );
-    if (generation !== resolveGeneration) return;
-    localResolvedMentions.value = Object.fromEntries(resolved.entries());
-  } catch {
-    if (generation === resolveGeneration) localResolvedMentions.value = {};
-  } finally {
-    if (generation === resolveGeneration) isResolvingLocal.value = false;
-  }
-}
-
-function openGame(target: ResolvedForumGameMention): void {
-  router.push({
-    name: "Market",
-    params: { sourceIdx: String(target.sourceIdx) },
-    query: { gameId: target.gameId },
+async function resolveBody(body: string): Promise<void> {
+  const current = ++generation;
+  parts.value = parseForumReferences(body);
+  references.value = new Map();
+  const tokens = parts.value.filter(
+    (part): part is ForumReferenceToken => part.type !== "text",
+  );
+  const result = await resolveForumReferenceViewModels(tokens, {
+    marketApi: window.electronAPI.market,
+    postApi: window.electronAPI.forum,
+    translate: t,
   });
+  if (current === generation) references.value = result;
 }
 
 watch(
   () => props.body,
-  (body) => {
-    if (props.resolvedMentions === undefined) void resolveMentions(body);
-    else parts.value = parseForumGameMentions(body);
-  },
+  (body) => void resolveBody(body),
   { immediate: true },
 );
 </script>
@@ -120,8 +183,60 @@ watch(
   line-height: 1.8;
   overflow-wrap: anywhere;
 }
-
-.forum-game-mention--resolved {
+.forum-reference,
+.forum-post-reference {
+  margin: 0 2px;
+  border: 1px solid #b7e2c7;
+  border-radius: 999px;
+  background: #eff8f2;
+  color: var(--bz-green);
+  font: inherit;
   cursor: pointer;
+}
+.forum-reference {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+}
+.forum-reference--version {
+  border-color: #c9c0ef;
+  background: #f4f1ff;
+  color: #6552a8;
+}
+.forum-reference--page {
+  border-color: #b9d9ee;
+  background: #eef8ff;
+  color: #2875a8;
+}
+.forum-reference--disabled {
+  display: inline-flex;
+  padding: 0 8px;
+  border-color: var(--bz-border);
+  background: var(--bz-bg-soft);
+  color: var(--bz-text-secondary);
+  cursor: default;
+}
+.forum-post-reference {
+  display: inline-flex;
+  max-width: min(520px, 100%);
+  box-sizing: border-box;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  text-align: left;
+  vertical-align: middle;
+}
+.forum-post-reference span {
+  max-width: 100%;
+  color: var(--bz-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.forum-post-reference--disabled {
+  color: var(--bz-text-secondary);
+  cursor: default;
 }
 </style>

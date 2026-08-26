@@ -2,7 +2,8 @@
 
 正式版 GitHub Release 发布后，`.github/workflows/sync-latest-release.yml` 会将唯一匹配的
 `BZ-Games-Setup-X.Y.Z.exe` 上传到服务器，经过版本、大小、PE 文件头和 SHA-256 校验后原子发布。
-草稿、预发布版、旧版本和同版本不同文件都会被拒绝。
+草稿、预发布版和旧版本会被拒绝。同版本同文件按幂等成功处理；同版本不同文件完成校验后保留服务器当前文件，
+并以成功状态返回 `desktop_release_same_version_different_sha256`。
 工作流在传输安装器前非阻塞获取与管理端共用的发布锁；已有上传时立即失败，不排队也不在 `.incoming` 留下第二份文件。
 
 ## 1. GitHub Environment
@@ -94,7 +95,7 @@ ssh-keyscan -t ed25519 39.106.221.85
 ## 5. 故障处理
 
 - `Expected exactly one asset`：Release 中缺少规范安装器或存在重名资产。
-- `same version has a different sha256`：同一版本资产被替换；必须发布更高版本，不能静默覆盖。
+- `desktop_release_same_version_different_sha256`：上传文件校验成功，但同版本文件的 SHA-256 与服务器不同；服务器保留当前文件，工作流正常结束。
 - `refusing to publish an older release`：手动选择了低于服务器当前版本的 tag。
 - SSH 失败：检查 Environment、专用用户公钥、22 端口安全组和 known_hosts 指纹。
 - 发布失败不会切换 `latest.json`；修正原因后重新运行同一 tag 即可。

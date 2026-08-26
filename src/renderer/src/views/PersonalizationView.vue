@@ -266,6 +266,7 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useMessage } from "naive-ui";
+import { useRoute } from "vue-router";
 import { useSettingsStore } from "../stores/useSettingsStore";
 import {
   TimeOutline,
@@ -302,8 +303,25 @@ import {
 const { t } = useI18n();
 const settingsStore = useSettingsStore();
 const message = useMessage();
+const route = useRoute();
 
-const activeTab = ref("avatarFrame");
+const personalizationTabs = new Set([
+  "avatarFrame",
+  "gameCard",
+  "nicknameStyle",
+]);
+const routePersonalizationTab = () =>
+  typeof route.query.tab === "string" &&
+  personalizationTabs.has(route.query.tab)
+    ? route.query.tab
+    : "avatarFrame";
+const activeTab = ref(routePersonalizationTab());
+watch(
+  () => route.query.tab,
+  () => {
+    activeTab.value = routePersonalizationTab();
+  },
+);
 const frames = ref<AvatarFrameDef[]>(AVATAR_FRAMES);
 const gameCardProducts = ref<GameCardProductDef[]>(GAME_CARD_PRODUCTS);
 const nicknameStyleForm = ref<NicknameStyle>({ ...DEFAULT_NICKNAME_STYLE });

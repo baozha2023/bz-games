@@ -366,7 +366,9 @@
             <n-text depth="3">{{ t("settings.onlineStatusHint") }}</n-text>
           </div>
           <n-space align="center" :size="10">
-            <n-text>{{ presenceEnabled ? t("settings.online") : t("settings.offline") }}</n-text>
+            <n-text>{{
+              presenceEnabled ? t("settings.online") : t("settings.offline")
+            }}</n-text>
             <n-switch
               :value="presenceEnabled"
               :loading="presenceBusy"
@@ -658,7 +660,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed, nextTick, watch, onUnmounted } from "vue";
-import { onBeforeRouteLeave, useRouter } from "vue-router";
+import { onBeforeRouteLeave, useRoute, useRouter } from "vue-router";
 import { useMessage, useDialog } from "naive-ui";
 import { useI18n } from "vue-i18n";
 import { useSettingsStore } from "../stores/useSettingsStore";
@@ -673,6 +675,7 @@ import { showUpdatePrompt } from "../composables/useUpdatePrompt";
 
 const { t, te } = useI18n();
 const router = useRouter();
+const route = useRoute();
 const settingsStore = useSettingsStore();
 const gameStore = useGameStore();
 const message = useMessage();
@@ -812,7 +815,6 @@ const languageOptions = computed(() => [
   { label: t("settings.langEnUS"), value: "en-US" },
   { label: t("settings.langJaJP"), value: "ja-JP" },
   { label: t("settings.langZhTW"), value: "zh-TW" },
-  { label: t("settings.langLzh"), value: "lzh" },
   { label: t("settings.langDeDE"), value: "de-DE" },
 ]);
 
@@ -1454,6 +1456,25 @@ const handleOpenMigrateStorageModal = () => {
   isMigratingStorage.value = false;
   showMigrateStorageModal.value = true;
 };
+
+function consumeForumAction(): void {
+  const action =
+    typeof route.query.forumAction === "string" ? route.query.forumAction : "";
+  if (action === "cloud") showCloudSettingsModal.value = true;
+  else if (action === "feedback") showFeedbackModal.value = true;
+  else if (action === "clear-cache") handleClearCache();
+  else if (action === "migrate-library") handleOpenMigrateStorageModal();
+  else return;
+  const query = { ...route.query };
+  delete query.forumAction;
+  void router.replace({ query });
+}
+
+watch(
+  () => route.query.forumAction,
+  () => consumeForumAction(),
+  { immediate: true },
+);
 
 const handlePickMigrationTargetPath = async () => {
   const result = await window.electronAPI.settings.selectGameStoragePath();

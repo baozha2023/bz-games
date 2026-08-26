@@ -50,8 +50,7 @@ async function createHarness({
     sha256,
     storageRoot,
     url: `http://127.0.0.1:${address.port}/api/v1/releases/latest/download`,
-    legacyUrl:
-      `http://127.0.0.1:${address.port}/bz-games/api/v1/releases/latest/download`,
+    legacyUrl: `http://127.0.0.1:${address.port}/bz-games/api/v1/releases/latest/download`,
     close: async () => {
       await new Promise((resolve) => server.close(resolve));
       await fs.rm(storageRoot, { recursive: true, force: true });
@@ -166,7 +165,7 @@ test("release endpoint enforces one aggregate bandwidth schedule", async () => {
   }
 });
 
-test("publisher rejects rollback and same-version replacement", async () => {
+test("publisher rejects rollback and retains the current same-version release", async () => {
   const harness = await createHarness();
   try {
     const incoming = path.join(harness.storageRoot, ".incoming");
@@ -195,20 +194,25 @@ test("publisher rejects rollback and same-version replacement", async () => {
       ),
       /older release/,
     );
-    await assert.rejects(
-      publishDesktopRelease(
-        {
-          ...(await makeStaged("changed.exe", 2)),
-          version: "3.2.0",
-          allowDowngrade: false,
-        },
-        {
-          DESKTOP_RELEASE_STORAGE_DIR: harness.storageRoot,
-          MAX_DESKTOP_RELEASE_FILE_BYTES: 2 * 1024 * 1024,
-        },
-      ),
-      /different sha256/,
+    const changed = await makeStaged("changed.exe", 2);
+    const result = await publishDesktopRelease(
+      {
+        ...changed,
+        version: "3.2.0",
+        allowDowngrade: false,
+      },
+      {
+        DESKTOP_RELEASE_STORAGE_DIR: harness.storageRoot,
+        MAX_DESKTOP_RELEASE_FILE_BYTES: 2 * 1024 * 1024,
+      },
     );
+    assert.equal(result.status, "current_retained");
+    assert.equal(
+      result.message,
+      "desktop_release_same_version_different_sha256",
+    );
+    assert.equal(result.release.sha256, harness.sha256);
+    await assert.rejects(fs.access(changed.staged), { code: "ENOENT" });
   } finally {
     await harness.close();
   }
@@ -282,7 +286,7 @@ test("super administrator upload publishes an executable through the shared publ
   );
   const publishRelease = async ({ stagedPath, version, size }) => {
     const body = await fs.readFile(stagedPath);
-    await publishDesktopRelease(
+    return await publishDesktopRelease(
       {
         staged: stagedPath,
         version,
@@ -321,10 +325,27 @@ test("super administrator upload publishes an executable through the shared publ
     const response = await fetch(url, { method: "POST", body: form });
     assert.equal(response.status, 200);
     const body = await response.json();
+    assert.equal(body.status, "published");
+    assert.equal(body.message, "desktop_release_published");
     assert.equal(body.release.version, "3.2.0");
     assert.equal(body.release.size, executable.length);
     const status = await (await fetch(url)).json();
     assert.equal(status.release.sha256, body.release.sha256);
+    const conflictingForm = new FormData();
+    conflictingForm.set("version", "3.2.0");
+    conflictingForm.set(
+      "installer",
+      new Blob([Buffer.concat([executable, Buffer.from([1])])]),
+      "BZ-Games-Setup-3.2.0.exe",
+    );
+    const conflictingResponse = await fetch(url, {
+      method: "POST",
+      body: conflictingForm,
+    });
+    assert.equal(conflictingResponse.status, 409);
+    assert.deepEqual(await conflictingResponse.json(), {
+      error: "desktop_release_version_conflict",
+    });
     assert.deepEqual(capabilityChecks, [
       {
         method: "POST",
@@ -332,6 +353,11 @@ test("super administrator upload publishes an executable through the shared publ
         options: { requireOrigin: true },
       },
       { method: "GET", capability: "release.view", options: undefined },
+      {
+        method: "POST",
+        capability: "release.upload",
+        options: { requireOrigin: true },
+      },
     ]);
   } finally {
     await new Promise((resolve) => server.close(resolve));

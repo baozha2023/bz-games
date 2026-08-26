@@ -174,12 +174,9 @@ export function registerSystemIpc() {
     return cloudSyncService.getPresenceStatus();
   });
 
-  ipcMain.handle(
-    IPC.SYSTEM_CLOUD_SET_PRESENCE,
-    async (_, enabled: unknown) => {
-      return cloudSyncService.setPresenceEnabled(enabled === true);
-    },
-  );
+  ipcMain.handle(IPC.SYSTEM_CLOUD_SET_PRESENCE, async (_, enabled: unknown) => {
+    return cloudSyncService.setPresenceEnabled(enabled === true);
+  });
 
   ipcMain.handle(IPC.SYSTEM_CLOUD_GET_SNAPSHOT_META, async () => {
     return await cloudSyncService.getSnapshotMeta();
@@ -216,8 +213,8 @@ export function registerSystemIpc() {
     feedbackService.submit(payload),
   );
 
-  ipcMain.handle(IPC.SYSTEM_FEEDBACK_GET_HISTORY, () =>
-    feedbackService.getHistory(),
+  ipcMain.handle(IPC.SYSTEM_FEEDBACK_GET_HISTORY, (_, cursor?: unknown) =>
+    feedbackService.getHistory(typeof cursor === "string" ? cursor : ""),
   );
 
   ipcMain.handle(IPC.SYSTEM_FEEDBACK_GET_DETAIL, (_, feedbackId: unknown) =>
@@ -227,29 +224,58 @@ export function registerSystemIpc() {
   ipcMain.handle(IPC.FORUM_SELECT_IMAGES, (_, selectionId: unknown) =>
     forumService.selectImages(selectionId),
   );
-  ipcMain.handle(IPC.FORUM_RELEASE_IMAGES, (_, selectionId: unknown, imageId?: unknown) => {
-    forumService.releaseImages(selectionId, imageId);
-  });
-  ipcMain.handle(IPC.FORUM_GET_SEARCH_AVAILABILITY, () => forumService.getSearchAvailability());
+  ipcMain.handle(
+    IPC.FORUM_RELEASE_IMAGES,
+    (_, selectionId: unknown, imageId?: unknown) => {
+      forumService.releaseImages(selectionId, imageId);
+    },
+  );
+  ipcMain.handle(IPC.FORUM_GET_SEARCH_AVAILABILITY, () =>
+    forumService.getSearchAvailability(),
+  );
   ipcMain.handle(IPC.FORUM_LIST_POSTS, (_, query?: unknown, cursor?: unknown) =>
-    forumService.listPosts(typeof query === "string" ? query : "", typeof cursor === "string" ? cursor : ""),
+    forumService.listPosts(
+      typeof query === "string" ? query : "",
+      typeof cursor === "string" ? cursor : "",
+    ),
   );
   ipcMain.handle(IPC.FORUM_GET_POST, (_, postId: unknown) =>
     forumService.getPost(typeof postId === "string" ? postId : ""),
   );
-  ipcMain.handle(IPC.FORUM_GET_COMMENTS, (_, postId: unknown, cursor?: unknown) =>
-    forumService.getComments(typeof postId === "string" ? postId : "", typeof cursor === "string" ? cursor : ""),
+  ipcMain.handle(IPC.FORUM_RESOLVE_POST_REFERENCES, (_, ids: unknown) =>
+    forumService.resolvePostReferences(
+      Array.isArray(ids)
+        ? ids.filter((id): id is string => typeof id === "string")
+        : [],
+    ),
+  );
+  ipcMain.handle(
+    IPC.FORUM_GET_COMMENTS,
+    (_, postId: unknown, cursor?: unknown) =>
+      forumService.getComments(
+        typeof postId === "string" ? postId : "",
+        typeof cursor === "string" ? cursor : "",
+      ),
   );
   ipcMain.handle(IPC.FORUM_CREATE_POST, (_, payload: unknown) => {
-    const value = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
+    const value =
+      payload && typeof payload === "object"
+        ? (payload as Record<string, unknown>)
+        : {};
     return forumService.createPost({
       title: typeof value.title === "string" ? value.title : "",
       body: typeof value.body === "string" ? value.body : "",
-      selectionId: typeof value.selectionId === "string" ? value.selectionId : undefined,
+      selectionId:
+        typeof value.selectionId === "string" ? value.selectionId : undefined,
     });
   });
-  ipcMain.handle(IPC.FORUM_CREATE_COMMENT, (_, postId: unknown, content: unknown) =>
-    forumService.createComment(typeof postId === "string" ? postId : "", typeof content === "string" ? content : ""),
+  ipcMain.handle(
+    IPC.FORUM_CREATE_COMMENT,
+    (_, postId: unknown, content: unknown) =>
+      forumService.createComment(
+        typeof postId === "string" ? postId : "",
+        typeof content === "string" ? content : "",
+      ),
   );
   ipcMain.handle(IPC.FORUM_DELETE_POST, (_, postId: unknown) =>
     forumService.deletePost(typeof postId === "string" ? postId : ""),
@@ -261,13 +287,22 @@ export function registerSystemIpc() {
     forumService.togglePostLike(typeof postId === "string" ? postId : "", true),
   );
   ipcMain.handle(IPC.FORUM_UNLIKE_POST, (_, postId: unknown) =>
-    forumService.togglePostLike(typeof postId === "string" ? postId : "", false),
+    forumService.togglePostLike(
+      typeof postId === "string" ? postId : "",
+      false,
+    ),
   );
   ipcMain.handle(IPC.FORUM_LIKE_COMMENT, (_, commentId: unknown) =>
-    forumService.toggleCommentLike(typeof commentId === "string" ? commentId : "", true),
+    forumService.toggleCommentLike(
+      typeof commentId === "string" ? commentId : "",
+      true,
+    ),
   );
   ipcMain.handle(IPC.FORUM_UNLIKE_COMMENT, (_, commentId: unknown) =>
-    forumService.toggleCommentLike(typeof commentId === "string" ? commentId : "", false),
+    forumService.toggleCommentLike(
+      typeof commentId === "string" ? commentId : "",
+      false,
+    ),
   );
 
   ipcMain.handle(IPC.SYSTEM_SAVE_SETTINGS, async (_, settings: unknown) => {
@@ -593,10 +628,7 @@ export function registerSystemIpc() {
           return null;
         }
         const product = getGameCardProduct(productId);
-        const asset = getGameCardProductAsset(
-          productId,
-          ratio,
-        );
+        const asset = getGameCardProductAsset(productId, ratio);
         if (!product || !asset) return null;
         const assetPath = path.join(
           app.getAppPath(),

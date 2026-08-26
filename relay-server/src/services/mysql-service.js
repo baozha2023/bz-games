@@ -126,7 +126,8 @@ export function createMySqlService({ config }) {
         PRIMARY KEY (id),
         KEY idx_feedback_status_created_at (status, created_at),
         KEY idx_feedback_created_at (created_at),
-        KEY idx_feedback_user_id (user_id)
+        KEY idx_feedback_user_id (user_id),
+        KEY idx_feedback_user_history (user_id, created_at, id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
     await pool.query(`

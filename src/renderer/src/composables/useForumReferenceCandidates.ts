@@ -9,7 +9,7 @@ import {
   loadForumMarketIndexes,
   type ForumMarketApi,
   type ForumMarketIndexEntry,
-} from "../services/forum-game-mention-service";
+} from "../services/forum-market-reference-service";
 
 export type MarketCandidate = {
   kind: "market";
@@ -31,7 +31,7 @@ export type GameCandidate = {
 
 export type MentionCandidate = MarketCandidate | GameCandidate;
 
-export function useForumMentionCandidates(
+export function useForumReferenceCandidates(
   api: ForumMarketApi,
   query: Ref<string>,
   selectedMarketId: Ref<string>,

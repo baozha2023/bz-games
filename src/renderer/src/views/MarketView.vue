@@ -1112,8 +1112,13 @@ async function scrollToRouteGame(): Promise<void> {
   expandedGames.value[gameId] = true;
   const game = games.value.find((item) => item.id === gameId);
   if (game) {
-    selectedVersions.value[gameId] =
-      game.latestVersion || game.versions[0]?.version || "";
+    const requestedVersion =
+      typeof route.query.version === "string" ? route.query.version : "";
+    selectedVersions.value[gameId] = game.versions.some(
+      (item) => item.version === requestedVersion,
+    )
+      ? requestedVersion
+      : game.latestVersion || game.versions[0]?.version || "";
     resolveMissingAssetInfo(gameId);
   }
   await nextTick();
@@ -1295,7 +1300,7 @@ onUnmounted(() => {
 });
 
 watch(
-  () => route.query.gameId,
+  () => [route.query.gameId, route.query.version],
   () => void scrollToRouteGame(),
 );
 </script>

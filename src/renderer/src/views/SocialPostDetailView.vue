@@ -10,17 +10,16 @@
     }}</n-alert>
     <template v-else-if="post">
       <div class="post-meta">
-        <span class="post-author">{{ post.authorNickname }}</span>
+        <ForumAuthorIdentity
+          class="post-author"
+          :nickname="post.authorNickname"
+          :github-login="post.authorGithubLogin"
+        />
         <n-text depth="3" class="post-time">{{
           formatTime(post.createdAt)
         }}</n-text>
       </div>
-      <ForumPostBody
-        v-if="post.body"
-        :body="post.body"
-        :resolved-mentions="resolvedMentions"
-        :is-resolving="isResolvingMentions"
-      />
+      <ForumPostBody v-if="post.body" :body="post.body" />
       <article v-else class="post-body">{{ t("social.noBody") }}</article>
       <div v-if="post.images.length" class="post-images">
         <n-image
@@ -84,17 +83,17 @@
             class="comment-item"
           >
             <div class="comment-head">
-              <span class="comment-author">{{ comment.author.nickname }}</span>
+              <ForumAuthorIdentity
+                class="comment-author"
+                :nickname="comment.author.nickname"
+                :github-login="comment.author.githubLogin"
+              />
               <span class="comment-time">{{
                 formatTime(comment.createdAt)
               }}</span>
             </div>
             <div class="comment-content">
-              <ForumPostBody
-                :body="comment.content"
-                :resolved-mentions="resolvedMentions"
-                :is-resolving="isResolvingMentions"
-              />
+              <ForumPostBody :body="comment.content" />
             </div>
             <n-space size="small">
               <n-button
@@ -143,6 +142,7 @@ import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { useDialog, useMessage } from "naive-ui";
 import { Heart, HeartOutline } from "@vicons/ionicons5";
+import ForumAuthorIdentity from "../components/social/ForumAuthorIdentity.vue";
 import { useForumStore } from "../stores/useForumStore";
 import {
   findScrollContainer,
@@ -151,14 +151,8 @@ import {
   type ScrollContainer,
 } from "../composables/useScrollContainer";
 import type { ForumComment, ForumPostDetail } from "../../../shared/types";
-import {
-  parseForumGameMentions,
-  type ForumGameMentionToken,
-} from "../../../shared/forum-game-mentions";
 import ForumPostEditor from "../components/social/ForumPostEditor.vue";
 import ForumPostBody from "../components/social/ForumPostBody.vue";
-import type { ResolvedForumGameMention } from "../services/forum-game-mention-service";
-import { resolveForumGameMentions } from "../services/forum-game-mention-service";
 
 const { t } = useI18n();
 const route = useRoute();
@@ -180,10 +174,6 @@ const isSubmittingComment = ref(false);
 const isDeletingPost = ref(false);
 const deletingCommentId = ref("");
 const commentsSentinel = ref<HTMLElement | null>(null);
-const resolvedMentions = ref<Record<string, ResolvedForumGameMention>>({});
-const isResolvingMentions = ref(false);
-const attemptedMentionKeys = new Set<string>();
-let mentionResolvePromise: Promise<void> | null = null;
 let commentsObserver: IntersectionObserver | null = null;
 let scrollContainer: ScrollContainer | null = null;
 
@@ -214,52 +204,6 @@ function mergeComments(items: ForumComment[]) {
   comments.value = Array.from(map.values()).sort(compareComments);
 }
 
-function collectMentionTokens(): ForumGameMentionToken[] {
-  const bodies = [
-    post.value?.body || "",
-    ...comments.value.map((item) => item.content),
-  ];
-  const tokens = new Map<string, ForumGameMentionToken>();
-  for (const body of bodies) {
-    for (const part of parseForumGameMentions(body)) {
-      if (part.type !== "game") continue;
-      tokens.set(`${part.marketId}/${part.gameId}`, part);
-    }
-  }
-  return Array.from(tokens.values());
-}
-
-async function resolveVisibleMentions(): Promise<void> {
-  if (mentionResolvePromise) {
-    await mentionResolvePromise;
-    return resolveVisibleMentions();
-  }
-  const pending = collectMentionTokens().filter(
-    (token) => !attemptedMentionKeys.has(`${token.marketId}/${token.gameId}`),
-  );
-  if (!pending.length) return;
-
-  pending.forEach((token) =>
-    attemptedMentionKeys.add(`${token.marketId}/${token.gameId}`),
-  );
-  isResolvingMentions.value = true;
-  mentionResolvePromise = resolveForumGameMentions(
-    pending,
-    window.electronAPI.market,
-  )
-    .then((resolved) => {
-      resolved.forEach((value, key) => {
-        resolvedMentions.value[key] = value;
-      });
-    })
-    .catch(() => undefined)
-    .finally(() => {
-      isResolvingMentions.value = false;
-      mentionResolvePromise = null;
-    });
-  return mentionResolvePromise;
-}
-
 function compareComments(left: ForumComment, right: ForumComment) {
   if (right.likeCount !== left.likeCount)
     return right.likeCount - left.likeCount;
@@ -284,7 +228,6 @@ async function loadComments(reset = false) {
       reset ? "" : commentsCursor.value || "",
     );
     mergeComments(page.items);
-    void resolveVisibleMentions();
     commentsCursor.value = page.nextCursor;
     commentsHasMore.value = page.hasMore;
   } catch (error) {
@@ -382,7 +325,9 @@ function confirmDeletePost() {
         goBack();
       } catch (error) {
         message.error(
-          errorLabel(error instanceof Error ? error.message : "forum_load_failed"),
+          errorLabel(
+            error instanceof Error ? error.message : "forum_load_failed",
+          ),
         );
       } finally {
         isDeletingPost.value = false;
@@ -406,12 +351,16 @@ function confirmDeleteComment(comment: ForumComment) {
           message.error(errorLabel(result.error));
           return;
         }
-        comments.value = comments.value.filter((item) => item.id !== comment.id);
+        comments.value = comments.value.filter(
+          (item) => item.id !== comment.id,
+        );
         if (post.value) forumStore.updateCommentCount(post.value.id, -1);
         message.success(t("social.deleteSuccess"));
       } catch (error) {
         message.error(
-          errorLabel(error instanceof Error ? error.message : "forum_load_failed"),
+          errorLabel(
+            error instanceof Error ? error.message : "forum_load_failed",
+          ),
         );
       } finally {
         deletingCommentId.value = "";

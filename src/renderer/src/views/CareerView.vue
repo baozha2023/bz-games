@@ -56,12 +56,18 @@ import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { SearchOutline } from "@vicons/ionicons5";
 import { useGameStore } from "../stores/useGameStore";
+import { useRoute } from "vue-router";
 import StatisticsView from "./StatisticsView.vue";
 import AchievementsView from "./AchievementsView.vue";
 
 const { t } = useI18n();
 const gameStore = useGameStore();
-const activeTab = ref<"statistics" | "achievements">("statistics");
+const route = useRoute();
+const routeCareerTab = () =>
+  route.query.tab === "achievements"
+    ? ("achievements" as const)
+    : ("statistics" as const);
+const activeTab = ref<"statistics" | "achievements">(routeCareerTab());
 const statisticsSearchKeyword = ref("");
 const achievementsSearchKeyword = ref("");
 const isSearchExpanded = ref(false);
@@ -86,6 +92,13 @@ watch(activeTab, () => {
     isSearchExpanded.value = true;
   }
 });
+
+watch(
+  () => route.query.tab,
+  () => {
+    activeTab.value = routeCareerTab();
+  },
+);
 
 function handleSearchBlur() {
   if (!currentSearchKeyword.value.trim()) {

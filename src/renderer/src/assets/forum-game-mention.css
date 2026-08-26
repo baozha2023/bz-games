@@ -21,12 +21,6 @@
   border-color: var(--bz-green);
 }
 
-.forum-game-mention--unknown {
-  color: var(--bz-text-secondary);
-  border-color: var(--bz-border-subtle);
-  background: var(--bz-bg-overlay);
-}
-
 .forum-game-mention-prefix {
   margin-right: 2px;
 }

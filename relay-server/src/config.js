@@ -99,7 +99,7 @@ export const config = {
   RELAY_TOKEN: (process.env.RELAY_TOKEN || "").trim(),
   MAX_ROOMS: Number(process.env.MAX_ROOMS || 80),
   MAX_CLIENTS: Number(process.env.MAX_CLIENTS || 400),
-  MAX_CLIENTS_PER_ROOM: Number(process.env.MAX_CLIENTS_PER_ROOM || 8),
+  MAX_CLIENTS_PER_ROOM: Number(process.env.MAX_CLIENTS_PER_ROOM || 10),
   MAX_EVENT_LOOP_DELAY_MS: Number(process.env.MAX_EVENT_LOOP_DELAY_MS || 250),
   MONGODB_URI: (process.env.MONGODB_URI || "").trim(),
   MONGODB_DB_NAME: (process.env.MONGODB_DB_NAME || "bz_games").trim(),

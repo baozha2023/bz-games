@@ -14,14 +14,14 @@
 
 ### 核心设计原则
 
-| 原则                 | 说明                                                                                                 |
-| -------------------- | ---------------------------------------------------------------------------------------------------- |
+| 原则                 | 说明                                                                                                       |
+| -------------------- | ---------------------------------------------------------------------------------------------------------- |
 | **本地优先**         | 用户配置、游戏记录、经济数据与统计数据存储于本地；登录、云同步、论坛与反馈属于可选在线能力，不影响核心功能 |
-| **便携式存储**       | 配置默认存储在应用根目录，游戏可存放在默认目录或用户维护的多路径目录中                               |
-| **开放式游戏管理**   | 用户可将符合平台规范的游戏载入平台，平台会自动复制并管理游戏文件                                     |
-| **统一联机基础设施** | 平台提供房间管理、玩家状态、聊天、游戏消息中继、断线重连与公网入口能力                               |
-| **公网入口可切换**   | 局域网入口持续可用，公网入口支持用户自备 frp 与官方中继服务器短地址                                  |
-| **Windows 专用**     | 面向 Windows 10/11 x64 设计、开发、测试与打包                                                        |
+| **便携式存储**       | 配置默认存储在应用根目录，游戏可存放在默认目录或用户维护的多路径目录中                                     |
+| **开放式游戏管理**   | 用户可将符合平台规范的游戏载入平台，平台会自动复制并管理游戏文件                                           |
+| **统一联机基础设施** | 平台提供房间管理、玩家状态、聊天、游戏消息中继、断线重连与公网入口能力                                     |
+| **公网入口可切换**   | 局域网入口持续可用，公网入口支持用户自备 frp 与官方中继服务器短地址                                        |
+| **Windows 专用**     | 面向 Windows 10/11 x64 设计、开发、测试与打包                                                              |
 
 ### 平台核心功能
 
@@ -29,7 +29,7 @@
 - 游戏启动与进程生命周期管理（主进程统一托管）
 - 联机房间系统（创建、加入、准备、开始、离开、聊天、踢人、解散同步）
 - 房间发现系统（局域网自动发现、官方服务器房间列表、加入前本地游戏与版本校验）
-- 国际化（`zh-CN / en-US / ja-JP / zh-TW / lzh / de-DE`）
+- 国际化（`zh-CN / en-US / ja-JP / zh-TW / de-DE`）
 - 成就系统（列表、解锁、系统通知、红点提示）
 - 统计系统（支持增量/全量统计模式，游玩时长自动累计）
 - 经济系统（签到、BZ 币、累计游玩时长、头像框解锁与装备）
@@ -51,31 +51,31 @@
 
 ## 二、技术栈
 
-| 分类            | 技术 / 库                                    | 备注                                                                             |
-| --------------- | -------------------------------------------- | -------------------------------------------------------------------------------- |
-| 桌面框架        | Electron                                     | <br />                                                                           |
-| 前端框架        | Vue 3                                        | <br />                                                                           |
-| 开发语言        | TypeScript（严格模式）                       | <br />                                                                           |
-| UI 组件库       | Naive UI                                     | <br />                                                                           |
-| 状态管理        | Pinia                                        | <br />                                                                           |
-| 页面截图        | html2canvas                                  | 统计热力图分享图生成                                                             |
-| 静态文件服务    | serve-static                                 | `entry=serve` 游戏本地 HTTP 服务，根路径回落到 `index.html`                      |
-| 构建工具        | electron-vite                                | <br />                                                                           |
-| 打包工具        | electron-builder                             | <br />                                                                           |
-| 包管理器        | pnpm                                         | <br />                                                                           |
-| 进程间通信      | Electron IPC（contextBridge）                | <br />                                                                           |
-| 本地数据存储    | electron-store                               | v10+ (ESM)，需在构建中配置 include                                               |
-| SQLite 数据存储 | better-sqlite3-multiple-ciphers              | ChaCha20 加密的游戏实体、会话、成就与统计事件                                    |
-| 在线服务元数据  | MySQL                                        | 用户、OAuth、会话、云文件元数据、反馈以及论坛帖子/评论/点赞/搜索 outbox           |
-| 云文件对象存储  | MongoDB GridFS                               | 保存云同步文件、反馈图片与论坛帖子图片                                           |
-| Multipart 解析  | busboy                                       | 中继服务流式接收反馈和论坛图片并限制字段、文件数量及大小                         |
-| 论坛搜索        | 可选 Elasticsearch 8.19.x + analysis-ik        | MySQL 为事实源；ES 未配置或未就绪时隐藏搜索，标题/正文使用 `ik_max_word`/`ik_smart` |
-| 管理前端        | Vue 3 + TypeScript + Vite + Pinia + Naive UI | 构建为 `/admin/` 同源静态站点                                                    |
-| 客户端更新      | electron-updater                             | GitHub Releases 作为更新源                                                       |
-| WebSocket 服务  | ws                                           | Game API、Room Server、Room Client 均基于 WebSocket，v2 高频通信支持原始二进制帧 |
-| 版本比较        | semver                                       | 用于平台版本与游戏版本兼容性检查                                                 |
-| ZIP/7Z 解压     | 7zip-bin (7za)                               | 通过 `child_process.spawn` 调用，统一处理 .zip 和 .7z                            |
-| 目标平台        | Windows 10/11 x64                            | <br />                                                                           |
+| 分类            | 技术 / 库                                    | 备注                                                                                |
+| --------------- | -------------------------------------------- | ----------------------------------------------------------------------------------- |
+| 桌面框架        | Electron                                     | <br />                                                                              |
+| 前端框架        | Vue 3                                        | <br />                                                                              |
+| 开发语言        | TypeScript（严格模式）                       | <br />                                                                              |
+| UI 组件库       | Naive UI                                     | <br />                                                                              |
+| 状态管理        | Pinia                                        | <br />                                                                              |
+| 页面截图        | html2canvas                                  | 统计热力图分享图生成                                                                |
+| 静态文件服务    | serve-static                                 | `entry=serve` 游戏本地 HTTP 服务，根路径回落到 `index.html`                         |
+| 构建工具        | electron-vite                                | <br />                                                                              |
+| 打包工具        | electron-builder                             | <br />                                                                              |
+| 包管理器        | pnpm                                         | <br />                                                                              |
+| 进程间通信      | Electron IPC（contextBridge）                | <br />                                                                              |
+| 本地数据存储    | electron-store                               | v10+ (ESM)，需在构建中配置 include                                                  |
+| SQLite 数据存储 | better-sqlite3-multiple-ciphers              | ChaCha20 加密的游戏实体、会话、成就与统计事件                                       |
+| 在线服务元数据  | MySQL                                        | 用户、OAuth、会话、云文件元数据、反馈以及论坛帖子/评论/点赞/搜索 outbox             |
+| 云文件对象存储  | MongoDB GridFS                               | 保存云同步文件、反馈图片与论坛帖子图片                                              |
+| Multipart 解析  | busboy                                       | 中继服务流式接收反馈和论坛图片并限制字段、文件数量及大小                            |
+| 论坛搜索        | 可选 Elasticsearch 8.19.x + analysis-ik      | MySQL 为事实源；ES 未配置或未就绪时隐藏搜索，标题/正文使用 `ik_max_word`/`ik_smart` |
+| 管理前端        | Vue 3 + TypeScript + Vite + Pinia + Naive UI | 构建为 `/admin/` 同源静态站点                                                       |
+| 客户端更新      | electron-updater                             | GitHub Releases 作为更新源                                                          |
+| WebSocket 服务  | ws                                           | Game API、Room Server、Room Client 均基于 WebSocket，v2 高频通信支持原始二进制帧    |
+| 版本比较        | semver                                       | 用于平台版本与游戏版本兼容性检查                                                    |
+| ZIP/7Z 解压     | 7zip-bin (7za)                               | 通过 `child_process.spawn` 调用，统一处理 .zip 和 .7z                               |
+| 目标平台        | Windows 10/11 x64                            | <br />                                                                              |
 
 ---
 
@@ -150,6 +150,7 @@ bz-games/
 ├── tsconfig.json                         # TypeScript 根配置
 ├── tsconfig.node.json                    # 主进程/预加载/共享代码 TS 配置
 ├── tsconfig.web.json                     # 渲染进程 TS 配置
+├── vitest.config.ts                      # Vue 论坛组件与 composable 的 jsdom 测试配置
 ├── electron.vite.config.ts               # Electron-Vite 构建配置（读取 private-build.config.json 注入构建期常量）
 ├── config.json                           # 本地持久化配置（运行生成）
 ├── db/                                   # SQLite 数据库目录（运行生成）
@@ -205,6 +206,7 @@ bz-games/
 │   │   │   └── system/
 │   │       ├── CloudSyncService.ts    # 云端数据同步（GitHub OAuth 登录 / 配置与数据库上传下载 / 哈希校验 / 进度事件 / 上传黑名单过滤敏感字段 / 下载选择性合并 config）
 │   │       ├── FeedbackService.ts     # 图片选择/验证、multipart 上传、历史详情查询与被动登录失效联动
+│   │       ├── ForumService.ts        # 论坛鉴权、信息流/搜索、帖子引用解析、发帖评论与图片上传客户端
 │   │       ├── NotificationService.ts # 系统通知窗口服务
 │   │       ├── UninstallService.ts    # 游戏进程收口、游戏库清理与系统卸载器启动确认
 │   │       └── UpdateService.ts       # 客户端更新检查/下载/安装服务
@@ -232,6 +234,7 @@ bz-games/
 │   │       ├── router/
 │   │       │   └── index.ts               # 路由配置
 │   │       ├── stores/
+│   │       │   ├── useForumStore.ts       # 论坛列表/搜索/游标与滚动位置状态管理
 │   │       │   ├── useGameStore.ts        # 游戏库状态管理
 │   │       │   ├── useRoomStore.ts        # 房间状态管理
 │   │       │   └── useSettingsStore.ts    # 设置与更新状态管理
@@ -252,15 +255,21 @@ bz-games/
 │   │       │   ├── SettingsView.vue       # 设置页面
 │   │       │   └── StatisticsView.vue     # 统计页面
 │   │       ├── composables/
+│   │       │   ├── useForumCommandController.ts # 论坛斜杠指令多级选择状态机（由统一注册表驱动）
+│   │       │   ├── useForumPostPicker.ts   # `/post` 的 ES 可用性、最近/搜索结果、限量与竞态取消
+│   │       │   ├── useForumReferenceCandidates.ts # `@game` 与斜杠指令共用的市场/游戏候选加载与筛选
 │   │       │   ├── useGameListView.ts      # 游戏列表搜索/筛选/版本选择/交错渲染公共逻辑（AchievementsView 与 StatisticsView 共享）
+│   │       │   ├── useImageCache.ts        # 统一图片缓存层（本地+远程）
 │   │       │   ├── useRoomJoin.ts          # 房间地址加入公共逻辑（服务器 Tab 与手动短地址共用）
-│   │       │   └── useImageCache.ts        # 统一图片缓存层（本地+远程）
+│   │       │   └── useScrollContainer.ts   # Naive UI 滚动容器定位与滚动状态复用逻辑
 │   │       ├── components/
 │   │       │   ├── CachedImg.vue           # 远程图片缓存组件（市场专用）
 │   │       │   ├── CalendarHeatmap.vue      # GitHub 风格日历热力图组件（统计页）
 │   │       │   ├── CheckInModal.vue        # 签到弹窗组件
 │   │       │   ├── AvatarWithFrame.vue     # 头像+头像框叠加组件（CSS overlay 算法）
 │   │       │   ├── NicknameText.vue        # 昵称样式渲染组件（颜色/渐变/字体/字重/特效动画 + 主题色自适应）
+│   │       │   ├── common/
+│   │       │   │   └── ImageSelectionPanel.vue # 建言献策与论坛发帖共用的图片选择、预览、排序和删除面板
 │   │       │   ├── game/
 │   │       │   │   ├── AchievementIcon.vue # Manifest 自定义成就图标加载与默认奖杯回退
 │   │       │   │   ├── GameAchievementsModal.vue # 游戏成就弹窗组件
@@ -272,6 +281,12 @@ bz-games/
 │   │       │   │   └── GameIcon.vue        # 游戏图标组件（缺失时使用构建期静态默认图标）
 │   │       │   ├── settings/
 │   │       │   │   └── FeedbackModal.vue   # 建言献策文字/图片选择、限流与提交结果弹窗
+│   │       │   ├── social/
+│   │       │   │   ├── ForumAuthorIdentity.vue # 论坛列表、正文与评论共用的昵称 + GitHub 身份链接
+│   │       │   │   ├── ForumPostBody.vue   # 帖子正文与评论共用的纯文本引用解析和展示
+│   │       │   │   ├── ForumPostEditor.vue # 发帖与评论共用的纯文本引用编辑器和指令选择界面
+│   │       │   │   ├── forum-editor-document.ts # 编辑器纯文档模型、引用替换与无损序列化
+│   │       │   │   └── forum-editor-dom.ts # contenteditable 渲染、光标和触发上下文 DOM 适配层
 │   │       │   └── room/
 │   │       │       ├── PlayerCard.vue      # 房间玩家卡片组件
 │   │       │       ├── PlayerList.vue      # 房间玩家列表组件
@@ -279,11 +294,17 @@ bz-games/
 │   │       │       ├── RoomChat.vue        # 房间聊天组件
 │   │       │       ├── LanGuideModal.vue    # 局域网联机引导弹窗组件（NatFrp + EasyTier 配置指引，不再硬编码引导节点地址，RoomView 与 RoomDiscoveryView 共享）
 │   │       │       └── ImageViewer.vue      # 聊天图片预览器（复用 Naive UI NImagePreview 工具栏）
+│   │       ├── services/
+│   │       │   ├── forum-command-registry.ts # 五种斜杠指令的定义、流程、可用条件与协议映射
+│   │       │   ├── forum-market-reference-service.ts # 市场目录/索引缓存及引用解析所需的加载状态
+│   │       │   ├── forum-page-registry.ts   # 稳定页面 ID、国际化信息及安全导航行为注册表
+│   │       │   ├── forum-post-reference-service.ts # 帖子引用批量解析、缓存与并发请求合并
+│   │       │   └── forum-reference-view-model.ts # 编辑器与正文共用的五类引用展示状态映射
 │   │       ├── locales/
 │   │       │   ├── de-DE.ts                # 德文文案
 │   │       │   ├── en-US.ts                # 英文文案
+│   │       │   ├── forum-commands.ts        # 五种论坛指令及页面注册项的多语言文案聚合
 │   │       │   ├── ja-JP.ts                # 日文文案
-│   │       │   ├── lzh.ts                  # 文言文文案
 │   │       │   ├── zh-CN.ts                # 中文文案
 │   │       │   └── zh-TW.ts                # 繁体中文文案
 │   │       ├── types/
@@ -299,17 +320,20 @@ bz-games/
 │       ├── AppConstants.ts                 # 平台构建期常量（CDN/OSS/GitHub/官方中继/配置、数据库及 Manifest 加密种子等，由 electron.vite.config.ts 构建期注入）
 │       ├── RoomConstants.ts                # 房间通信与 Game API 常量（消息大小限制、心跳间隔、重连/延迟探测定时器等）
 │       ├── binary-protocol.ts              # v2 二进制帧编码/解码工具（4字节头长度 + JSON header + binary body）
+│       ├── forum-references.ts              # `@game` 与五种斜杠指令的纯文本协议、解析和序列化
 │       ├── game-launch.ts                  # 四种入口分流与 Web/Native 启动配置纯函数
 │       ├── game-manifest.ts                # Game Manifest Schema 与类型
 │       ├── ipc-channels.ts                 # IPC 频道常量定义
 │       ├── log-serialization.ts            # 日志序列化工具（有界深度/数组/字符串截断 + RendererLogPayload 结构化格式）
+│       ├── market-search.ts                # 市场/游戏候选的规范化、索引构建和跨市场搜索纯函数
 │       └── types/
-│   │       ├── game.types.ts               # Game API 消息与游戏启动结果类型
-│       ├── index.ts                    # 共享类型聚合导出
-│       ├── market.types.ts             # 市场索引、任务状态与错误码类型
-│       ├── report.types.ts             # 游戏战绩报告类型（game.report API 的 payload 定义）
-│       ├── room.types.ts               # 房间协议与房间模型类型
-│       └── store.types.ts              # 本地存储模型类型
+│           ├── forum.types.ts              # 论坛帖子、评论、引用解析和图片选择共享模型
+│           ├── game.types.ts               # Game API 消息与游戏启动结果类型
+│           ├── index.ts                    # 共享类型聚合导出
+│           ├── market.types.ts             # 市场索引、任务状态与错误码类型
+│           ├── report.types.ts             # 游戏战绩报告类型（game.report API 的 payload 定义）
+│           ├── room.types.ts               # 房间协议与房间模型类型
+│           └── store.types.ts              # 本地存储模型类型
 │
 ├── resources/
 │   ├── icon.png                            # 应用图标资源
@@ -838,7 +862,7 @@ interface AppSettings {
   nicknameStyle?: NicknameStyle;
   libraryLayout?: "card" | "icon" | "steam";
   lastJoinRoomAddress?: string;
-  language: "zh-CN" | "en-US" | "ja-JP" | "zh-TW" | "lzh" | "de-DE";
+  language: "zh-CN" | "en-US" | "ja-JP" | "zh-TW" | "de-DE";
   theme: "dark" | "light" | "auto";
   defaultRoomPort: number;
   closeBehavior: "tray" | "exit";
@@ -1080,7 +1104,7 @@ interface AppSettings {
 - **论坛系统设计（ForumService）**：
   - **运行边界**：论坛客户端接口必须同时携带 relayToken 和有效 GitHub Bearer Session；管理端只使用同源 Portal Cookie。MySQL 是帖子、评论、计数、点赞和软删除的事实源，MongoDB GridFS 仅保存帖子图片。帖子和评论的 `status` 为 0/1/2，分别表示正常、作者删除、管理员删除；`deleted_at` 只记录删除时间，`deleted_by` 记录实际操作人。
   - **信息流与详情**：`SocialView.vue` 只读取每页 10 条标题/时间/点赞数/评论数，使用 MySQL 最新流游标或 Elasticsearch `search_after` 搜索；`SocialPostDetailView.vue` 读取正文、图片和按点赞数/时间/ID排序的评论。列表、搜索词、游标和实际 `.n-layout-scroll-container` 滚动位置由 `useForumStore` 保留，返回详情不重新加载首页。
-  - **文字与图片**：标题、正文和评论在服务端使用现有敏感词服务替换为等量 `*` 后存储；客户端主进程和服务端都必须校验图片真实 MIME、扩展名、大小、尺寸和像素数，详情图片还必须校验响应 MIME 与声明大小。帖子最多 4 张、单张最多 5 MiB，正文与评论分别受服务端长度限制。
+  - **文字与图片**：标题、正文和评论在服务端使用现有敏感词服务替换为等量 `*` 后存储；客户端主进程和服务端都必须校验图片真实 MIME、扩展名、大小、尺寸和像素数，客户端选区还按 SHA-256 拒绝同批及跨批重复图片，详情图片必须校验响应 MIME 与声明大小。帖子最多 4 张、单张最多 5 MiB，正文与评论分别受服务端长度限制。
   - **互动与限流**：帖子和评论点赞通过复合唯一键与事务内计数更新保证幂等。发帖限流使用 `forum.post.create`，管理员/超级管理员 1 小时、其他登录用户 24 小时；评论使用 `forum.comment.create`，分别为 5 分钟和 30 分钟。multipart 发帖在读取图片前 reservation，失败释放，业务事务提交后 commit。
   - **搜索同步**：ES 仅索引过滤后的标题和正文，不索引图片、评论、点赞或原始敏感词。帖子创建/软删除与 `forum_search_outbox` 同事务，worker 失败重试；ES 不可用时最新流、发帖和评论不受影响，带搜索词请求返回可重试错误，不回退 `LIKE`。`GET /api/v1/forum/search-status` 是客户端搜索开关：ES 未配置、未就绪或同步异常时返回 `enabled: false`，客户端隐藏搜索框。后台 ES 调用静默失败，仅保留 outbox 重试状态。部署固定 Elasticsearch 8.19.0 与同版本 analysis-ik，`ik_max_word` 索引、`ik_smart` 查询，端口只监听本机。
   - **删除、恢复与管理端**：客户端作者可通过 `DELETE /api/v1/forum/posts/:id` 和 `DELETE /api/v1/forum/comments/:id` 删除自己的内容；服务端按作者 ID 和 `status=0` 最终校验，作者删除帖子会级联标记其有效评论。`forum.view` 控制查看，`forum.manage` 控制管理员删除，`forum.restore` 仅授予超级管理员并控制恢复；管理员与超级管理员拥有前两项 capability，超级管理员额外拥有恢复能力。管理员删除写入 `status=2`，删除帖子同时标记其有效评论并写入 ES 删除 outbox。恢复帖子只将帖子恢复为 `status=0` 并写入 ES upsert outbox，不自动恢复已删除评论；恢复评论要求所属帖子正常，并在事务内增加评论计数。普通客户端永远只读取 `status=0` 内容。
@@ -1089,10 +1113,10 @@ interface AppSettings {
   - **图片选择与验证（v3.1.3 追加模式）**：`selectImages(existingSelectionId?)` 支持传入已有选区 ID 时以追加模式在现有图片上叠加新图片。读取文件后：① 魔术字节检测实际 MIME；② 比对实际格式与扩展名声明是否一致（`getDeclaredContentType`）；③ `nativeImage.createFromBuffer` 验证图形有效性；④ 每张图片生成 SHA-256 哈希用于跨批次去重（同一选区中哈希重复的图片被拒绝，前端弹出 `duplicate_image` 提示）。追加时若原选区已满 4 张或总图片数超限则返回 `too_many_images`；传入已过期选区 ID 返回 `feedback_images_expired`。通过后将 Buffer 与哈希存入进程内存 Map（`selectionId` 为键），供后续 multipart 上传引用。整组图片 30 分钟后自动清理；单张移除后刷新 `createdAt`。
   - **释放语义**：`releaseImages(selectionId, imageId?)` 支持单张移除或整组释放；单张移除后若 selection 为空则自动删除 Map 条目，否则刷新 `createdAt` 时间戳。
   - **提交管线**：建言献策仅对已登录用户开放；设置页仅在 GitHub 会话有效时显示入口，主进程的图片选择、历史读取、详情查询和提交 IPC 也独立校验本地会话。`submit()` 校验 content ≤ 5000 字、selectionId 有效性、文字或图片至少存在一种，通过 `FormData` 构造 multipart，注入 `appVersion` 与 `platform`，并由 `RequestInterceptor.buildHeaders()` 注入 relayToken 和必需的 GitHub Bearer Token。POST `/api/v1/feedback` 超时 45 秒。通过 `cloudSyncService.handleAuthFailure(body.error)` 统一处理登录失效——仅 `session_expired` / `session_invalid` 时清除本地云会话。
-  - **反馈历史**：打开历史 Tab 时，主进程先删除旧版本 `config.json` 中的 `settings.feedbackHistory`，再通过 `GET /api/v1/feedback` 按当前登录账号查询反馈编号和提交时间；客户端不再主动持久化反馈历史，旧字段在打开历史时清理。展开条目时调用 `getFeedbackDetail(id)` 从服务端查询正文、状态、回复与图片，收起后再次展开会重新查询，不设定时刷新。列表加载期间显示骨架屏。
+  - **反馈历史**：打开历史 Tab 时，主进程在首屏请求前删除旧版本 `config.json` 中的 `settings.feedbackHistory`，再通过 `GET /api/v1/feedback?limit=10&cursor=` 按当前登录账号查询反馈编号和提交时间；服务端按 `created_at DESC, id DESC` 使用键集游标固定返回 10 条，客户端用 `IntersectionObserver` 在滚动区距底部 320px 时加载下一页并按 ID 去重。翻页失败时保留当前游标和 `hasMore`，不把瞬时错误误判为已经到底；用户重新滚动到触发区后可重试。客户端不再主动持久化反馈历史。展开条目时调用 `getFeedbackDetail(id)` 从服务端查询正文、状态、回复与图片，收起后再次展开会重新查询，不设定时刷新。首屏列表加载期间显示骨架屏。
   - **反馈详情查询**：`getDetail(feedbackId)` 通过 `/api/v1/feedback/:id` 获取用户可见详情。主进程校验 UUID 格式反馈 ID，然后校验响应结构（id、content、status、reply、imageCount、createdAt、updatedAt 及 images 数组的每个元素的类型与大小）。随后逐个通过 `/api/v1/feedback/:id/images/:imageId` 下载图片，校验实际 Content-Type 与 MySQL 记录的 MIME 一致、实际 body 长度与声明 size 一致、不超 MAX_IMAGE_BYTES。任一步不通过返回 `feedback_invalid_response`。通过 auth 失败或权限不足由 `handleAuthFailure` 统一收口。
   - **IPC 边界**：渲染进程仅通过 `FeedbackModal.vue` → `electronAPI.settings.selectFeedbackImages / releaseFeedbackImages / submitFeedback / getFeedbackHistory / getFeedbackDetail` 与主进程交互，不直接接触文件路径或服务端 relayToken / GitHub 会话。`getFeedbackHistory` 从服务端查询当前账号列表，主进程必须校验历史和详情响应结构、图片数量、大小、MIME 和实际响应长度后再生成 Data URL。
-  - **服务端并联（v3.1.3 用户详情接口）**：`POST /api/v1/feedback`、`GET /api/v1/feedback`、`GET /api/v1/feedback/:id` 和图片读取接口均要求发行版 relayToken、有效 GitHub Bearer Token，并对历史、详情和图片校验反馈所有者。历史接口只返回当前账号的 `id/submittedAt`；详情返回 `id/content/status/reply/imageCount/createdAt/updatedAt/images`，不含 `adminNote`；图片接口返回单张图片原始流。管理 API 详情额外包含 `adminNote`，更新接口接受 `status/adminNote/reply`，备注与回复均不超过 5000 字符。提交采用 busboy 流式 multipart、魔法字节校验、GitHub ID 进程内冷却、MySQL 事务 + GridFS。
+  - **服务端并联（v3.1.3 用户详情接口）**：`POST /api/v1/feedback`、`GET /api/v1/feedback`、`GET /api/v1/feedback/:id` 和图片读取接口均要求发行版 relayToken、有效 GitHub Bearer Token，并对历史、详情和图片校验反馈所有者。历史接口只返回当前账号的 `id/submittedAt` 及 `hasMore/nextCursor` 分页元数据；详情返回 `id/content/status/reply/imageCount/createdAt/updatedAt/images`，不含 `adminNote`；图片接口返回单张图片原始流。管理 API 详情额外包含 `adminNote`，更新接口接受 `status/adminNote/reply`，备注与回复均不超过 5000 字符。提交采用 busboy 流式 multipart、魔法字节校验、GitHub ID 进程内冷却、MySQL 事务 + GridFS。
   - **Portal 前端**：`bz-games-admin/` 为独立 Vue 3 + Vite + Pinia 项目，构建为 `/admin/` 同源静态站点。生产环境由 Nginx 直接从 `/var/www/campusmate/admin` 托管页面，Relay 的 `ADMIN_STATIC_DIR` 保留为本机直连或开发回退；Nginx 与 Relay 静态服务都必须提供 SPA fallback、路径穿越防护和 CSP/`nosniff`/`DENY` iframe 等安全响应头。服务端会话接口返回唯一 capability 集合，前端 `rbac.ts` 只校验能力契约，不维护角色到能力的映射；菜单、路由、按钮和提交前置检查均调用 `auth.can(capability)`。玩家进入欢迎页并管理自己的反馈，创作者仅管理自己的游戏托管，管理员无用户角色调整、托管容量查看、系统监控和桌面客户端版本上传能力，超级管理员拥有全部界面与操作。服务端仍是唯一授权决策源，并独立执行 capability、资源所有权、状态机和精确 Origin 校验。
 - **卸载系统设计（UninstallService）**：
   - **状态互斥**：`running` 布尔标志防止重复卸载调用。
@@ -1285,7 +1309,7 @@ interface AppSettings {
 - `system:feedback:selectImages`：打开文件对话框选择反馈图片（支持传入 `selectionId` 追加模式），主进程侧执行 MIME 声明与实际格式一致性校验、SHA-256 去重。
 - `system:feedback:releaseImages`：释放单张或全部已选反馈图片。
 - `system:feedback:submit`：文本 ≤ 5000 字 + 可选图片 multipart 上传。
-- `system:feedback:getHistory`：从服务端读取当前登录账号的反馈历史编号与提交时间戳，并在查询前清理旧版本地历史。
+- `system:feedback:getHistory`：携带可选游标从服务端读取当前登录账号固定 10 条的反馈历史编号、提交时间戳和下一页元数据，并在首屏查询前清理旧版本地历史。
 - `system:feedback:getDetail`：从服务端查询反馈详情（正文、处理状态、回复、图片），主进程侧校验响应结构后再返回 Data URL。
 - `forum:listPosts` / `forum:getPost` / `forum:getComments`：主进程携带 relayToken 与登录 Bearer Session 读取论坛轻量列表、帖子详情和评论游标页。
 - `forum:getSearchAvailability`：主进程读取服务端 ES 可用性；不可用时客户端不显示论坛搜索框。
@@ -1488,6 +1512,7 @@ interface AppSettings {
 - **令牌注入边界**：客户端附加 GitHub Token、Relay Token 或专用 Referer 前，必须使用 `URL` 解析并精确校验协议、`origin` 与允许的路径边界；禁止使用字符串 `startsWith` 判断可信主机，禁止向相似前缀域名、用户信息段、重定向后的第三方地址或任意市场 URL 发送凭据。
   - **配置唯一来源**：客户端真实关键配置只允许出现在被 Git 忽略的 `private-build.config.json`；服务端真实关键配置只允许存在于服务器的 systemd 主单元及 drop-in 配置，权限必须为 `root:root 0600`；管理端生产环境使用同源 `/api` 与 `/auth`，当前无环境字段。生产管理端构建产物只部署到 Nginx 的 `/var/www/campusmate/admin`，不把服务器真实配置回写仓库。
   - **生产公网入口唯一化**：Nginx 只监听公网 `:38090`，Relay 只监听本机 `127.0.0.1:38091`；Nginx 直接托管 `/admin/` 静态页面，并将当前 `/api/...`、`/auth/...`、房间 HTTP 接口和 `/ws/` WebSocket 转发到本机 Relay。不得保留旧服务前缀或 Relay `:38091` 的公网兼容入口。官网和客户端发行版下载统一使用 `/api/v1/releases/latest/download`；GitHub Actions 发布通过 SSH 调用服务器发布脚本，超级管理员桌面版本上传使用 `/api/admin/v1/desktop-release`，客户端托管游戏下载使用 `/api/v1/game-hosting/assets/*`，创作者上传使用 `/api/portal/v1/game-hosting/*`。
+  - **桌面版本发布语义**：GitHub Actions 与管理端上传复用同一原子发布器和发布锁。Actions 对同版本同文件返回 `already_current`，对同版本不同 SHA-256 返回 `current_retained` 并保留当前文件，两者都按幂等成功结束；管理 API 必须把 `current_retained` 映射为 `409 desktop_release_version_conflict`，不得让页面把未发生的替换提示为发布成功。
 - **示例同步**：`private-build.config.example.json`、`relay-server/bz-games-relay.service.example` 和 `bz-games-admin/.env.example` 分别对应三端。新增或删除配置字段后必须运行 `npm run check:config`（对应 `scripts/check-config-examples.mjs`，自动校验三端配置字段一致性、`.gitignore` 敏感路径覆盖及 SERVICE 示例完整性），禁止在源码或文档写入真实公网地址、管理员 ID、令牌、数据库连接串或 OAuth Secret。
 
 ---

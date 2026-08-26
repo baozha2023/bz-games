@@ -23,7 +23,7 @@
           <n-button
             secondary
             :loading="isRefreshing"
-            :disabled="forumStore.isLoading"
+            :disabled="forumStore.isLoading || !canRefresh"
             @click="refreshPosts"
           >
             <template #icon
@@ -52,28 +52,35 @@
           :description="t('social.empty')"
         />
         <div v-else class="forum-list">
-          <button
+          <div
             v-for="post in forumStore.posts"
             :key="post.id"
             class="forum-post-row"
-            type="button"
+            role="button"
+            tabindex="0"
             @click="openPost(post.id)"
+            @keydown.enter.prevent="openPost(post.id)"
+            @keydown.space.prevent="openPost(post.id)"
           >
-            <span class="forum-post-main">
-              <span class="forum-post-title">{{ post.title }}</span>
-              <span class="forum-post-author">{{ post.authorNickname }}</span>
-            </span>
+            <span class="forum-post-title">{{ post.title }}</span>
+            <ForumAuthorIdentity
+              class="forum-post-author"
+              :nickname="post.authorNickname"
+              :github-login="post.authorGithubLogin"
+            />
             <span class="forum-post-meta">
-              <span>{{ formatTime(post.createdAt) }}</span>
-              <span
+              <span class="forum-post-time">{{
+                formatTime(post.createdAt)
+              }}</span>
+              <span class="forum-post-stat"
                 ><n-icon><HeartOutline /></n-icon>{{ post.likeCount }}</span
               >
-              <span
+              <span class="forum-post-stat"
                 ><n-icon><ChatbubbleOutline /></n-icon
                 >{{ post.commentCount }}</span
               >
             </span>
-          </button>
+          </div>
         </div>
         <div ref="sentinel" class="forum-sentinel">
           <n-spin
@@ -99,61 +106,68 @@
       v-model:show="showCreatePost"
       preset="card"
       :title="t('social.createPost')"
-      style="width: min(680px, 92vw)"
+      style="
+        width: 60vw;
+        height: 80vh;
+        max-width: calc(100vw - 32px);
+        max-height: calc(100vh - 32px);
+      "
+      content-style="display: flex; flex: 1; min-height: 0; overflow: hidden"
+      header-style="flex-shrink: 0"
+      footer-style="flex-shrink: 0"
+      :closable="!isCreatePostBusy"
+      :mask-closable="!isCreatePostBusy"
       @after-leave="clearDraft"
     >
-      <n-form label-placement="top">
-        <n-form-item :label="t('social.postTitle')">
-          <n-input
-            v-model:value="draftTitle"
-            maxlength="80"
-            show-count
-            :placeholder="t('social.postTitlePlaceholder')"
+      <n-scrollbar class="create-post-scrollbar">
+        <n-form class="create-post-form" label-placement="top">
+          <n-form-item :label="t('social.postTitle')">
+            <n-input
+              v-model:value="draftTitle"
+              maxlength="80"
+              show-count
+              :placeholder="t('social.postTitlePlaceholder')"
+            />
+          </n-form-item>
+          <n-form-item :label="t('social.postBody')">
+            <ForumPostEditor
+              v-model="draftBody"
+              :placeholder="t('social.postBodyPlaceholder')"
+              :max-length="5000"
+              @update:valid="draftBodyValid = $event"
+            />
+          </n-form-item>
+          <ImageSelectionPanel
+            :images="selectedImages"
+            :select-label="t('feedback.selectImages')"
+            :limits-label="t('feedback.imageLimits')"
+            :clear-label="t('feedback.clearImages')"
+            :remove-label="t('feedback.removeImage')"
+            :selecting="isSelectingImages"
+            :disabled="isCreatePostBusy"
+            :clear-disabled="isCreating"
+            @select="chooseImages"
+            @clear="clearImages"
+            @remove="removeImage"
           />
-        </n-form-item>
-        <n-form-item :label="t('social.postBody')">
-          <ForumPostEditor
-            v-model="draftBody"
-            :placeholder="t('social.postBodyPlaceholder')"
-            :max-length="5000"
-            @update:valid="draftBodyValid = $event"
-          />
-        </n-form-item>
-        <n-space v-if="selectedImages.length" :size="8" class="selected-images">
-          <div
-            v-for="image in selectedImages"
-            :key="image.id"
-            class="selected-image"
-          >
-            <img :src="image.previewUrl" :alt="image.fileName" />
-            <n-button
-              size="tiny"
-              circle
-              type="error"
-              @click="removeImage(image.id)"
-              ><template #icon
-                ><n-icon><CloseOutline /></n-icon></template
-            ></n-button>
-          </div>
-        </n-space>
-      </n-form>
+        </n-form>
+      </n-scrollbar>
       <template #footer>
-        <n-space justify="space-between" align="center">
-          <n-button secondary @click="chooseImages">{{
-            t("social.addImages")
-          }}</n-button>
-          <n-space>
-            <n-button @click="showCreatePost = false">{{
-              t("common.cancel")
-            }}</n-button>
-            <n-button
-              type="primary"
-              :loading="isCreating"
-              :disabled="!draftTitle.trim() || !draftBodyValid"
-              @click="submitPost"
-              >{{ t("social.publish") }}</n-button
-            >
-          </n-space>
+        <n-space justify="end">
+          <n-button
+            :disabled="isCreatePostBusy"
+            @click="showCreatePost = false"
+            >{{ t("common.cancel") }}</n-button
+          >
+          <n-button
+            type="primary"
+            :loading="isCreating"
+            :disabled="
+              isCreatePostBusy || !draftTitle.trim() || !draftBodyValid
+            "
+            @click="submitPost"
+            >{{ t("social.publish") }}</n-button
+          >
         </n-space>
       </template>
     </n-modal>
@@ -161,14 +175,13 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { useMessage } from "naive-ui";
 import {
   AddOutline,
   ChatbubbleOutline,
-  CloseOutline,
   HeartOutline,
   RefreshOutline,
   SearchOutline,
@@ -183,6 +196,8 @@ import {
 } from "../composables/useScrollContainer";
 import type { ForumImageSelection } from "../../../shared/types";
 import ForumPostEditor from "../components/social/ForumPostEditor.vue";
+import ForumAuthorIdentity from "../components/social/ForumAuthorIdentity.vue";
+import ImageSelectionPanel from "../components/common/ImageSelectionPanel.vue";
 
 const { t } = useI18n();
 const router = useRouter();
@@ -199,10 +214,18 @@ const draftBodyValid = ref(true);
 const selectionId = ref("");
 const selectedImages = ref<ForumImageSelection[]>([]);
 const isCreating = ref(false);
+const isSelectingImages = ref(false);
 const isRefreshing = ref(false);
+const canRefresh = ref(true);
+const FORUM_REFRESH_COOLDOWN_MS = 5_000;
 let searchTimer: ReturnType<typeof setTimeout> | null = null;
 let observer: IntersectionObserver | null = null;
 let scrollContainer: ScrollContainer | null = null;
+let refreshCooldownTimer: number | null = null;
+
+const isCreatePostBusy = computed(
+  () => isCreating.value || isSelectingImages.value,
+);
 
 function formatTime(value: string | null) {
   if (!value) return "";
@@ -223,6 +246,8 @@ function openPost(id: string) {
 }
 
 async function chooseImages() {
+  if (isCreatePostBusy.value || selectedImages.value.length >= 4) return;
+  isSelectingImages.value = true;
   try {
     const result = await window.electronAPI.forum.selectImages(
       selectionId.value || undefined,
@@ -231,12 +256,22 @@ async function chooseImages() {
       selectionId.value = result.selectionId;
       selectedImages.value = result.images;
     } else if (!result.canceled) {
-      message.error(errorLabel(result.error || "image_failed"));
+      if (result.error === "duplicate_image") {
+        message.warning(errorLabel(result.error));
+      } else {
+        message.error(errorLabel(result.error || "image_failed"));
+      }
+      if (result.error === "forum_images_expired") {
+        selectionId.value = "";
+        selectedImages.value = [];
+      }
     }
   } catch (error) {
     message.error(
       errorLabel(error instanceof Error ? error.message : "image_failed"),
     );
+  } finally {
+    isSelectingImages.value = false;
   }
 }
 
@@ -247,6 +282,14 @@ async function removeImage(imageId: string) {
     (image) => image.id !== imageId,
   );
   if (!selectedImages.value.length) selectionId.value = "";
+}
+
+async function clearImages() {
+  if (!selectionId.value) return;
+  const currentSelectionId = selectionId.value;
+  selectionId.value = "";
+  selectedImages.value = [];
+  await window.electronAPI.forum.releaseImages(currentSelectionId);
 }
 
 function clearDraft() {
@@ -286,7 +329,7 @@ async function submitPost() {
 }
 
 async function refreshPosts() {
-  if (isRefreshing.value || forumStore.isLoading) return;
+  if (isRefreshing.value || forumStore.isLoading || !canRefresh.value) return;
   isRefreshing.value = true;
   try {
     await forumStore.search(forumStore.query);
@@ -296,7 +339,25 @@ async function refreshPosts() {
     );
   } finally {
     isRefreshing.value = false;
+    startRefreshCooldown();
   }
+}
+
+function startRefreshCooldown() {
+  if (refreshCooldownTimer) window.clearTimeout(refreshCooldownTimer);
+  canRefresh.value = false;
+  refreshCooldownTimer = window.setTimeout(() => {
+    canRefresh.value = true;
+    refreshCooldownTimer = null;
+  }, FORUM_REFRESH_COOLDOWN_MS);
+}
+
+function stopRefreshCooldown() {
+  if (refreshCooldownTimer) {
+    window.clearTimeout(refreshCooldownTimer);
+    refreshCooldownTimer = null;
+  }
+  canRefresh.value = true;
 }
 
 watch(searchInput, (value) => {
@@ -333,6 +394,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   if (searchTimer) clearTimeout(searchTimer);
+  stopRefreshCooldown();
   observer?.disconnect();
   if (scrollContainer)
     forumStore.saveScrollPosition(getScrollTop(scrollContainer));
@@ -362,10 +424,10 @@ onUnmounted(() => {
   overflow: hidden;
 }
 .forum-post-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr);
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+  box-sizing: border-box;
   width: 100%;
   padding: 18px 20px;
   border: 0;
@@ -381,23 +443,23 @@ onUnmounted(() => {
 .forum-post-row:hover {
   background: var(--bz-bg-hover);
 }
-.forum-post-main {
-  display: flex;
-  min-width: 0;
-  align-items: baseline;
-  gap: 10px;
+.forum-post-row:focus-visible {
+  outline: 2px solid var(--n-primary-color);
+  outline-offset: -2px;
 }
 .forum-post-title {
   min-width: 0;
   overflow: hidden;
+  padding-right: 16px;
   font-size: 16px;
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .forum-post-author {
-  max-width: 180px;
+  min-width: 0;
   overflow: hidden;
+  padding-right: 16px;
   color: var(--bz-text-secondary);
   font-size: 13px;
   text-overflow: ellipsis;
@@ -405,16 +467,27 @@ onUnmounted(() => {
 }
 .forum-post-meta {
   display: flex;
-  flex: 0 0 auto;
+  min-width: 0;
   align-items: center;
+  justify-content: flex-end;
   gap: 14px;
+  overflow: hidden;
   color: var(--bz-text-secondary);
   font-size: 13px;
+  white-space: nowrap;
 }
 .forum-post-meta span {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+}
+.forum-post-time {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.forum-post-stat {
+  flex: 0 0 auto;
 }
 .forum-sentinel {
   display: flex;
@@ -432,33 +505,26 @@ onUnmounted(() => {
   justify-content: center;
   padding-top: 12px;
 }
-.selected-images {
-  flex-wrap: wrap;
+.create-post-scrollbar {
+  flex: 1;
+  min-height: 0;
 }
-.selected-image {
-  position: relative;
-  width: 88px;
-  height: 88px;
-}
-.selected-image img {
-  width: 100%;
-  height: 100%;
-  border-radius: 6px;
-  object-fit: cover;
-}
-.selected-image .n-button {
-  position: absolute;
-  top: -6px;
-  right: -6px;
+.create-post-form {
+  padding-right: 12px;
 }
 @media (max-width: 640px) {
   .forum-post-row {
     align-items: flex-start;
-    flex-direction: column;
-    gap: 8px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px 16px;
   }
-  .forum-post-main {
+  .forum-post-title {
+    grid-column: 1 / -1;
     width: 100%;
+    padding-right: 0;
+  }
+  .forum-post-author {
+    padding-right: 0;
   }
   .forum-toolbar {
     flex-direction: column;

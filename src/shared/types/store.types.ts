@@ -154,6 +154,12 @@ export interface FeedbackHistoryItem {
   submittedAt: number;
 }
 
+export interface FeedbackHistoryPage {
+  items: FeedbackHistoryItem[];
+  nextCursor: string | null;
+  hasMore: boolean;
+}
+
 export type FeedbackStatus =
   | "new"
   | "reviewing"
@@ -238,7 +244,7 @@ export interface AppSettings {
   nicknameStyle?: NicknameStyle;
   libraryLayout?: LibraryLayout;
   lastJoinRoomAddress?: string;
-  language: "zh-CN" | "en-US" | "ja-JP" | "zh-TW" | "lzh" | "de-DE";
+  language: "zh-CN" | "en-US" | "ja-JP" | "zh-TW" | "de-DE";
   theme: "dark" | "light" | "auto";
   defaultRoomPort: number;
   closeBehavior: "tray" | "exit";

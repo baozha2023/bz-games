@@ -71,18 +71,24 @@ describe("FeedbackService remote history", () => {
               submittedAt: 1_735_689_600_000,
             },
           ],
+          nextCursor: "cursor-1",
+          hasMore: true,
         }),
         { status: 200 },
       ),
     );
 
     const service = new FeedbackService();
-    await expect(service.getHistory()).resolves.toEqual([
-      {
-        id: "11111111-1111-4111-8111-111111111111",
-        submittedAt: 1_735_689_600_000,
-      },
-    ]);
+    await expect(service.getHistory()).resolves.toEqual({
+      items: [
+        {
+          id: "11111111-1111-4111-8111-111111111111",
+          submittedAt: 1_735_689_600_000,
+        },
+      ],
+      nextCursor: "cursor-1",
+      hasMore: true,
+    });
 
     expect(mocks.clearLegacyFeedbackHistory).toHaveBeenCalledOnce();
     expect(mocks.fetch).toHaveBeenCalledOnce();
@@ -90,15 +96,40 @@ describe("FeedbackService remote history", () => {
       mocks.clearLegacyFeedbackHistory.mock.invocationCallOrder[0],
     ).toBeLessThan(mocks.fetch.mock.invocationCallOrder[0]);
     expect(mocks.fetch.mock.calls[0][0]).toBe(
-      "https://relay.example.com/api/v1/feedback",
+      "https://relay.example.com/api/v1/feedback?limit=10",
     );
+  });
+
+  it("passes the cursor when loading the next history page", async () => {
+    mocks.fetch.mockResolvedValue(
+      new Response(
+        JSON.stringify({ items: [], nextCursor: null, hasMore: false }),
+        { status: 200 },
+      ),
+    );
+
+    const service = new FeedbackService();
+    await expect(service.getHistory("cursor+/=")).resolves.toEqual({
+      items: [],
+      nextCursor: null,
+      hasMore: false,
+    });
+
+    expect(mocks.fetch.mock.calls[0][0]).toBe(
+      "https://relay.example.com/api/v1/feedback?limit=10&cursor=cursor%2B%2F%3D",
+    );
+    expect(mocks.clearLegacyFeedbackHistory).not.toHaveBeenCalled();
   });
 
   it("clears legacy local history even when the account is not logged in", async () => {
     mocks.settings.cloudSessionToken = "";
 
     const service = new FeedbackService();
-    await expect(service.getHistory()).resolves.toEqual([]);
+    await expect(service.getHistory()).resolves.toEqual({
+      items: [],
+      nextCursor: null,
+      hasMore: false,
+    });
 
     expect(mocks.clearLegacyFeedbackHistory).toHaveBeenCalledOnce();
     expect(mocks.fetch).not.toHaveBeenCalled();
@@ -114,13 +145,17 @@ describe("FeedbackService remote history", () => {
               submittedAt: 1_735_689_600_000,
             },
           ],
+          nextCursor: null,
+          hasMore: false,
         }),
         { status: 200 },
       ),
     );
 
     const service = new FeedbackService();
-    await expect(service.getHistory()).resolves.toEqual([]);
+    await expect(service.getHistory()).rejects.toThrow(
+      "feedback_invalid_response",
+    );
     expect(mocks.clearLegacyFeedbackHistory).toHaveBeenCalledOnce();
   });
 

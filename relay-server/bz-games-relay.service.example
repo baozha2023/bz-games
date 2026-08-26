@@ -48,7 +48,7 @@ Environment=ADMIN_STATIC_DIR=/opt/bz-games-admin
 Environment=RELAY_TOKEN=YOUR_RELAY_TOKEN
 Environment=MAX_ROOMS=80
 Environment=MAX_CLIENTS=400
-Environment=MAX_CLIENTS_PER_ROOM=8
+Environment=MAX_CLIENTS_PER_ROOM=10
 Environment=MAX_EVENT_LOOP_DELAY_MS=250
 Environment=MONGODB_URI=YOUR_MONGODB_URI
 Environment=MONGODB_DB_NAME=bz_games

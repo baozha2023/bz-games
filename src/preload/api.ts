@@ -33,6 +33,7 @@ import type {
   ForumPage,
   ForumPostDetail,
   ForumPostSummary,
+  ForumPostReferenceResult,
 } from "../shared/types";
 
 installErrorForwarding("main-window");
@@ -310,8 +311,8 @@ export const electronAPI = {
       ),
     submitFeedback: (payload: { content: string; selectionId?: string }) =>
       ipcRenderer.invoke(IPC.SYSTEM_FEEDBACK_SUBMIT, payload),
-    getFeedbackHistory: () =>
-      ipcRenderer.invoke(IPC.SYSTEM_FEEDBACK_GET_HISTORY),
+    getFeedbackHistory: (cursor?: string) =>
+      ipcRenderer.invoke(IPC.SYSTEM_FEEDBACK_GET_HISTORY, cursor),
     getFeedbackDetail: (feedbackId: string) =>
       ipcRenderer.invoke(IPC.SYSTEM_FEEDBACK_GET_DETAIL, feedbackId),
     save: (settings: AppSettings) =>
@@ -413,15 +414,30 @@ export const electronAPI = {
       ipcRenderer.invoke(IPC.FORUM_RELEASE_IMAGES, selectionId, imageId),
     getSearchAvailability: (): Promise<boolean> =>
       ipcRenderer.invoke(IPC.FORUM_GET_SEARCH_AVAILABILITY),
-    listPosts: (query?: string, cursor?: string): Promise<ForumPage<ForumPostSummary>> =>
+    listPosts: (
+      query?: string,
+      cursor?: string,
+    ): Promise<ForumPage<ForumPostSummary>> =>
       ipcRenderer.invoke(IPC.FORUM_LIST_POSTS, query, cursor),
     getPost: (postId: string): Promise<ForumPostDetail> =>
       ipcRenderer.invoke(IPC.FORUM_GET_POST, postId),
-    getComments: (postId: string, cursor?: string): Promise<ForumPage<ForumComment>> =>
+    resolvePostReferences: (ids: string[]): Promise<ForumPostReferenceResult> =>
+      ipcRenderer.invoke(IPC.FORUM_RESOLVE_POST_REFERENCES, ids),
+    getComments: (
+      postId: string,
+      cursor?: string,
+    ): Promise<ForumPage<ForumComment>> =>
       ipcRenderer.invoke(IPC.FORUM_GET_COMMENTS, postId, cursor),
-    createPost: (payload: { title: string; body: string; selectionId?: string }): Promise<ForumMutationResult> =>
+    createPost: (payload: {
+      title: string;
+      body: string;
+      selectionId?: string;
+    }): Promise<ForumMutationResult> =>
       ipcRenderer.invoke(IPC.FORUM_CREATE_POST, payload),
-    createComment: (postId: string, content: string): Promise<ForumMutationResult> =>
+    createComment: (
+      postId: string,
+      content: string,
+    ): Promise<ForumMutationResult> =>
       ipcRenderer.invoke(IPC.FORUM_CREATE_COMMENT, postId, content),
     deletePost: (postId: string): Promise<ForumMutationResult> =>
       ipcRenderer.invoke(IPC.FORUM_DELETE_POST, postId),

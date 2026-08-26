@@ -4,7 +4,7 @@
       <n-empty :description="t('achievement.noAchievements')" />
     </div>
 
-    <n-list v-else style="margin-top: 24px; background: transparent">
+    <n-list v-else style="margin-top: 0; background: transparent">
       <n-list-item
         v-for="(game, index) in achievementCards"
         :key="game.id"
@@ -261,7 +261,7 @@ function getGameAchievements(gameId: string) {
 
 <style scoped>
 .career-section {
-  padding-top: 12px;
+  padding-top: 0;
 }
 
 .stagger-card-enter {

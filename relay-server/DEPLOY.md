@@ -45,46 +45,46 @@ relay-server/
 
 ## 环境变量
 
-| 变量                                | 默认值                 | 说明                                                                        |
-| ----------------------------------- | ---------------------- | --------------------------------------------------------------------------- |
-| `PORT`                              | `38091`                | Relay 内部 HTTP/WebSocket 监听端口；公网由 Nginx 使用 `38090`                |
-| `HOST`                              | `127.0.0.1`            | HTTP/WebSocket 监听地址；生产环境不得绑定公网网卡                             |
-| `ROOM_TTL_MS`                       | `60000`                | 房间活跃超时时间                                                            |
-| `HEARTBEAT_INTERVAL_MS`             | `30000`                | WebSocket ping 与清理间隔                                                   |
-| `MAX_TEXT_BYTES`                    | `1048576`              | 单条文本消息最大字节数                                                      |
-| `MAX_BINARY_BYTES`                  | `12582912`             | 单条二进制消息最大字节数                                                    |
-| `MAX_PLATFORM_CLOUD_SNAPSHOT_BYTES` | `134217728`            | 单次上传完整平台快照的大小上限                                              |
-| `PLATFORM_SNAPSHOT_GC_GRACE_MS`     | `300000`               | 指针切换成功后旧平台快照的清理宽限期                                        |
-| `RELAY_TOKEN`                       | 空字符串               | 全接口鉴权 token；必须通过 systemd 环境变量配置，平台侧通过构建配置注入同值 |
-| `MAX_ROOMS`                         | `80`                   | 最大同时房间数                                                              |
-| `MAX_CLIENTS`                       | `400`                  | 最大已登记客户端数                                                          |
-| `MAX_CLIENTS_PER_ROOM`              | `8`                    | 单房间最大中继客户端数上限                                                  |
-| `MAX_EVENT_LOOP_DELAY_MS`           | `250`                  | 事件循环延迟限制                                                            |
-| `FEEDBACK_AUTHENTICATED_COOLDOWN_MS` | `43200000`             | 已登录用户建言献策成功后的冷却时间，默认 12 小时                           |
-| `RATE_LIMIT_RESERVATION_TTL_MS`      | `300000`               | 通用限流 reservation 租约时间，默认 5 分钟                                 |
-| `MYSQL_HOST`                        | `127.0.0.1`            | MySQL 主机                                                                  |
-| `MYSQL_PORT`                        | `3306`                 | MySQL 端口                                                                  |
-| `MYSQL_USER`                        | 空字符串               | MySQL 用户名；为空时登录和云同步接口不可用                                  |
-| `MYSQL_PASSWORD`                    | 空字符串               | MySQL 密码                                                                  |
-| `MYSQL_DATABASE`                    | `bz_games`             | MySQL 数据库名                                                              |
-| `MONGODB_URI`                       | 空字符串               | MongoDB 连接串；为空时登录和云同步接口不可用                                |
-| `MONGODB_DB_NAME`                   | `bz_games`             | MongoDB 数据库名                                                            |
-| `MONGODB_BUCKET_NAME`               | `userFiles`            | GridFS bucket 名                                                            |
-| `GITHUB_CLIENT_ID`                  | 空字符串               | GitHub OAuth App Client ID                                                  |
-| `GITHUB_CLIENT_SECRET`              | 空字符串               | GitHub OAuth App Client Secret                                              |
-| `GITHUB_CALLBACK_URL`               | 空字符串               | GitHub OAuth 回调地址，必须与 GitHub OAuth App 配置完全一致                 |
-| `GITHUB_OAUTH_SCOPE`                | `read:user user:email` | GitHub OAuth scope                                                          |
-| `SESSION_COOKIE_NAME`               | `bz_games_session`     | 登录会话 Cookie 名称                                                        |
-| `OAUTH_SESSION_TTL_MS`              | `2592000000`           | 登录会话有效期，默认 30 天                                                  |
-| `AUTH_EXPIRED_SESSION_RETENTION_MS` | `604800000`            | 已过期会话保留期，默认 7 天，用于区分过期与无效令牌                         |
-| `OAUTH_STATE_TTL_MS`                | `600000`               | OAuth state 有效期，默认 10 分钟                                            |
-| `ELASTICSEARCH_ENABLED`             | `false`                | ES 总开关；为 `false` 时关闭论坛搜索、ES worker 和客户端搜索框                  |
-| `ELASTICSEARCH_URL`                 | 空字符串               | ES 地址；仅在 `ELASTICSEARCH_ENABLED=true` 时生效                             |
-| `ELASTICSEARCH_USERNAME`            | 空字符串               | 可选；Relay 访问 ES 的最小权限账号                                             |
-| `ELASTICSEARCH_PASSWORD`            | 空字符串               | 可选；Relay 访问 ES 的账号密码                                                 |
-| `ELASTICSEARCH_INDEX_ALIAS`         | `bz_forum_posts`      | 论坛搜索 alias                                                                |
-| `ELASTICSEARCH_REQUEST_TIMEOUT_MS`  | `5000`                | ES 单次请求超时                                                                |
-| `FORUM_SEARCH_WORKER_INTERVAL_MS`   | `5000`                | outbox worker 检查间隔                                                         |
+| 变量                                 | 默认值                 | 说明                                                                        |
+| ------------------------------------ | ---------------------- | --------------------------------------------------------------------------- |
+| `PORT`                               | `38091`                | Relay 内部 HTTP/WebSocket 监听端口；公网由 Nginx 使用 `38090`               |
+| `HOST`                               | `127.0.0.1`            | HTTP/WebSocket 监听地址；生产环境不得绑定公网网卡                           |
+| `ROOM_TTL_MS`                        | `60000`                | 房间活跃超时时间                                                            |
+| `HEARTBEAT_INTERVAL_MS`              | `30000`                | WebSocket ping 与清理间隔                                                   |
+| `MAX_TEXT_BYTES`                     | `1048576`              | 单条文本消息最大字节数                                                      |
+| `MAX_BINARY_BYTES`                   | `12582912`             | 单条二进制消息最大字节数                                                    |
+| `MAX_PLATFORM_CLOUD_SNAPSHOT_BYTES`  | `134217728`            | 单次上传完整平台快照的大小上限                                              |
+| `PLATFORM_SNAPSHOT_GC_GRACE_MS`      | `300000`               | 指针切换成功后旧平台快照的清理宽限期                                        |
+| `RELAY_TOKEN`                        | 空字符串               | 全接口鉴权 token；必须通过 systemd 环境变量配置，平台侧通过构建配置注入同值 |
+| `MAX_ROOMS`                          | `80`                   | 最大同时房间数                                                              |
+| `MAX_CLIENTS`                        | `400`                  | 最大已登记客户端数                                                          |
+| `MAX_CLIENTS_PER_ROOM`               | `10`                   | 单房间最大中继客户端数上限                                                  |
+| `MAX_EVENT_LOOP_DELAY_MS`            | `250`                  | 事件循环延迟限制                                                            |
+| `FEEDBACK_AUTHENTICATED_COOLDOWN_MS` | `43200000`             | 已登录用户建言献策成功后的冷却时间，默认 12 小时                            |
+| `RATE_LIMIT_RESERVATION_TTL_MS`      | `300000`               | 通用限流 reservation 租约时间，默认 5 分钟                                  |
+| `MYSQL_HOST`                         | `127.0.0.1`            | MySQL 主机                                                                  |
+| `MYSQL_PORT`                         | `3306`                 | MySQL 端口                                                                  |
+| `MYSQL_USER`                         | 空字符串               | MySQL 用户名；为空时登录和云同步接口不可用                                  |
+| `MYSQL_PASSWORD`                     | 空字符串               | MySQL 密码                                                                  |
+| `MYSQL_DATABASE`                     | `bz_games`             | MySQL 数据库名                                                              |
+| `MONGODB_URI`                        | 空字符串               | MongoDB 连接串；为空时登录和云同步接口不可用                                |
+| `MONGODB_DB_NAME`                    | `bz_games`             | MongoDB 数据库名                                                            |
+| `MONGODB_BUCKET_NAME`                | `userFiles`            | GridFS bucket 名                                                            |
+| `GITHUB_CLIENT_ID`                   | 空字符串               | GitHub OAuth App Client ID                                                  |
+| `GITHUB_CLIENT_SECRET`               | 空字符串               | GitHub OAuth App Client Secret                                              |
+| `GITHUB_CALLBACK_URL`                | 空字符串               | GitHub OAuth 回调地址，必须与 GitHub OAuth App 配置完全一致                 |
+| `GITHUB_OAUTH_SCOPE`                 | `read:user user:email` | GitHub OAuth scope                                                          |
+| `SESSION_COOKIE_NAME`                | `bz_games_session`     | 登录会话 Cookie 名称                                                        |
+| `OAUTH_SESSION_TTL_MS`               | `2592000000`           | 登录会话有效期，默认 30 天                                                  |
+| `AUTH_EXPIRED_SESSION_RETENTION_MS`  | `604800000`            | 已过期会话保留期，默认 7 天，用于区分过期与无效令牌                         |
+| `OAUTH_STATE_TTL_MS`                 | `600000`               | OAuth state 有效期，默认 10 分钟                                            |
+| `ELASTICSEARCH_ENABLED`              | `false`                | ES 总开关；为 `false` 时关闭论坛搜索、ES worker 和客户端搜索框              |
+| `ELASTICSEARCH_URL`                  | 空字符串               | ES 地址；仅在 `ELASTICSEARCH_ENABLED=true` 时生效                           |
+| `ELASTICSEARCH_USERNAME`             | 空字符串               | 可选；Relay 访问 ES 的最小权限账号                                          |
+| `ELASTICSEARCH_PASSWORD`             | 空字符串               | 可选；Relay 访问 ES 的账号密码                                              |
+| `ELASTICSEARCH_INDEX_ALIAS`          | `bz_forum_posts`       | 论坛搜索 alias                                                              |
+| `ELASTICSEARCH_REQUEST_TIMEOUT_MS`   | `5000`                 | ES 单次请求超时                                                             |
+| `FORUM_SEARCH_WORKER_INTERVAL_MS`    | `5000`                 | outbox worker 检查间隔                                                      |
 
 公网部署必须配置 `RELAY_TOKEN`，并与平台侧构建注入的 `relayToken` 保持一致。服务端不会兼容未携带 token 的旧版平台。
 如需启用 GitHub 登录，必须额外配置 `MYSQL_USER`、`MYSQL_PASSWORD`、`MYSQL_DATABASE`、`GITHUB_CLIENT_ID`、`GITHUB_CLIENT_SECRET`、`GITHUB_CALLBACK_URL`。
@@ -369,7 +369,7 @@ http://relay.example.com:38090/auth/github/start?returnTo=bzgames://oauth-comple
 ```ini
 Environment=MAX_ROOMS=80
 Environment=MAX_CLIENTS=400
-Environment=MAX_CLIENTS_PER_ROOM=8
+Environment=MAX_CLIENTS_PER_ROOM=10
 Environment=MAX_EVENT_LOOP_DELAY_MS=250
 ```
 
@@ -412,7 +412,7 @@ curl -H "X-Relay-Token: your-relay-token" http://relay.example.com:38090/rooms
   "limits": {
     "maxRooms": 80,
     "maxClients": 400,
-    "maxClientsPerRoom": 8,
+    "maxClientsPerRoom": 10,
     "maxEventLoopDelayMs": 250
   }
 }
@@ -536,6 +536,11 @@ ufw status
 `/etc/systemd/system/bz-games-relay.service` 的 `[Service]` 段。
 
 MySQL已配置时，服务启动会执行统一 Schema 初始化并自动创建反馈表。
+反馈历史游标分页要求 `feedback` 表具有复合索引
+`idx_feedback_user_history (user_id, created_at, id)`。新环境由统一 Schema 初始化直接创建；
+已有生产表应在代码发布前备份数据库、用 `SHOW INDEX FROM feedback` 检查，并在索引缺失时执行一次
+`ALTER TABLE feedback ADD INDEX idx_feedback_user_history (user_id, created_at, id)`。
+发布后再次用 `SHOW INDEX` 验证三列顺序，确认健康检查和反馈历史接口正常后，才可删除本次数据库备份。
 管理前端生产构建产物部署到 Nginx 静态目录 `/var/www/campusmate/admin`，随后访问 `/admin/`；Relay 的 `ADMIN_STATIC_DIR` 仍用于本机直连或开发回退，不是当前公网 Nginx 的静态根目录。替换静态目录前创建独立备份，完成页面、响应头、权限和服务健康检查后再删除本次备份与临时文件。
 建言献策仅允许已登录用户提交，并按 GitHub ID 冷却 12 小时。限流状态持久化在
 MySQL 的 `rate_limit_records` 表中，服务重启或多实例部署不会清空；对应配置以

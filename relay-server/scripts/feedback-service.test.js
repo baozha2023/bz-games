@@ -280,22 +280,14 @@ test("feedback endpoint requires login and applies authenticated cooldowns", asy
   }
 });
 
-test("user feedback history requires login and returns only the current user's IDs", async () => {
+test("user feedback history uses a stable ten-item cursor page", async () => {
   const queryCalls = [];
+  const ownerRows = Array.from({ length: 12 }, (_, index) => ({
+    id: `00000000-0000-4000-8000-${String(12 - index).padStart(12, "0")}`,
+    created_at: new Date(Date.UTC(2026, 7, 21 - index, 10, 0, 0)),
+  }));
   const rowsByUser = new Map([
-    [
-      42,
-      [
-        {
-          id: "22222222-2222-4222-8222-222222222222",
-          created_at: new Date("2026-08-21T10:00:00.000Z"),
-        },
-        {
-          id: "11111111-1111-4111-8111-111111111111",
-          created_at: new Date("2026-08-20T10:00:00.000Z"),
-        },
-      ],
-    ],
+    [42, ownerRows],
     [
       7,
       [
@@ -313,9 +305,20 @@ test("user feedback history requires login and returns only the current user's I
     },
     mySqlService: {
       isEnabled: () => true,
-      query: async (_sql, params) => {
+      query: async (sql, params) => {
         queryCalls.push(params);
-        return [rowsByUser.get(params[0]) || []];
+        const rows = rowsByUser.get(params[0]) || [];
+        if (!sql.includes("created_at < ?")) return [rows];
+        const cursorDate = params[1];
+        const cursorId = params[3];
+        return [
+          rows.filter(
+            (row) =>
+              row.created_at < cursorDate ||
+              (row.created_at.getTime() === cursorDate.getTime() &&
+                row.id < cursorId),
+          ),
+        ];
       },
     },
     mongoService: { isEnabled: () => false },
@@ -368,19 +371,42 @@ test("user feedback history requires login and returns only the current user's I
       },
     });
     assert.equal(ownerResponse.status, 200);
-    assert.deepEqual(await ownerResponse.json(), {
-      items: [
-        {
-          id: "22222222-2222-4222-8222-222222222222",
-          submittedAt: Date.parse("2026-08-21T10:00:00.000Z"),
-        },
-        {
-          id: "11111111-1111-4111-8111-111111111111",
-          submittedAt: Date.parse("2026-08-20T10:00:00.000Z"),
-        },
-      ],
-    });
+    const ownerPage = await ownerResponse.json();
+    assert.deepEqual(
+      ownerPage.items,
+      ownerRows.slice(0, 10).map((row) => ({
+        id: row.id,
+        submittedAt: row.created_at.getTime(),
+      })),
+    );
+    assert.equal(ownerPage.hasMore, true);
+    assert.equal(typeof ownerPage.nextCursor, "string");
     assert.deepEqual(queryCalls.at(-1), [42]);
+
+    const nextResponse = await fetch(
+      `${baseUrl}/api/v1/feedback?limit=10&cursor=${encodeURIComponent(ownerPage.nextCursor)}`,
+      {
+        headers: {
+          "x-relay-token": "test-relay-token",
+          authorization: "Bearer owner-session",
+        },
+      },
+    );
+    assert.equal(nextResponse.status, 200);
+    assert.deepEqual(await nextResponse.json(), {
+      items: ownerRows.slice(10).map((row) => ({
+        id: row.id,
+        submittedAt: row.created_at.getTime(),
+      })),
+      hasMore: false,
+      nextCursor: null,
+    });
+    assert.equal(queryCalls.at(-1)[0], 42);
+    assert.equal(
+      queryCalls.at(-1)[1].getTime(),
+      ownerRows[9].created_at.getTime(),
+    );
+    assert.equal(queryCalls.at(-1)[3], ownerRows[9].id);
 
     const otherResponse = await fetch(`${baseUrl}/api/v1/feedback`, {
       headers: {
@@ -396,8 +422,35 @@ test("user feedback history requires login and returns only the current user's I
           submittedAt: Date.parse("2026-08-19T10:00:00.000Z"),
         },
       ],
+      hasMore: false,
+      nextCursor: null,
     });
     assert.deepEqual(queryCalls.at(-1), [7]);
+
+    const invalidLimit = await fetch(`${baseUrl}/api/v1/feedback?limit=20`, {
+      headers: {
+        "x-relay-token": "test-relay-token",
+        authorization: "Bearer owner-session",
+      },
+    });
+    assert.equal(invalidLimit.status, 400);
+    assert.deepEqual(await invalidLimit.json(), {
+      error: "invalid_feedback_limit",
+    });
+
+    const invalidCursor = await fetch(
+      `${baseUrl}/api/v1/feedback?cursor=invalid`,
+      {
+        headers: {
+          "x-relay-token": "test-relay-token",
+          authorization: "Bearer owner-session",
+        },
+      },
+    );
+    assert.equal(invalidCursor.status, 400);
+    assert.deepEqual(await invalidCursor.json(), {
+      error: "invalid_feedback_cursor",
+    });
   } finally {
     service.dispose();
     await new Promise((resolve) => server.close(resolve));
