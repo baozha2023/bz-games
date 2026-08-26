@@ -142,6 +142,7 @@ export default {
   common: {
     confirm: "Confirm",
     cancel: "Cancel",
+    close: "Close",
     join: "Join",
     copy: "Copy",
     copied: "Copied to clipboard",
@@ -226,6 +227,8 @@ export default {
       unknown: "Import failed: {message}",
       interrupted: "Import was interrupted. Please retry",
       taskNotRetryable: "This task cannot be retried right now",
+      migrationExportInProgress:
+        "Migration data is being exported. Finish or cancel it first",
     },
     importDraftTitle: "Complete Game Information",
     importDraftDesc:
@@ -597,6 +600,50 @@ export default {
     playtimeDescription:
       "Earn 10 BZ Coins automatically for every 10 minutes of recorded game time. No manual claim is required.",
   },
+  migration: {
+    title: "BZ-Games Update and Data Migration",
+    finalVersionTitle: "Automatic updates are ending",
+    finalVersionBody:
+      "v{version} is the final release installable through the legacy NSIS updater. This version cannot check for, download, or install later releases.",
+    downloadBody: "Download future releases from the BZ-Games website.",
+    exportBody:
+      "Before installing a new release, export your migration data and keep this installation until the import succeeds. In the new release, choose the file under Settings — Import Data.",
+    afterImport:
+      "Exporting does not delete any source data. After confirming that the new version imported successfully, you may uninstall this client yourself; it will not uninstall automatically.",
+    localGamesOnly:
+      "The export includes only config.json, games, and db under the current application directory. External game libraries are not copied.",
+    securityNotice:
+      "The .bzgames file contains personal settings, database records, and game files. It has no additional password protection, so keep it secure.",
+    openWebsite: "Open Website",
+    exportData: "Export Data",
+    exportSuccess: "Migration data exported successfully",
+    progressDetail: "Processed {processed} / {total} across {files} files",
+    status: {
+      idle: "Export has not started",
+      preparing: "Checking and preparing data…",
+      archiving: "Creating the .bzgames file…",
+      verifying: "Verifying the exported file…",
+      completed: "Export and integrity verification completed",
+      canceled: "Export canceled; source data was not changed",
+      error: "Export failed",
+    },
+    errors: {
+      game_running: "Close all running games before exporting",
+      market_task_active: "Finish or cancel active marketplace tasks first",
+      import_task_active: "Finish or cancel active game imports first",
+      export_in_progress: "Another export is already in progress",
+      source_missing: "config.json or database data is missing",
+      unsafe_source_entry:
+        "The data contains an unsupported link or special file",
+      unsafe_destination: "Save the backup outside the application directory",
+      insufficient_space:
+        "The destination or temporary drive has insufficient space",
+      archive_failed: "The .bzgames file could not be created or verified",
+      database_snapshot_failed:
+        "A consistent database snapshot could not be created",
+      unknown: "Export failed. Check the logs and try again",
+    },
+  },
   settings: {
     title: "Settings",
     playerName: "Nickname",
@@ -799,39 +846,9 @@ export default {
         "The latest version record is invalid for {gameId}: {version}",
       storage_root_missing: "A game library storage path does not exist",
     },
-    update: "Client Update",
-    checkUpdate: "Check for Updates",
-    updateTitle: "Update Status",
+    update: "Version Migration",
+    updateNotice: "Update Information",
     currentVersion: "Current version: {version}",
-    installNow: "Install and Restart",
-    updateIdle: 'Click "Check for Updates" to get the latest version',
-    updateChecking: "Checking for updates...",
-    updateAvailable: "New version found: {version}, downloading...",
-    updateLatest: "You are on the latest version",
-    updateDownloading: "Downloading: {progress}%",
-    updateDownloaded:
-      'Update package downloaded. Click "Install and Restart" to apply it',
-    updateUnsupported: "Auto update is unavailable in dev mode",
-    updateFailed: "Update failed",
-    updateError: "Update failed: {message}",
-    updateErrors: {
-      network_error:
-        "Network request failed. Check your connection or update feed",
-      feed_invalid:
-        "Update metadata is invalid. Check latest.yml or publish config",
-      download_failed: "Failed to download update package",
-      verify_failed: "Update package verification failed",
-      permission_denied: "Permission denied while writing update files",
-      unsupported_dev_mode: "Auto update is unavailable in dev mode",
-      unknown: "Unknown update error",
-    },
-    updatePromptTitle: "Update Available",
-    updatePromptMessage: "New version {version} is available. Update now?",
-    updateNow: "Update Now",
-    updateLater: "Later",
-    updateViewReleaseNotes: "View Release Notes",
-    updateReleaseOpenFailed:
-      "Unable to open the release notes page. Check your default browser settings.",
     officialWebsite: "Official Website",
     uninstallClient: "Uninstall Client",
     uninstallClientDescription:

@@ -55,8 +55,7 @@ const defaultSettings: AppSettings = {
   defaultRoomPort: 38080,
   closeBehavior: "tray",
   autoLaunch: false,
-  ignoredUpdateVersion: "",
-  skipStartupUpdateCheck: false,
+  migrationNoticeAcknowledgedVersion: "",
   gameStoragePath: "",
   gameStorageHistory: [],
   lastOpenedAt: undefined,
@@ -152,6 +151,7 @@ const CLOUD_SETTINGS_SYNC_BLACKLIST: Array<keyof AppSettings> = [
   "cloudUserLogin",
   "cloudUserName",
   "cloudUserProfileUrl",
+  "migrationNoticeAcknowledgedVersion",
 ];
 
 function createConfigCipherKey(): Buffer {
@@ -1018,9 +1018,22 @@ class StoreService {
         ...DEFAULT_NICKNAME_STYLE,
         ...(settings.nicknameStyle || {}),
       },
-    };
+    } as AppSettings & { nicknameStyle: NicknameStyle } & Record<
+        string,
+        unknown
+      >;
     const defaultGamesPath = path.join(getAppRoot(), "games");
     let shouldPersist = false;
+
+    for (const legacyKey of [
+      "ignoredUpdateVersion",
+      "skipStartupUpdateCheck",
+    ]) {
+      if (Object.prototype.hasOwnProperty.call(merged, legacyKey)) {
+        delete merged[legacyKey];
+        shouldPersist = true;
+      }
+    }
 
     const normalizedNicknameEffect = normalizeNicknameEffect(
       merged.nicknameStyle.effect,
@@ -1060,9 +1073,7 @@ class StoreService {
       try {
         const langContent = fsSync.readFileSync(initialLangFile, "utf-8");
         const lang = langContent.trim();
-        if (
-          ["zh-CN", "en-US", "ja-JP", "zh-TW", "de-DE"].includes(lang)
-        ) {
+        if (["zh-CN", "en-US", "ja-JP", "zh-TW", "de-DE"].includes(lang)) {
           merged.language = lang as AppSettings["language"];
           logger.info(`[StoreService] Detected installer language: ${lang}`);
         }
@@ -1349,6 +1360,14 @@ class StoreService {
     });
   }
 
+  acknowledgeMigrationNotice(version: string): void {
+    const store = this.getStore();
+    store.set("settings", {
+      ...this.getSettings(),
+      migrationNoticeAcknowledgedVersion: version,
+    });
+  }
+
   clearLegacyFeedbackHistory(): void {
     const store = this.getStore();
     // This key is intentionally absent from AppSettings but may exist in older stores.
@@ -1504,16 +1523,6 @@ class StoreService {
       migratedVersions,
       gameStoragePath: nextStoragePath,
     };
-  }
-
-  performIgnoreUpdateVersion(version: string): void {
-    const store = this.getStore();
-    const current = this.getSettings();
-    store.set("settings", {
-      ...current,
-      ignoredUpdateVersion: version,
-      skipStartupUpdateCheck: true,
-    });
   }
 
   async removeGameStoragePath(storagePath: string): Promise<{

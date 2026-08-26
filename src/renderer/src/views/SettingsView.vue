@@ -287,12 +287,12 @@
 
       <n-form-item :label="t('settings.update')">
         <n-space>
-          <n-button :loading="isCheckingUpdate" @click="handleCheckUpdate">
-            {{ t("settings.checkUpdate") }}
+          <n-button @click="showMigrationNotice">
+            {{ t("settings.updateNotice") }}
           </n-button>
           <n-text depth="3">{{
             t("settings.currentVersion", {
-              version: updateState.currentVersion,
+              version: appVersion,
             })
           }}</n-text>
         </n-space>
@@ -667,11 +667,14 @@ import { useSettingsStore } from "../stores/useSettingsStore";
 import { useGameStore } from "../stores/useGameStore";
 import AvatarWithFrame from "../components/AvatarWithFrame.vue";
 import FeedbackModal from "../components/settings/FeedbackModal.vue";
-import type { AppSettings } from "../../../shared/types";
+import {
+  MIGRATION_NOTICE_VERSION,
+  type AppSettings,
+} from "../../../shared/types";
 import { getFrameImageFileName } from "../../../shared/avatar-frames";
 import { formatBytes } from "../utils/format";
 import { HelpCircleOutline, LogoGithub } from "@vicons/ionicons5";
-import { showUpdatePrompt } from "../composables/useUpdatePrompt";
+import { showMigrationNotice } from "../composables/useMigrationNotice";
 
 const { t, te } = useI18n();
 const router = useRouter();
@@ -713,9 +716,8 @@ const selectedMigrationTargetPath = ref("");
 const registeredStoragePaths = ref<Array<{ path: string; isDefault: boolean }>>(
   [],
 );
-const updateState = computed(() => settingsStore.updateState);
+const appVersion = ref<string>(MIGRATION_NOTICE_VERSION);
 const dataHealthReport = computed(() => settingsStore.dataHealthReport);
-const isCheckingUpdate = ref(false);
 const isCheckingHealth = ref(false);
 const removingPath = ref("");
 const cloudBusy = ref(false);
@@ -865,16 +867,6 @@ const cloudProgressText = computed(() => {
   return text === key ? t("settings.cloudProgress.checking") : text;
 });
 
-const updateErrorText = (errorCode?: string, rawMessage?: string) => {
-  const key = errorCode
-    ? `settings.updateErrors.${errorCode}`
-    : "settings.updateErrors.unknown";
-  const translated = t(key);
-  return translated === key
-    ? rawMessage || t("settings.updateErrors.unknown")
-    : translated;
-};
-
 const storageErrorText = (error: any) => {
   const message = error?.error || error?.message || String(error || "");
   const key = message
@@ -945,12 +937,11 @@ onMounted(async () => {
   await refreshStoragePaths();
   await refreshLocalCloudStatus();
   await refreshPresenceStatus();
+  appVersion.value = await window.electronAPI.settings.getAppVersion();
   if (settingsStore.settings) {
     formValue.value = JSON.parse(JSON.stringify(settingsStore.settings));
     originalSettings.value = JSON.stringify(formValue.value);
   }
-  settingsStore.initUpdateEvents();
-  await settingsStore.refreshUpdateStatus();
 });
 
 const removeCloudSyncListener = window.electronAPI.settings.onCloudSyncEvent(
@@ -1358,36 +1349,6 @@ const handleRemovePath = async (targetPath: string) => {
       }
     },
   });
-};
-
-const handleCheckUpdate = async () => {
-  if (isCheckingUpdate.value) return;
-  isCheckingUpdate.value = true;
-  try {
-    if (settingsStore.settings?.skipStartupUpdateCheck) {
-      await settingsStore.savePartialSettings({
-        skipStartupUpdateCheck: false,
-      });
-    }
-    const state = await settingsStore.checkUpdateOnly();
-    if (state.status === "available") {
-      showUpdatePrompt(state);
-      return;
-    }
-    if (state.status === "up_to_date") {
-      message.success(t("settings.updateLatest"));
-    } else if (state.status === "unsupported") {
-      message.warning(t("settings.updateUnsupported"));
-    } else if (state.status === "error") {
-      message.error(
-        t("settings.updateError", {
-          message: updateErrorText(state.errorCode, state.message),
-        }),
-      );
-    }
-  } finally {
-    isCheckingUpdate.value = false;
-  }
 };
 
 const handleDataHealthCheck = async () => {

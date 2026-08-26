@@ -3,7 +3,6 @@ import fs from "fs";
 import path from "path";
 import { IPC } from "../../shared/ipc-channels";
 import { storeService } from "../services/storage/StoreService";
-import { updateService } from "../services/system/UpdateService";
 import { logger } from "../utils/logger";
 import type { AppSettings, NicknameStyle } from "../../shared/types";
 import {
@@ -40,7 +39,6 @@ const RENDERER_WRITABLE_SETTING_KEYS = [
   "defaultRoomPort",
   "closeBehavior",
   "autoLaunch",
-  "skipStartupUpdateCheck",
   "downloadFloatBall",
   "sensitiveWordFilter",
   "githubToken",
@@ -143,8 +141,6 @@ function loadSensitiveWords(): string[] {
 }
 
 export function registerSystemIpc() {
-  updateService.init();
-
   function applyFloatBallSetting(settings: AppSettings | Partial<AppSettings>) {
     if (!("downloadFloatBall" in settings)) return;
     if (settings.downloadFloatBall) {
@@ -343,14 +339,6 @@ export function registerSystemIpc() {
         void cloudSyncService.syncPlayerName(safeSettings.playerName);
       }
       applyFloatBallSetting(safeSettings);
-    },
-  );
-
-  ipcMain.handle(
-    IPC.SYSTEM_SET_IGNORED_UPDATE_VERSION,
-    async (_, version: string) => {
-      storeService.performIgnoreUpdateVersion(version);
-      return true;
     },
   );
 
@@ -657,23 +645,6 @@ export function registerSystemIpc() {
 
   ipcMain.handle(IPC.SYSTEM_DATA_HEALTH_CHECK, async () => {
     return await storeService.healthCheck();
-  });
-
-  ipcMain.handle(IPC.SYSTEM_GET_UPDATE_STATUS, async () => {
-    return updateService.getState();
-  });
-
-  ipcMain.handle(IPC.SYSTEM_CHECK_UPDATE, async () => {
-    return await updateService.checkForUpdates();
-  });
-
-  ipcMain.handle(IPC.SYSTEM_DOWNLOAD_UPDATE, async () => {
-    return await updateService.downloadUpdate();
-  });
-
-  ipcMain.handle(IPC.SYSTEM_INSTALL_UPDATE, async () => {
-    updateService.installUpdate();
-    return true;
   });
 
   ipcMain.handle(

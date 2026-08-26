@@ -5,10 +5,17 @@ import {
 } from "../../../../shared/AppConstants";
 import type { GameRecord } from "../../../../shared/types";
 import { compareGameVersionsDescending } from "../../../../shared/game-manifest";
-import { AsyncSqliteDatabase, type SqliteBatchStatement } from "./AsyncSqliteDatabase";
+import {
+  AsyncSqliteDatabase,
+  type SqliteBatchStatement,
+} from "./AsyncSqliteDatabase";
 
 const CLOUD_SQL_DUMP_HEADER = "-- BZ-Games cloud SQL dump v2";
-const CLOUD_SYNC_TABLES = ["play_sessions", "achievement_unlocks", "stats_reports"];
+const CLOUD_SYNC_TABLES = [
+  "play_sessions",
+  "achievement_unlocks",
+  "stats_reports",
+];
 export const BZ_GAMES_SCHEMA_SQL = [
   `CREATE TABLE IF NOT EXISTS games (
     id TEXT PRIMARY KEY,
@@ -134,9 +141,11 @@ export class BzGamesDatabase {
     this.database.init();
     await this.database.get("SELECT name FROM sqlite_master LIMIT 1");
     const columns = new Set(
-      (await this.database.all<TableInfoRow>("PRAGMA table_info(game_versions)")).map(
-        (column) => column.name,
-      ),
+      (
+        await this.database.all<TableInfoRow>(
+          "PRAGMA table_info(game_versions)",
+        )
+      ).map((column) => column.name),
     );
     if (!columns.has("install_source")) {
       await this.database.run(
@@ -144,7 +153,9 @@ export class BzGamesDatabase {
       );
     }
     if (!columns.has("market_id")) {
-      await this.database.run("ALTER TABLE game_versions ADD COLUMN market_id TEXT");
+      await this.database.run(
+        "ALTER TABLE game_versions ADD COLUMN market_id TEXT",
+      );
     }
   }
 
@@ -152,19 +163,36 @@ export class BzGamesDatabase {
     return this.database.close();
   }
 
+  suspendForSnapshot(): Promise<void> {
+    return this.database.suspendForSnapshot();
+  }
+
+  resumeAfterSnapshot(): void {
+    this.database.resumeAfterSnapshot();
+  }
+
   getDatabasePath(): string {
     return this.database.getDatabasePath();
   }
 
-  run(sql: string, params: Array<string | number | bigint | Buffer | null> = []): Promise<void> {
+  run(
+    sql: string,
+    params: Array<string | number | bigint | Buffer | null> = [],
+  ): Promise<void> {
     return this.database.run(sql, params).then(() => undefined);
   }
 
-  get<T>(sql: string, params: Array<string | number | bigint | Buffer | null> = []): Promise<T | undefined> {
+  get<T>(
+    sql: string,
+    params: Array<string | number | bigint | Buffer | null> = [],
+  ): Promise<T | undefined> {
     return this.database.get<T>(sql, params);
   }
 
-  all<T>(sql: string, params: Array<string | number | bigint | Buffer | null> = []): Promise<T[]> {
+  all<T>(
+    sql: string,
+    params: Array<string | number | bigint | Buffer | null> = [],
+  ): Promise<T[]> {
     return this.database.all<T>(sql, params);
   }
 
@@ -174,11 +202,17 @@ export class BzGamesDatabase {
 
   async getGames(): Promise<GameRecord[]> {
     const [games, versions, achievements, stats, sessions] = await Promise.all([
-      this.all<GameRow>("SELECT id, added_at, is_favorite, sort_order FROM games WHERE is_present = 1 ORDER BY sort_order, added_at"),
-      this.all<VersionRow>(`SELECT game_id, version, path, added_at, install_source, market_id
+      this.all<GameRow>(
+        "SELECT id, added_at, is_favorite, sort_order FROM games WHERE is_present = 1 ORDER BY sort_order, added_at",
+      ),
+      this
+        .all<VersionRow>(`SELECT game_id, version, path, added_at, install_source, market_id
         FROM game_versions WHERE is_present = 1`),
-      this.all<AchievementRow>("SELECT game_id, version, achievement_id, unlocked_at FROM achievement_unlocks"),
-      this.all<StatsRow>(`SELECT game_id, version, stat_id, reported_value, report_mode
+      this.all<AchievementRow>(
+        "SELECT game_id, version, achievement_id, unlocked_at FROM achievement_unlocks",
+      ),
+      this
+        .all<StatsRow>(`SELECT game_id, version, stat_id, reported_value, report_mode
         FROM stats_reports ORDER BY reported_at, event_id`),
       this.all<SessionAggregate>(`SELECT game_id, version,
         COALESCE(SUM(duration_ms), 0) AS playtime,
@@ -211,26 +245,42 @@ export class BzGamesDatabase {
       });
     }
     for (const row of achievements) {
-      const version = gameMap.get(row.game_id)?.versions.find((item) => item.version === row.version);
-      version?.unlockedAchievements.push({ id: row.achievement_id, unlockedAt: row.unlocked_at });
+      const version = gameMap
+        .get(row.game_id)
+        ?.versions.find((item) => item.version === row.version);
+      version?.unlockedAchievements.push({
+        id: row.achievement_id,
+        unlockedAt: row.unlocked_at,
+      });
     }
     for (const row of stats) {
-      const version = gameMap.get(row.game_id)?.versions.find((item) => item.version === row.version);
+      const version = gameMap
+        .get(row.game_id)
+        ?.versions.find((item) => item.version === row.version);
       if (!version) continue;
-      version.stats[row.stat_id] = row.report_mode === "full"
-        ? row.reported_value
-        : (version.stats[row.stat_id] || 0) + row.reported_value;
+      version.stats[row.stat_id] =
+        row.report_mode === "full"
+          ? row.reported_value
+          : (version.stats[row.stat_id] || 0) + row.reported_value;
     }
     for (const row of sessions) {
       const game = gameMap.get(row.game_id);
-      const version = game?.versions.find((item) => item.version === row.version);
+      const version = game?.versions.find(
+        (item) => item.version === row.version,
+      );
       if (version) version.playtime = row.playtime || 0;
-      if (game && row.last_played_at && (!game.lastPlayedAt || row.last_played_at > game.lastPlayedAt)) {
+      if (
+        game &&
+        row.last_played_at &&
+        (!game.lastPlayedAt || row.last_played_at > game.lastPlayedAt)
+      ) {
         game.lastPlayedAt = row.last_played_at;
       }
     }
     for (const game of gameMap.values()) {
-      game.versions.sort((a, b) => compareGameVersionsDescending(a.version, b.version));
+      game.versions.sort((a, b) =>
+        compareGameVersionsDescending(a.version, b.version),
+      );
       game.latestVersion = game.versions[0]?.version || "";
     }
     return [...gameMap.values()].filter((game) => game.versions.length > 0);
@@ -288,7 +338,10 @@ export class BzGamesDatabase {
   }
 
   async setFavorite(gameId: string, favorite: boolean): Promise<void> {
-    await this.run("UPDATE games SET is_favorite = ? WHERE id = ?", [favorite ? 1 : 0, gameId]);
+    await this.run("UPDATE games SET is_favorite = ? WHERE id = ?", [
+      favorite ? 1 : 0,
+      gameId,
+    ]);
   }
 
   async recordAchievement(record: {
@@ -315,41 +368,51 @@ export class BzGamesDatabase {
     return result.changes === 1;
   }
 
-  async recordStats(records: Array<{
-    gameId: string;
-    gameName: string;
-    version: string;
-    statId: string;
-    statName: string;
-    value: number;
-    mode: "full" | "increment";
-    reportedAt: number;
-  }>): Promise<void> {
-    await this.batch(records.map((record) => ({
-      sql: `INSERT INTO stats_reports
+  async recordStats(
+    records: Array<{
+      gameId: string;
+      gameName: string;
+      version: string;
+      statId: string;
+      statName: string;
+      value: number;
+      mode: "full" | "increment";
+      reportedAt: number;
+    }>,
+  ): Promise<void> {
+    await this.batch(
+      records.map((record) => ({
+        sql: `INSERT INTO stats_reports
         (event_id, game_id, game_name, version, stat_id, stat_name,
          reported_value, report_mode, reported_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      params: [
-        crypto.randomUUID(),
-        record.gameId,
-        record.gameName,
-        record.version,
-        record.statId,
-        record.statName,
-        record.value,
-        record.mode,
-        record.reportedAt,
-      ],
-    })));
+        params: [
+          crypto.randomUUID(),
+          record.gameId,
+          record.gameName,
+          record.version,
+          record.statId,
+          record.statName,
+          record.value,
+          record.mode,
+          record.reportedAt,
+        ],
+      })),
+    );
   }
 
   async softDelete(gameId: string, versions?: string[]): Promise<void> {
     const statements: SqliteBatchStatement[] = [];
     if (versions === undefined) {
       statements.push(
-        { sql: "UPDATE game_versions SET is_present = 0 WHERE game_id = ?", params: [gameId] },
-        { sql: "UPDATE games SET is_present = 0 WHERE id = ?", params: [gameId] },
+        {
+          sql: "UPDATE game_versions SET is_present = 0 WHERE game_id = ?",
+          params: [gameId],
+        },
+        {
+          sql: "UPDATE games SET is_present = 0 WHERE id = ?",
+          params: [gameId],
+        },
       );
     } else {
       for (const version of versions) {
@@ -378,15 +441,18 @@ export class BzGamesDatabase {
   }
 
   exportCloudSqlDump(): Promise<string> {
-    return this.database.exportSqlDump(CLOUD_SQL_DUMP_HEADER, CLOUD_SYNC_TABLES, {
-      stats_reports: ["event_sequence"],
-    });
+    return this.database.exportSqlDump(
+      CLOUD_SQL_DUMP_HEADER,
+      CLOUD_SYNC_TABLES,
+      {
+        stats_reports: ["event_sequence"],
+      },
+    );
   }
 
   importCloudSqlDump(sql: string): Promise<void> {
     return this.database.importSqlDump(sql);
   }
-
 }
 
 export const bzGamesDatabase = new BzGamesDatabase();

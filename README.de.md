@@ -46,9 +46,9 @@
 - **Database**: better-sqlite3-multiple-ciphers (ChaCha20-verschlüsseltes SQLite)
 - **Config**: electron-store (verschlüsseltes JSON)
 - **Communication**: WebSocket (ws-Bibliothek), Electron IPC
-- **Archive**: 7zip-bin / 7za (7Z), adm-zip (ZIP)
+- **Archive**: 7zip-bin / 7za (7Z / ZIP)
 - **Image**: html2canvas (Heatmap-Teilen-Rendering)
-- **Update**: electron-updater (GitHub Releases)
+- **Migration**: `.bzgames` v1 (unkomprimierter 7z-Container); v3.4.2 ist die letzte NSIS-Brückenversion
 
 ## 🚀 Schnellstart
 

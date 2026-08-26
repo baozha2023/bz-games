@@ -13,7 +13,8 @@ import type {
   GameType,
   DiscoveredRoom,
   RoomEvent,
-  UpdateState,
+  MigrationExportResult,
+  MigrationExportState,
   NicknameStyle,
   GameLaunchFailurePayload,
   RoomConnectResult,
@@ -323,8 +324,6 @@ export const electronAPI = {
       style: NicknameStyle,
     ): Promise<{ success: boolean; code?: string }> =>
       ipcRenderer.invoke(IPC.SYSTEM_SAVE_NICKNAME_STYLE, style),
-    ignoreUpdateVersion: (version: string) =>
-      ipcRenderer.invoke(IPC.SYSTEM_SET_IGNORED_UPDATE_VERSION, version),
     uploadAvatar: () => ipcRenderer.invoke(IPC.SYSTEM_UPLOAD_AVATAR),
     getAvatarFrameImage: (fileName: string) =>
       ipcRenderer.invoke(IPC.SYSTEM_GET_AVATAR_FRAME_IMAGE, fileName),
@@ -355,10 +354,6 @@ export const electronAPI = {
       ipcRenderer.invoke(IPC.SYSTEM_REMOVE_GAME_STORAGE_PATH, targetPath),
     dataHealthCheck: (): Promise<DataHealthReport> =>
       ipcRenderer.invoke(IPC.SYSTEM_DATA_HEALTH_CHECK),
-    getUpdateStatus: () => ipcRenderer.invoke(IPC.SYSTEM_GET_UPDATE_STATUS),
-    checkUpdate: () => ipcRenderer.invoke(IPC.SYSTEM_CHECK_UPDATE),
-    downloadUpdate: () => ipcRenderer.invoke(IPC.SYSTEM_DOWNLOAD_UPDATE),
-    installUpdate: () => ipcRenderer.invoke(IPC.SYSTEM_INSTALL_UPDATE),
     uninstall: (payload?: {
       deleteGames?: boolean;
     }): Promise<{ success: boolean; error?: string; paths?: string[] }> =>
@@ -374,11 +369,6 @@ export const electronAPI = {
       filePath?: string;
       error?: string;
     }> => ipcRenderer.invoke(IPC.SYSTEM_SAVE_PNG, dataUrl, defaultName),
-    onUpdateEvent: (callback: (payload: UpdateState) => void) => {
-      const handler = (_: any, payload: UpdateState) => callback(payload);
-      ipcRenderer.on(IPC.SYSTEM_UPDATE_EVENT, handler);
-      return () => ipcRenderer.removeListener(IPC.SYSTEM_UPDATE_EVENT, handler);
-    },
     onCloudSyncEvent: (
       callback: (payload: { stage: string; percentage: number }) => void,
     ) => {
@@ -405,6 +395,21 @@ export const electronAPI = {
       ipcRenderer.on(IPC.SYSTEM_CLOUD_PRESENCE_CHANGED, handler);
       return () =>
         ipcRenderer.removeListener(IPC.SYSTEM_CLOUD_PRESENCE_CHANGED, handler);
+    },
+  },
+  migration: {
+    exportData: (): Promise<MigrationExportResult> =>
+      ipcRenderer.invoke(IPC.MIGRATION_EXPORT),
+    cancel: (): Promise<boolean> => ipcRenderer.invoke(IPC.MIGRATION_CANCEL),
+    getStatus: (): Promise<MigrationExportState> =>
+      ipcRenderer.invoke(IPC.MIGRATION_GET_STATUS),
+    acknowledgeNotice: (version: string): Promise<boolean> =>
+      ipcRenderer.invoke(IPC.MIGRATION_ACKNOWLEDGE_NOTICE, version),
+    onEvent: (callback: (payload: MigrationExportState) => void) => {
+      const handler = (_: unknown, payload: MigrationExportState) =>
+        callback(payload);
+      ipcRenderer.on(IPC.MIGRATION_EVENT, handler);
+      return () => ipcRenderer.removeListener(IPC.MIGRATION_EVENT, handler);
     },
   },
   forum: {

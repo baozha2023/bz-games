@@ -31,6 +31,7 @@ import {
   resolveWebWindowStartupOptions,
 } from "./WebWindowStartup";
 import { processTreeService } from "./ProcessTreeService";
+import { migrationActivityGuard } from "../system/MigrationActivityGuard";
 
 type GameRuntimeKind = "native" | "web";
 
@@ -80,6 +81,7 @@ class GameManager {
 
   async launch(id: string, version?: string): Promise<boolean> {
     if (
+      migrationActivityGuard.isExporting() ||
       this.shuttingDownForUninstall ||
       this.isGameRunning(id) ||
       this.launchingGames.has(id)
@@ -245,6 +247,10 @@ class GameManager {
     return Array.from(this.activeRuntimes.keys()).filter((id) =>
       this.isGameRunning(id),
     );
+  }
+
+  hasActiveOrLaunchingGames(): boolean {
+    return this.launchingGames.size > 0 || this.getRunningGameIds().length > 0;
   }
 
   private startNativeRuntimeMonitor(id: string): void {

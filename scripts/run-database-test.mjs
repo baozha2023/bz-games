@@ -9,6 +9,9 @@ const require = createRequire(import.meta.url);
 const electronEntry = require.resolve("electron");
 const electronExecutable = require(electronEntry);
 const serviceTestSource = path.resolve("scripts/test-database-service.ts");
+const migrationFixtureDatabase = path.resolve(
+  "scripts/fixtures/migration-v1-bz_games.db",
+);
 const serviceTestBundle = path.resolve("scripts/.test-database-service.cjs");
 const serviceTestRoot = fs.mkdtempSync(
   path.join(os.tmpdir(), "bz-games-service-test-"),
@@ -63,7 +66,11 @@ async function main() {
 
     const serviceResult = spawnSync(electronExecutable, [serviceTestBundle], {
       cwd: serviceTestRoot,
-      env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
+      env: {
+        ...process.env,
+        ELECTRON_RUN_AS_NODE: "1",
+        BZ_MIGRATION_FIXTURE_DB: migrationFixtureDatabase,
+      },
       stdio: "inherit",
     });
     process.exitCode = serviceResult.status ?? 1;

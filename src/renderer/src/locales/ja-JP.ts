@@ -78,6 +78,7 @@ export default {
   common: {
     confirm: "確認",
     cancel: "キャンセル",
+    close: "閉じる",
     join: "参加",
     copy: "コピー",
     copied: "コピーしました",
@@ -137,6 +138,8 @@ export default {
       webUrlInvalid:
         "web_url が無効です。http:// または https:// のURLを入力してください",
       unknown: "インポート失敗: {message}",
+      migrationExportInProgress:
+        "移行データを書き出し中です。完了またはキャンセルしてから再試行してください",
     },
     importDraftTitle: "ゲーム情報を補完",
     importDraftDesc:
@@ -505,6 +508,52 @@ export default {
     playtimeDescription:
       "記録されたゲームプレイ時間が10分増えるごとに、10 BZコインを自動的に獲得します。手動で受け取る必要はありません。",
   },
+  migration: {
+    title: "BZ-Games 更新とデータ移行のお知らせ",
+    finalVersionTitle: "自動更新サービス終了のお知らせ",
+    finalVersionBody:
+      "v{version} は旧 NSIS 自動更新でインストールできる最後のバージョンです。このバージョンから後続リリースの確認・ダウンロード・インストールはできません。",
+    downloadBody:
+      "今後のバージョンは BZ-Games 公式サイトから再ダウンロードしてください。",
+    exportBody:
+      "新バージョンをインストールする前に移行データを書き出し、インポートが成功するまで旧バージョンを保持してください。新バージョンの「設定—データをインポート」からこのファイルを選択できます。",
+    afterImport:
+      "バックアップの書き出しによって元データが削除されることはありません。新バージョンへのインポート成功を確認後、このクライアントを手動でアンインストールできます。自動ではアンインストールされません。",
+    localGamesOnly:
+      "現在のアプリディレクトリ内の config.json、games、db のみを書き出します。外部ゲームライブラリはコピーされません。",
+    securityNotice:
+      ".bzgames には個人設定、データベース、ゲームファイルが含まれ、追加のパスワード保護はありません。安全に保管してください。",
+    openWebsite: "公式サイトを開く",
+    exportData: "データを書き出す",
+    exportSuccess: "移行データの書き出しが完了しました",
+    progressDetail: "{files} ファイル中 {processed} / {total} を処理済み",
+    status: {
+      idle: "書き出しは開始されていません",
+      preparing: "データを確認して準備しています…",
+      archiving: ".bzgames ファイルを作成しています…",
+      verifying: "書き出したファイルを検証しています…",
+      completed: "書き出しと整合性検証が完了しました",
+      canceled: "書き出しをキャンセルしました。元データは変更されていません",
+      error: "書き出しに失敗しました",
+    },
+    errors: {
+      game_running: "実行中のゲームをすべて終了してください",
+      market_task_active:
+        "マーケットのタスクを完了またはキャンセルしてください",
+      import_task_active:
+        "ゲームのインポートを完了またはキャンセルしてください",
+      export_in_progress: "別の書き出しが進行中です",
+      source_missing: "config.json またはデータベースが見つかりません",
+      unsafe_source_entry: "未対応のリンクまたは特殊ファイルが含まれています",
+      unsafe_destination:
+        "バックアップはアプリディレクトリの外に保存してください",
+      insufficient_space: "保存先または一時ドライブの空き容量が不足しています",
+      archive_failed: ".bzgames ファイルの作成または検証に失敗しました",
+      database_snapshot_failed:
+        "整合性のあるデータベーススナップショットを作成できません",
+      unknown: "書き出しに失敗しました。ログを確認して再試行してください",
+    },
+  },
   settings: {
     title: "設定",
     playerName: "ニックネーム",
@@ -714,40 +763,9 @@ export default {
         "{gameId} の最新バージョン記録が無効です: {version}",
       storage_root_missing: "ゲームライブラリの保存先がありません",
     },
-    update: "クライアント更新",
-    checkUpdate: "更新を確認",
-    updateTitle: "更新状態",
+    update: "バージョン移行",
+    updateNotice: "更新のお知らせ",
     currentVersion: "現在のバージョン: {version}",
-    installNow: "今すぐインストールして再起動",
-    updateIdle: "「更新を確認」をクリックして最新バージョンを確認します",
-    updateChecking: "更新を確認中...",
-    updateAvailable: "新しいバージョン {version} を検出、ダウンロード中...",
-    updateLatest: "すでに最新バージョンです",
-    updateDownloading: "ダウンロード中: {progress}%",
-    updateDownloaded:
-      "更新パッケージのダウンロードが完了しました。「今すぐインストールして再起動」を押してください",
-    updateUnsupported: "開発モードでは自動更新を利用できません",
-    updateFailed: "更新に失敗しました",
-    updateError: "更新失敗: {message}",
-    updateErrors: {
-      network_error:
-        "ネットワーク要求に失敗しました。接続または更新配信先を確認してください",
-      feed_invalid:
-        "更新メタデータが無効です。latest.yml または publish 設定を確認してください",
-      download_failed: "更新パッケージのダウンロードに失敗しました",
-      verify_failed: "更新パッケージの検証に失敗しました",
-      permission_denied: "更新ファイルの書き込み権限がありません",
-      unsupported_dev_mode: "開発モードでは自動更新を利用できません",
-      unknown: "不明な更新エラー",
-    },
-    updatePromptTitle: "新しいバージョンがあります",
-    updatePromptMessage:
-      "新しいバージョン {version} を検出しました。今すぐ更新しますか？",
-    updateNow: "今すぐ更新",
-    updateLater: "後で",
-    updateViewReleaseNotes: "更新履歴を見る",
-    updateReleaseOpenFailed:
-      "更新履歴ページを開けません。既定のブラウザー設定を確認してください。",
     officialWebsite: "公式サイト",
     uninstallClient: "クライアントのアンインストール",
     uninstallClientDescription:

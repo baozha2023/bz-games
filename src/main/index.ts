@@ -16,6 +16,7 @@ import { roomDiscoveryService } from "./services/room/RoomDiscoveryService";
 import { cloudSyncService } from "./services/system/CloudSyncService";
 import { logger } from "./utils/logger";
 import { gameImportTaskService } from "./services/game/GameImportTaskService";
+import { migrationExportService } from "./services/system/MigrationExportService";
 
 logger.installGlobalHandlers();
 
@@ -169,6 +170,7 @@ app.on("before-quit", (event) => {
         roomDiscoveryService.stop();
       }
       await cloudSyncService.shutdown();
+      await migrationExportService.shutdown();
       await gameImportTaskService.shutdown();
       await bzGamesDatabase.close();
     } catch (error) {

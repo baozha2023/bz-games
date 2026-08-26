@@ -46,9 +46,9 @@
 - **Database**: better-sqlite3-multiple-ciphers（ChaCha20 加密 SQLite）
 - **Config**: electron-store（加密 JSON）
 - **Communication**: WebSocket（ws 库）, Electron IPC
-- **Archive**: 7zip-bin / 7za (7Z), adm-zip (ZIP)
+- **Archive**: 7zip-bin / 7za（7Z / ZIP）
 - **Image**: html2canvas（热力图分享渲染）
-- **Update**: electron-updater (GitHub Releases)
+- **Migration**: `.bzgames` v1（无压缩 7z 容器）；v3.4.2 为最终 NSIS 迁移桥接版
 
 ## 🚀 快速开始
 

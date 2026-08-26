@@ -1,6 +1,6 @@
 {
   "name": "bz-launcher",
-  "version": "3.4.1",
+  "version": "3.4.2",
   "description": "BZ-Games game platform",
   "main": "./out/main/index.js",
   "author": {
@@ -19,7 +19,9 @@
     "typecheck:web": "vue-tsc --noEmit -p tsconfig.web.json",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "check:config": "node scripts/check-config-examples.mjs",
-    "test": "npm run test:import && npm run test:forum && npm run test:market && npm run test:manifest && npm run test:nickname && npm run test:avatar-frame && npm run test:game-card && npm run test:feedback && npm run test:database && npm run test:all --prefix relay-server",
+    "fixture:migration": "node scripts/build-migration-fixture.mjs",
+    "test": "npm run test:import && npm run test:migration && npm run test:forum && npm run test:market && npm run test:manifest && npm run test:nickname && npm run test:avatar-frame && npm run test:game-card && npm run test:feedback && npm run test:database && npm run test:all --prefix relay-server",
+    "test:migration": "vitest run src/main/services/system/MigrationExportService.test.ts",
     "test:import": "vitest run src/main/utils/fileUtils.test.ts src/main/services/game/GameImportTaskService.test.ts src/main/services/game/ProcessTreeService.test.ts src/main/services/room/relayWebSocketUrl.test.ts src/renderer/src/stores/useGameStore.test.ts src/renderer/src/stores/useForumStore.test.ts",
     "test:forum": "vitest run src/shared/forum-references.test.ts src/main/services/system/ForumService.test.ts src/renderer/src/services/forum-market-reference-service.test.ts src/renderer/src/services/forum-post-reference-service.test.ts src/renderer/src/services/forum-reference-view-model.test.ts src/renderer/src/composables/useForumCommandController.test.ts src/renderer/src/components/social/forum-editor-document.test.ts src/renderer/src/components/social/ForumPostEditor.test.ts src/renderer/src/components/social/ForumPostBody.test.ts",
     "test:market": "vitest run src/main/services/market",
@@ -44,7 +46,6 @@
     "7zip-bin": "^5.2.0",
     "better-sqlite3-multiple-ciphers": "^12.11.1",
     "electron-store": "^11.0.2",
-    "electron-updater": "^6.8.9",
     "html2canvas": "^1.4.1",
     "naive-ui": "^2.44.1",
     "pinia": "^2.2.4",

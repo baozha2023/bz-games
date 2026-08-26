@@ -96,6 +96,22 @@ async function count(
 
 async function verifyReinstallRestoresDerivedData(): Promise<void> {
   await storeService.init();
+  storeService.acknowledgeMigrationNotice("3.4.2");
+  assert.equal(
+    storeService.getSettings().migrationNoticeAcknowledgedVersion,
+    "3.4.2",
+  );
+  const cloudConfig = storeService.parseCloudConfigContent(
+    storeService.createCloudConfigContent(),
+  );
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(
+      cloudConfig.settings || {},
+      "migrationNoticeAcknowledgedVersion",
+    ),
+    false,
+    "migration notice acknowledgement must remain device-local",
+  );
   const gameId = "reinstall-cache";
   const version = "1.0.0";
   const gameRoot = path.join(process.cwd(), "games", gameId);
@@ -318,10 +334,108 @@ async function verifyManualUnlockProgressData(): Promise<void> {
   }
 }
 
+async function verifyFinalNsisBridgeSnapshotRestore(): Promise<void> {
+  const dataRoot = process.cwd();
+  const configPath = path.join(dataRoot, "config.json");
+  const gamesPath = path.join(dataRoot, "games");
+  const dbPath = path.join(dataRoot, "db");
+  const label = (targetPath: string) =>
+    targetPath
+      .replace(/[:\\/]/g, "_")
+      .replace(/_+/g, "_")
+      .replace(/^_+|_+$/g, "");
+  const snapshotRoot = path.join(
+    dataRoot,
+    ".update-snapshots",
+    "version-3.4.2-bridge-test",
+  );
+  await fs.mkdir(snapshotRoot, { recursive: true });
+  await fs.writeFile(
+    path.join(snapshotRoot, `config_${label(configPath)}.backup`),
+    "snapshot-config",
+  );
+  await fs.mkdir(path.join(snapshotRoot, `games_${label(gamesPath)}`), {
+    recursive: true,
+  });
+  await fs.writeFile(
+    path.join(snapshotRoot, `games_${label(gamesPath)}`, "game.marker"),
+    "snapshot-game",
+  );
+  await fs.mkdir(path.join(snapshotRoot, `db_${label(dbPath)}`), {
+    recursive: true,
+  });
+  await fs.writeFile(
+    path.join(snapshotRoot, `db_${label(dbPath)}`, "db.marker"),
+    "snapshot-db",
+  );
+  await fs.writeFile(
+    path.join(snapshotRoot, "snapshot-meta.json"),
+    JSON.stringify({ createdAt: Date.now() }),
+  );
+
+  await (
+    storeService as unknown as {
+      restoreDataFromSnapshotIfNeeded: (root: string) => Promise<void>;
+    }
+  ).restoreDataFromSnapshotIfNeeded(dataRoot);
+
+  assert.equal(await fs.readFile(configPath, "utf8"), "snapshot-config");
+  assert.equal(
+    await fs.readFile(path.join(gamesPath, "game.marker"), "utf8"),
+    "snapshot-game",
+  );
+  assert.equal(
+    await fs.readFile(path.join(dbPath, "db.marker"), "utf8"),
+    "snapshot-db",
+  );
+
+  await Promise.all([
+    fs.rm(configPath, { force: true }),
+    fs.rm(gamesPath, { recursive: true, force: true }),
+    fs.rm(dbPath, { recursive: true, force: true }),
+    fs.rm(path.join(dataRoot, ".update-snapshots"), {
+      recursive: true,
+      force: true,
+    }),
+  ]);
+}
+
+async function verifyMigrationFixtureDatabase(): Promise<void> {
+  const sourcePath = process.env.BZ_MIGRATION_FIXTURE_DB;
+  assert.ok(sourcePath, "migration fixture database path is required");
+  const fixturePath = path.join(process.cwd(), "migration-fixture.db");
+  await fs.copyFile(sourcePath, fixturePath);
+  const fixture = new BzGamesDatabase(
+    "migration-fixture.db",
+    "bzgames-migration-v1-fixture",
+  );
+  try {
+    await fixture.initialize();
+    const games = await fixture.getGames();
+    assert.equal(games.length, 1);
+    assert.equal(games[0].id, "fixture-game");
+    assert.equal(
+      games[0].versions[0].path,
+      "C:\\BZ-Games\\games\\fixture-game\\1.0.0",
+    );
+    assert.deepEqual(await fixture.checkIntegrity(), []);
+  } finally {
+    await fixture.close();
+  }
+}
+
 async function main(): Promise<void> {
   try {
-    assert.equal(resolveGameHostingPortalUrl(), "https://relay.example.com/admin/game-hosting");
-    assert.equal(resolveGameHostingPortalUrl("ws://127.0.0.1:38090/"), "http://127.0.0.1:38090/admin/game-hosting");
+    await verifyMigrationFixtureDatabase();
+    await verifyFinalNsisBridgeSnapshotRestore();
+    assert.equal(
+      resolveGameHostingPortalUrl(),
+      "https://relay.example.com/admin/game-hosting",
+    );
+    assert.equal(
+      resolveGameHostingPortalUrl("ws://127.0.0.1:38090/"),
+      "http://127.0.0.1:38090/admin/game-hosting",
+    );
     assert.throws(() => resolveGameHostingPortalUrl(""));
     const hostedUrl =
       "games.bzgames.top/com.example.game/1.2.3/package/%E6%B8%B8%E6%88%8F%E5%8C%85.zip";
@@ -413,6 +527,33 @@ async function main(): Promise<void> {
 
     await source.saveGames([game("remote", true)]);
     await seedBusinessRecords(source, "remote");
+
+    await source.suspendForSnapshot();
+    let queuedReadSettled = false;
+    const queuedRead = source.getGames().then((games) => {
+      queuedReadSettled = true;
+      return games;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(
+      queuedReadSettled,
+      false,
+      "database work must wait while a migration snapshot is copied",
+    );
+    await fs.copyFile("source.db", "migration-snapshot.db");
+    source.resumeAfterSnapshot();
+    assert.equal((await queuedRead).length, 1);
+    const snapshot = new BzGamesDatabase(
+      "migration-snapshot.db",
+      "database-service-test",
+    );
+    try {
+      await snapshot.initialize();
+      assert.equal((await snapshot.getGames()).length, 1);
+      assert.deepEqual(await snapshot.checkIntegrity(), []);
+    } finally {
+      await snapshot.close();
+    }
 
     await source.softDelete("remote");
     assert.deepEqual(await source.getGames(), []);

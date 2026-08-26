@@ -12,6 +12,7 @@ import { GameType } from "../../../shared/types";
 import { logger } from "../../utils/logger";
 import { storeService } from "../storage/StoreService";
 import { GameLoader, type ManualManifestDraft } from "./GameLoader";
+import { migrationActivityGuard } from "../system/MigrationActivityGuard";
 
 interface InternalImportTask {
   state: GameImportTaskState;
@@ -60,6 +61,12 @@ export class GameImportTaskService {
       .sort((a, b) => a.createdAt - b.createdAt);
   }
 
+  hasActiveTasks(): boolean {
+    return Array.from(this.tasks.values()).some((task) =>
+      ACTIVE_STATUSES.has(task.state.status),
+    );
+  }
+
   async restoreTasks(): Promise<void> {
     try {
       const raw = await fsp.readFile(this.snapshotPath, "utf8");
@@ -100,6 +107,9 @@ export class GameImportTaskService {
     sourcePath: string,
     draft?: ManualManifestDraft,
   ): Promise<GameImportStartResult> {
+    if (migrationActivityGuard.isExporting()) {
+      return { success: false, error: "migrationExportInProgress" };
+    }
     try {
       const prepared = await GameLoader.prepareGameImport(sourcePath, draft);
       const duplicate = this.hasActiveDuplicate(
@@ -119,6 +129,9 @@ export class GameImportTaskService {
             version: prepared.manifest.version,
           },
         };
+      }
+      if (migrationActivityGuard.isExporting()) {
+        return { success: false, error: "migrationExportInProgress" };
       }
 
       const taskId = crypto.randomUUID();
@@ -168,6 +181,9 @@ export class GameImportTaskService {
   }
 
   async retryImport(taskId: string): Promise<GameImportStartResult> {
+    if (migrationActivityGuard.isExporting()) {
+      return { success: false, error: "migrationExportInProgress" };
+    }
     const task = this.tasks.get(taskId);
     if (!task || !["failed", "interrupted"].includes(task.state.status)) {
       return { success: false, error: "taskNotRetryable" };
@@ -200,6 +216,9 @@ export class GameImportTaskService {
               ? "idExists"
               : "versionExists",
         };
+      }
+      if (migrationActivityGuard.isExporting()) {
+        return { success: false, error: "migrationExportInProgress" };
       }
       task.state = {
         ...task.state,

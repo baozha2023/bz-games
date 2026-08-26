@@ -13,7 +13,8 @@ import type {
   MarketIndex,
   MarketTaskEvent,
   MarketTaskState,
-  UpdateState,
+  MigrationExportResult,
+  MigrationExportState,
   UserData,
   NicknameStyle,
   GameLaunchFailurePayload,
@@ -301,7 +302,6 @@ declare global {
         saveNicknameStyle: (
           style: NicknameStyle,
         ) => Promise<{ success: boolean; code?: string }>;
-        ignoreUpdateVersion: (version: string) => Promise<boolean>;
         uploadAvatar: () => Promise<string | null>;
         getAvatarFrameImage: (fileName: string) => Promise<string | null>;
         selectGameStoragePath: () => Promise<{
@@ -349,10 +349,6 @@ declare global {
           error?: string;
         }>;
         dataHealthCheck: () => Promise<DataHealthReport>;
-        getUpdateStatus: () => Promise<UpdateState>;
-        checkUpdate: () => Promise<UpdateState>;
-        downloadUpdate: () => Promise<UpdateState>;
-        installUpdate: () => Promise<boolean>;
         uninstall: (payload?: { deleteGames?: boolean }) => Promise<{
           success: boolean;
           error?: string;
@@ -368,7 +364,6 @@ declare global {
           filePath?: string;
           error?: string;
         }>;
-        onUpdateEvent: (callback: (payload: UpdateState) => void) => () => void;
         onCloudSyncEvent: (
           callback: (payload: { stage: string; percentage: number }) => void,
         ) => () => void;
@@ -377,6 +372,15 @@ declare global {
         ) => () => void;
         onPresenceChanged: (
           callback: (payload: CloudPresenceStatus) => void,
+        ) => () => void;
+      };
+      migration: {
+        exportData: () => Promise<MigrationExportResult>;
+        cancel: () => Promise<boolean>;
+        getStatus: () => Promise<MigrationExportState>;
+        acknowledgeNotice: (version: string) => Promise<boolean>;
+        onEvent: (
+          callback: (payload: MigrationExportState) => void,
         ) => () => void;
       };
       forum: {

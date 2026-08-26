@@ -39,6 +39,7 @@ import {
   type MarketCatalogClient,
   type OfficialMarketCatalog,
 } from "./MarketCatalogClient";
+import { migrationActivityGuard } from "../system/MigrationActivityGuard";
 
 interface TaskMeta {
   gameId: string;
@@ -778,6 +779,9 @@ export class MarketService {
   }
 
   async resumeTask(taskId: string): Promise<MarketTaskState | null> {
+    if (migrationActivityGuard.isExporting()) {
+      throw new Error("migration_export_in_progress");
+    }
     const snapshots = await this.loadSnapshots();
     const snap = snapshots.find((s) => s.taskId === taskId);
     if (!snap) return null;
@@ -827,6 +831,9 @@ export class MarketService {
       sourceIdx: snap.sourceIdx,
       marketId: index.marketId,
     };
+    if (migrationActivityGuard.isExporting()) {
+      throw new Error("migration_export_in_progress");
+    }
 
     const state = this.startTask(taskId, meta, {
       progress:
@@ -913,6 +920,9 @@ export class MarketService {
     version: string,
     sourceIdx: number,
   ): Promise<MarketTaskState> {
+    if (migrationActivityGuard.isExporting()) {
+      throw new Error("migration_export_in_progress");
+    }
     const taskId = toTaskId(gameId, version);
     const existing = this.tasks.get(taskId)?.state;
     if (
@@ -999,6 +1009,9 @@ export class MarketService {
       sourceIdx,
       marketId: index.marketId,
     };
+    if (migrationActivityGuard.isExporting()) {
+      throw new Error("migration_export_in_progress");
+    }
     const state = this.startTask(taskId, meta);
     this.startPipeline(taskId, game, targetVersion);
     return state;

@@ -80,6 +80,7 @@ export default {
   common: {
     confirm: "Bestätigen",
     cancel: "Abbrechen",
+    close: "Schließen",
     join: "Beitreten",
     copy: "Kopieren",
     copied: "In die Zwischenablage kopiert",
@@ -141,6 +142,8 @@ export default {
       webUrlInvalid:
         "Ungültige web_url. Bitte eine gültige http:// oder https:// URL verwenden",
       unknown: "Import fehlgeschlagen: {message}",
+      migrationExportInProgress:
+        "Migrationsdaten werden exportiert. Schließe den Export zuerst ab oder brich ihn ab",
     },
     importDraftTitle: "Spielinformationen vervollständigen",
     importDraftDesc:
@@ -514,6 +517,56 @@ export default {
     playtimeDescription:
       "Für jeweils 10 Minuten erfasste Spielzeit werden automatisch 10 BZ-Münzen gutgeschrieben. Eine manuelle Abholung ist nicht erforderlich.",
   },
+  migration: {
+    title: "BZ-Games Update- und Datenmigration",
+    finalVersionTitle: "Automatische Updates werden eingestellt",
+    finalVersionBody:
+      "v{version} ist die letzte Version, die über den bisherigen NSIS-Updater installiert werden kann. Diese Version kann spätere Versionen nicht prüfen, herunterladen oder installieren.",
+    downloadBody:
+      "Zukünftige Versionen bitte von der BZ-Games-Website herunterladen.",
+    exportBody:
+      "Exportiere vor der Installation einer neuen Version deine Migrationsdaten und behalte diese Installation, bis der Import erfolgreich war. Wähle die Datei in der neuen Version unter Einstellungen — Daten importieren.",
+    afterImport:
+      "Der Export löscht keine Quelldaten. Nach einem erfolgreichen Import kannst du diesen Client selbst deinstallieren; er wird nicht automatisch deinstalliert.",
+    localGamesOnly:
+      "Exportiert werden nur config.json, games und db im aktuellen Programmverzeichnis. Externe Spielebibliotheken werden nicht kopiert.",
+    securityNotice:
+      "Die .bzgames-Datei enthält persönliche Einstellungen, Datenbankeinträge und Spieldateien. Sie besitzt keinen zusätzlichen Passwortschutz und muss sicher aufbewahrt werden.",
+    openWebsite: "Website öffnen",
+    exportData: "Daten exportieren",
+    exportSuccess: "Migrationsdaten wurden exportiert",
+    progressDetail: "{processed} / {total} in {files} Dateien verarbeitet",
+    status: {
+      idle: "Export wurde noch nicht gestartet",
+      preparing: "Daten werden geprüft und vorbereitet…",
+      archiving: ".bzgames-Datei wird erstellt…",
+      verifying: "Exportdatei wird geprüft…",
+      completed: "Export und Integritätsprüfung abgeschlossen",
+      canceled: "Export abgebrochen; Quelldaten wurden nicht verändert",
+      error: "Export fehlgeschlagen",
+    },
+    errors: {
+      game_running: "Beende zuerst alle laufenden Spiele",
+      market_task_active:
+        "Schließe zuerst aktive Marktplatz-Aufgaben ab oder brich sie ab",
+      import_task_active:
+        "Schließe zuerst aktive Spielimporte ab oder brich sie ab",
+      export_in_progress: "Ein anderer Export läuft bereits",
+      source_missing: "config.json oder Datenbankdaten fehlen",
+      unsafe_source_entry:
+        "Die Daten enthalten einen nicht unterstützten Link oder eine Spezialdatei",
+      unsafe_destination:
+        "Speichere die Sicherung außerhalb des Programmverzeichnisses",
+      insufficient_space:
+        "Auf dem Ziel- oder temporären Laufwerk ist nicht genug Speicher frei",
+      archive_failed:
+        "Die .bzgames-Datei konnte nicht erstellt oder geprüft werden",
+      database_snapshot_failed:
+        "Es konnte kein konsistenter Datenbank-Snapshot erstellt werden",
+      unknown:
+        "Export fehlgeschlagen. Prüfe das Protokoll und versuche es erneut",
+    },
+  },
   settings: {
     title: "Einstellungen",
     playerName: "Spitzname",
@@ -722,45 +775,9 @@ export default {
         "Der neueste Versionseintrag für {gameId} ist ungültig: {version}",
       storage_root_missing: "Ein Speicherpfad der Spielebibliothek fehlt",
     },
-    update: "Client-Update",
-    checkUpdate: "Nach Update suchen",
-    updateTitle: "Update-Status",
+    update: "Versionsmigration",
+    updateNotice: "Update-Hinweise",
     currentVersion: "Aktuelle Version: {version}",
-    installNow: "Jetzt installieren & neu starten",
-    updateIdle:
-      'Klicke „Nach Update suchen", um die neueste Version zu erhalten',
-    updateChecking: "Suche nach Updates...",
-    updateAvailable: "Neue Version gefunden: {version}, lade herunter...",
-    updateLatest: "Bereits die neueste Version",
-    updateDownloading: "Download: {progress}%",
-    updateDownloaded:
-      'Update heruntergeladen, klicke „Jetzt installieren & neu starten"',
-    updateUnsupported:
-      "Automatisches Update im Entwicklungsmodus nicht unterstützt",
-    updateFailed: "Update fehlgeschlagen",
-    updateError: "Update fehlgeschlagen: {message}",
-    updateErrors: {
-      network_error:
-        "Netzwerkverbindung fehlgeschlagen, Netzwerk oder Update-Quelle prüfen",
-      feed_invalid:
-        "Update-Metadaten ungültig, latest.yml oder Release-Konfiguration prüfen",
-      download_failed:
-        "Update-Download fehlgeschlagen, später erneut versuchen",
-      verify_failed:
-        "Update-Prüfung fehlgeschlagen, erneut herunterladen oder Release-Dateien prüfen",
-      permission_denied: "Keine Berechtigung zum Schreiben der Update-Dateien",
-      unsupported_dev_mode:
-        "Automatisches Update im Entwicklungsmodus nicht unterstützt",
-      unknown: "Unbekannter Update-Fehler",
-    },
-    updatePromptTitle: "Neue Version verfügbar",
-    updatePromptMessage:
-      "Neue Version {version} gefunden. Jetzt aktualisieren?",
-    updateNow: "Jetzt aktualisieren",
-    updateLater: "Später",
-    updateViewReleaseNotes: "Release-Notizen anzeigen",
-    updateReleaseOpenFailed:
-      "Die Release-Notizen konnten nicht geöffnet werden. Überprüfe die Einstellungen des Standardbrowsers.",
     officialWebsite: "Offizielle Website",
     uninstallClient: "Client deinstallieren",
     uninstallClientDescription:

@@ -249,8 +249,7 @@ export interface AppSettings {
   defaultRoomPort: number;
   closeBehavior: "tray" | "exit";
   autoLaunch: boolean;
-  ignoredUpdateVersion?: string;
-  skipStartupUpdateCheck?: boolean;
+  migrationNoticeAcknowledgedVersion?: string;
   gameStoragePath?: string;
   gameStorageHistory?: string[];
   lastOpenedAt?: number;
@@ -266,34 +265,6 @@ export interface AppSettings {
 export interface DefaultGamesMigrationStatus {
   shouldPrompt: boolean;
   defaultGamesPath: string;
-}
-
-export type UpdateErrorCode =
-  | "network_error"
-  | "feed_invalid"
-  | "download_failed"
-  | "verify_failed"
-  | "permission_denied"
-  | "unsupported_dev_mode"
-  | "unknown";
-
-export type UpdateStatus =
-  | "idle"
-  | "checking"
-  | "available"
-  | "up_to_date"
-  | "downloading"
-  | "downloaded"
-  | "error"
-  | "unsupported";
-
-export interface UpdateState {
-  status: UpdateStatus;
-  currentVersion: string;
-  latestVersion?: string;
-  progress?: number;
-  message?: string;
-  errorCode?: UpdateErrorCode;
 }
 
 export interface DataHealthIssue {

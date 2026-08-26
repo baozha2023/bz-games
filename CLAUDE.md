@@ -37,7 +37,7 @@
 - 游戏市场（远程发现、详情展示、下载并安装到默认游戏库，GitHub Release Asset 自动补齐 sha256/size）
 - 游戏托管（创作者、管理员和超级管理员上传 ZIP 到官方服务器；创作者提交后需审核，管理员与超级管理员直接发布，市场通过逻辑地址下载）
 - 个性化系统（头像框解锁、装备、预览，支持多场景展示）
-- 系统设置（玩家信息、主题、端口、语言、更新、游戏库列表、GitHub Token）
+- 系统设置（玩家信息、主题、端口、语言、版本迁移、游戏库列表、GitHub Token）
 - 官方登录与云同步服务（GitHub OAuth 登录；脱敏配置与三张业务表 SQL 逻辑备份组成单一平台快照，原子发布并在本地幂等合并）
 - 建言献策（仅 GitHub 登录用户可提交文字与图片，每个账号每 12 小时一次）
 - 论坛（仅登录用户；帖子纯文本+图片、服务端敏感词过滤、点赞/评论、游标信息流与独立详情页）
@@ -71,7 +71,7 @@
 | Multipart 解析  | busboy                                       | 中继服务流式接收反馈和论坛图片并限制字段、文件数量及大小                            |
 | 论坛搜索        | 可选 Elasticsearch 8.19.x + analysis-ik      | MySQL 为事实源；ES 未配置或未就绪时隐藏搜索，标题/正文使用 `ik_max_word`/`ik_smart` |
 | 管理前端        | Vue 3 + TypeScript + Vite + Pinia + Naive UI | 构建为 `/admin/` 同源静态站点                                                       |
-| 客户端更新      | electron-updater                             | GitHub Releases 作为更新源                                                          |
+| 版本迁移        | 7zip-bin / `.bzgames` v1                     | v3.4.2 最终 NSIS 桥接版，只导出、不删除源数据                                       |
 | WebSocket 服务  | ws                                           | Game API、Room Server、Room Client 均基于 WebSocket，v2 高频通信支持原始二进制帧    |
 | 版本比较        | semver                                       | 用于平台版本与游戏版本兼容性检查                                                    |
 | ZIP/7Z 解压     | 7zip-bin (7za)                               | 通过 `child_process.spawn` 调用，统一处理 .zip 和 .7z                               |
@@ -169,7 +169,7 @@ bz-games/
 │   │   │   ├── game.ipc.ts                # 游戏相关 IPC 处理器
 │   │   │   ├── market.ipc.ts               # 游戏市场 IPC 处理器
 │   │   │   ├── room.ipc.ts                # 房间相关 IPC 处理器
-│   │   │   ├── system.ipc.ts              # 设置/系统/更新 IPC 处理器
+│   │   │   ├── system.ipc.ts              # 设置与系统 IPC 处理器
 │   │   │   ├── storage.ipc.ts             # Web 游戏本地存储 IPC 处理器
 │   │   │   ├── log.ipc.ts                # 渲染进程错误日志回传 IPC 处理器
 │   │   │   └── statistics.ipc.ts          # 统计数据查询 IPC 处理器
@@ -209,7 +209,8 @@ bz-games/
 │   │       ├── ForumService.ts        # 论坛鉴权、信息流/搜索、帖子引用解析、发帖评论与图片上传客户端
 │   │       ├── NotificationService.ts # 系统通知窗口服务
 │   │       ├── UninstallService.ts    # 游戏进程收口、游戏库清理与系统卸载器启动确认
-│   │       └── UpdateService.ts       # 客户端更新检查/下载/安装服务
+│   │       ├── MigrationActivityGuard.ts # 迁移导出期间阻止新游戏、市场安装与导入任务
+│   │       └── MigrationExportService.ts # config.json / games / db 的 .bzgames 导出与校验
 │   │   └── utils/
 │   │       ├── appPath.ts                 # 应用根路径工具
 │   │       ├── externalUrl.ts             # 外部链接 http/https 协议白名单校验与统一打开
@@ -237,7 +238,7 @@ bz-games/
 │   │       │   ├── useForumStore.ts       # 论坛列表/搜索/游标与滚动位置状态管理
 │   │       │   ├── useGameStore.ts        # 游戏库状态管理
 │   │       │   ├── useRoomStore.ts        # 房间状态管理
-│   │       │   └── useSettingsStore.ts    # 设置与更新状态管理
+│   │       │   └── useSettingsStore.ts    # 设置状态管理
 │   │       ├── views/
 │   │       │   ├── AchievementsView.vue   # 成就页面
 │   │       │   ├── GameDetailView.vue     # 游戏详情页面
@@ -757,7 +758,7 @@ interface FloatBallProgress {
 - 通过 `PlaySessionDatabaseService` 自动记录每次游戏启动→关闭为一次"游玩会话"（写入 SQLite `bz_games.db`）
 - 通过 `StoreService` 与统一数据库仓储记录成就解锁和统计事件（写入加密 SQLite `bz_games.db`）
 - 系统托盘动态菜单：游戏退出时自动刷新「最近游玩」列表，支持从托盘快速启动最近玩过的游戏
-- 更新检查、下载、安装由 `UpdateService` 统一处理
+- 迁移导出由 `MigrationExportService` 统一处理；v3.4.2 不发起更新检查，也不能下载或安装后续版本
 
 #### 渲染进程 (Renderer Process)
 
@@ -867,7 +868,7 @@ interface AppSettings {
   defaultRoomPort: number;
   closeBehavior: "tray" | "exit";
   autoLaunch: boolean;
-  ignoredUpdateVersion?: string;
+  migrationNoticeAcknowledgedVersion?: string;
   gameStoragePath?: string;
   gameStorageHistory?: string[];
   lastOpenedAt?: number;
@@ -1338,18 +1339,17 @@ interface AppSettings {
 - `system:equipFrame`：原子装备头像框（仅校验已拥有）。
 - `system:unequipFrame`：原子卸下头像框（仅当前装备时生效）。
 - `system:getAvatarFrameImage`：从 `resources/avatar-frames/` 读取帧图返回 base64 Data URL。
-- `system:setIgnoredUpdateVersion`：原子设置忽略的更新版本号。
 - `system:dataHealthCheck`：执行本地数据健康检查，返回结构化报告（错误/警告/摘要）。
-- `system:getUpdateStatus`：获取当前更新状态。
-- `system:checkUpdate`：检查是否有可用更新。
-- `system:downloadUpdate`：下载可用更新包。
-- `system:installUpdate`：安装更新并重启。
+- `migration:export`：选择目标文件并导出 `.bzgames` v1；单任务互斥，返回最终结构化状态。
+- `migration:cancel`：取消当前导出，仅清理临时快照与未完成文件。
+- `migration:get-status`：读取迁移导出当前状态。
+- `migration:acknowledge-notice`：仅接受当前应用版本号，记录用户已确认本版本迁移公告。
+- `migration:event`：推送准备、打包、校验、完成、取消或错误状态及真实字节进度。
 - `system:log:error`：渲染进程错误日志回传主进程统一记录（`ipcRenderer.send` 单向推送，无需返回值）。
 - `room:event`：主进程推送房间事件给渲染层。
 - `game:process:started`：推送平台托管的游戏运行实体启动事件。Native 在入口进程 `spawn` 后发送；Web 在窗口加载成功并创建游玩会话后发送。
 - `game:process:ended`：推送平台托管的游戏运行实体结束事件。Native 在入口进程及已发现的子进程树均结束后发送；Web 在窗口关闭或渲染进程崩溃/被杀死后发送。
 - `game:launch:failed`：推送游戏启动失败事件。
-- `system:update:event`：推送更新状态变化事件。
 - `market:event`：推送市场下载/安装任务状态变化事件。
 - `game:import:event`：推送手动导入任务的阶段、字节进度和终态快照。
 - `game:unlockAchievement`：推送成就解锁事件到渲染层。
@@ -1437,7 +1437,7 @@ interface AppSettings {
 - **房间开始按钮冷却**：房间内收到 `room:game:end` 后，Host 的「开始游戏」按钮需禁用 5 秒。
 - **客机重连按钮**：客机游戏进程意外退出后，由 `RoomServer` 将 `playerId` 加入 `RoomInfo.reconnectPlayerIds` 并广播状态同步。前端 `isReconnectMode` 从该数组派生，无需手动管理。重连状态下 Ready/Unready 按钮位替换为"重连"按钮。点击后重新 `launch()` 同一游戏版本。`room:game:start` 或 `playing→waiting` 时 `reconnectPlayerIds` 被清空，按钮恢复原状。
 - **统计界面**：卡片右上角需展示该游戏的所有版本号，使用自动换行布局。
-- **设置页更新入口**：设置页需提供「检查更新」按钮，点击后弹出更新状态弹层，显示下载进度与安装按钮。
+- **设置页更新说明入口**：设置页提供「更新说明」按钮，始终可重新打开 v3.4.2 迁移公告；首次启动自动展示，只有主动关闭或成功导出后才记录已确认版本。导出成功的 message 出现后不再显示进度条，但保留完成状态与目标路径。
 - **玩家昵称校验**：昵称输入框限制 16 个字符（`maxlength="16" show-count`），表单校验规则包含三个维度：① 非空（`required`）；② 最长 16 字符（`max: 16`）；③ 禁止 `< > " ' \` & \\ /`等特殊字符（正则`/^[^<>\"'\`&\\\\/]+$/`）。`canSave`computed 通过`nicknameValid`门控：空名或包含非法字符时保存按钮 disabled。所有 6 种语言均提供`nameTooLong`/`nameInvalidChars` 错误提示。
 - **设置页卸载入口**：设置页底部（与保存按钮同行，`justify-content: space-between`）提供"卸载客户端"按钮（
   `type="error" secondary`），右侧提供"清除缓存"按钮。点击卸载弹出 NaiveUI 自定义确认弹窗，包含不可撤销的警告文案、是否同时删除所有游戏库目录的勾选项、以及删除路径列表预览。确认后调用
@@ -1455,7 +1455,7 @@ interface AppSettings {
 - **GitHub Token 设置**：设置页提供 `githubToken` 字段（`n-input type="password"`，`@copy.prevent` + `@cut.prevent` 防剪贴板泄漏）。填写有效的 GitHub Personal Access Token 后，平台所有 GitHub API 请求自动携带 `Authorization: Bearer <token>`，将 API 限流从 60 次/小时提升至 5000 次/小时（用于 Release Asset 解析）。
 - **云端同步说明**：设置页 GitHub 登录区域在上传/下载按钮旁提供 `?` 帮助按钮，hover 展示 `cloudSyncHelp` tooltip，说明上传会排除 GitHub Token 与登录会话字段、下载 config.json 仅更新云端存在的字段。
 - **设置页数据自检**：设置页需提供“数据自检”按钮。清单检查必须复用 `GameManifestFileService`，在不迁移或覆盖原文件的前提下识别明文/密文、验证密文信封/密钥/认证标签和最新 `GameManifestSchema`，并核对游戏 ID/版本、平台兼容范围、入口及图标/封面/视频/成就图标文件。明文为警告，解密、格式、密钥或 Schema 问题为错误；主进程返回稳定错误码和参数，渲染层使用六语 i18n 展示，不直接显示主进程硬编码文案。
-- **更新错误诊断**：更新失败时前端展示归类后的错误码文案与技术摘要。
+- **迁移导出错误诊断**：迁移导出失败时前端按共享错误码展示本地化原因；技术细节仅写入主进程日志，不向用户泄露绝对源路径或内部异常。
 - **设置页游戏库列表管理**：
   - 支持维护多个游戏库路径，并为每个项提供默认游戏库切换、打开路径和删除入口。
   - 默认游戏库影响新导入或市场下载安装的游戏，已导入游戏所在目录保持不变。
@@ -1486,17 +1486,18 @@ interface AppSettings {
   - **版本完整性分级**：前端使用 `getVersionIntegrity()` 返回五档结果：`"ok"`（一切正常）、`"missingSha256"`（缺 sha256，黄色警告标签）、`"missingSize"`（缺 size，黄色警告标签）、`"invalid"`（下载链接非法或非 GitHub 直链缺少 size，红色错误标签）、`null`（GitHub 直链 Asset 信息尚未解析，不显示标签）。`isVersionDownloadable()` 仅用于下载按钮禁用判断：非 GitHub 直链缺 size 时禁用。
   - **下载阶段**：`downloadAndInstall()` 按优先级获取 sha256/size：① 版本对象 → ② `resolvedAssets` 缓存 → ③ GitHub 直链实时 API。size 缺失则拒绝下载（`market_missing_size`），sha256 缺失仅跳过哈希校验不拒绝。
 
-### 6.5 客户端更新发布规范
+### 6.5 v3.4.2 最终 NSIS 桥接与迁移规范
 
-- **更新源**：使用 GitHub Releases（仓库：`baozha2023/bz-games`）作为 `electron-updater` 的发布源。
-- **发布资产**：每个版本 Release 单独上传 `BZ-Games Setup x.x.x.exe`、`latest.yml`、`*.blockmap`。
-- **版本策略**：发布前需先提升 `package.json` 版本号，并使用对应 Tag 创建 Release。
-- **生效条件**：自动更新在打包后的生产环境可用；开发模式（`pnpm dev`）下提示不支持。
-- **本地数据保护**：
-  - 更新包下载完成后，`UpdateService` 按目标版本创建 `.update-snapshots/version-<version>-<hash>`；下载前不创建快照。
-  - 点击安装时必须确认目标版本快照存在，不存在才补建；同一目标版本的并发或重复调用必须复用唯一快照。
-  - 快照包含 `config.json` 备份、默认游戏目录和 SQLite `db/` 目录；默认游戏目录尚未创建时，快照保存一个空目录，不要求先修改原应用目录。除该明确的缺失根目录场景外，任一复制失败都必须清理临时目录并阻止安装，不得把不完整目录标记为完成。
-  - 禁止退出应用时自动安装更新，所有安装必须经过显式安装入口和快照检查。
+- **终止版本**：v3.4.2 是最后一个可由旧版 NSIS 自动更新机制安装的版本；自身不包含 `electron-updater`，不检查、下载或安装后续版本。
+- **桥接发布**：仍由 electron-builder 生成 NSIS 安装包、`latest.yml` 与 blockmap，供 v3.4.1 及更早客户端升级到 v3.4.2。现有 `StoreService.restoreDataFromSnapshotIfNeeded()` 必须保留，以恢复旧客户端在更新前创建的快照。
+- **手工安装边界**：不为用户直接运行 v3.4.2 安装包覆盖旧目录增加备份或阻止逻辑；受保证路径是旧客户端内置更新到 v3.4.2。
+- **导出范围**：固定为 exe 同级 `config.json`、`games/`、`db/`。外部游戏库不复制；`config.json`、`db/` 与普通文件 `db/bz_games.db` 必须存在，`games/` 可为空。
+- **数据保留承诺**：导出不得删除或移动任何源数据。为获得一致快照可以正常关闭 SQLite 并将 WAL 检查点落盘。取消和失败只能清理临时快照及 `.partial-*` 文件；成功导入新版本后由用户主动卸载，客户端不得自动卸载。
+- **一致性与互斥**：活动游戏、市场任务或手动导入存在时拒绝导出。导出期间阻止新任务；SQLite 进入排队维护窗口，关闭 WAL worker 后复制完整 `db/`，随后必须在 `finally` 中恢复。
+- **空间与取消**：目标盘和临时盘分开校验可用空间；二者位于同一卷时必须按归档与数据库快照的合计占用校验。取消 7za 后必须等待子进程真正退出，再删除 `.partial-*` 与临时快照。
+- **归档契约**：使用 `-t7z -mx=0` 生成 `.bzgames`，根目录仅允许 `migration-manifest.json`、`config.json`、`games/`、`db/`；生成后必须通过 `7za t`，再以同目录单次重命名原子替换正式文件，替换失败时保留已有有效备份。完整格式见 `docs/MIGRATION_BUNDLE_V1.md`。
+- **路径安全**：拒绝符号链接、目录联接和特殊文件；备份目标必须位于当前程序根目录之外，并通过 `realpath` 复核，防止从外部目录联接回程序目录。未来导入器只重映射旧 `sourceGamesRoot` 下的路径，外部路径保持原值并提示重新关联。
+- **回归样本**：`docs/fixtures/BZ-Games-Migration-v1-sample.bzgames` 是固定 v1 导入样本，邻接 SHA-256 文件校验其确定性；`npm run fixture:migration` 必须可重复生成相同字节，样本仅使用测试密钥和合成数据。
 
 ### 6.6 建言献策、管理后台与配置安全
 

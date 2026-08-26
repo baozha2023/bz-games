@@ -45,6 +45,8 @@ export class AsyncSqliteDatabase {
   private readonly pendingTasks = new Map<number, PendingTask<unknown>>();
   private readonly idleResolvers = new Set<() => void>();
   private readonly expectedWorkerExits = new WeakSet<Worker>();
+  private maintenancePromise: Promise<void> | null = null;
+  private resolveMaintenance: (() => void) | null = null;
 
   constructor(
     private readonly serviceName: string,
@@ -144,7 +146,9 @@ parentPort?.on("message", (message) => {
       this.worker = null;
     });
     worker.on("exit", (code) => {
-      const expectedExit = this.expectedWorkerExits.has(worker) || (this.isClosing && this.worker === worker);
+      const expectedExit =
+        this.expectedWorkerExits.has(worker) ||
+        (this.isClosing && this.worker === worker);
       if (code !== 0 && !expectedExit) {
         const error = new Error(`${this.serviceName}_worker_exited_${code}`);
         logger.error(`[${this.serviceName}] Worker exited unexpectedly`, error);
@@ -153,7 +157,9 @@ parentPort?.on("message", (message) => {
       if (this.worker === worker) this.worker = null;
     });
     this.worker = worker;
-    logger.info(`[${this.serviceName}] Initialized at: ${this.getDatabasePath()}`);
+    logger.info(
+      `[${this.serviceName}] Initialized at: ${this.getDatabasePath()}`,
+    );
   }
 
   getDatabasePath(): string {
@@ -161,7 +167,14 @@ parentPort?.on("message", (message) => {
   }
 
   private resolveNativeBindingPath(packageEntryPath: string): string {
-    return path.join(packageEntryPath, "..", "..", "build", "Release", "better_sqlite3.node");
+    return path.join(
+      packageEntryPath,
+      "..",
+      "..",
+      "build",
+      "Release",
+      "better_sqlite3.node",
+    );
   }
 
   run(sql: string, params: SqliteParam[] = []): Promise<SqliteRunResult> {
@@ -201,7 +214,9 @@ parentPort?.on("message", (message) => {
     ];
     for (const table of exportTables) {
       for (const row of table.rows) {
-        lines.push(`INSERT OR IGNORE INTO ${this.quoteIdentifier(table.name)} (${table.columns.map((column) => this.quoteIdentifier(column)).join(", ")}) VALUES (${table.columns.map((column) => this.toSqlLiteral(row[column])).join(", ")});`);
+        lines.push(
+          `INSERT OR IGNORE INTO ${this.quoteIdentifier(table.name)} (${table.columns.map((column) => this.quoteIdentifier(column)).join(", ")}) VALUES (${table.columns.map((column) => this.toSqlLiteral(row[column])).join(", ")});`,
+        );
       }
     }
     lines.push("COMMIT;");
@@ -231,7 +246,35 @@ parentPort?.on("message", (message) => {
     logger.info(`[${this.serviceName}] Closed`);
   }
 
-  private post<T>(type: RequestType, sql = "", params: SqliteParam[] = []): Promise<T> {
+  async suspendForSnapshot(): Promise<void> {
+    if (this.maintenancePromise) {
+      throw new Error(`${this.serviceName}_snapshot_already_active`);
+    }
+    this.maintenancePromise = new Promise<void>((resolve) => {
+      this.resolveMaintenance = resolve;
+    });
+    try {
+      await this.close();
+    } catch (error) {
+      this.resumeAfterSnapshot();
+      throw error;
+    }
+  }
+
+  resumeAfterSnapshot(): void {
+    if (!this.maintenancePromise) return;
+    this.init();
+    const resolve = this.resolveMaintenance;
+    this.maintenancePromise = null;
+    this.resolveMaintenance = null;
+    resolve?.();
+  }
+
+  private post<T>(
+    type: RequestType,
+    sql = "",
+    params: SqliteParam[] = [],
+  ): Promise<T> {
     return this.postWithPayload(type, { sql, params });
   }
 
@@ -239,19 +282,36 @@ parentPort?.on("message", (message) => {
     type: RequestType,
     payload: Record<string, unknown>,
   ): Promise<T> {
-    if (this.isClosing && type !== "close") return Promise.reject(new Error(`${this.serviceName}_worker_closing`));
+    if (this.maintenancePromise && type !== "close") {
+      return this.maintenancePromise.then(() =>
+        this.postWithPayload<T>(type, payload),
+      );
+    }
+    if (this.isClosing && type !== "close")
+      return Promise.reject(new Error(`${this.serviceName}_worker_closing`));
     this.init();
-    if (!this.worker) return Promise.reject(new Error(`${this.serviceName}_worker_unavailable`));
+    if (!this.worker)
+      return Promise.reject(
+        new Error(`${this.serviceName}_worker_unavailable`),
+      );
     const id = this.nextTaskId++;
     return new Promise((resolve, reject) => {
-      this.pendingTasks.set(id, { resolve: resolve as (value: unknown) => void, reject });
+      this.pendingTasks.set(id, {
+        resolve: resolve as (value: unknown) => void,
+        reject,
+      });
       this.worker?.postMessage({ id, type, ...payload });
     });
   }
 
   private handleWorkerMessage(message: unknown): void {
     if (!message || typeof message !== "object") return;
-    const payload = message as { id?: number; ok?: boolean; result?: unknown; error?: string };
+    const payload = message as {
+      id?: number;
+      ok?: boolean;
+      result?: unknown;
+      error?: string;
+    };
     if (typeof payload.id !== "number") return;
     const task = this.pendingTasks.get(payload.id);
     if (!task) return;
@@ -259,7 +319,9 @@ parentPort?.on("message", (message) => {
     if (payload.ok) {
       task.resolve(payload.result);
     } else {
-      task.reject(new Error(payload.error || `${this.serviceName}_sqlite_task_failed`));
+      task.reject(
+        new Error(payload.error || `${this.serviceName}_sqlite_task_failed`),
+      );
     }
     this.resolveIdleIfNeeded();
   }
@@ -290,9 +352,9 @@ parentPort?.on("message", (message) => {
   private toSqlLiteral(value: unknown): string {
     if (value === null || value === undefined) return "NULL";
     if (Buffer.isBuffer(value)) return `X'${value.toString("hex")}'`;
-    if (typeof value === "number") return Number.isFinite(value) ? String(value) : "NULL";
+    if (typeof value === "number")
+      return Number.isFinite(value) ? String(value) : "NULL";
     if (typeof value === "bigint") return String(value);
     return `'${String(value).replace(/'/g, "''")}'`;
   }
-
 }
