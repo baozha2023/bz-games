@@ -291,7 +291,7 @@ import type {
 import { GameType } from "../../../shared/types";
 import { AVATAR_FRAMES } from "../../../shared/avatar-frames";
 import { GAME_CARD_PRODUCTS } from "../../../shared/game-card-products";
-import type { GameManifest } from "../../../shared/game-manifest";
+import type { ResolvedGameManifest as GameManifest } from "../../../shared/game-manifest";
 import defaultCoverUrl from "../../../../resources/default_cover.png";
 import defaultIconUrl from "../../../../resources/default_icon.png";
 import {
@@ -329,6 +329,7 @@ const NICKNAME_STYLE_SAVE_COST = 30;
 const productBusyId = ref<string | null>(null);
 const productProgress = ref<Record<string, ManualUnlockResult>>({});
 const previewGame: GameManifest = {
+  manifestVersion: 1,
   id: "com.bz.preview",
   name: "游戏名",
   version: "1.0.0",

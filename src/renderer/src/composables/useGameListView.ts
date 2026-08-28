@@ -7,7 +7,7 @@ import {
   type ComputedRef,
   type Ref,
 } from "vue";
-import type { GameManifest } from "../../../shared/game-manifest";
+import type { ResolvedGameManifest as GameManifest } from "../../../shared/game-manifest";
 
 interface SearchableItem {
   id: string;
@@ -77,6 +77,19 @@ export function useGameListView<T extends SearchableItem>(
     }
   }
 
+  async function refreshManifestCache(manifests: GameManifest[]) {
+    manifestCache.value = {};
+    initializeManifestCache(manifests);
+    await Promise.all(
+      manifests.map((manifest) => {
+        const selectedVersion = selectedVersions.value[manifest.id];
+        return selectedVersion && selectedVersion !== manifest.version
+          ? handleVersionChange(manifest.id, selectedVersion)
+          : Promise.resolve();
+      }),
+    );
+  }
+
   async function handleVersionChange(gameId: string, version: string) {
     selectedVersions.value[gameId] = version;
     const key = `${gameId}@${version}`;
@@ -120,6 +133,7 @@ export function useGameListView<T extends SearchableItem>(
     filteredItems,
     activateStaggerRendering,
     initializeManifestCache,
+    refreshManifestCache,
     handleVersionChange,
     getManifest,
   };

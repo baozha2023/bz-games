@@ -2,7 +2,7 @@ import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import {
-  GameManifestSchema,
+  parseGameManifest,
   type GameManifest,
 } from "../../../shared/game-manifest";
 import { GAME_MANIFEST_ENCRYPTION_SEED } from "../../../shared/AppConstants";
@@ -18,7 +18,8 @@ export type GameManifestFileErrorCode =
   | "manifestEncryptionKeyMissing"
   | "manifestEncryptedFormatInvalid"
   | "manifestKeyMismatch"
-  | "manifestDecryptFailed";
+  | "manifestDecryptFailed"
+  | "manifestPlaintextUnsupported";
 
 export interface GameManifestFileReadResult {
   manifest: GameManifest;
@@ -151,7 +152,7 @@ function decryptManifest(envelope: EncryptedManifestEnvelope): GameManifest {
       { cause: error },
     );
   }
-  return GameManifestSchema.parse(JSON.parse(plaintext));
+  return parseGameManifest(JSON.parse(plaintext));
 }
 
 function replaceFileSafely(filePath: string, content: string): void {
@@ -208,20 +209,18 @@ export function writeEncryptedGameManifestFile(
   filePath: string,
   manifest: GameManifest,
 ): void {
-  const validated = GameManifestSchema.parse(manifest);
+  const validated = parseGameManifest(manifest);
   replaceFileSafely(filePath, encryptManifest(validated));
 }
 
 export function readGameManifestFile(
   filePath: string,
-  options: { migratePlaintext?: boolean } = {},
 ): GameManifest {
-  return readGameManifestFileWithMetadata(filePath, options).manifest;
+  return readGameManifestFileWithMetadata(filePath).manifest;
 }
 
 export function readGameManifestFileWithMetadata(
   filePath: string,
-  options: { migratePlaintext?: boolean } = {},
 ): GameManifestFileReadResult {
   if (fs.statSync(filePath).size > MAX_MANIFEST_FILE_BYTES) {
     throw new GameManifestFileError(
@@ -248,9 +247,9 @@ export function readGameManifestFileWithMetadata(
     return { manifest: decryptManifest(envelope), encrypted: true };
   }
 
-  const manifest = GameManifestSchema.parse(raw);
-  if (options.migratePlaintext) {
-    writeEncryptedGameManifestFile(filePath, manifest);
-  }
-  return { manifest, encrypted: false };
+  parseGameManifest(raw);
+  throw new GameManifestFileError(
+    "manifestPlaintextUnsupported",
+    "Encrypted game manifest is required",
+  );
 }

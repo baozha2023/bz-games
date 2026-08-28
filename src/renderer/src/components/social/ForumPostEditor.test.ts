@@ -87,7 +87,7 @@ describe("ForumPostEditor command interactions", () => {
         },
         market: {
           getSources: vi.fn(async () => ({
-            schemaVersion: "1",
+            schemaVersion: 2,
             sources: [
               {
                 marketId: "official",
@@ -99,7 +99,7 @@ describe("ForumPostEditor command interactions", () => {
             ],
           })),
           getIndex: vi.fn(async () => ({
-            schemaVersion: "1",
+            schemaVersion: 2,
             marketId: "official",
             marketName: "官方市场",
             generatedAt: "2026-08-24T00:00:00.000Z",
@@ -109,7 +109,7 @@ describe("ForumPostEditor command interactions", () => {
                 id: "com.bz.demo",
                 name: "演示游戏",
                 author: "BZ",
-                description: "",
+                summary: "",
                 tags: [],
                 versions: [
                   {

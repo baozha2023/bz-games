@@ -35,7 +35,7 @@ describe("ForumPostBody page references", () => {
       configurable: true,
       value: {
         market: {
-          getSources: async () => ({ schemaVersion: "1", sources: [] }),
+          getSources: async () => ({ schemaVersion: 2, sources: [] }),
           getIndex: async () => {
             throw new Error("unused");
           },

@@ -24,7 +24,7 @@ import {
 
 function officialPayload(overrides: Record<string, unknown> = {}) {
   return {
-    schemaVersion: "1.0.0",
+    schemaVersion: 2,
     marketId: "official",
     marketName: "Official",
     generatedAt: "2026-08-09T00:00:00.000Z",
@@ -41,6 +41,17 @@ function officialPayload(overrides: Record<string, unknown> = {}) {
     games: [],
     ...overrides,
   };
+}
+
+function externalPayload(overrides: Record<string, unknown> = {}) {
+  const { sources: _sources, ...payload } = officialPayload(overrides);
+  return payload;
+}
+
+function officialSource() {
+  return officialPayload().sources.find(
+    ({ marketId }) => marketId === "official",
+  )!;
 }
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -103,7 +114,29 @@ describe("MarketCatalogClient", () => {
     ).fetchOfficialCatalog();
 
     expect(fetchImpl).toHaveBeenCalledTimes(1);
-    expect(catalog.directory.sources[0].marketId).toBe("official");
+    expect(
+      catalog.directory.sources.some(({ marketId }) => marketId === "official"),
+    ).toBe(true);
+    expect(catalog.index.marketId).toBe("official");
+  });
+
+  it("resolves the official source by marketId instead of array position", async () => {
+    const payload = officialPayload();
+    payload.sources.unshift({
+      marketId: "community",
+      marketName: "Community",
+      generatedAt: "2026-08-09T00:00:00.000Z",
+      repository: "https://github.com/example/community",
+      branch: "main",
+    });
+    const catalog = await createClient(
+      vi.fn(async () => jsonResponse(payload)) as typeof fetch,
+    ).fetchOfficialCatalog();
+
+    expect(catalog.directory.sources.map(({ marketId }) => marketId)).toEqual([
+      "community",
+      "official",
+    ]);
     expect(catalog.index.marketId).toBe("official");
   });
 
@@ -130,12 +163,10 @@ describe("MarketCatalogClient", () => {
       const fetchImpl = vi
         .fn()
         .mockResolvedValueOnce(jsonResponse({}, status))
-        .mockResolvedValueOnce(jsonResponse(officialPayload()));
+        .mockResolvedValueOnce(jsonResponse(externalPayload()));
       const client = createClient(fetchImpl as typeof fetch, sleep);
 
-      const index = await client.fetchExternalIndex(
-        officialPayload().sources[0],
-      );
+      const index = await client.fetchExternalIndex(officialSource());
 
       expect(index.marketId).toBe("official");
       expect(fetchImpl).toHaveBeenCalledTimes(2);
@@ -150,7 +181,7 @@ describe("MarketCatalogClient", () => {
       const client = createClient(fetchImpl as typeof fetch);
 
       await expect(
-        client.fetchExternalIndex(officialPayload().sources[0]),
+        client.fetchExternalIndex(officialSource()),
       ).rejects.toMatchObject({ kind: "http", status });
       expect(fetchImpl).toHaveBeenCalledTimes(1);
     },
@@ -161,7 +192,7 @@ describe("MarketCatalogClient", () => {
     const client = createClient(fetchImpl as typeof fetch);
 
     await expect(
-      client.fetchExternalIndex(officialPayload().sources[0]),
+      client.fetchExternalIndex(officialSource()),
     ).rejects.toMatchObject({ kind: "json" });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
@@ -170,11 +201,11 @@ describe("MarketCatalogClient", () => {
     const fetchImpl = vi
       .fn()
       .mockRejectedValueOnce(new TypeError("fetch failed"))
-      .mockResolvedValueOnce(jsonResponse(officialPayload()));
+      .mockResolvedValueOnce(jsonResponse(externalPayload()));
     const client = createClient(fetchImpl as typeof fetch);
 
     await expect(
-      client.fetchExternalIndex(officialPayload().sources[0]),
+      client.fetchExternalIndex(officialSource()),
     ).resolves.toMatchObject({ marketId: "official" });
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
@@ -184,7 +215,7 @@ describe("MarketCatalogClient", () => {
     const client = createClient(fetchImpl as typeof fetch);
 
     await expect(
-      client.fetchExternalIndex(officialPayload().sources[0]),
+      client.fetchExternalIndex(officialSource()),
     ).rejects.toMatchObject({ kind: "schema" });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
@@ -201,7 +232,7 @@ describe("MarketCatalogClient", () => {
     );
     const client = createClient(fetchImpl as typeof fetch, async () => {});
 
-    const result = client.fetchExternalIndex(officialPayload().sources[0]);
+    const result = client.fetchExternalIndex(officialSource());
     const rejection = expect(result).rejects.toMatchObject({ kind: "timeout" });
     await vi.advanceTimersByTimeAsync(16_000);
 
@@ -224,7 +255,7 @@ describe("MarketCatalogClient", () => {
     expect(catalog.index.marketId).toBe("official");
   });
 
-  it("skips invalid games and versions without accepting old field shapes", async () => {
+  it("rejects the whole Schema 2 market when it contains old field shapes", async () => {
     const validVersion = {
       version: "1.0.0",
       description: "Initial",
@@ -248,14 +279,10 @@ describe("MarketCatalogClient", () => {
     });
     const fetchImpl = vi.fn(async () => jsonResponse(payload));
 
-    const catalog = await createClient(
-      fetchImpl as typeof fetch,
-    ).fetchOfficialCatalog();
-
-    expect(catalog.index.games).toHaveLength(1);
-    expect(catalog.index.games[0].versions).toHaveLength(1);
-    expect(catalog.index.games[0].latestVersion).toBe("1.0.0");
-    expect(logger.warn).toHaveBeenCalled();
+    await expect(
+      createClient(fetchImpl as typeof fetch).fetchOfficialCatalog(),
+    ).rejects.toMatchObject({ kind: "schema" });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
   it("returns a structured business error for unsupported repositories", async () => {
@@ -263,7 +290,7 @@ describe("MarketCatalogClient", () => {
 
     await expect(
       client.fetchExternalIndex({
-        ...officialPayload().sources[0],
+        ...officialSource(),
         repository: "https://gitlab.com/example/market",
       }),
     ).rejects.toBeInstanceOf(MarketCatalogError);

@@ -1,6 +1,6 @@
 <template>
   <n-space vertical :size="18">
-    <n-card>
+    <n-card v-if="auth.can('hosting.capacity.view')">
       <n-space justify="space-between" align="center">
         <div>
           <strong>托管容量</strong>
@@ -9,11 +9,6 @@
             {{ formatBytes(maxTotalBytes) }}
           </div>
         </div>
-        <n-button
-          v-if="auth.can('hosting.game.create')"
-          type="primary"
-          @click="openCreateGame"
-        >新增</n-button>
       </n-space>
       <n-progress
         type="line"
@@ -24,6 +19,14 @@
     </n-card>
 
     <n-card title="托管游戏">
+      <template #header-extra>
+        <n-button
+          v-if="auth.can('hosting.game.create')"
+          type="primary"
+          @click="openCreateGame"
+          >新增</n-button
+        >
+      </template>
       <n-space align="center" style="margin-bottom: 16px">
         <n-input
           v-model:value="query"
@@ -61,6 +64,9 @@
     v-model:active-tab="activeTab"
     v-model:manifest-enabled="manifestEnabled"
     v-model:set-latest="setLatest"
+    v-model:game="gameForm"
+    v-model:version="versionForm"
+    v-model:manifest="manifestForm"
     :mode="formMode"
     :title="formTitle"
     :can-publish-direct="auth.can('hosting.publish.direct')"
@@ -69,12 +75,12 @@
     :max-package-bytes="maxPackageBytes"
     :max-image-bytes="maxImageBytes"
     :file-input-key="fileInputKey"
-    :game="gameForm"
-    :version="versionForm"
-    :manifest="manifestForm"
     :files="files"
     :existing-assets="editingVersion?.assets || []"
+    :can-upload-version-images="canUploadVersionImages"
     @select-asset="selectAsset"
+    @next="nextStep"
+    @previous="previousStep"
     @submit="submitForm"
   />
 
@@ -140,7 +146,6 @@ import {
   NButton,
   NSpace,
   NTag,
-  NText,
   type DataTableColumns,
   useMessage,
 } from "naive-ui";
@@ -148,18 +153,32 @@ import { useRouter } from "vue-router";
 import { api, ApiError, upload } from "../api";
 import { useAuthStore } from "../stores/auth";
 import GameHostingForm from "../components/GameHostingForm.vue";
+import {
+  buildEntrySpecificManifestFields,
+  validateManifestRuntimeRelations,
+} from "../utils/manifest-entry";
 
 type FormMode = "create-game" | "add-version" | "edit-game" | "edit-version";
 type AssetRole = "package" | "icon" | "cover";
+type Locale = "zh-CN" | "zh-TW" | "en-US" | "ja-JP" | "de-DE";
+const SUPPORTED_LOCALES: Locale[] = [
+  "zh-CN",
+  "zh-TW",
+  "en-US",
+  "ja-JP",
+  "de-DE",
+];
 
 interface GameMetadata {
   id: string;
-  name: string;
+  defaultLocale: Locale;
+  localizations: Record<
+    Locale,
+    { name: string; summary: string; tags: string[] }
+  >;
   author: string;
   author_url?: string;
   type: string;
-  summary: string;
-  tags?: string[];
   iconUrl?: string;
   coverUrl?: string;
   screenshots?: string[];
@@ -170,7 +189,7 @@ interface GameMetadata {
 }
 interface VersionMetadata {
   version: string;
-  description: string;
+  localizations: Record<Locale, { description: string; releaseNotes?: string }>;
   platformVersion: string;
   publishedAt?: string;
   releaseNotes?: string;
@@ -228,10 +247,9 @@ interface TreeResponse {
   total: number;
   page: number;
   pageSize: number;
-  usedBytes: number;
+  capacity?: { usedBytes: number; maxTotalBytes: number };
   maxPackageBytes: number;
   maxImageBytes: number;
-  maxTotalBytes: number;
   role: "creator" | "administrator" | "super_administrator";
 }
 interface TreeRow {
@@ -256,15 +274,13 @@ interface EnvRow {
 }
 interface StatisticRow {
   id: string;
-  kind: "id" | "label" | "details";
-  label: string;
   mode: "increment" | "full";
+  labels: Record<Locale, string>;
 }
 interface AchievementRow {
   id: string;
-  title: string;
-  description: string;
   icon: string;
+  translations: Record<Locale, { title: string; description: string }>;
 }
 
 const GAME_ID_PATTERN = /^[a-z0-9]+(?:\.[a-z0-9-]+)+$/;
@@ -319,12 +335,14 @@ let loadSequence = 0;
 
 const gameForm = reactive({
   id: "",
-  name: "",
+  defaultLocale: "zh-CN" as Locale,
+  localizations: {} as Record<
+    Locale,
+    { enabled: boolean; name: string; summary: string; tagsText: string }
+  >,
   author: "",
   author_url: "",
   type: "singleplayer",
-  summary: "",
-  tagsText: "",
   iconUrl: "",
   coverUrl: "",
   screenshotsText: "",
@@ -335,15 +353,17 @@ const gameForm = reactive({
 });
 const versionForm = reactive({
   version: "",
-  description: "",
+  localizations: {} as Record<
+    Locale,
+    { description: string; releaseNotes: string }
+  >,
   platformVersion: ">=3.1.0",
   publishedAt: null as number | null,
-  releaseNotes: "",
   isPrerelease: false,
 });
 const manifestForm = reactive({
-  name: "",
-  description: "",
+  defaultLocale: "zh-CN" as Locale,
+  localizations: {} as Record<Locale, { name: string; description: string }>,
   author: "",
   author_url: "",
   platformMode: "range" as "range" | "tuple",
@@ -356,6 +376,7 @@ const manifestForm = reactive({
   cover: "",
   video: "",
   encryptLocalStorage: false,
+  windowedFullscreen: false,
   type: null as string | null,
   minPlayers: null as number | null,
   maxPlayers: null as number | null,
@@ -376,11 +397,12 @@ const statusLabels: Record<string, string> = {
   rejected: "已驳回",
 };
 
-const showGameFields = computed(() =>
-  ["create-game", "edit-game"].includes(formMode.value),
-);
-const showVersionFields = computed(() => formMode.value !== "edit-game");
-const showFiles = computed(() => formMode.value !== "edit-game");
+const canUploadVersionImages = computed(() => {
+  if (formMode.value === "create-game") return true;
+  const versionCount = editingGame.value?.versions.length ?? 0;
+  if (formMode.value === "add-version") return versionCount === 0;
+  return formMode.value === "edit-version" && versionCount === 1;
+});
 const formTitle = computed(
   () =>
     ({
@@ -409,6 +431,30 @@ function lines(value: string) {
     .map((item) => item.trim())
     .filter(Boolean);
 }
+function emptyGameLocalizations() {
+  return Object.fromEntries(
+    SUPPORTED_LOCALES.map((locale) => [
+      locale,
+      { enabled: locale === "zh-CN", name: "", summary: "", tagsText: "" },
+    ]),
+  ) as Record<
+    Locale,
+    { enabled: boolean; name: string; summary: string; tagsText: string }
+  >;
+}
+function emptyVersionLocalizations() {
+  return Object.fromEntries(
+    SUPPORTED_LOCALES.map((locale) => [
+      locale,
+      { description: "", releaseNotes: "" },
+    ]),
+  ) as Record<Locale, { description: string; releaseNotes: string }>;
+}
+function emptyManifestLocalizations() {
+  return Object.fromEntries(
+    SUPPORTED_LOCALES.map((locale) => [locale, { name: "", description: "" }]),
+  ) as Record<Locale, { name: string; description: string }>;
+}
 function formatBytes(value = 0) {
   if (!Number.isFinite(value) || value <= 0) return "0 B";
   const units = ["B", "KiB", "MiB", "GiB"];
@@ -418,16 +464,22 @@ function formatBytes(value = 0) {
 function formatTime(value?: string) {
   return value ? new Date(value).toLocaleString() : "-";
 }
+function localizedGameName(metadata: GameMetadata) {
+  return (
+    metadata.localizations?.[metadata.defaultLocale]?.name ||
+    Object.values(metadata.localizations || {})[0]?.name ||
+    metadata.id
+  );
+}
 
 function resetForms() {
   Object.assign(gameForm, {
     id: "",
-    name: "",
+    defaultLocale: "zh-CN",
+    localizations: emptyGameLocalizations(),
     author: "",
     author_url: "",
     type: "singleplayer",
-    summary: "",
-    tagsText: "",
     iconUrl: "",
     coverUrl: "",
     screenshotsText: "",
@@ -438,15 +490,14 @@ function resetForms() {
   });
   Object.assign(versionForm, {
     version: "",
-    description: "",
+    localizations: emptyVersionLocalizations(),
     platformVersion: ">=3.1.0",
     publishedAt: null,
-    releaseNotes: "",
     isPrerelease: false,
   });
   Object.assign(manifestForm, {
-    name: "",
-    description: "",
+    defaultLocale: "zh-CN",
+    localizations: emptyManifestLocalizations(),
     author: "",
     author_url: "",
     platformMode: "range",
@@ -459,6 +510,7 @@ function resetForms() {
     cover: "",
     video: "",
     encryptLocalStorage: false,
+    windowedFullscreen: false,
     type: null,
     minPlayers: null,
     maxPlayers: null,
@@ -477,10 +529,24 @@ function resetForms() {
 }
 
 function hydrateGame(metadata: GameMetadata) {
+  const localizations = emptyGameLocalizations();
+  for (const locale of SUPPORTED_LOCALES) {
+    const value = metadata.localizations?.[locale];
+    if (value)
+      localizations[locale] = {
+        enabled: true,
+        name: value.name || "",
+        summary: value.summary || "",
+        tagsText: (value.tags || []).join("\n"),
+      };
+  }
   Object.assign(gameForm, {
-    ...metadata,
+    id: metadata.id,
+    defaultLocale: metadata.defaultLocale || "zh-CN",
+    localizations,
+    author: metadata.author || "",
     author_url: metadata.author_url || "",
-    tagsText: (metadata.tags || []).join("\n"),
+    type: metadata.type || "singleplayer",
     iconUrl: metadata.iconUrl || "",
     coverUrl: metadata.coverUrl || "",
     screenshotsText: (metadata.screenshots || []).join("\n"),
@@ -491,24 +557,98 @@ function hydrateGame(metadata: GameMetadata) {
   });
 }
 function hydrateVersion(metadata: VersionMetadata) {
+  const localizations = emptyVersionLocalizations();
+  for (const locale of SUPPORTED_LOCALES) {
+    const value = metadata.localizations?.[locale];
+    if (value)
+      localizations[locale] = {
+        description: value.description || "",
+        releaseNotes: value.releaseNotes || "",
+      };
+  }
   Object.assign(versionForm, {
     version: metadata.version,
-    description: metadata.description,
+    localizations,
     platformVersion: metadata.platformVersion,
     publishedAt: metadata.publishedAt ? Date.parse(metadata.publishedAt) : null,
-    releaseNotes: metadata.releaseNotes || "",
     isPrerelease: metadata.isPrerelease || false,
   });
   const manifest = metadata.gameManifest as Record<string, unknown> | undefined;
   manifestEnabled.value = !!manifest;
   if (!manifest) return;
+  const manifestLocalizations = emptyManifestLocalizations();
+  for (const locale of SUPPORTED_LOCALES) {
+    const value = (
+      manifest.localizations as
+        | Record<string, Record<string, unknown>>
+        | undefined
+    )?.[locale];
+    if (value)
+      manifestLocalizations[locale] = {
+        name: typeof value.name === "string" ? value.name : "",
+        description:
+          typeof value.description === "string" ? value.description : "",
+      };
+  }
+  const statistics = Array.isArray(manifest.statistics)
+    ? (manifest.statistics as Array<Record<string, unknown>>).map((item) => {
+        const labels = Object.fromEntries(
+          SUPPORTED_LOCALES.map((locale) => [locale, ""]),
+        ) as Record<Locale, string>;
+        for (const locale of SUPPORTED_LOCALES) {
+          const label = (
+            manifest.localizations as
+              | Record<string, Record<string, unknown>>
+              | undefined
+          )?.[locale]?.statistics as Record<string, unknown> | undefined;
+          if (label && typeof label[item.id as string] === "string")
+            labels[locale] = label[item.id as string] as string;
+        }
+        return {
+          id: String(item.id || ""),
+          mode: item.mode === "full" ? "full" : "increment",
+          labels,
+        } as StatisticRow;
+      })
+    : [];
+  const achievements = Array.isArray(manifest.achievements)
+    ? (manifest.achievements as Array<Record<string, unknown>>).map((item) => {
+        const translations = Object.fromEntries(
+          SUPPORTED_LOCALES.map((locale) => [
+            locale,
+            { title: "", description: "" },
+          ]),
+        ) as Record<Locale, { title: string; description: string }>;
+        for (const locale of SUPPORTED_LOCALES) {
+          const localized = (
+            manifest.localizations as
+              | Record<string, Record<string, unknown>>
+              | undefined
+          )?.[locale]?.achievements as Record<string, unknown> | undefined;
+          const value = localized?.[item.id as string] as
+            | Record<string, unknown>
+            | undefined;
+          if (value)
+            translations[locale] = {
+              title: typeof value.title === "string" ? value.title : "",
+              description:
+                typeof value.description === "string" ? value.description : "",
+            };
+        }
+        return {
+          id: String(item.id || ""),
+          icon: typeof item.icon === "string" ? item.icon : "",
+          translations,
+        } as AchievementRow;
+      })
+    : [];
   const platform = manifest.platformVersion;
   const multiplayer = manifest.multiplayer as
     | { minPlayers?: number; maxPlayers?: number }
     | undefined;
   Object.assign(manifestForm, {
-    name: manifest.name || "",
-    description: manifest.description || "",
+    defaultLocale: (manifest.defaultLocale as Locale) || gameForm.defaultLocale,
+    localizations: manifestLocalizations,
     author: manifest.author || "",
     author_url: manifest.author_url || "",
     platformMode: Array.isArray(platform) ? "tuple" : "range",
@@ -521,6 +661,7 @@ function hydrateVersion(metadata: VersionMetadata) {
     cover: manifest.cover || "",
     video: manifest.video || "",
     encryptLocalStorage: !!manifest.encryptLocalStorage,
+    windowedFullscreen: manifest.windowedFullscreen === true,
     type: manifest.type || null,
     minPlayers: multiplayer?.minPlayers || null,
     maxPlayers: multiplayer?.maxPlayers || null,
@@ -528,50 +669,32 @@ function hydrateVersion(metadata: VersionMetadata) {
     env: Object.entries((manifest.env as Record<string, string>) || {}).map(
       ([key, value]) => ({ key, value }),
     ),
-    statistics: decodeStatistics(manifest.statistics),
-    achievements: Array.isArray(manifest.achievements)
-      ? manifest.achievements.map((item) => ({
-          ...(item as AchievementRow),
-          icon: (item as AchievementRow).icon || "",
-        }))
-      : [],
-  });
-}
-function decodeStatistics(value: unknown): StatisticRow[] {
-  if (!Array.isArray(value)) return [];
-  return value.map((item) => {
-    if (typeof item === "string")
-      return { id: item, kind: "id", label: "", mode: "increment" };
-    const [id, definition] = Object.entries(
-      item as Record<string, unknown>,
-    )[0] || ["", ""];
-    if (typeof definition === "string")
-      return { id, kind: "label", label: definition, mode: "increment" };
-    const details = definition as {
-      label?: string;
-      mode?: "increment" | "full";
-    };
-    return {
-      id,
-      kind: "details",
-      label: details.label || "",
-      mode: details.mode || "increment",
-    };
+    statistics,
+    achievements,
   });
 }
 
 function buildGamePayload(): GameMetadata {
   const payload: GameMetadata = {
     id: gameForm.id.trim(),
-    name: gameForm.name.trim(),
+    defaultLocale: gameForm.defaultLocale,
+    localizations: Object.fromEntries(
+      SUPPORTED_LOCALES.filter(
+        (locale) => gameForm.localizations[locale]?.enabled,
+      ).map((locale) => [
+        locale,
+        {
+          name: gameForm.localizations[locale].name.trim(),
+          summary: gameForm.localizations[locale].summary.trim(),
+          tags: lines(gameForm.localizations[locale].tagsText),
+        },
+      ]),
+    ) as Record<Locale, { name: string; summary: string; tags: string[] }>,
     author: gameForm.author.trim(),
     type: gameForm.type,
-    summary: gameForm.summary.trim(),
   };
   if (gameForm.author_url.trim())
     payload.author_url = gameForm.author_url.trim();
-  const tags = lines(gameForm.tagsText);
-  if (tags.length) payload.tags = tags;
   if (gameForm.iconUrl.trim()) payload.iconUrl = gameForm.iconUrl.trim();
   if (gameForm.coverUrl.trim()) payload.coverUrl = gameForm.coverUrl.trim();
   const screenshots = lines(gameForm.screenshotsText);
@@ -584,10 +707,32 @@ function buildGamePayload(): GameMetadata {
 }
 function buildManifest(): Record<string, unknown> | undefined {
   if (!manifestEnabled.value) return undefined;
-  const result: Record<string, unknown> = {};
+  const result: Record<string, unknown> = {
+    manifestVersion: 2,
+    defaultLocale: manifestForm.defaultLocale,
+    localizations: Object.fromEntries(
+      SUPPORTED_LOCALES.filter(
+        (locale) => gameForm.localizations[locale]?.enabled,
+      ).map((locale) => [
+        locale,
+        {
+          name: manifestForm.localizations[locale].name.trim(),
+          description: manifestForm.localizations[locale].description.trim(),
+          achievements: Object.fromEntries(
+            manifestForm.achievements
+              .filter((item) => item.id.trim())
+              .map((item) => [item.id.trim(), item.translations[locale]]),
+          ),
+          statistics: Object.fromEntries(
+            manifestForm.statistics
+              .filter((item) => item.id.trim())
+              .map((item) => [item.id.trim(), item.labels[locale].trim()]),
+          ),
+        },
+      ]),
+    ),
+  };
   for (const key of [
-    "name",
-    "description",
     "author",
     "author_url",
     "entry",
@@ -621,44 +766,55 @@ function buildManifest(): Record<string, unknown> | undefined {
       maxPlayers: manifestForm.maxPlayers,
     };
   const args = manifestForm.args.map((item) => item.trim()).filter(Boolean);
-  if (args.length) result.args = args;
   const env = Object.fromEntries(
     manifestForm.env
       .filter((item) => item.key.trim())
       .map((item) => [item.key.trim(), item.value]),
   );
-  if (Object.keys(env).length) result.env = env;
+  Object.assign(
+    result,
+    buildEntrySpecificManifestFields({
+      entry: manifestForm.entry,
+      windowedFullscreen: manifestForm.windowedFullscreen,
+      args,
+      env,
+    }),
+  );
   const statistics = manifestForm.statistics
     .filter((item) => item.id.trim())
-    .map((item) =>
-      item.kind === "id"
-        ? item.id.trim()
-        : item.kind === "label"
-          ? { [item.id.trim()]: item.label.trim() }
-          : { [item.id.trim()]: { label: item.label.trim(), mode: item.mode } },
-    );
-  if (statistics.length) result.statistics = statistics;
+    .map((item) => ({ id: item.id.trim(), mode: item.mode }));
+  result.statistics = statistics;
   const achievements = manifestForm.achievements
     .filter((item) => item.id.trim())
     .map((item) => ({
       id: item.id.trim(),
-      title: item.title.trim(),
-      description: item.description,
       ...(item.icon.trim() ? { icon: item.icon.trim() } : {}),
     }));
-  if (achievements.length) result.achievements = achievements;
+  result.achievements = achievements;
   return result;
 }
 function buildVersionPayload(): VersionMetadata {
   const payload: VersionMetadata = {
     version: versionForm.version.trim(),
-    description: versionForm.description.trim(),
+    localizations: Object.fromEntries(
+      SUPPORTED_LOCALES.filter(
+        (locale) => gameForm.localizations[locale]?.enabled,
+      ).map((locale) => {
+        const releaseNotes =
+          versionForm.localizations[locale].releaseNotes.trim();
+        return [
+          locale,
+          {
+            description: versionForm.localizations[locale].description.trim(),
+            ...(releaseNotes ? { releaseNotes } : {}),
+          },
+        ];
+      }),
+    ) as Record<Locale, { description: string; releaseNotes?: string }>,
     platformVersion: versionForm.platformVersion.trim(),
   };
   if (versionForm.publishedAt)
     payload.publishedAt = new Date(versionForm.publishedAt).toISOString();
-  if (versionForm.releaseNotes.trim())
-    payload.releaseNotes = versionForm.releaseNotes.trim();
   if (versionForm.isPrerelease) payload.isPrerelease = true;
   const manifest = buildManifest();
   if (manifest) payload.gameManifest = manifest;
@@ -679,6 +835,8 @@ function openAddVersion(game: HostedGame) {
   resetForms();
   formMode.value = "add-version";
   editingGame.value = game;
+  hydrateGame(game.metadata);
+  manifestForm.defaultLocale = game.metadata.defaultLocale;
   activeTab.value = "version";
   showFormModal.value = true;
 }
@@ -703,9 +861,158 @@ function openEditVersion(game: HostedGame, version: HostedVersion) {
   formMode.value = "edit-version";
   editingGame.value = game;
   editingVersion.value = version;
+  hydrateGame(game.metadata);
   hydrateVersion(version.metadata);
   activeTab.value = "version";
   showFormModal.value = true;
+}
+
+const wizardSteps = computed(() => {
+  if (formMode.value === "edit-game") return ["game"];
+  return formMode.value === "create-game"
+    ? ["game", "version", "manifest", "advanced", "files"]
+    : ["version", "manifest", "advanced", "files"];
+});
+function validateStep(step: string): string | null {
+  if (step === "game") {
+    const game = buildGamePayload();
+    if (!GAME_ID_PATTERN.test(game.id) || !game.author || !game.type)
+      return "请完整填写合法的游戏基本信息";
+    const locales = Object.keys(game.localizations) as Locale[];
+    if (!locales.includes(game.defaultLocale))
+      return "默认语言必须启用并填写完整";
+    if (
+      !locales.length ||
+      locales.some(
+        (locale) =>
+          !game.localizations[locale].name ||
+          !game.localizations[locale].summary,
+      )
+    )
+      return "每个已启用语言都必须填写名称和摘要";
+    if (game.minPlayers && game.maxPlayers && game.minPlayers > game.maxPlayers)
+      return "最少玩家不能大于最多玩家";
+    if (files.icon && game.iconUrl) return "图标只能选择上传或外部地址其中一种";
+    if (files.cover && game.coverUrl)
+      return "封面只能选择上传或外部地址其中一种";
+  }
+  if (step === "version") {
+    const version = buildVersionPayload();
+    const locales = Object.keys(buildGamePayload().localizations) as Locale[];
+    if (!SEMVER_PATTERN.test(version.version) || !version.platformVersion)
+      return "请完整填写合法的版本信息";
+    if (
+      new Set(Object.keys(version.localizations)).size !== locales.length ||
+      locales.some((locale) => !version.localizations[locale]?.description)
+    )
+      return "版本描述必须覆盖游戏的全部语言";
+  }
+  if (step === "manifest" && manifestEnabled.value) {
+    const manifest = buildManifest()!;
+    const locales = Object.keys(buildGamePayload().localizations) as Locale[];
+    const localizations = manifest.localizations as Record<
+      string,
+      { name: string; description: string }
+    >;
+    if (manifest.defaultLocale !== gameForm.defaultLocale)
+      return "Manifest 默认语言必须与游戏默认语言一致";
+    if (
+      !locales.includes(manifest.defaultLocale as Locale) ||
+      locales.some(
+        (locale) =>
+          !localizations[locale]?.name || !localizations[locale]?.description,
+      )
+    )
+      return "Manifest V2 的语言包必须完整覆盖游戏语言";
+    const relationError = validateManifestRuntimeRelations({
+      entry: manifest.entry,
+      webUrl: manifest.web_url,
+      type: manifest.type || gameForm.type,
+      multiplayer: {
+        minPlayers: manifestForm.minPlayers ?? gameForm.minPlayers,
+        maxPlayers: manifestForm.maxPlayers ?? gameForm.maxPlayers,
+      },
+      encryptLocalStorage: manifestForm.encryptLocalStorage,
+    });
+    if (relationError === "entry_required") return "Manifest 必须填写入口";
+    if (relationError === "web_url_required")
+      return "entry 为 url 时必须填写 web_url";
+    if (relationError === "web_url_forbidden")
+      return "只有 entry 为 url 时才能填写 web_url";
+    if (relationError === "network_entry_required")
+      return "网页游戏必须使用 url 入口";
+    if (relationError === "multiplayer_required")
+      return "多人游戏必须填写完整的玩家人数范围";
+    if (relationError === "multiplayer_forbidden")
+      return "只有多人游戏类型才能填写玩家人数范围";
+    if (relationError === "encrypt_local_storage_forbidden")
+      return "本地存储加密只适用于网页游戏入口";
+    const hasManifestMinPlayers = manifestForm.minPlayers !== null;
+    const hasManifestMaxPlayers = manifestForm.maxPlayers !== null;
+    if (hasManifestMinPlayers !== hasManifestMaxPlayers)
+      return "Manifest 联机玩家数必须同时填写最少和最多玩家";
+    if (
+      hasManifestMinPlayers &&
+      hasManifestMaxPlayers &&
+      manifestForm.minPlayers! > manifestForm.maxPlayers!
+    )
+      return "Manifest 最少玩家不能大于最多玩家";
+  }
+  if (step === "advanced" && manifestEnabled.value) {
+    const ids = manifestForm.statistics
+      .map((item) => item.id.trim())
+      .filter(Boolean);
+    if (new Set(ids).size !== ids.length) return "统计 ID 不能重复";
+    const achievementIds = manifestForm.achievements
+      .map((item) => item.id.trim())
+      .filter(Boolean);
+    if (new Set(achievementIds).size !== achievementIds.length)
+      return "成就 ID 不能重复";
+    const locales = Object.keys(buildGamePayload().localizations) as Locale[];
+    for (const item of manifestForm.statistics.filter((row) => row.id.trim()))
+      if (locales.some((locale) => !item.labels[locale].trim()))
+        return "统计名称必须覆盖全部语言";
+    for (const item of manifestForm.achievements.filter((row) => row.id.trim()))
+      if (
+        locales.some(
+          (locale) =>
+            !item.translations[locale].title.trim() ||
+            !item.translations[locale].description.trim(),
+        )
+      )
+        return "成就标题和描述必须覆盖全部语言";
+  }
+  if (step === "files") {
+    if (
+      ["create-game", "add-version"].includes(formMode.value) &&
+      (!files.package || !files.package.name.toLowerCase().endsWith(".zip"))
+    )
+      return "请选择 ZIP 游戏包";
+    if (files.package && !files.package.name.toLowerCase().endsWith(".zip"))
+      return "请选择 ZIP 游戏包";
+    if (files.package && files.package.size > maxPackageBytes.value)
+      return "ZIP 游戏包超过大小限制";
+    if (!canUploadVersionImages.value && (files.icon || files.cover))
+      return "只有游戏唯一版本可以上传图标和封面";
+    for (const role of ["icon", "cover"] as const)
+      if (files[role] && files[role]!.size > maxImageBytes.value)
+        return `${roleLabels[role]}超过大小限制`;
+  }
+  return null;
+}
+function nextStep() {
+  const error = validateStep(activeTab.value);
+  if (error) {
+    message.warning(error);
+    return;
+  }
+  const index = wizardSteps.value.indexOf(activeTab.value);
+  if (index >= 0 && index < wizardSteps.value.length - 1)
+    activeTab.value = wizardSteps.value[index + 1];
+}
+function previousStep() {
+  const index = wizardSteps.value.indexOf(activeTab.value);
+  if (index > 0) activeTab.value = wizardSteps.value[index - 1];
 }
 function selectAsset(role: AssetRole, event: Event) {
   files[role] = (event.target as HTMLInputElement).files?.[0] || null;
@@ -718,49 +1025,13 @@ async function submitForm() {
     (formMode.value.startsWith("edit-") &&
       !auth.can("hosting.own.manage") &&
       !auth.can("hosting.all.manage"))
-  ) return;
+  )
+    return;
   try {
-    if (showGameFields.value) {
-      const game = buildGamePayload();
-      if (
-        !GAME_ID_PATTERN.test(game.id) ||
-        !game.name ||
-        !game.author ||
-        !game.summary
-      )
-        throw new Error("请完整填写合法的游戏信息");
-      if (
-        game.minPlayers &&
-        game.maxPlayers &&
-        game.minPlayers > game.maxPlayers
-      )
-        throw new Error("最少玩家不能大于最多玩家");
-      if (files.icon && game.iconUrl)
-        throw new Error("图标只能选择上传或外部地址其中一种");
-      if (files.cover && game.coverUrl)
-        throw new Error("封面只能选择上传或外部地址其中一种");
+    for (const step of wizardSteps.value) {
+      const error = validateStep(step);
+      if (error) throw new Error(error);
     }
-    if (showVersionFields.value) {
-      const version = buildVersionPayload();
-      if (
-        !SEMVER_PATTERN.test(version.version) ||
-        !version.description ||
-        !version.platformVersion
-      )
-        throw new Error("请完整填写合法的版本信息");
-    }
-    if (
-      ["create-game", "add-version"].includes(formMode.value) &&
-      (!files.package || !files.package.name.toLowerCase().endsWith(".zip"))
-    )
-      throw new Error("请选择 ZIP 游戏包");
-    if (files.package && !files.package.name.toLowerCase().endsWith(".zip"))
-      throw new Error("请选择 ZIP 游戏包");
-    if (files.package && files.package.size > maxPackageBytes.value)
-      throw new Error("ZIP 游戏包超过大小限制");
-    for (const role of ["icon", "cover"] as const)
-      if (files[role] && files[role]!.size > maxImageBytes.value)
-        throw new Error(`${roleLabels[role]}超过大小限制`);
   } catch (error) {
     message.warning((error as Error).message);
     return;
@@ -818,12 +1089,38 @@ async function submitForm() {
 }
 
 async function copyText(value: string, success: string) {
+  let copied = false;
   try {
-    await navigator.clipboard.writeText(value);
-    message.success(success);
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value);
+      copied = true;
+    }
   } catch {
-    message.error("复制失败，请检查浏览器剪贴板权限");
+    // Clipboard API may be unavailable on HTTP or denied by browser policy.
   }
+  if (!copied) {
+    const textarea = document.createElement("textarea");
+    textarea.value = value;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    textarea.style.pointerEvents = "none";
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    textarea.setSelectionRange(0, textarea.value.length);
+    try {
+      copied = document.execCommand("copy");
+    } catch {
+      copied = false;
+    }
+    textarea.remove();
+  }
+  if (copied) {
+    message.success(success);
+    return;
+  }
+  message.error("复制失败，请检查浏览器剪贴板权限");
 }
 async function getConfig(gameId: string) {
   return await api<Record<string, unknown>>(
@@ -845,6 +1142,12 @@ async function downloadConfig(game: HostedGame) {
   } catch (error) {
     await handleError(error);
   }
+}
+function downloadAsset(asset: HostedAsset) {
+  const link = document.createElement("a");
+  link.href = `/api/portal/v1/game-hosting/assets/${encodeURIComponent(asset.id)}/download`;
+  link.download = asset.fileName;
+  link.click();
 }
 async function makeLatest(game: HostedGame, version: HostedVersion) {
   if (!auth.can("hosting.all.manage")) return;
@@ -869,7 +1172,8 @@ function requestDelete(
     ((version || revision) &&
       !auth.can("hosting.own.manage") &&
       !auth.can("hosting.all.manage"))
-  ) return;
+  )
+    return;
   deleteTarget.value = { game, version, revision };
   showDeleteModal.value = true;
 }
@@ -881,7 +1185,8 @@ async function confirmDelete() {
     ((version || revision) &&
       !auth.can("hosting.own.manage") &&
       !auth.can("hosting.all.manage"))
-  ) return;
+  )
+    return;
   deleting.value = true;
   try {
     const { game, version, revision } = deleteTarget.value;
@@ -1171,19 +1476,29 @@ const columns: DataTableColumns<TreeRow> = [
                 ? versionActions(row.game, row.version!)
                 : row.kind === "revision"
                   ? revisionActions(row.game, row.revision!)
-                  : row.version?.status === "approved"
-                    ? [
-                        h(
-                          NButton,
-                          {
-                            size: "small",
-                            onClick: () =>
-                              copyText(row.logicalUrl!, "资源地址已复制"),
-                          },
-                          { default: () => "复制地址" },
-                        ),
-                      ]
-                    : [],
+                  : [
+                      h(
+                        NButton,
+                        {
+                          size: "small",
+                          onClick: () => downloadAsset(row.asset!),
+                        },
+                        { default: () => "下载" },
+                      ),
+                      ...(row.version?.status === "approved"
+                        ? [
+                            h(
+                              NButton,
+                              {
+                                size: "small",
+                                onClick: () =>
+                                  copyText(row.logicalUrl!, "资源地址已复制"),
+                              },
+                              { default: () => "复制地址" },
+                            ),
+                          ]
+                        : []),
+                    ],
         },
       ),
   },
@@ -1193,7 +1508,7 @@ const treeRows = computed<TreeRow[]>(() =>
   games.value.map((game) => ({
     key: `game:${game.gameId}`,
     kind: "game",
-    label: `${game.gameId} · ${game.metadata.name}`,
+    label: `${game.gameId} · ${localizedGameName(game.metadata)}`,
     uploader: game.updater,
     createdAt: game.updatedAt,
     game,
@@ -1257,6 +1572,7 @@ async function handleError(error: unknown) {
     invalid_game_metadata: "游戏信息不合法",
     invalid_game_version_metadata: "版本信息不合法",
     invalid_game_manifest: "Manifest 配置不合法",
+    hosted_version_images_require_unique: "只有游戏唯一版本可以上传图标和封面",
   };
   message.error(labels[code] || code);
 }
@@ -1275,10 +1591,10 @@ async function load() {
     if (sequence !== loadSequence) return;
     games.value = result.games;
     total.value = result.total;
-    usedBytes.value = result.usedBytes;
+    usedBytes.value = result.capacity?.usedBytes ?? 0;
     maxPackageBytes.value = result.maxPackageBytes;
     maxImageBytes.value = result.maxImageBytes;
-    maxTotalBytes.value = result.maxTotalBytes;
+    maxTotalBytes.value = result.capacity?.maxTotalBytes ?? 0;
   } catch (error) {
     await handleError(error);
   } finally {

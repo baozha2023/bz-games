@@ -1,12 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import type { MarketDirectory, MarketIndex } from "../../../shared/types";
+import { GameType } from "../../../shared/types";
 import {
   loadForumMarketIndexes,
   resolveForumMarketReferences,
 } from "./forum-market-reference-service";
 
 const directory: MarketDirectory = {
-  schemaVersion: "1",
+  schemaVersion: 2,
   sources: [
     {
       marketId: "official",
@@ -27,7 +28,7 @@ const directory: MarketDirectory = {
 
 const indexes: MarketIndex[] = [
   {
-    schemaVersion: "1",
+    schemaVersion: 2,
     marketId: "official",
     marketName: "官方市场",
     generatedAt: "2026-08-23T00:00:00.000Z",
@@ -35,24 +36,45 @@ const indexes: MarketIndex[] = [
     games: [],
   },
   {
-    schemaVersion: "1",
+    schemaVersion: 2,
     marketId: "community",
     marketName: "社区市场",
     generatedAt: "2026-08-23T00:00:00.000Z",
     updatedAt: "2026-08-23T00:00:00.000Z",
-    games: [],
+    games: [
+      {
+        id: "com.bz.tetris",
+        name: "Tetris",
+        author: "BZ-Games",
+        type: GameType.Singleplayer,
+        summary: "Localized summary",
+        tags: ["Puzzle"],
+        latestVersion: "1.0.0",
+        versions: [
+          {
+            version: "1.0.0",
+            platformVersion: ">=4.0.0",
+            downloadUrl: "https://example.com/tetris.zip",
+            description: "Initial version",
+          },
+        ],
+      },
+    ],
   },
 ];
 
 function createApi() {
   return {
     getSources: vi.fn(async () => directory),
-    getIndex: vi.fn(async (sourceIdx: number) => indexes[sourceIdx]),
+    getIndex: vi.fn(
+      async (marketId: string) =>
+        indexes.find((index) => index.marketId === marketId)!,
+    ),
   };
 }
 
 describe("forum game mention market access", () => {
-  it("loads only requested markets for post details", async () => {
+  it("loads only requested markets and returns the localized command label", async () => {
     const api = createApi();
     const result = await resolveForumMarketReferences(
       [
@@ -67,13 +89,18 @@ describe("forum game mention market access", () => {
       api,
     );
     expect(api.getIndex).toHaveBeenCalledTimes(1);
-    expect(api.getIndex).toHaveBeenCalledWith(1);
-    expect(result.games.get("community/com.bz.tetris")?.status).toBe("missing");
+    expect(api.getIndex).toHaveBeenCalledWith("community");
+    expect(result.games.get("community/com.bz.tetris")).toMatchObject({
+      status: "resolved",
+      gameName: "Tetris",
+    });
   });
 
-  it("deduplicates source indexes and limits the requested set", async () => {
+  it("deduplicates market IDs and limits the requested set", async () => {
     const api = createApi();
-    const state = await loadForumMarketIndexes(api, { sourceIndexes: [1, 1] });
+    const state = await loadForumMarketIndexes(api, {
+      marketIds: ["community", "community"],
+    });
     expect(api.getIndex).toHaveBeenCalledTimes(1);
     expect(state.entries).toHaveLength(1);
   });

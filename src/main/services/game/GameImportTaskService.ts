@@ -12,7 +12,9 @@ import { GameType } from "../../../shared/types";
 import { logger } from "../../utils/logger";
 import { storeService } from "../storage/StoreService";
 import { GameLoader, type ManualManifestDraft } from "./GameLoader";
-import { migrationActivityGuard } from "../system/MigrationActivityGuard";
+import { backupActivityGuard } from "../backup/BackupActivityGuard";
+import { lifecycleOperationGuard } from "../system/LifecycleOperationGuard";
+import { resolveGameManifest } from "../../../shared/game-manifest";
 
 interface InternalImportTask {
   state: GameImportTaskState;
@@ -107,8 +109,11 @@ export class GameImportTaskService {
     sourcePath: string,
     draft?: ManualManifestDraft,
   ): Promise<GameImportStartResult> {
-    if (migrationActivityGuard.isExporting()) {
-      return { success: false, error: "migrationExportInProgress" };
+    if (
+      backupActivityGuard.isActive() ||
+      lifecycleOperationGuard.blocksNewActivity()
+    ) {
+      return { success: false, error: "backupTaskInProgress" };
     }
     try {
       const prepared = await GameLoader.prepareGameImport(sourcePath, draft);
@@ -130,14 +135,21 @@ export class GameImportTaskService {
           },
         };
       }
-      if (migrationActivityGuard.isExporting()) {
-        return { success: false, error: "migrationExportInProgress" };
+      if (
+        backupActivityGuard.isActive() ||
+        lifecycleOperationGuard.blocksNewActivity()
+      ) {
+        return { success: false, error: "backupTaskInProgress" };
       }
 
       const taskId = crypto.randomUUID();
       const now = Date.now();
+      const resolvedManifest = resolveGameManifest(
+        prepared.manifest,
+        storeService.getSettings().language,
+      );
       const stagingPath = path.join(
-        storeService.getGameStoragePath(),
+        storeService.getDefaultGameStoragePath(),
         ".imports",
         taskId,
       );
@@ -145,7 +157,7 @@ export class GameImportTaskService {
         taskId,
         sourcePath: prepared.sourcePath,
         gameId: prepared.manifest.id,
-        gameName: prepared.manifest.name,
+        gameName: resolvedManifest.name,
         version: prepared.manifest.version,
         existingGame: prepared.existingGame,
         source: "manual",
@@ -181,8 +193,11 @@ export class GameImportTaskService {
   }
 
   async retryImport(taskId: string): Promise<GameImportStartResult> {
-    if (migrationActivityGuard.isExporting()) {
-      return { success: false, error: "migrationExportInProgress" };
+    if (
+      backupActivityGuard.isActive() ||
+      lifecycleOperationGuard.blocksNewActivity()
+    ) {
+      return { success: false, error: "backupTaskInProgress" };
     }
     const task = this.tasks.get(taskId);
     if (!task || !["failed", "interrupted"].includes(task.state.status)) {
@@ -197,6 +212,10 @@ export class GameImportTaskService {
       const prepared = await GameLoader.prepareGameImport(
         task.state.sourcePath,
         task.draft,
+      );
+      const resolvedManifest = resolveGameManifest(
+        prepared.manifest,
+        storeService.getSettings().language,
       );
       if (!["failed", "interrupted"].includes(task.state.status)) {
         return { success: false, error: "taskNotRetryable" };
@@ -217,13 +236,16 @@ export class GameImportTaskService {
               : "versionExists",
         };
       }
-      if (migrationActivityGuard.isExporting()) {
-        return { success: false, error: "migrationExportInProgress" };
+      if (
+        backupActivityGuard.isActive() ||
+        lifecycleOperationGuard.blocksNewActivity()
+      ) {
+        return { success: false, error: "backupTaskInProgress" };
       }
       task.state = {
         ...task.state,
         gameId: prepared.manifest.id,
-        gameName: prepared.manifest.name,
+        gameName: resolvedManifest.name,
         version: prepared.manifest.version,
         existingGame: prepared.existingGame,
         status: "queued",
@@ -441,7 +463,7 @@ export class GameImportTaskService {
 
   private async safeRemoveStaging(stagingPath: string): Promise<void> {
     const storageRoots = new Set([
-      storeService.getGameStoragePath(),
+      storeService.getDefaultGameStoragePath(),
       ...storeService.getGameStorageRoots(),
     ]);
     const allowed = Array.from(storageRoots).some((root) => {

@@ -16,7 +16,6 @@ export type MarketCandidate = {
   key: string;
   marketId: string;
   marketName: string;
-  sourceIdx: number;
 };
 
 export type GameCandidate = {
@@ -24,7 +23,6 @@ export type GameCandidate = {
   key: string;
   marketId: string;
   marketName: string;
-  sourceIdx: number;
   gameId: string;
   gameName: string;
 };
@@ -60,9 +58,6 @@ export function useForumReferenceCandidates(
         key: `market:${source.marketId}`,
         marketId: source.marketId,
         marketName: source.marketName,
-        sourceIdx: directorySources.value.findIndex(
-          (item) => item.marketId === source.marketId,
-        ),
       }))
       .filter(
         (candidate) =>
@@ -76,14 +71,13 @@ export function useForumReferenceCandidates(
           !selectedMarketId.value ||
           entry.index.marketId === selectedMarketId.value,
       )
-      .map((entry) => ({ sourceIdx: entry.sourceIdx, index: entry.index }));
+      .map((entry) => ({ marketId: entry.marketId, index: entry.index }));
     const gameCandidates = searchMarketGames(indexes, query.value).map(
       (result): GameCandidate => ({
         kind: "game",
         key: `game:${result.marketId}/${result.game.id}`,
         marketId: result.marketId,
         marketName: result.marketName,
-        sourceIdx: result.sourceIdx,
         gameId: result.game.id,
         gameName: result.game.name,
       }),
@@ -123,10 +117,10 @@ export function useForumReferenceCandidates(
   function mergeEntry(entry: ForumMarketIndexEntry): void {
     loadedIndexes.value = [
       ...loadedIndexes.value.filter(
-        (item) => item.sourceIdx !== entry.sourceIdx,
+        (item) => item.marketId !== entry.marketId,
       ),
       entry,
-    ].sort((left, right) => left.sourceIdx - right.sourceIdx);
+    ].sort((left, right) => left.marketId.localeCompare(right.marketId));
   }
 
   async function loadAllIndexes(): Promise<void> {
@@ -161,7 +155,7 @@ export function useForumReferenceCandidates(
     }
   }
 
-  async function selectMarket(sourceIdx: number): Promise<void> {
+  async function selectMarket(marketId: string): Promise<void> {
     const generation = ++loadingGeneration;
     isLoadingCandidates.value = true;
     try {
@@ -169,19 +163,19 @@ export function useForumReferenceCandidates(
       if (allIndexesPromise) {
         await allIndexesPromise.catch(() => undefined);
       }
-      if (loadedIndexes.value.some((entry) => entry.sourceIdx === sourceIdx)) {
+      if (loadedIndexes.value.some((entry) => entry.marketId === marketId)) {
         return;
       }
       const state = await loadForumMarketIndexes(api, {
         directory,
-        sourceIndexes: [sourceIdx],
+        marketIds: [marketId],
         concurrency: 1,
         onEntry: mergeEntry,
       });
       loadedIndexes.value = [
-        ...loadedIndexes.value.filter((entry) => entry.sourceIdx !== sourceIdx),
+        ...loadedIndexes.value.filter((entry) => entry.marketId !== marketId),
         ...state.entries,
-      ].sort((left, right) => left.sourceIdx - right.sourceIdx);
+      ].sort((left, right) => left.marketId.localeCompare(right.marketId));
     } finally {
       if (generation === loadingGeneration) isLoadingCandidates.value = false;
     }

@@ -130,22 +130,22 @@ function excerptFor(part: ForumReferenceToken): string {
 function openReference(part: ForumReferenceToken): void {
   const value = referenceFor(part);
   if (!value || value.status !== "resolved") return;
-  if (value.type === "game" && value.sourceIdx !== undefined)
+  if (value.type === "game")
     void router.push({
       name: "Market",
-      params: { sourceIdx: String(value.sourceIdx) },
+      params: { marketId: value.marketId },
       query: { gameId: value.gameId },
     });
-  else if (value.type === "version" && value.sourceIdx !== undefined)
+  else if (value.type === "version")
     void router.push({
       name: "Market",
-      params: { sourceIdx: String(value.sourceIdx) },
+      params: { marketId: value.marketId },
       query: { gameId: value.gameId, version: value.version },
     });
-  else if (value.type === "market" && value.sourceIdx !== undefined)
+  else if (value.type === "market")
     void router.push({
       name: "Market",
-      params: { sourceIdx: String(value.sourceIdx) },
+      params: { marketId: value.marketId },
     });
   else if (value.type === "post")
     void router.push({ name: "SocialPost", params: { postId: value.postId } });

@@ -2,9 +2,17 @@ import { z } from "zod";
 import { GameType } from "./game.types";
 import {
   GameManifestBaseSchema,
+  GameManifestV2AchievementSchema,
+  GameManifestV2StatisticSchema,
+  ManifestItemIdSchema,
   GameVersionSchema,
   PlatformVersionRangeSchema,
 } from "../game-manifest";
+import {
+  SUPPORTED_LOCALES,
+  SupportedLocaleSchema,
+  type SupportedLocale,
+} from "../localization";
 
 export const HOSTED_GAME_LOGICAL_PREFIX = "games.bzgames.top/";
 
@@ -58,24 +66,119 @@ export function parseHostedGameLogicalUrl(
   }
 }
 
-export const GameManifestOverrideSchema = GameManifestBaseSchema.omit({
+const GameManifestV1OverrideSchema = GameManifestBaseSchema.omit({
   $schema: true,
   id: true,
   version: true,
 }).partial();
 
-export const MarketGameVersionSchema = z.object({
-  version: GameVersionSchema,
-  description: z.string().min(1),
-  platformVersion: PlatformVersionRangeSchema,
-  downloadUrl: z.string().refine(isValidDownloadUrl, "Invalid download URL"),
-  sha256: z.string().optional(),
-  size: z.number().int().nonnegative().optional(),
-  publishedAt: z.string().datetime().optional(),
-  releaseNotes: z.string().optional(),
-  isPrerelease: z.boolean().optional(),
-  gameManifest: GameManifestOverrideSchema.optional(),
-});
+const GameManifestV2OverrideSchema = GameManifestBaseSchema.omit({
+  $schema: true,
+  id: true,
+  name: true,
+  version: true,
+  description: true,
+  statistics: true,
+  achievements: true,
+})
+  .partial()
+  .extend({
+    manifestVersion: z.literal(2),
+    defaultLocale: SupportedLocaleSchema.optional(),
+    statistics: z.array(GameManifestV2StatisticSchema).max(1000).optional(),
+    achievements: z.array(GameManifestV2AchievementSchema).max(1000).optional(),
+    localizations: z
+      .record(
+        z.string(),
+        z
+          .object({
+            name: z.string().min(1).max(100).optional(),
+            description: z.string().max(500).optional(),
+            achievements: z.record(
+              ManifestItemIdSchema,
+              z
+                .object({
+                  title: z.string().min(1).max(200),
+                  description: z.string().max(1000),
+                })
+                .strict(),
+            ),
+            statistics: z.record(
+              ManifestItemIdSchema,
+              z.string().min(1).max(200),
+            ),
+          })
+          .strict(),
+      )
+      .optional(),
+  })
+  .strict();
+
+type GameManifestV1Override = z.infer<typeof GameManifestV1OverrideSchema>;
+type GameManifestV2Override = z.infer<typeof GameManifestV2OverrideSchema>;
+export type GameManifestOverride =
+  | GameManifestV1Override
+  | GameManifestV2Override;
+
+export const GameManifestOverrideSchema = z
+  .unknown()
+  .transform((raw, ctx): GameManifestOverride => {
+    const isV2 =
+      typeof raw === "object" &&
+      raw !== null &&
+      (raw as { manifestVersion?: unknown }).manifestVersion === 2;
+    const result = (
+      isV2 ? GameManifestV2OverrideSchema : GameManifestV1OverrideSchema
+    ).safeParse(raw);
+    if (result.success) return result.data;
+    for (const issue of result.error.issues) ctx.addIssue(issue);
+    return z.NEVER;
+  });
+
+const MarketGameLocalizationSchema = z
+  .object({
+    name: z.string().min(1).max(100),
+    summary: z.string().min(1).max(500),
+    tags: z.array(z.string().min(1).max(100)).max(100),
+  })
+  .strict();
+
+const MarketVersionLocalizationSchema = z
+  .object({
+    description: z.string().min(1),
+    releaseNotes: z.string().optional(),
+  })
+  .strict();
+
+const LocalizationMapSchema = <T extends z.ZodTypeAny>(schema: T) =>
+  z.record(z.string(), schema).superRefine((value, ctx) => {
+    for (const locale of Object.keys(value)) {
+      if (!SUPPORTED_LOCALES.includes(locale as SupportedLocale)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [locale],
+          message: `unsupported locale: ${locale}`,
+        });
+      }
+    }
+  });
+
+export const MarketGameVersionV2Schema = z
+  .object({
+    version: GameVersionSchema,
+    platformVersion: PlatformVersionRangeSchema,
+    downloadUrl: z
+      .string()
+      .refine(isValidDownloadUrl, "Invalid download URL")
+      .optional(),
+    sha256: z.string().optional(),
+    size: z.number().int().nonnegative().optional(),
+    publishedAt: z.string().datetime().optional(),
+    localizations: LocalizationMapSchema(MarketVersionLocalizationSchema),
+    isPrerelease: z.boolean().optional(),
+    gameManifest: GameManifestOverrideSchema.optional(),
+  })
+  .strict();
 
 /** 校验下载链接格式 */
 export function isValidDownloadUrl(url: string): boolean {
@@ -108,11 +211,15 @@ export function isMissingSize(v: { size?: number }): boolean {
 }
 
 /** 运行时校验版本是否可下载：downloadUrl 合法，sha256 格式合法（若有），非 GitHub 直链时 size 必填 */
-export function isVersionDownloadable(v: {
-  downloadUrl: string;
-  sha256?: string;
-  size?: number;
-}): boolean {
+export function isVersionDownloadable(
+  v: {
+    downloadUrl?: string;
+    sha256?: string;
+    size?: number;
+  },
+  allowManifestOnly = false,
+): boolean {
+  if (!v.downloadUrl) return allowManifestOnly;
   if (!isValidDownloadUrl(v.downloadUrl)) return false;
   if (!isValidSha256Format(v.sha256)) return false;
   if (isMissingSize(v) && !isGitHubReleaseUrl(v.downloadUrl)) return false;
@@ -124,30 +231,67 @@ export function isGitHubReleaseUrl(url: string): boolean {
   return /^https:\/\/github\.com\/[^/]+\/[^/]+\/releases\/download\//.test(url);
 }
 
-export const MarketGameSchema = z.object({
-  id: z.string().regex(/^[a-z0-9]+(\.[a-z0-9\-]+)+$/),
-  name: z.string().min(1).max(100),
-  author: z.string().min(1).max(100),
-  author_url: z.string().url().optional(),
-  type: z.nativeEnum(GameType),
-  summary: z.string().min(1).max(200),
-  tags: z.array(z.string().min(1)).optional(),
-  iconUrl: z
-    .string()
-    .refine((url) => isValidMarketImageUrl(url, "icon"), "Invalid icon URL")
-    .optional(),
-  coverUrl: z
-    .string()
-    .refine((url) => isValidMarketImageUrl(url, "cover"), "Invalid cover URL")
-    .optional(),
-  screenshots: z.array(z.string().url()).optional(),
-  featured: z.boolean().optional(),
-  visibility: z.enum(["public", "hidden", "deprecated"]).optional(),
-  minPlayers: z.number().int().min(1).optional(),
-  maxPlayers: z.number().int().min(1).optional(),
-  latestVersion: GameVersionSchema,
-  versions: z.array(MarketGameVersionSchema).min(1),
-});
+export const MarketGameV2Schema = z
+  .object({
+    id: z.string().regex(/^[a-z0-9]+(\.[a-z0-9\-]+)+$/),
+    defaultLocale: SupportedLocaleSchema,
+    localizations: LocalizationMapSchema(MarketGameLocalizationSchema),
+    author: z.string().min(1).max(100),
+    author_url: z.string().url().optional(),
+    type: z.nativeEnum(GameType),
+    iconUrl: z
+      .string()
+      .refine((url) => isValidMarketImageUrl(url, "icon"), "Invalid icon URL")
+      .optional(),
+    coverUrl: z
+      .string()
+      .refine((url) => isValidMarketImageUrl(url, "cover"), "Invalid cover URL")
+      .optional(),
+    screenshots: z.array(z.string().url()).optional(),
+    featured: z.boolean().optional(),
+    visibility: z.enum(["public", "hidden", "deprecated"]).optional(),
+    minPlayers: z.number().int().min(1).optional(),
+    maxPlayers: z.number().int().min(1).optional(),
+    latestVersion: GameVersionSchema,
+    versions: z.array(MarketGameVersionV2Schema).min(1),
+  })
+  .strict()
+  .superRefine((game, ctx) => {
+    const locales = Object.keys(game.localizations).sort();
+    if (!game.localizations[game.defaultLocale]) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["localizations", game.defaultLocale],
+        message: "defaultLocale must have a complete localization bundle",
+      });
+    }
+    for (const [index, version] of game.versions.entries()) {
+      const versionLocales = Object.keys(version.localizations).sort();
+      if (
+        versionLocales.length !== locales.length ||
+        versionLocales.some(
+          (locale, localeIndex) => locale !== locales[localeIndex],
+        )
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["versions", index, "localizations"],
+          message: "every version must use the game's complete language set",
+        });
+      }
+      if (
+        !version.downloadUrl &&
+        !(game.type === GameType.NetworkGame && version.gameManifest)
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["versions", index, "downloadUrl"],
+          message:
+            "downloadUrl is required unless a network game has a manifest override",
+        });
+      }
+    }
+  });
 
 export function parseGitHubRepositoryUrl(
   value: string,
@@ -208,39 +352,126 @@ export const GitHubRepositoryUrlSchema = z
   .string()
   .refine(parseGitHubRepositoryUrl, "Invalid GitHub repository URL");
 
-export const MarketSourceSchema = z.object({
-  marketId: z.string().min(1),
-  marketName: z.string().min(1),
-  coverUrl: z.string().url().optional(),
-  generatedAt: z.string().datetime(),
-  repository: GitHubRepositoryUrlSchema,
-  branch: z.string().refine(isValidGitBranch, "Invalid Git branch"),
-  featured: z.boolean().optional(),
-  visibility: z.enum(["public", "hidden"]).optional(),
-});
+export const MarketSourceSchema = z
+  .object({
+    marketId: z.string().min(1),
+    marketName: z.string().min(1),
+    coverUrl: z.string().url().optional(),
+    generatedAt: z.string().datetime(),
+    repository: GitHubRepositoryUrlSchema,
+    branch: z.string().refine(isValidGitBranch, "Invalid Git branch"),
+    featured: z.boolean().optional(),
+    visibility: z.enum(["public", "hidden"]).optional(),
+  })
+  .strict();
 
-export const MarketDirectorySchema = z.object({
-  schemaVersion: z.string().min(1),
+export const MarketDirectorySchema = z
+  .object({
+    schemaVersion: z.literal(2),
+    sources: z.array(MarketSourceSchema).min(1),
+  })
+  .strict()
+  .superRefine((directory, ctx) => {
+    const ids = directory.sources.map(({ marketId }) => marketId);
+    if (new Set(ids).size !== ids.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["sources"],
+        message: "marketId values must be unique",
+      });
+    }
+  });
+
+export const MarketIndexV2Schema = z
+  .object({
+    schemaVersion: z.literal(2),
+    marketId: z.string().min(1),
+    marketName: z.string().min(1),
+    generatedAt: z.string().datetime(),
+    updatedAt: z.string().datetime(),
+    repository: GitHubRepositoryUrlSchema.optional(),
+    author: z.string().min(1).max(100).optional(),
+    games: z.array(MarketGameV2Schema),
+  })
+  .strict();
+
+/** The official market.json is the only document that combines the directory and index. */
+export const OfficialMarketCatalogV2Schema = MarketIndexV2Schema.extend({
   sources: z.array(MarketSourceSchema).min(1),
+}).superRefine((catalog, ctx) => {
+  const ids = catalog.sources.map(({ marketId }) => marketId);
+  if (new Set(ids).size !== ids.length) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["sources"],
+      message: "marketId values must be unique",
+    });
+  }
 });
 
-export const MarketIndexSchema = z.object({
-  schemaVersion: z.string().min(1),
-  marketId: z.string().min(1),
-  marketName: z.string().min(1),
-  generatedAt: z.string().datetime(),
-  updatedAt: z.string().datetime(),
-  repository: GitHubRepositoryUrlSchema.optional(),
-  author: z.string().min(1).max(100).optional(),
-  games: z.array(MarketGameSchema),
-});
-
-export type GameManifestOverride = z.infer<typeof GameManifestOverrideSchema>;
 export type MarketSource = z.infer<typeof MarketSourceSchema>;
 export type MarketDirectory = z.infer<typeof MarketDirectorySchema>;
-export type MarketGameVersion = z.infer<typeof MarketGameVersionSchema>;
-export type MarketGame = z.infer<typeof MarketGameSchema>;
-export type MarketIndex = z.infer<typeof MarketIndexSchema>;
+export type RawMarketGameVersion = z.infer<typeof MarketGameVersionV2Schema>;
+export type RawMarketGame = z.infer<typeof MarketGameV2Schema>;
+export type RawMarketIndex = z.infer<typeof MarketIndexV2Schema>;
+
+export type MarketGameVersion = Omit<
+  RawMarketGameVersion,
+  "downloadUrl" | "localizations"
+> & {
+  downloadUrl: string;
+  description: string;
+  releaseNotes?: string;
+};
+
+export type MarketGame = Omit<
+  RawMarketGame,
+  "defaultLocale" | "localizations" | "versions"
+> & {
+  name: string;
+  summary: string;
+  tags: string[];
+  versions: MarketGameVersion[];
+};
+
+export type MarketIndex = Omit<RawMarketIndex, "games"> & {
+  games: MarketGame[];
+};
+
+export function resolveMarketIndex(
+  index: RawMarketIndex,
+  locale: SupportedLocale,
+): MarketIndex {
+  return {
+    ...index,
+    games: index.games.map((game) => {
+      const {
+        defaultLocale,
+        localizations: gameLocalizations,
+        versions,
+        ...gameMetadata
+      } = game;
+      const resolvedLocale = gameLocalizations[locale] ? locale : defaultLocale;
+      const localization = gameLocalizations[resolvedLocale];
+      return {
+        ...gameMetadata,
+        name: localization.name,
+        summary: localization.summary,
+        tags: localization.tags,
+        versions: versions.map((version) => {
+          const { localizations, ...versionMetadata } = version;
+          const versionLocalization = localizations[resolvedLocale];
+          return {
+            ...versionMetadata,
+            downloadUrl: version.downloadUrl || "",
+            description: versionLocalization.description,
+            releaseNotes: versionLocalization.releaseNotes,
+          };
+        }),
+      };
+    }),
+  };
+}
 
 export type MarketTaskStatus =
   | "idle"
@@ -267,7 +498,7 @@ export interface MarketTaskState {
   gameId: string;
   version: string;
   gameName?: string;
-  sourceIdx?: number;
+  marketId?: string;
   installStarted?: boolean;
   status: MarketTaskStatus;
   progress: number;
@@ -296,7 +527,7 @@ export interface DownloadTaskSnapshot {
   gameId: string;
   version: string;
   gameName?: string;
-  sourceIdx: number;
+  marketId: string;
   downloadUrl: string;
   sha256: string | undefined;
   size: number;

@@ -18,7 +18,9 @@ vi.mock("electron", () => ({
 vi.mock("../storage/StoreService", () => ({
   storeService: {
     getGameStoragePath: () => mocks.storage,
+    getDefaultGameStoragePath: () => mocks.storage,
     getGameStorageRoots: () => [mocks.storage],
+    getSettings: () => ({ language: "zh-CN" }),
   },
 }));
 vi.mock("../../utils/logger", () => ({
@@ -175,7 +177,9 @@ describe("GameImportTaskService", () => {
     await fs.mkdir(stagingPath, { recursive: true });
 
     expect(await service.cancelImport(queued.task!.taskId)).toBe(true);
-    await expect(fs.stat(stagingPath)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(fs.stat(stagingPath)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
 
     for (const release of releases) release();
     await vi.waitFor(() =>

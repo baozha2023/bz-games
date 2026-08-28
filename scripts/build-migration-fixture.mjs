@@ -25,8 +25,33 @@ const fixtureDatabasePath = path.join(
   "migration-v1-bz_games.db",
 );
 const fixtureDatabaseSha256 =
-  "0a04c1f5c8eaaea9865e897f382a71a149629a47e7bd590b6f5c4235e50f7c69";
+  "48789dff1a7f1e2a1c0e45eba4c1a78bae7d12185842d2bed2756f96455ff146";
+const fixtureEncryptionSeed = "bzgames-migration-v1-fixture";
 const fixedTime = new Date("2026-08-26T00:00:00.000Z");
+
+function encryptV1Config(value) {
+  const key = crypto
+    .createHash("sha256")
+    .update(fixtureEncryptionSeed)
+    .digest();
+  const iv = crypto
+    .createHash("sha256")
+    .update("bzgames-migration-v1-fixture-config-iv")
+    .digest()
+    .subarray(0, 12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+  const payload = Buffer.concat([
+    cipher.update(JSON.stringify(value), "utf8"),
+    cipher.final(),
+  ]);
+  return {
+    __encrypted: true,
+    algorithm: "aes-256-gcm",
+    iv: iv.toString("base64"),
+    tag: cipher.getAuthTag().toString("base64"),
+    payload: payload.toString("base64"),
+  };
+}
 
 async function listPayload(root) {
   const files = [];
@@ -83,7 +108,7 @@ async function main() {
     const gamesVersionRoot = path.join(
       stagingRoot,
       "games",
-      "fixture-game",
+      "com.bz.fixture-game",
       "1.0.0",
     );
     const databaseRoot = path.join(stagingRoot, "db");
@@ -92,14 +117,57 @@ async function main() {
     await fsp.writeFile(
       path.join(stagingRoot, "config.json"),
       `${JSON.stringify(
+        encryptV1Config({
+          settings: {
+            playerId: "00000000-0000-4000-8000-000000000001",
+            playerName: "Migration Fixture",
+            language: "zh-CN",
+            filterSensitiveWords: false,
+            libraryLayoutMode: "steam",
+            gameStoragePath: "C:\\BZ-Games\\games",
+            gameStorageHistory: ["C:\\BZ-Games\\games"],
+            feedbackHistory: [{ id: "must-be-discarded" }],
+            ignoredUpdateVersion: "9.9.9",
+            skipStartupUpdateCheck: true,
+            migrationNoticeAcknowledgedVersion: "3.4.2",
+          },
+          userData: {
+            bzCoins: 42,
+            checkIn: {
+              lastCheckInDate: "2026-08-26",
+              consecutiveDays: 2,
+              maxConsecutiveDays: 3,
+              totalDays: 4,
+            },
+            ownedFrames: [],
+            ownedGameCardProducts: [],
+          },
+        }),
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    await fsp.writeFile(
+      path.join(gamesVersionRoot, "game.json"),
+      `${JSON.stringify(
         {
-          playerId: "00000000-0000-4000-8000-000000000001",
-          playerName: "Migration Fixture",
-          language: "zh-CN",
+          id: "com.bz.fixture-game",
+          name: "Migration Fixture",
+          version: "1.0.0",
+          author: "BZ-Games",
+          platformVersion: ">=3.4.2",
+          entry: "index.html",
+          type: "singleplayer",
         },
         null,
         2,
       )}\n`,
+      "utf8",
+    );
+    await fsp.writeFile(
+      path.join(gamesVersionRoot, "index.html"),
+      "<!doctype html><title>BZ-Games migration fixture</title>\n",
       "utf8",
     );
     await fsp.writeFile(
@@ -111,6 +179,22 @@ async function main() {
     await fsp.copyFile(
       fixtureDatabasePath,
       path.join(databaseRoot, "bz_games.db"),
+    );
+    for (const legacyName of [
+      "achievement_unlocks.db",
+      "play_sessions.db",
+      "stats_reports.db",
+      "bz_games.db-wal",
+      "bz_games.db-shm",
+    ]) {
+      await fsp.writeFile(path.join(databaseRoot, legacyName), "", "utf8");
+    }
+    const legacyImportsRoot = path.join(stagingRoot, "games", ".imports");
+    await fsp.mkdir(legacyImportsRoot, { recursive: true });
+    await fsp.writeFile(
+      path.join(legacyImportsRoot, "orphan.partial"),
+      "must be discarded\n",
+      "utf8",
     );
 
     const payloadFiles = await listPayload(stagingRoot);

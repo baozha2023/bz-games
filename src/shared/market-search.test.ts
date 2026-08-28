@@ -15,8 +15,12 @@ const source = (marketId: string, marketName: string): MarketSource => ({
   branch: "main",
 });
 
-const index = (marketId: string, marketName: string, name: string): MarketIndex => ({
-  schemaVersion: "1",
+const index = (
+  marketId: string,
+  marketName: string,
+  name: string,
+): MarketIndex => ({
+  schemaVersion: 2,
   marketId,
   marketName,
   generatedAt: "2026-08-23T00:00:00.000Z",
@@ -28,6 +32,7 @@ const index = (marketId: string, marketName: string, name: string): MarketIndex 
       author: "BZ-Games",
       type: GameType.Singleplayer,
       summary: "A game",
+      tags: ["益智"],
       latestVersion: "1.0.0",
       versions: [
         {
@@ -56,21 +61,42 @@ describe("market search helpers", () => {
   });
 
   it("searches market names and IDs", () => {
-    expect(searchMarketSources([source("official", "官方市场")], "官方")).toHaveLength(1);
-    expect(searchMarketSources([source("official", "官方市场")], "official")).toHaveLength(1);
-    expect(searchMarketSources([source("official", "官方市场")], "missing")).toHaveLength(0);
+    expect(
+      searchMarketSources([source("official", "官方市场")], "官方"),
+    ).toHaveLength(1);
+    expect(
+      searchMarketSources([source("official", "官方市场")], "official"),
+    ).toHaveLength(1);
+    expect(
+      searchMarketSources([source("official", "官方市场")], "missing"),
+    ).toHaveLength(0);
   });
 
   it("searches game names, IDs, authors, tags, and market names", () => {
     const result = searchMarketGames(
-      [{ sourceIdx: 0, index: index("official", "官方市场", "俄罗斯方块") }],
+      [
+        {
+          marketId: "official",
+          index: index("official", "官方市场", "俄罗斯方块"),
+        },
+      ],
       "俄罗斯",
     );
     expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject({
-      sourceIdx: 0,
       marketId: "official",
       game: { id: "com.bz.tetris", name: "俄罗斯方块" },
     });
+    expect(
+      searchMarketGames(
+        [
+          {
+            marketId: "official",
+            index: index("official", "官方市场", "俄罗斯方块"),
+          },
+        ],
+        "益智",
+      ),
+    ).toHaveLength(1);
   });
 });

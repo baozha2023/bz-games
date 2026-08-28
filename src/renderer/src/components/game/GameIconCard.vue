@@ -20,7 +20,7 @@
 <script setup lang="ts">
 import GameCardBase from "./GameCardBase.vue";
 import GameIcon from "./GameIcon.vue";
-import type { GameManifest } from "../../../../shared/game-manifest";
+import type { ResolvedGameManifest as GameManifest } from "../../../../shared/game-manifest";
 import type { GameImportTaskState } from "../../../../shared/types";
 
 defineProps<{

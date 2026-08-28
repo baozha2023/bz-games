@@ -52,7 +52,7 @@
 import { computed, toRef } from "vue";
 import { NCard, NEllipsis, NText, NIcon } from "naive-ui";
 import { Heart } from "@vicons/ionicons5";
-import type { GameManifest } from "../../../../shared/game-manifest";
+import type { ResolvedGameManifest as GameManifest } from "../../../../shared/game-manifest";
 import type { GameImportTaskState } from "../../../../shared/types";
 import { useGameStore } from "../../stores/useGameStore";
 import { useGameCardFrameAsset } from "../../composables/useGameCardFrameAsset";

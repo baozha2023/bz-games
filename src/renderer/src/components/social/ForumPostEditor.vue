@@ -213,7 +213,6 @@ const pickerQuery = ref("");
 const selectedMarket = ref<{
   marketId: string;
   marketName: string;
-  sourceIdx: number;
 } | null>(null);
 const selectedGame = ref<GameCandidate | null>(null);
 const selectedPageGroup = ref<string | null>(null);
@@ -263,11 +262,11 @@ const pickerOptions = computed<PickerOption[]>(() => {
   const query = pickerQuery.value.trim().toLocaleLowerCase();
   let values: PickerOption[] = [];
   if (stage.value === "market")
-    values = mentions.directorySources.value.map((item, sourceIdx) => ({
+    values = mentions.directorySources.value.map((item) => ({
       key: item.marketId,
       label: item.marketName,
       description: item.marketId,
-      value: { ...item, sourceIdx },
+      value: item,
     }));
   if (stage.value === "game")
     values = mentions.loadedIndexes.value
@@ -282,7 +281,6 @@ const pickerOptions = computed<PickerOption[]>(() => {
             key: game.id,
             marketId: item.index.marketId,
             marketName: item.index.marketName,
-            sourceIdx: item.sourceIdx,
             gameId: game.id,
             gameName: game.name,
           } satisfies GameCandidate,
@@ -549,21 +547,19 @@ async function restoreSlashDraft(context: SlashCommandContext): Promise<void> {
   }
   if (generation !== restoreGeneration || context.args.length === 0) return;
   const marketId = context.args[0];
-  const sourceIdx = mentions.directorySources.value.findIndex(
+  const source = mentions.directorySources.value.find(
     (source) => source.marketId === marketId,
   );
-  const source = mentions.directorySources.value[sourceIdx];
-  if (!source || sourceIdx < 0) {
+  if (!source) {
     pickerQuery.value = marketId;
     return;
   }
   selectedMarket.value = {
     marketId: source.marketId,
     marketName: source.marketName,
-    sourceIdx,
   };
   if (definition.flow.length === 1) return;
-  await mentions.selectMarket(sourceIdx).catch(() => undefined);
+  await mentions.selectMarket(marketId).catch(() => undefined);
   if (generation !== restoreGeneration) return;
   commandController.restore(command, definition.flow[1]);
   if (context.args.length < 2) return;
@@ -580,7 +576,6 @@ async function restoreSlashDraft(context: SlashCommandContext): Promise<void> {
     key: `game:${marketId}/${game.id}`,
     marketId,
     marketName: entry.index.marketName,
-    sourceIdx: entry.sourceIdx,
     gameId: game.id,
     gameName: game.name,
   };
@@ -764,7 +759,7 @@ async function selectMentionCandidate(
   if (candidate.kind === "market") {
     selectedMentionMarketId.value = candidate.marketId;
     mentionQuery.value = "";
-    await mentions.selectMarket(candidate.sourceIdx).catch(() => undefined);
+    await mentions.selectMarket(candidate.marketId).catch(() => undefined);
     optionIndex.value = 0;
     return;
   }
@@ -777,7 +772,6 @@ async function selectMentionCandidate(
     },
     marketName: candidate.marketName,
     gameName: candidate.gameName,
-    sourceIdx: candidate.sourceIdx,
   });
 }
 async function selectPickerOption(option: PickerOption): Promise<void> {
@@ -785,7 +779,6 @@ async function selectPickerOption(option: PickerOption): Promise<void> {
     const market = option.value as {
       marketId: string;
       marketName: string;
-      sourceIdx: number;
     };
     selectedMarket.value = market;
     const nextStage = commandController.advance();
@@ -793,12 +786,11 @@ async function selectPickerOption(option: PickerOption): Promise<void> {
       insertResolvedReference({
         reference: { type: "market", marketId: market.marketId },
         marketName: market.marketName,
-        sourceIdx: market.sourceIdx,
       });
       return;
     }
     replaceTriggerWithDraft(`/${selectedCommand.value}<${market.marketId}>`);
-    await mentions.selectMarket(market.sourceIdx).catch(() => undefined);
+    await mentions.selectMarket(market.marketId).catch(() => undefined);
     pickerQuery.value = "";
     optionIndex.value = 0;
     return;
@@ -817,7 +809,6 @@ async function selectPickerOption(option: PickerOption): Promise<void> {
         },
         marketName: game.marketName,
         gameName: game.gameName,
-        sourceIdx: game.sourceIdx,
       });
       return;
     }
@@ -836,7 +827,6 @@ async function selectPickerOption(option: PickerOption): Promise<void> {
       },
       marketName: selectedGame.value.marketName,
       gameName: selectedGame.value.gameName,
-      sourceIdx: selectedGame.value.sourceIdx,
     });
     return;
   }

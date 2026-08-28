@@ -36,7 +36,6 @@ export interface ForumGameReferenceViewModel extends ForumReferenceViewModelBase
   gameId: string;
   marketName?: string;
   gameName?: string;
-  sourceIdx?: number;
 }
 
 export interface ForumVersionReferenceViewModel extends ForumReferenceViewModelBase {
@@ -46,14 +45,12 @@ export interface ForumVersionReferenceViewModel extends ForumReferenceViewModelB
   version: string;
   marketName?: string;
   gameName?: string;
-  sourceIdx?: number;
 }
 
 export interface ForumMarketReferenceViewModel extends ForumReferenceViewModelBase {
   type: "market";
   marketId: string;
   marketName?: string;
-  sourceIdx?: number;
 }
 
 export interface ForumPostReferenceViewModel extends ForumReferenceViewModelBase {
@@ -106,18 +103,15 @@ export type ForumResolvedReferenceSeed =
       reference: Extract<ForumReferenceInput, { type: "game" }>;
       marketName: string;
       gameName: string;
-      sourceIdx: number;
     }
   | {
       reference: Extract<ForumReferenceInput, { type: "version" }>;
       marketName: string;
       gameName: string;
-      sourceIdx: number;
     }
   | {
       reference: Extract<ForumReferenceInput, { type: "market" }>;
       marketName: string;
-      sourceIdx: number;
     }
   | {
       reference: Extract<ForumReferenceInput, { type: "post" }>;
@@ -144,7 +138,6 @@ export function createResolvedForumReferenceViewModel(
       gameId: reference.gameId,
       marketName: seed.marketName,
       gameName: seed.gameName,
-      sourceIdx: seed.sourceIdx,
     };
   if (reference.type === "version" && "gameName" in seed)
     return {
@@ -157,7 +150,6 @@ export function createResolvedForumReferenceViewModel(
       version: reference.version,
       marketName: seed.marketName,
       gameName: seed.gameName,
-      sourceIdx: seed.sourceIdx,
     };
   if (reference.type === "market" && "marketName" in seed)
     return {
@@ -167,7 +159,6 @@ export function createResolvedForumReferenceViewModel(
       label: seed.marketName,
       marketId: reference.marketId,
       marketName: seed.marketName,
-      sourceIdx: seed.sourceIdx,
     };
   if (reference.type === "post" && "title" in seed)
     return {
@@ -288,7 +279,6 @@ export async function resolveForumReferenceViewModels(
               gameId: token.gameId,
               marketName: resolution.marketName,
               gameName: resolution.gameName,
-              sourceIdx: resolution.sourceIdx,
             }
           : {
               type: "game",
@@ -323,7 +313,6 @@ export async function resolveForumReferenceViewModels(
               version: token.version,
               marketName: resolution.marketName,
               gameName: resolution.gameName,
-              sourceIdx: resolution.sourceIdx,
             }
           : {
               type: "version",
@@ -354,7 +343,6 @@ export async function resolveForumReferenceViewModels(
               label: resolution.marketName,
               marketId: token.marketId,
               marketName: resolution.marketName,
-              sourceIdx: resolution.sourceIdx,
             }
           : {
               type: "market",

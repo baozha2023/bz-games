@@ -224,7 +224,7 @@ import GameAchievementsModal from "../components/game/GameAchievementsModal.vue"
 import GameDeleteModal from "../components/game/GameDeleteModal.vue";
 import {
   compareGameVersionsDescending,
-  type GameManifest,
+  type ResolvedGameManifest as GameManifest,
 } from "../../../shared/game-manifest";
 import { GameType } from "../../../shared/types";
 
@@ -379,6 +379,20 @@ watch(effectiveGameId, async () => {
   showAchievements.value = false;
   await loadGameDetail();
 });
+
+watch(
+  () => settingsStore.settings?.language,
+  (language, previousLanguage) => {
+    if (
+      language &&
+      previousLanguage &&
+      language !== previousLanguage &&
+      selectedVersion.value
+    ) {
+      void handleVersionChange(selectedVersion.value);
+    }
+  },
+);
 
 watch(showJoinModal, (open) => {
   if (open && settingsStore.settings?.lastJoinRoomAddress) {

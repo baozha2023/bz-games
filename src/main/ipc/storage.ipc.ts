@@ -65,9 +65,7 @@ function isEncryptedStorageEnabled(gameId: string, version: string): boolean {
   if (!fs.existsSync(manifestPath)) {
     return false;
   }
-  const manifest = readGameManifestFile(manifestPath, {
-    migratePlaintext: true,
-  });
+  const manifest = readGameManifestFile(manifestPath);
   return manifest.encryptLocalStorage === true;
 }
 

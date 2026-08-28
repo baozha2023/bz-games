@@ -12,8 +12,8 @@ export function registerMarketIpc() {
     return await marketService.getSources(!!forceRefresh);
   });
 
-  ipcMain.handle(IPC.MARKET_GET_INDEX, async (_, sourceIdx: number, forceRefresh?: boolean) => {
-    return await marketService.getIndex(sourceIdx, !!forceRefresh);
+  ipcMain.handle(IPC.MARKET_GET_INDEX, async (_, marketId: string, forceRefresh?: boolean) => {
+    return await marketService.getIndex(marketId, !!forceRefresh);
   });
 
   ipcMain.handle(IPC.MARKET_GET_CACHED_IMAGE, async (_, url: string) => {
@@ -26,8 +26,8 @@ export function registerMarketIpc() {
 
   ipcMain.handle(
     IPC.MARKET_DOWNLOAD_AND_INSTALL,
-    async (_, gameId: string, version: string, sourceIdx: number) => {
-      return await marketService.downloadAndInstall(gameId, version, sourceIdx);
+    async (_, gameId: string, version: string, marketId: string) => {
+      return await marketService.downloadAndInstall(gameId, version, marketId);
     },
   );
 

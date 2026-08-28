@@ -84,23 +84,9 @@ export function registerGameIpc() {
     gameImportTaskService.dismissImport(taskId),
   );
 
-  ipcMain.handle(IPC.GAME_LOAD, async (_, sourcePath?: string) => {
-    if (sourcePath) {
-      return await GameLoader.loadGameFromPath(sourcePath);
-    }
-    return await GameLoader.loadGameFromDialog();
-  });
-
   ipcMain.handle(IPC.GAME_PREPARE_IMPORT, async (_, sourcePath: string) => {
     return await GameLoader.prepareImportFromPath(sourcePath);
   });
-
-  ipcMain.handle(
-    IPC.GAME_LOAD_WITH_MANIFEST,
-    async (_, sourcePath: string, draft: ManualManifestDraft) => {
-      return await GameLoader.loadGameFromPathWithManifest(sourcePath, draft);
-    },
-  );
 
   ipcMain.handle(IPC.GAME_CHECK_ID_EXISTS, async (_, id: string) => {
     return await GameLoader.checkGameIdExists(id);

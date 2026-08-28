@@ -2,7 +2,7 @@ import path from "path";
 import fs from "fs";
 import { app } from "electron";
 import { logger } from "../../utils/logger";
-import type { GameManifest } from "../../../shared/game-manifest";
+import type { ResolvedGameManifest as GameManifest } from "../../../shared/game-manifest";
 import type { AppSettings } from "../../../shared/types";
 import {
   buildGameProcessEnvironment,
@@ -71,6 +71,7 @@ export class GameEnvironment {
   ): GameLaunchContext {
     const room = findMatchingRoom(id, manifest.version);
     return {
+      locale: settings.language,
       platformVersion: app.getVersion(),
       apiPort: port,
       apiToken: token,

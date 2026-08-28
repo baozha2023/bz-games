@@ -1,11 +1,10 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
-import type { GameManifest } from "../../../shared/game-manifest";
+import type { ResolvedGameManifest as GameManifest } from "../../../shared/game-manifest";
 import type {
   GameImportStartResult,
   GameImportTaskState,
   GameRecord,
-  GameType,
   MarketTaskState,
   UnlockedAchievement,
 } from "../../../shared/types";
@@ -136,15 +135,6 @@ export const useGameStore = defineStore("game", () => {
     }, false);
   }
 
-  async function addGame(sourcePath?: string) {
-    const res = await window.electronAPI.game.load(sourcePath);
-    if (res.success && res.manifest) {
-      invalidateGameAssetCache(res.manifest.id);
-      await refreshGames([res.manifest.id]);
-    }
-    return res;
-  }
-
   async function loadImportTasks() {
     const [manualSnapshots, marketSnapshots] = await Promise.all([
       window.electronAPI.game.getImportTasks(),
@@ -197,7 +187,7 @@ export const useGameStore = defineStore("game", () => {
         await window.electronAPI.market.downloadAndInstall(
           task.gameId,
           task.version,
-          Number(task.params?.sourceIdx || 0),
+          String(task.params?.marketId || ""),
         );
         importTasks.value = importTasks.value.filter(
           (item) => item.taskId !== taskId,
@@ -267,7 +257,7 @@ export const useGameStore = defineStore("game", () => {
               : "copying",
       progress: task.progress,
       error: task.error,
-      params: { sourceIdx: task.sourceIdx },
+      params: { marketId: task.marketId },
       createdAt: task.createdAt,
       updatedAt: task.updatedAt,
     };
@@ -305,35 +295,6 @@ export const useGameStore = defineStore("game", () => {
     } catch (error) {
       console.error("[GameStore] Failed to refresh completed imports", error);
     }
-  }
-
-  async function addGameWithManifest(
-    sourcePath: string,
-    draft: {
-      id: string;
-      name: string;
-      version: string;
-      description?: string;
-      author: string;
-      entry?: string;
-      web_url?: string;
-      platformVersion?: string;
-      icon?: string;
-      cover?: string;
-      type: GameType;
-      minPlayers?: number;
-      maxPlayers?: number;
-    },
-  ) {
-    const res = await window.electronAPI.game.loadWithManifest(
-      sourcePath,
-      draft,
-    );
-    if (res.success && res.manifest) {
-      invalidateGameAssetCache(draft.id);
-      await refreshGames([res.manifest.id]);
-    }
-    return res;
   }
 
   async function removeGame(id: string, versions?: string[]) {
@@ -486,8 +447,6 @@ export const useGameStore = defineStore("game", () => {
     cancelImport,
     retryImport,
     dismissImport,
-    addGame,
-    addGameWithManifest,
     removeGame,
     toggleFavorite,
     launchGame,

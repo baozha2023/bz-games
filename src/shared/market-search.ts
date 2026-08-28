@@ -1,12 +1,11 @@
 import type { MarketGame, MarketIndex, MarketSource } from "./types";
 
 export interface MarketSearchIndex {
-  sourceIdx: number;
+  marketId: string;
   index: MarketIndex;
 }
 
 export interface MarketGameSearchResult {
-  sourceIdx: number;
   marketId: string;
   marketName: string;
   game: MarketGame;
@@ -88,11 +87,10 @@ export function searchMarketGames(
   query = "",
 ): MarketGameSearchResult[] {
   const normalizedQuery = normalizeQuery(query);
-  const ranked = indexes.flatMap(({ sourceIdx, index }) =>
+  const ranked = indexes.flatMap(({ marketId, index }) =>
     index.games
       .map((game) => ({
-        sourceIdx,
-        marketId: index.marketId,
+        marketId,
         marketName: index.marketName,
         game,
         score: bestScore(

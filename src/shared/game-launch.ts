@@ -1,10 +1,12 @@
 import path from "path";
+import type { SupportedLocale } from "./localization";
 
 export type GameEntryMode = "url" | "serve" | "html" | "native";
 
 const PRIVATE_ENV_PREFIXES = ["ELECTRON_", "NODE_", "NPM_", "VSCODE_"];
 
 export interface GameLaunchContext {
+  locale: SupportedLocale;
   platformVersion: string;
   apiPort: number;
   apiToken: string;
@@ -39,6 +41,7 @@ export function buildGameProcessEnvironment(
   return Object.assign(environment, manifestEnvironment || {}, {
     BZ_PLATFORM: "1",
     BZ_PLATFORM_VERSION: context.platformVersion,
+    BZ_LOCALE: context.locale,
     BZ_API_PORT: context.apiPort.toString(),
     BZ_API_TOKEN: context.apiToken,
     BZ_PLAYER_ID: context.playerId,
@@ -54,6 +57,7 @@ export function buildGameProcessEnvironment(
 
 export function buildWebGameConfig(context: GameLaunchContext) {
   return {
+    locale: context.locale,
     apiPort: context.apiPort.toString(),
     token: context.apiToken,
     playerId: context.playerId,

@@ -1,14 +1,10 @@
-import { z } from "zod";
 import {
-  GitHubRepositoryUrlSchema,
   MarketDirectorySchema,
-  MarketGameSchema,
-  MarketGameVersionSchema,
+  MarketIndexV2Schema,
+  OfficialMarketCatalogV2Schema,
   parseGitHubRepositoryUrl,
   type MarketDirectory,
-  type MarketGame,
-  type MarketGameVersion,
-  type MarketIndex,
+  type RawMarketIndex,
   type MarketSource,
 } from "../../../shared/types";
 import {
@@ -48,7 +44,7 @@ export class MarketCatalogError extends Error {
 
 export interface OfficialMarketCatalog {
   directory: MarketDirectory;
-  index: MarketIndex;
+  index: RawMarketIndex;
   fetchedAt: number;
 }
 
@@ -59,23 +55,6 @@ interface MarketCatalogClientOptions {
   ossUrl?: string;
   githubUrl?: string;
 }
-
-const MarketIndexTopLevelSchema = z.object({
-  schemaVersion: z.string().min(1),
-  marketId: z.string().min(1),
-  marketName: z.string().min(1),
-  generatedAt: z.string().datetime(),
-  updatedAt: z.string().datetime(),
-  author: z.string().min(1).max(100).optional(),
-  repository: GitHubRepositoryUrlSchema.optional(),
-  games: z.array(z.unknown()),
-});
-
-const MarketGameMetadataSchema = MarketGameSchema.omit({
-  versions: true,
-}).extend({
-  versions: z.array(z.unknown()),
-});
 
 export function getMarketSourceKey(source: MarketSource): string {
   return `${source.marketId}\u0000${source.repository}\u0000${source.branch}`;
@@ -90,75 +69,12 @@ function gitToRawUrl(repository: string, branch: string): string {
   return `${GITHUB_RAW_BASE}${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repository)}/${encodedBranch}/market.json`;
 }
 
-function issuePaths(error: z.ZodError): string[] {
-  return error.issues.map((issue) => issue.path.join(".") || "(root)");
-}
-
-function parseGameTolerant(rawGame: unknown): MarketGame | null {
-  const fullResult = MarketGameSchema.safeParse(rawGame);
-  if (fullResult.success) return fullResult.data;
-
-  const rawRecord =
-    rawGame && typeof rawGame === "object"
-      ? (rawGame as Record<string, unknown>)
-      : null;
-  const gameId =
-    rawRecord && typeof rawRecord.id === "string" ? rawRecord.id : "(unknown)";
-  const metadataResult = MarketGameMetadataSchema.safeParse(rawGame);
-  if (!metadataResult.success) {
-    logger.warn(
-      `[MarketCatalogClient] Skipping game "${gameId}": invalid metadata`,
-      issuePaths(metadataResult.error),
-    );
-    return null;
-  }
-
-  const validVersions: MarketGameVersion[] = [];
-  for (const rawVersion of metadataResult.data.versions) {
-    const versionResult = MarketGameVersionSchema.safeParse(rawVersion);
-    if (versionResult.success) {
-      validVersions.push(versionResult.data);
-      continue;
-    }
-    const version =
-      rawVersion &&
-      typeof rawVersion === "object" &&
-      "version" in rawVersion &&
-      typeof rawVersion.version === "string"
-        ? rawVersion.version
-        : "(unknown)";
-    logger.warn(
-      `[MarketCatalogClient] Skipping invalid version "${version}" for game "${gameId}"`,
-      issuePaths(versionResult.error),
-    );
-  }
-
-  if (validVersions.length === 0) {
-    logger.warn(
-      `[MarketCatalogClient] Skipping game "${gameId}": no valid versions`,
-    );
-    return null;
-  }
-
-  const latestVersion =
-    validVersions.find(
-      (version) => version.version === metadataResult.data.latestVersion,
-    )?.version ?? validVersions[0].version;
-
+function parseIndex(raw: unknown): RawMarketIndex {
+  const index = MarketIndexV2Schema.parse(raw);
   return {
-    ...metadataResult.data,
-    latestVersion,
-    versions: validVersions,
+    ...index,
+    games: index.games.filter((game) => game.visibility !== "hidden"),
   };
-}
-
-function parseIndex(raw: unknown): MarketIndex {
-  const top = MarketIndexTopLevelSchema.parse(raw);
-  const games = top.games
-    .map(parseGameTolerant)
-    .filter((game): game is MarketGame => game !== null)
-    .filter((game) => game.visibility !== "hidden");
-  return { ...top, games };
 }
 
 function toCatalogError(
@@ -219,7 +135,7 @@ export class MarketCatalogClient {
     }
   }
 
-  async fetchExternalIndex(source: MarketSource): Promise<MarketIndex> {
+  async fetchExternalIndex(source: MarketSource): Promise<RawMarketIndex> {
     let url: string;
     try {
       url = gitToRawUrl(source.repository, source.branch);
@@ -241,14 +157,24 @@ export class MarketCatalogClient {
     url: string,
   ): OfficialMarketCatalog {
     let directory: MarketDirectory;
-    let index: MarketIndex;
+    let index: RawMarketIndex;
     try {
-      directory = MarketDirectorySchema.parse(raw);
-      index = parseIndex(raw);
+      const catalog = OfficialMarketCatalogV2Schema.parse(raw);
+      directory = MarketDirectorySchema.parse({
+        schemaVersion: catalog.schemaVersion,
+        sources: catalog.sources,
+      });
+      const { sources: _sources, ...rawIndex } = catalog;
+      index = {
+        ...rawIndex,
+        games: rawIndex.games.filter((game) => game.visibility !== "hidden"),
+      };
     } catch (error) {
       throw toCatalogError(error, "schema", source, url);
     }
-    if (directory.sources[0].marketId !== index.marketId) {
+    if (
+      !directory.sources.some(({ marketId }) => marketId === index.marketId)
+    ) {
       throw new MarketCatalogError("business", source, url);
     }
     return { directory, index, fetchedAt: Date.now() };

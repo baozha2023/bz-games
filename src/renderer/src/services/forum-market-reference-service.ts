@@ -3,19 +3,19 @@ import type {
   MarketIndex,
   MarketSource,
 } from "../../../shared/types";
-import type { ForumGameReferenceToken } from "../../../shared/forum-references";
 import type {
+  ForumGameReferenceToken,
   ForumMarketToken,
   ForumVersionToken,
 } from "../../../shared/forum-references";
 
 export interface ForumMarketApi {
   getSources: () => Promise<MarketDirectory>;
-  getIndex: (sourceIdx: number) => Promise<MarketIndex>;
+  getIndex: (marketId: string) => Promise<MarketIndex>;
 }
 
 export interface ForumMarketIndexEntry {
-  sourceIdx: number;
+  marketId: string;
   source: MarketSource;
   index: MarketIndex;
 }
@@ -25,16 +25,10 @@ export interface ResolvedForumGameReference {
   marketName: string;
   gameId: string;
   gameName: string;
-  sourceIdx: number;
 }
 
 export type ForumMarketReferenceResolution =
-  | {
-      status: "resolved";
-      marketId: string;
-      marketName: string;
-      sourceIdx: number;
-    }
+  | { status: "resolved"; marketId: string; marketName: string }
   | { status: "missing" }
   | { status: "unavailable" };
 
@@ -50,80 +44,71 @@ export type ForumVersionReferenceResolution =
 
 export interface ForumMarketLoadState {
   entries: ForumMarketIndexEntry[];
-  failedSourceIndexes: number[];
-}
-
-function sourceMap(
-  directory: MarketDirectory,
-): Map<string, { source: MarketSource; sourceIdx: number }> {
-  return new Map(
-    directory.sources.map((source, sourceIdx) => [
-      source.marketId,
-      { source, sourceIdx },
-    ]),
-  );
+  failedMarketIds: string[];
 }
 
 async function loadIndexes(
   directory: MarketDirectory,
-  sourceIndexes: number[],
+  marketIds: string[],
   api: ForumMarketApi,
   concurrency: number,
   onEntry?: (entry: ForumMarketIndexEntry) => void,
 ): Promise<ForumMarketLoadState> {
-  const uniqueIndexes = [...new Set(sourceIndexes)].filter(
-    (sourceIdx) => directory.sources[sourceIdx] !== undefined,
+  const sources = new Map(
+    directory.sources.map((source) => [source.marketId, source]),
+  );
+  const uniqueIds = [...new Set(marketIds)].filter((marketId) =>
+    sources.has(marketId),
   );
   const entries: ForumMarketIndexEntry[] = [];
-  const failedSourceIndexes: number[] = [];
+  const failedMarketIds: string[] = [];
   let cursor = 0;
 
   async function worker(): Promise<void> {
-    while (cursor < uniqueIndexes.length) {
-      const current = uniqueIndexes[cursor++];
+    while (cursor < uniqueIds.length) {
+      const marketId = uniqueIds[cursor++];
       try {
-        const index = await api.getIndex(current);
-        const source = directory.sources[current];
-        if (!source || index.marketId !== source.marketId) {
-          failedSourceIndexes.push(current);
+        const index = await api.getIndex(marketId);
+        const source = sources.get(marketId);
+        if (!source || index.marketId !== marketId) {
+          failedMarketIds.push(marketId);
           continue;
         }
-        const entry = { sourceIdx: current, source, index };
+        const entry = { marketId, source, index };
         entries.push(entry);
         onEntry?.(entry);
       } catch {
-        failedSourceIndexes.push(current);
+        failedMarketIds.push(marketId);
       }
     }
   }
 
   await Promise.all(
     Array.from(
-      { length: Math.min(Math.max(1, concurrency), uniqueIndexes.length) },
+      { length: Math.min(Math.max(1, concurrency), uniqueIds.length) },
       () => worker(),
     ),
   );
-
-  entries.sort((left, right) => left.sourceIdx - right.sourceIdx);
-  failedSourceIndexes.sort((left, right) => left - right);
-  return { entries, failedSourceIndexes };
+  entries.sort((left, right) => left.marketId.localeCompare(right.marketId));
+  failedMarketIds.sort();
+  return { entries, failedMarketIds };
 }
 
 export async function loadForumMarketIndexes(
   api: ForumMarketApi,
   options: {
     directory?: MarketDirectory;
-    sourceIndexes?: number[];
+    marketIds?: string[];
     concurrency?: number;
     onEntry?: (entry: ForumMarketIndexEntry) => void;
   } = {},
 ): Promise<ForumMarketLoadState & { directory: MarketDirectory }> {
   const directory = options.directory || (await api.getSources());
-  const sourceIndexes =
-    options.sourceIndexes || directory.sources.map((_, sourceIdx) => sourceIdx);
+  const marketIds =
+    options.marketIds || directory.sources.map(({ marketId }) => marketId);
   const state = await loadIndexes(
     directory,
-    sourceIndexes,
+    marketIds,
     api,
     options.concurrency ?? 3,
     options.onEntry,
@@ -131,110 +116,80 @@ export async function loadForumMarketIndexes(
   return { directory, ...state };
 }
 
-export async function resolveForumMarketReferences(
-  tokens: Array<ForumGameReferenceToken | ForumVersionToken | ForumMarketToken>,
-  api: ForumMarketApi,
-): Promise<{
+type ResolutionMaps = {
   markets: Map<string, ForumMarketReferenceResolution>;
   games: Map<string, ForumGameReferenceResolution>;
   versions: Map<string, ForumVersionReferenceResolution>;
-}> {
-  const marketsResult = new Map<string, ForumMarketReferenceResolution>();
-  const gamesResult = new Map<string, ForumGameReferenceResolution>();
-  const versionsResult = new Map<string, ForumVersionReferenceResolution>();
-  if (!tokens.length)
-    return {
-      markets: marketsResult,
-      games: gamesResult,
-      versions: versionsResult,
-    };
+};
+
+function setResolution(
+  token: ForumGameReferenceToken | ForumVersionToken | ForumMarketToken,
+  status: "missing" | "unavailable",
+  result: ResolutionMaps,
+): void {
+  if (token.type === "market") result.markets.set(token.marketId, { status });
+  if (token.type === "game") {
+    result.games.set(`${token.marketId}/${token.gameId}`, { status });
+  }
+  if (token.type === "version") {
+    result.versions.set(
+      `${token.marketId}/${token.gameId}/${token.version}`,
+      { status },
+    );
+  }
+}
+
+export async function resolveForumMarketReferences(
+  tokens: Array<ForumGameReferenceToken | ForumVersionToken | ForumMarketToken>,
+  api: ForumMarketApi,
+): Promise<ResolutionMaps> {
+  const result: ResolutionMaps = {
+    markets: new Map(),
+    games: new Map(),
+    versions: new Map(),
+  };
+  if (!tokens.length) return result;
 
   let directory: MarketDirectory;
   try {
     directory = await api.getSources();
   } catch {
-    for (const token of tokens) {
-      if (token.type === "market")
-        marketsResult.set(token.marketId, { status: "unavailable" });
-      if (token.type === "game")
-        gamesResult.set(`${token.marketId}/${token.gameId}`, {
-          status: "unavailable",
-        });
-      if (token.type === "version")
-        versionsResult.set(
-          `${token.marketId}/${token.gameId}/${token.version}`,
-          { status: "unavailable" },
-        );
-    }
-    return {
-      markets: marketsResult,
-      games: gamesResult,
-      versions: versionsResult,
-    };
+    for (const token of tokens) setResolution(token, "unavailable", result);
+    return result;
   }
 
-  const markets = sourceMap(directory);
-  const sourceIndexes = tokens
-    .map((token) => markets.get(token.marketId)?.sourceIdx)
-    .filter((value): value is number => value !== undefined);
-  const state = await loadIndexes(directory, sourceIndexes, api, 3);
-  const entries = new Map(
-    state.entries.map((entry) => [entry.source.marketId, entry]),
+  const sources = new Map(
+    directory.sources.map((source) => [source.marketId, source]),
   );
-  const failed = new Set(state.failedSourceIndexes);
+  const requestedMarketIds = tokens
+    .map(({ marketId }) => marketId)
+    .filter((marketId) => sources.has(marketId));
+  const state = await loadIndexes(directory, requestedMarketIds, api, 3);
+  const entries = new Map(state.entries.map((entry) => [entry.marketId, entry]));
+  const failed = new Set(state.failedMarketIds);
 
   for (const token of tokens) {
-    const market = markets.get(token.marketId);
-    if (!market) {
-      if (token.type === "market")
-        marketsResult.set(token.marketId, { status: "missing" });
-      if (token.type === "game")
-        gamesResult.set(`${token.marketId}/${token.gameId}`, {
-          status: "missing",
-        });
-      if (token.type === "version")
-        versionsResult.set(
-          `${token.marketId}/${token.gameId}/${token.version}`,
-          { status: "missing" },
-        );
+    if (!sources.has(token.marketId)) {
+      setResolution(token, "missing", result);
       continue;
     }
     const entry = entries.get(token.marketId);
-    if (!entry && failed.has(market.sourceIdx)) {
-      if (token.type === "market")
-        marketsResult.set(token.marketId, { status: "unavailable" });
-      if (token.type === "game")
-        gamesResult.set(`${token.marketId}/${token.gameId}`, {
-          status: "unavailable",
-        });
-      if (token.type === "version")
-        versionsResult.set(
-          `${token.marketId}/${token.gameId}/${token.version}`,
-          { status: "unavailable" },
-        );
+    if (!entry && failed.has(token.marketId)) {
+      setResolution(token, "unavailable", result);
       continue;
     }
     if (!entry) continue;
     if (token.type === "market") {
-      marketsResult.set(token.marketId, {
+      result.markets.set(token.marketId, {
         status: "resolved",
         marketId: token.marketId,
         marketName: entry.index.marketName,
-        sourceIdx: entry.sourceIdx,
       });
       continue;
     }
     const game = entry.index.games.find((item) => item.id === token.gameId);
     if (!game) {
-      if (token.type === "game")
-        gamesResult.set(`${token.marketId}/${token.gameId}`, {
-          status: "missing",
-        });
-      else
-        versionsResult.set(
-          `${token.marketId}/${token.gameId}/${token.version}`,
-          { status: "missing" },
-        );
+      setResolution(token, "missing", result);
       continue;
     }
     const resolved = {
@@ -242,27 +197,21 @@ export async function resolveForumMarketReferences(
       marketName: entry.index.marketName,
       gameId: token.gameId,
       gameName: game.name,
-      sourceIdx: entry.sourceIdx,
     };
-    if (token.type === "game")
-      gamesResult.set(`${token.marketId}/${token.gameId}`, {
+    if (token.type === "game") {
+      result.games.set(`${token.marketId}/${token.gameId}`, {
         status: "resolved",
         ...resolved,
       });
-    else if (game.versions.some((item) => item.version === token.version))
-      versionsResult.set(`${token.marketId}/${token.gameId}/${token.version}`, {
+    } else if (game.versions.some(({ version }) => version === token.version)) {
+      result.versions.set(`${token.marketId}/${token.gameId}/${token.version}`, {
         status: "resolved",
         ...resolved,
         version: token.version,
       });
-    else
-      versionsResult.set(`${token.marketId}/${token.gameId}/${token.version}`, {
-        status: "missing",
-      });
+    } else {
+      setResolution(token, "missing", result);
+    }
   }
-  return {
-    markets: marketsResult,
-    games: gamesResult,
-    versions: versionsResult,
-  };
+  return result;
 }

@@ -109,7 +109,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, nextTick } from "vue";
+import { ref, onMounted, computed, nextTick, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useMessage } from "naive-ui";
 import html2canvas from "html2canvas";
@@ -151,6 +151,7 @@ const {
   filteredItems: filteredGames,
   activateStaggerRendering,
   initializeManifestCache,
+  refreshManifestCache,
   handleVersionChange,
   getManifest,
 } = useGameListView(games, searchKeyword);
@@ -498,6 +499,11 @@ onMounted(async () => {
   activateStaggerRendering();
 });
 
+watch(
+  () => gameStore.games,
+  (manifests) => void refreshManifestCache(manifests),
+);
+
 const statCards = computed(() =>
   filteredGames.value.map((game) => {
     const keys = getStatKeys(game.id);
@@ -664,8 +670,10 @@ function getLabel(gameId: string, key: string): string {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 3px;
-  background: rgba(255, 255, 255, 0.72);
+  box-sizing: border-box;
+  border: 1px solid var(--bz-border-subtle);
+  border-radius: 6px;
+  background: var(--bz-bg-panel);
   backdrop-filter: blur(3px);
   z-index: 1;
 }

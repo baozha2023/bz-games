@@ -157,7 +157,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from "vue";
+import { ref, onMounted, onUnmounted, computed, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { ChevronDown, ChevronUp } from "@vicons/ionicons5";
 import { useGameStore } from "../stores/useGameStore";
@@ -194,6 +194,7 @@ const {
   filteredItems: filteredDisplayGames,
   activateStaggerRendering,
   initializeManifestCache,
+  refreshManifestCache,
   handleVersionChange,
   getManifest,
 } = useGameListView(displayGames, searchKeyword);
@@ -207,6 +208,11 @@ onMounted(async () => {
   });
   activateStaggerRendering();
 });
+
+watch(
+  () => gameStore.games,
+  (manifests) => void refreshManifestCache(manifests),
+);
 
 onUnmounted(() => {
   gameStore.markAchievementsAsSeen();

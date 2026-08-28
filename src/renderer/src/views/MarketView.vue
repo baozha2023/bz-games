@@ -605,8 +605,12 @@
         :label="item.label"
       >
         <template v-if="item.label === 'repository' && item.value !== '-'">
-          <n-button text type="info" @click="handleOpenRepo(item.value)">
-            {{ item.value }}
+          <n-button
+            text
+            type="info"
+            @click="handleOpenRepo(String(item.value))"
+          >
+            {{ String(item.value) }}
           </n-button>
         </template>
         <template v-else>
@@ -664,10 +668,16 @@ const router = useRouter();
 const settingsStore = useSettingsStore();
 const gameStore = useGameStore();
 
-const sourceIdx = computed(() => {
-  const idx = Number(route.params.sourceIdx);
-  return Number.isFinite(idx) ? idx : 0;
-});
+const marketId = computed(() => String(route.params.marketId || ""));
+
+watch(
+  () => settingsStore.settings?.language,
+  (language, previousLanguage) => {
+    if (language && previousLanguage && language !== previousLanguage) {
+      void loadIndex();
+    }
+  },
+);
 
 const isLoading = ref(false);
 const loadError = ref("");
@@ -714,14 +724,12 @@ let cleanupMarketEvent: (() => void) | undefined;
 const filteredGames = computed(() => {
   if (!marketIndex.value) return games.value;
   return searchMarketGames(
-    [{ sourceIdx: sourceIdx.value, index: marketIndex.value }],
+    [{ marketId: marketId.value, index: marketIndex.value }],
     keyword.value,
   ).map((result) => result.game);
 });
 
-const installPathLabel = computed(() => {
-  return settingsStore.settings?.gameStoragePath || "games/";
-});
+const installPathLabel = ref("games/");
 
 const updatedAtLabel = computed(() => {
   const time = formatDateTime(updatedAt.value);
@@ -1000,7 +1008,12 @@ function getVersionIntegrity(v: {
 
 function isSelectedVersionInvalid(game: MarketGame): boolean {
   const version = getSelectedVersionInfo(game);
-  return version ? !isVersionDownloadable(version) : false;
+  return version
+    ? !isVersionDownloadable(
+        version,
+        game.type === GameType.NetworkGame && !!version.gameManifest,
+      )
+    : false;
 }
 
 function friendlyLoadError(raw: string): string {
@@ -1062,7 +1075,7 @@ async function loadIndex(forceRefresh = false): Promise<void> {
   }
   try {
     const index = await window.electronAPI.market.getIndex(
-      sourceIdx.value,
+      marketId.value,
       forceRefresh,
     );
     marketIndex.value = index;
@@ -1146,7 +1159,7 @@ async function handleDownload(gameId: string, version: string): Promise<void> {
     const task = await window.electronAPI.market.downloadAndInstall(
       gameId,
       version,
-      sourceIdx.value,
+      marketId.value,
     );
     taskStates.value = {
       ...taskStates.value,
@@ -1158,6 +1171,8 @@ async function handleDownload(gameId: string, version: string): Promise<void> {
       message.error(t("market.platformIncompatible"));
     } else if (text.includes("already_installed")) {
       message.info(t("market.installed"));
+    } else if (text.includes("market_insufficient_disk_space")) {
+      message.error(t("market.insufficientDiskSpace"));
     } else {
       message.error(t("market.downloadFailed"));
     }
@@ -1236,6 +1251,15 @@ async function handleResume(taskId: string): Promise<void> {
 onMounted(async () => {
   await Promise.all([settingsStore.loadSettings(), gameStore.loadGames()]);
   try {
+    const libraries = await window.electronAPI.settings.getGameStoragePaths();
+    installPathLabel.value =
+      libraries.find((library) => library.isDefault)?.path ||
+      libraries[0]?.path ||
+      "games/";
+  } catch {
+    installPathLabel.value = "games/";
+  }
+  try {
     appVersion.value = await window.electronAPI.settings.getAppVersion();
   } catch {
     appVersion.value = "";
@@ -1280,6 +1304,14 @@ onMounted(async () => {
       task.status !== "interrupted"
     ) {
       const id = window.setTimeout(() => {
+        const current = taskStates.value[task.taskId];
+        if (
+          !current ||
+          current.updatedAt !== task.updatedAt ||
+          current.status !== task.status
+        ) {
+          return;
+        }
         const { [task.taskId]: _, ...rest } = taskStates.value;
         taskStates.value = rest;
         const idx = timeoutIds.indexOf(id);

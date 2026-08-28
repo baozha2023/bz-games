@@ -28,7 +28,7 @@ import { encodeBinaryEnvelope } from "../../../shared/binary-protocol";
 import { V1GameApiProtocol } from "./V1GameApiProtocol";
 import { V2GameApiProtocol } from "./V2GameApiProtocol";
 import { RoomConstants } from "../../../shared/RoomConstants";
-import type { GameManifest } from "../../../shared/game-manifest";
+import type { ResolvedGameManifest as GameManifest } from "../../../shared/game-manifest";
 import { logger } from "../../utils/logger";
 
 type BinaryRelayPayload = GameRelayPayload & { binaryData?: Buffer };

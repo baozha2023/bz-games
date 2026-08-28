@@ -8,7 +8,7 @@ import semver from "semver";
 import { path7za } from "7zip-bin";
 import { IPC } from "../../../shared/ipc-channels";
 import {
-  GameManifestSchema,
+  parseGameManifest,
   type GameManifest,
 } from "../../../shared/game-manifest";
 import {
@@ -16,13 +16,16 @@ import {
   isGitHubReleaseUrl,
   type DownloadTaskSnapshot,
   type FloatBallProgress,
+  type GameManifestOverride,
   type MarketErrorCode,
   type MarketDirectory,
-  type MarketGame,
-  type MarketGameVersion,
   type MarketIndex,
+  type RawMarketIndex,
+  type RawMarketGame,
+  type RawMarketGameVersion,
   type MarketTaskState,
   type MarketTaskStatus,
+  resolveMarketIndex,
 } from "../../../shared/types";
 import { GameLoader } from "../game/GameLoader";
 import { logger } from "../../utils/logger";
@@ -36,10 +39,16 @@ import {
 import {
   getMarketSourceKey,
   marketCatalogClient,
+  MarketCatalogError,
   type MarketCatalogClient,
   type OfficialMarketCatalog,
 } from "./MarketCatalogClient";
-import { migrationActivityGuard } from "../system/MigrationActivityGuard";
+import { backupActivityGuard } from "../backup/BackupActivityGuard";
+import { lifecycleOperationGuard } from "../system/LifecycleOperationGuard";
+import { storeService } from "../storage/StoreService";
+import { writeEncryptedGameManifestFile } from "../game/GameManifestFileService";
+import { MarketCacheCleaner } from "./MarketCacheCleaner";
+import { canTransitionMarketTask } from "./MarketTaskStateMachine";
 
 interface TaskMeta {
   gameId: string;
@@ -51,7 +60,6 @@ interface TaskMeta {
   size: number;
   downloadPath: string;
   archiveType: MarketArchiveType;
-  sourceIdx: number;
   marketId: string;
 }
 
@@ -114,6 +122,7 @@ function classifyErrorCode(error: unknown): MarketErrorCode {
     return "download";
   }
   if (
+    message.includes("market_cache_cleanup") ||
     message.includes("market_extract") ||
     message.includes("market_archive")
   ) {
@@ -128,29 +137,32 @@ async function ensureDir(dirPath: string): Promise<void> {
 
 async function getPartialFileSize(filePath: string): Promise<number> {
   try {
-    const stat = await fsp.stat(filePath);
-    return stat.size;
+    const stat = await fsp.lstat(filePath);
+    return stat.isFile() ? stat.size : 0;
   } catch {
     return 0;
   }
 }
 
-async function removeIfExists(targetPath: string): Promise<void> {
-  try {
-    fs.rmSync(targetPath, {
-      recursive: true,
-      force: true,
-      maxRetries: 10,
-      retryDelay: 500,
-    });
-  } catch (err: unknown) {
-    const code = (err as NodeJS.ErrnoException)?.code;
-    if (code === "ENOENT") return;
-    if (code === "EBUSY" || code === "EPERM") {
-      logger.warn(`[MarketService] could not remove ${targetPath}: ${code}`);
-      return;
-    }
-    throw err;
+async function assertDownloadSpaceAvailable(
+  downloadPath: string,
+  totalBytes: number,
+): Promise<void> {
+  if (totalBytes <= 0) return;
+  const downloadDirectory = path.dirname(downloadPath);
+  await ensureDir(downloadDirectory);
+  const partialBytes = Math.min(
+    totalBytes,
+    await getPartialFileSize(downloadPath),
+  );
+  const requiredBytes = BigInt(totalBytes - partialBytes);
+  if (requiredBytes === 0n) return;
+  const stats = await fsp.statfs(downloadDirectory);
+  const availableBytes = BigInt(stats.bavail) * BigInt(stats.bsize);
+  if (availableBytes < requiredBytes) {
+    throw new Error(
+      `market_insufficient_disk_space:${requiredBytes}:${availableBytes}`,
+    );
   }
 }
 
@@ -322,13 +334,14 @@ export class MarketService {
   ) {}
 
   private readonly tasks = new Map<string, ActiveTask>();
+  private readonly cacheCleaner = new MarketCacheCleaner();
   private officialCatalogCache: OfficialMarketCatalog | null = null;
   private officialCatalogInFlight: Promise<OfficialMarketCatalog> | null = null;
   private externalIndexCache = new Map<
     string,
-    { index: MarketIndex; at: number }
+    { index: RawMarketIndex; at: number }
   >();
-  private externalIndexInFlight = new Map<string, Promise<MarketIndex>>();
+  private externalIndexInFlight = new Map<string, Promise<RawMarketIndex>>();
   private cachedImages = new Map<string, { dataUrl: string; at: number }>();
   private resolvedAssets = new Map<
     string,
@@ -336,6 +349,19 @@ export class MarketService {
   >();
   private static readonly CACHE_TTL_MS = 60 * 60 * 1000;
   private static readonly IMAGE_FETCH_TIMEOUT_MS = 15_000;
+
+  hasRetainedTasks(): boolean {
+    return Array.from(this.tasks.values()).some((task) =>
+      [...ACTIVE_STATUSES, "paused", "interrupted"].includes(task.state.status),
+    );
+  }
+
+  clearMemoryCaches(): void {
+    this.officialCatalogCache = null;
+    this.externalIndexCache.clear();
+    this.cachedImages.clear();
+    this.resolvedAssets.clear();
+  }
 
   // ── Snapshot persistence ──
 
@@ -351,7 +377,15 @@ export class MarketService {
     try {
       const raw = await fsp.readFile(this.pendingTasksFile, "utf8");
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed)) {
+        return parsed.filter(
+          (snapshot): snapshot is DownloadTaskSnapshot =>
+            !!snapshot &&
+            typeof snapshot === "object" &&
+            typeof snapshot.marketId === "string" &&
+            snapshot.marketId.length > 0,
+        );
+      }
     } catch {
       /* file not found or corrupt */
     }
@@ -381,7 +415,7 @@ export class MarketService {
       gameId: meta.gameId,
       version: meta.version,
       gameName: meta.gameName,
-      sourceIdx: meta.sourceIdx,
+      marketId: meta.marketId,
       downloadUrl: meta.catalogDownloadUrl,
       sha256: meta.sha256,
       size: meta.size,
@@ -577,7 +611,7 @@ export class MarketService {
 
   private tickProgress(taskId: string, progress: number): void {
     const task = this.tasks.get(taskId);
-    if (!task) return;
+    if (!task || !ACTIVE_STATUSES.includes(task.state.status)) return;
     task.state = {
       ...task.state,
       progress: Math.max(task.state.progress, progress),
@@ -617,20 +651,30 @@ export class MarketService {
     return () => clearInterval(timer);
   }
 
-  /**
-   * The ONE AND ONLY method that mutates task state.
-   * Enforces valid transitions — silent no-op for invalid ones.
-   */
+  /** The only status mutation entry point. */
   private transition(
     taskId: string,
     status: MarketTaskStatus,
     extra?: Partial<MarketTaskState>,
   ): MarketTaskState | null {
     const task = this.tasks.get(taskId);
-    if (!task) return null;
+    if (!task) {
+      logger.error("[MarketService] Rejected transition for missing task", {
+        taskId,
+        next: status,
+      });
+      return null;
+    }
     const current = task.state.status;
 
-    if (TERMINAL_STATUSES.includes(current)) return null;
+    if (!canTransitionMarketTask(current, status)) {
+      logger.error("[MarketService] Rejected illegal task transition", {
+        taskId,
+        current,
+        next: status,
+      });
+      return null;
+    }
 
     task.state = {
       ...task.state,
@@ -656,7 +700,7 @@ export class MarketService {
       gameId: meta.gameId,
       version: meta.version,
       gameName: meta.gameName,
-      sourceIdx: meta.sourceIdx,
+      marketId: meta.marketId,
       status: "idle",
       progress: 0,
       ...initial,
@@ -671,8 +715,8 @@ export class MarketService {
 
   private startPipeline(
     taskId: string,
-    game: MarketGame,
-    targetVersion: MarketGameVersion,
+    game: RawMarketGame,
+    targetVersion: RawMarketGameVersion,
   ): void {
     const task = this.tasks.get(taskId);
     if (!task) return;
@@ -709,18 +753,19 @@ export class MarketService {
       this.clearTaskEmission(taskId);
       this.emitFloatBallProgress(true);
       await Promise.all([
-        removeIfExists(downloadPath).catch(() => undefined),
-        removeIfExists(extractRoot).catch(() => undefined),
+        this.cacheCleaner.reclaim(downloadPath),
+        this.cacheCleaner.reclaim(extractRoot),
       ]);
       return;
     }
 
     await Promise.all([
-      removeIfExists(downloadPath).catch(() => undefined),
-      removeIfExists(extractRoot).catch(() => undefined),
+      this.cacheCleaner.reclaim(downloadPath),
+      this.cacheCleaner.reclaim(extractRoot),
     ]);
 
     setTimeout(() => {
+      if (this.tasks.get(taskId) !== task) return;
       this.tasks.delete(taskId);
       this.clearTaskEmission(taskId);
       this.emitFloatBallProgress(true);
@@ -779,7 +824,10 @@ export class MarketService {
   }
 
   async resumeTask(taskId: string): Promise<MarketTaskState | null> {
-    if (migrationActivityGuard.isExporting()) {
+    if (
+      backupActivityGuard.isActive() ||
+      lifecycleOperationGuard.blocksNewActivity()
+    ) {
       throw new Error("migration_export_in_progress");
     }
     const snapshots = await this.loadSnapshots();
@@ -792,8 +840,8 @@ export class MarketService {
     }
 
     // Validate the snapshot is still valid
-    const index = await this.getIndex(snap.sourceIdx);
-    const game = index.games.find((item) => item.id === snap.gameId);
+    const rawIndex = await this.getRawIndex(snap.marketId, false);
+    const game = rawIndex.games.find((item) => item.id === snap.gameId);
     const targetVersion = game?.versions.find(
       (item) => item.version === snap.version,
     );
@@ -818,20 +866,30 @@ export class MarketService {
       throw new Error("market_platform_version_mismatch");
     }
 
+    const localizedIndex = resolveMarketIndex(
+      rawIndex,
+      storeService.getSettings().language,
+    );
+    const localizedGame = localizedIndex.games.find(
+      (item) => item.id === snap.gameId,
+    )!;
     const meta: TaskMeta = {
       gameId: game.id,
       version: targetVersion.version,
-      gameName: game.name,
+      gameName: localizedGame.name,
       downloadUrl: resolveMarketDownloadUrl(snap.downloadUrl),
       catalogDownloadUrl: snap.downloadUrl,
       sha256: snap.sha256,
       size: snap.size,
       downloadPath: snap.downloadPath,
       archiveType: snap.archiveType,
-      sourceIdx: snap.sourceIdx,
-      marketId: index.marketId,
+      marketId: rawIndex.marketId,
     };
-    if (migrationActivityGuard.isExporting()) {
+    await assertDownloadSpaceAvailable(meta.downloadPath, meta.size);
+    if (
+      backupActivityGuard.isActive() ||
+      lifecycleOperationGuard.blocksNewActivity()
+    ) {
       throw new Error("migration_export_in_progress");
     }
 
@@ -856,7 +914,7 @@ export class MarketService {
         gameId: snap.gameId,
         version: snap.version,
         gameName: snap.gameName || snap.gameId,
-        sourceIdx: snap.sourceIdx,
+        marketId: snap.marketId,
         status: "interrupted",
         progress:
           snap.size > 0
@@ -878,8 +936,7 @@ export class MarketService {
         size: snap.size,
         downloadPath: snap.downloadPath,
         archiveType: snap.archiveType,
-        sourceIdx: snap.sourceIdx,
-        marketId: "",
+        marketId: snap.marketId,
       };
       const abort = new AbortController();
       this.tasks.set(snap.taskId, { state, meta, abort });
@@ -918,9 +975,12 @@ export class MarketService {
   async downloadAndInstall(
     gameId: string,
     version: string,
-    sourceIdx: number,
+    marketId: string,
   ): Promise<MarketTaskState> {
-    if (migrationActivityGuard.isExporting()) {
+    if (
+      backupActivityGuard.isActive() ||
+      lifecycleOperationGuard.blocksNewActivity()
+    ) {
       throw new Error("migration_export_in_progress");
     }
     const taskId = toTaskId(gameId, version);
@@ -932,8 +992,8 @@ export class MarketService {
       return existing;
     }
 
-    const index = await this.getIndex(sourceIdx);
-    const game = index.games.find((item) => item.id === gameId);
+    const rawIndex = await this.getRawIndex(marketId, false);
+    const game = rawIndex.games.find((item) => item.id === gameId);
     const targetVersion = game?.versions.find(
       (item) => item.version === version,
     );
@@ -954,10 +1014,16 @@ export class MarketService {
     }
 
     const cacheRoot = path.join(app.getPath("userData"), ".market-cache");
-    const resolvedDownloadUrl = resolveMarketDownloadUrl(
-      targetVersion.downloadUrl,
-    );
-    const archiveType = inferArchiveType(resolvedDownloadUrl);
+    const manifestOnly =
+      game.type === GameType.NetworkGame &&
+      !targetVersion.downloadUrl &&
+      !!targetVersion.gameManifest;
+    const resolvedDownloadUrl = targetVersion.downloadUrl
+      ? resolveMarketDownloadUrl(targetVersion.downloadUrl)
+      : "";
+    const archiveType = manifestOnly
+      ? "zip"
+      : inferArchiveType(resolvedDownloadUrl);
     const downloadPath = path.join(
       cacheRoot,
       "downloads",
@@ -965,24 +1031,27 @@ export class MarketService {
     );
 
     let sha256 = targetVersion.sha256;
-    let size = targetVersion.size;
+    let size = manifestOnly ? 0 : targetVersion.size;
+    const catalogDownloadUrl = targetVersion.downloadUrl;
 
-    if (!sha256 || size == null) {
-      const cached = this.resolvedAssets.get(targetVersion.downloadUrl);
+    if (!manifestOnly && catalogDownloadUrl && (!sha256 || size == null)) {
+      const cached = this.resolvedAssets.get(catalogDownloadUrl);
       if (cached && Date.now() - cached.at < MarketService.CACHE_TTL_MS) {
         sha256 = sha256 ?? cached.sha256;
         size = size ?? cached.size;
       }
     }
 
-    const isGitHub = isGitHubReleaseUrl(targetVersion.downloadUrl);
+    const isGitHub = catalogDownloadUrl
+      ? isGitHubReleaseUrl(catalogDownloadUrl)
+      : false;
 
     if (size == null && isGitHub) {
       try {
-        const info = await resolveGitHubAssetInfo(targetVersion.downloadUrl);
+        const info = await resolveGitHubAssetInfo(catalogDownloadUrl!);
         size = info.size;
         sha256 = sha256 ?? info.sha256;
-        this.resolvedAssets.set(targetVersion.downloadUrl, {
+        this.resolvedAssets.set(catalogDownloadUrl!, {
           sha256: info.sha256,
           size: info.size,
           at: Date.now(),
@@ -996,20 +1065,32 @@ export class MarketService {
       throw new Error("market_missing_size");
     }
 
+    const localizedIndex = resolveMarketIndex(
+      rawIndex,
+      storeService.getSettings().language,
+    );
+    const localizedGame = localizedIndex.games.find(
+      (item) => item.id === gameId,
+    )!;
     const meta: TaskMeta = {
       gameId: game.id,
       version: targetVersion.version,
-      gameName: game.name,
+      gameName: localizedGame.name,
       downloadUrl: resolvedDownloadUrl,
-      catalogDownloadUrl: targetVersion.downloadUrl,
+      catalogDownloadUrl: catalogDownloadUrl || "",
       sha256,
       size,
       downloadPath,
       archiveType,
-      sourceIdx,
-      marketId: index.marketId,
+      marketId: rawIndex.marketId,
     };
-    if (migrationActivityGuard.isExporting()) {
+    if (!manifestOnly) {
+      await assertDownloadSpaceAvailable(downloadPath, size);
+    }
+    if (
+      backupActivityGuard.isActive() ||
+      lifecycleOperationGuard.blocksNewActivity()
+    ) {
       throw new Error("migration_export_in_progress");
     }
     const state = this.startTask(taskId, meta);
@@ -1021,9 +1102,14 @@ export class MarketService {
     return Date.now() - timestamp < MarketService.CACHE_TTL_MS;
   }
 
-  private pruneExternalIndexCache(directory: MarketDirectory): void {
+  private pruneExternalIndexCache(
+    directory: MarketDirectory,
+    officialMarketId: string,
+  ): void {
     const activeKeys = new Set(
-      directory.sources.slice(1).map(getMarketSourceKey),
+      directory.sources
+        .filter(({ marketId }) => marketId !== officialMarketId)
+        .map(getMarketSourceKey),
     );
     for (const key of this.externalIndexCache.keys()) {
       if (!activeKeys.has(key)) this.externalIndexCache.delete(key);
@@ -1047,7 +1133,7 @@ export class MarketService {
     try {
       const catalog = await request;
       this.officialCatalogCache = catalog;
-      this.pruneExternalIndexCache(catalog.directory);
+      this.pruneExternalIndexCache(catalog.directory, catalog.index.marketId);
       return catalog;
     } finally {
       if (this.officialCatalogInFlight === request) {
@@ -1058,23 +1144,62 @@ export class MarketService {
 
   async getSources(forceRefresh = false): Promise<MarketDirectory> {
     if (forceRefresh) this.cachedImages.clear();
-    return (await this.getOfficialCatalog(forceRefresh)).directory;
+    const catalog = await this.getOfficialCatalog(forceRefresh);
+    const checks = await Promise.all(
+      catalog.directory.sources.map(async (source) => {
+        if (source.marketId === catalog.index.marketId) return source;
+        try {
+          await this.getRawExternalIndex(source, forceRefresh);
+          return source;
+        } catch (error) {
+          if (
+            error instanceof MarketCatalogError &&
+            ["schema", "json", "business"].includes(error.kind)
+          ) {
+            logger.warn(
+              `[MarketService] Hiding incompatible market ${source.marketId}`,
+              { kind: error.kind },
+            );
+            return null;
+          }
+          return source;
+        }
+      }),
+    );
+    return {
+      ...catalog.directory,
+      sources: checks.filter((source) => source !== null),
+    };
   }
 
-  async getIndex(
-    sourceIdx: number,
-    forceRefresh = false,
-  ): Promise<MarketIndex> {
-    if (!Number.isInteger(sourceIdx) || sourceIdx < 0) {
+  async getIndex(marketId: string, forceRefresh = false): Promise<MarketIndex> {
+    const rawIndex = await this.getRawIndex(marketId, forceRefresh);
+    return resolveMarketIndex(rawIndex, storeService.getSettings().language);
+  }
+
+  private async getRawIndex(
+    marketId: string,
+    forceRefresh: boolean,
+  ): Promise<RawMarketIndex> {
+    if (!marketId || typeof marketId !== "string") {
       throw new Error("market_source_not_found");
     }
     if (forceRefresh) this.cachedImages.clear();
 
     const catalog = await this.getOfficialCatalog(forceRefresh);
-    const source = catalog.directory.sources[sourceIdx];
+    const source = catalog.directory.sources.find(
+      (candidate) => candidate.marketId === marketId,
+    );
     if (!source) throw new Error("market_source_not_found");
-    if (sourceIdx === 0) return catalog.index;
+    return source.marketId === catalog.index.marketId
+      ? catalog.index
+      : await this.getRawExternalIndex(source, forceRefresh);
+  }
 
+  private async getRawExternalIndex(
+    source: MarketDirectory["sources"][number],
+    forceRefresh: boolean,
+  ): Promise<RawMarketIndex> {
     const key = getMarketSourceKey(source);
     const cached = this.externalIndexCache.get(key);
     if (!forceRefresh && cached && this.isFresh(cached.at)) {
@@ -1088,8 +1213,16 @@ export class MarketService {
     try {
       const index = await request;
       if (index.marketId !== source.marketId) {
-        throw new Error(
-          `market_id_mismatch:expected=${source.marketId};actual=${index.marketId}`,
+        throw new MarketCatalogError(
+          "business",
+          "github",
+          source.repository,
+          undefined,
+          {
+            cause: new Error(
+              `market_id_mismatch:expected=${source.marketId};actual=${index.marketId}`,
+            ),
+          },
         );
       }
       const isCurrentSource = this.officialCatalogCache?.directory.sources
@@ -1150,8 +1283,8 @@ export class MarketService {
 
   private async runPipeline(
     taskId: string,
-    game: MarketGame,
-    targetVersion: MarketGameVersion,
+    game: RawMarketGame,
+    targetVersion: RawMarketGameVersion,
     signal: AbortSignal,
   ): Promise<void> {
     const task = this.tasks.get(taskId);
@@ -1168,9 +1301,31 @@ export class MarketService {
     await ensureDir(path.dirname(meta.downloadPath));
     await ensureDir(path.dirname(extractRoot));
 
+    if (!meta.downloadUrl) {
+      await this.cacheCleaner.prepare(extractRoot, "extract_preflight");
+      await ensureDir(extractRoot);
+      signal.throwIfAborted();
+      await this.installGame(
+        taskId,
+        game,
+        targetVersion,
+        extractRoot,
+        meta.marketId,
+        signal,
+      );
+      this.transition(taskId, "completed", { progress: 100 });
+      this.finalize(taskId);
+      return;
+    }
+
     const partialSize = await getPartialFileSize(meta.downloadPath);
-    if (partialSize === 0) await removeIfExists(meta.downloadPath);
-    await removeIfExists(extractRoot);
+    if (partialSize === 0) {
+      await this.cacheCleaner.prepare(
+        meta.downloadPath,
+        "download_preflight",
+      );
+    }
+    await this.cacheCleaner.prepare(extractRoot, "extract_preflight");
 
     await this.downloadArchive(taskId, meta, signal, partialSize);
     signal.throwIfAborted();
@@ -1224,9 +1379,11 @@ export class MarketService {
     });
 
     const response = await fetch(meta.downloadUrl, { signal, headers });
-    if (!response.ok || !response.body) {
+    if (!response.ok) {
+      await response.body?.cancel().catch(() => undefined);
       throw new Error(`market_download_request_failed:${response.status}`);
     }
+    if (!response.body) throw new Error("market_download_response_empty");
 
     let received: number;
     let writer: fs.WriteStream;
@@ -1236,7 +1393,12 @@ export class MarketService {
       received = partialSize;
     } else if (response.status === 200) {
       if (isResuming) {
-        await removeIfExists(meta.downloadPath);
+        try {
+          await this.cacheCleaner.prepare(meta.downloadPath, "resume_restart");
+        } catch (error: unknown) {
+          await response.body.cancel().catch(() => undefined);
+          throw error;
+        }
         this.transition(taskId, "downloading", {
           progress: 0,
           bytesReceived: 0,
@@ -1245,6 +1407,7 @@ export class MarketService {
       writer = fs.createWriteStream(meta.downloadPath);
       received = 0;
     } else {
+      await response.body.cancel().catch(() => undefined);
       throw new Error(`market_download_unexpected_status:${response.status}`);
     }
 
@@ -1271,6 +1434,10 @@ export class MarketService {
             if (done) break;
             if (!value) continue;
             received += value.byteLength;
+            if (meta.size > 0 && received > meta.size) {
+              await reader.cancel();
+              throw new Error("market_download_size_mismatch");
+            }
             const buf = Buffer.from(value);
             if (!writer.write(buf)) {
               await new Promise<void>((r) => writer.once("drain", r));
@@ -1289,6 +1456,7 @@ export class MarketService {
             resolve();
           });
         } catch (error) {
+          writer.destroy();
           settleReject(error);
         }
       };
@@ -1347,12 +1515,11 @@ export class MarketService {
   }
 
   private buildManifestFromMarket(
-    game: MarketGame,
-    targetVersion: MarketGameVersion,
+    game: RawMarketGame,
+    targetVersion: RawMarketGameVersion,
     importDir: string,
   ): GameManifest {
     const gm = targetVersion.gameManifest!;
-
     const entry =
       gm.entry ||
       (() => {
@@ -1371,41 +1538,123 @@ export class MarketService {
     const needsMultiplayer =
       type === GameType.Multiplayer || type === GameType.SingleMultiple;
 
-    return GameManifestSchema.parse({
+    if ("manifestVersion" in gm && gm.manifestVersion === 2) {
+      const v2 = gm as Extract<GameManifestOverride, { manifestVersion: 2 }>;
+      const marketLocales = Object.keys(game.localizations);
+      const manifestLocales = Object.keys(v2.localizations ?? {});
+      if (manifestLocales.some((locale) => !game.localizations[locale])) {
+        throw new Error("market_manifest_locale_mismatch");
+      }
+      return parseGameManifest({
+        manifestVersion: 2,
+        id: game.id,
+        version: targetVersion.version,
+        defaultLocale: v2.defaultLocale || game.defaultLocale,
+        localizations: Object.fromEntries(
+          marketLocales.map((locale) => {
+            const localization = game.localizations[locale];
+            const manifestLocalization = v2.localizations?.[locale];
+            return [
+              locale,
+              {
+                name: manifestLocalization?.name || localization.name,
+                description:
+                  manifestLocalization?.description || localization.summary,
+                achievements: manifestLocalization?.achievements ?? {},
+                statistics: manifestLocalization?.statistics ?? {},
+              },
+            ];
+          }),
+        ),
+        author: v2.author || game.author,
+        author_url:
+          v2.author_url !== undefined ? v2.author_url : game.author_url,
+        platformVersion: v2.platformVersion || targetVersion.platformVersion,
+        entry,
+        web_url: v2.web_url,
+        icon: v2.icon,
+        cover: v2.cover,
+        video: v2.video,
+        encryptLocalStorage: v2.encryptLocalStorage,
+        type,
+        statistics: v2.statistics ?? [],
+        multiplayer:
+          v2.multiplayer ||
+          (needsMultiplayer && game.minPlayers != null
+            ? {
+                minPlayers: game.minPlayers,
+                maxPlayers: game.maxPlayers || game.minPlayers,
+              }
+            : undefined),
+        args: v2.args,
+        env: v2.env,
+        windowedFullscreen: v2.windowedFullscreen,
+        achievements: v2.achievements ?? [],
+      });
+    }
+
+    const v1 = gm as Exclude<GameManifestOverride, { manifestVersion: 2 }>;
+    const defaultLocalization = game.localizations[game.defaultLocale];
+    return parseGameManifest({
       id: game.id,
-      name: gm.name || game.name,
+      name: v1.name || defaultLocalization.name,
       version: targetVersion.version,
-      description: gm.description || game.summary,
-      author: gm.author || game.author,
-      author_url: gm.author_url !== undefined ? gm.author_url : game.author_url,
-      platformVersion: gm.platformVersion || targetVersion.platformVersion,
+      description: v1.description || defaultLocalization.summary,
+      author: v1.author || game.author,
+      author_url: v1.author_url !== undefined ? v1.author_url : game.author_url,
+      platformVersion: v1.platformVersion || targetVersion.platformVersion,
       entry,
-      web_url: gm.web_url,
-      icon: gm.icon,
-      cover: gm.cover,
-      video: gm.video,
-      encryptLocalStorage: gm.encryptLocalStorage,
+      web_url: v1.web_url,
+      icon: v1.icon,
+      cover: v1.cover,
+      video: v1.video,
+      encryptLocalStorage: v1.encryptLocalStorage,
       type,
-      statistics: gm.statistics,
+      statistics: v1.statistics,
       multiplayer:
-        gm.multiplayer ||
+        v1.multiplayer ||
         (needsMultiplayer && game.minPlayers != null
           ? {
               minPlayers: game.minPlayers,
               maxPlayers: game.maxPlayers || game.minPlayers,
             }
           : undefined),
-      args: gm.args,
-      env: gm.env,
-      windowedFullscreen: gm.windowedFullscreen,
-      achievements: gm.achievements,
+      args: v1.args,
+      env: v1.env,
+      windowedFullscreen: v1.windowedFullscreen,
+      achievements: v1.achievements,
     });
+  }
+
+  private async prepareManifestForInstall(
+    game: RawMarketGame,
+    targetVersion: RawMarketGameVersion,
+    importDir: string,
+  ): Promise<GameManifest> {
+    const manifestPath = path.join(importDir, "game.json");
+    if (targetVersion.gameManifest) {
+      await fsp.rm(manifestPath, { force: true });
+      const manifest = this.buildManifestFromMarket(
+        game,
+        targetVersion,
+        importDir,
+      );
+      await fsp.writeFile(
+        manifestPath,
+        JSON.stringify(manifest, null, 2),
+        "utf8",
+      );
+      return manifest;
+    }
+    return parseGameManifest(
+      JSON.parse(await fsp.readFile(manifestPath, "utf8")),
+    );
   }
 
   private async installGame(
     taskId: string,
-    game: MarketGame,
-    targetVersion: MarketGameVersion,
+    game: RawMarketGame,
+    targetVersion: RawMarketGameVersion,
     extractRoot: string,
     marketId: string,
     signal: AbortSignal,
@@ -1423,21 +1672,13 @@ export class MarketService {
           throw new Error("market_manifest_missing");
         }
         importDir = await resolveImportRoot(extractRoot);
-        const builtManifest = this.buildManifestFromMarket(
-          game,
-          targetVersion,
-          importDir,
-        );
-        await fsp.writeFile(
-          path.join(importDir, "game.json"),
-          JSON.stringify(builtManifest, null, 2),
-          "utf8",
-        );
       }
 
       const manifestPath = path.join(importDir, "game.json");
-      const manifest = GameManifestSchema.parse(
-        JSON.parse(await fsp.readFile(manifestPath, "utf8")),
+      const manifest = await this.prepareManifestForInstall(
+        game,
+        targetVersion,
+        importDir,
       );
       if (manifest.id !== game.id) {
         throw new Error("market_manifest_mismatch");
@@ -1464,6 +1705,8 @@ export class MarketService {
       if (!manifestVersionOk) {
         throw new Error("market_platform_version_manifest_mismatch");
       }
+
+      writeEncryptedGameManifestFile(manifestPath, manifest);
 
       this.transition(taskId, "installing", { installStarted: true });
       const result = await GameLoader.loadGameFromPath(

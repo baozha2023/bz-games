@@ -1,14 +1,18 @@
-import { dialog, app } from "electron";
+import { app } from "electron";
 import fs from "fs";
 import fsp from "fs/promises";
 import path from "path";
 import crypto from "crypto";
 import semver from "semver";
 import {
-  GameManifestSchema,
+  GameManifestV2Schema,
   compareGameVersionsDescending,
+  parseGameManifest,
+  resolveGameManifest,
   type GameManifest,
+  type ResolvedGameManifest,
 } from "../../../shared/game-manifest";
+import type { SupportedLocale } from "../../../shared/localization";
 import { storeService } from "../storage/StoreService";
 import {
   GameType,
@@ -80,7 +84,8 @@ type EntryCandidate = {
 const IMPORT_TASK_MARKER = ".bz-import-task";
 
 export class GameLoader {
-  private static cache: GameManifest[] | null = null;
+  private static cache: ResolvedGameManifest[] | null = null;
+  private static cacheLocale: SupportedLocale | null = null;
   private static finalizationChain: Promise<void> = Promise.resolve();
 
   private static resolveImportDirectory(sourcePath: string): string | null {
@@ -100,25 +105,6 @@ export class GameLoader {
     return path.dirname(normalized);
   }
 
-  static async loadGameFromDialog(): Promise<{
-    success: boolean;
-    manifest?: GameManifest;
-    error?: string;
-    params?: Record<string, any>;
-  }> {
-    const { canceled, filePaths } = await dialog.showOpenDialog({
-      title: "Select Game Directory",
-      properties: ["openDirectory"],
-      filters: [],
-    });
-
-    if (canceled || filePaths.length === 0) {
-      return { success: false, error: "canceled" };
-    }
-
-    return this.loadGameFromPath(filePaths[0]);
-  }
-
   static async loadGameFromPath(
     sourcePath: string,
     provenance: GameInstallProvenance = {
@@ -128,7 +114,7 @@ export class GameLoader {
     options: GameImportExecutionOptions = {},
   ): Promise<{
     success: boolean;
-    manifest?: GameManifest;
+    manifest?: ResolvedGameManifest;
     error?: string;
     params?: Record<string, any>;
   }> {
@@ -156,7 +142,10 @@ export class GameLoader {
       );
 
       this.cache = null;
-      return { success: true, manifest };
+      return {
+        success: true,
+        manifest: this.resolveManifest(manifest),
+      };
     } catch (err: any) {
       if (err.code) {
         return { success: false, error: err.code, params: err.params };
@@ -207,7 +196,7 @@ export class GameLoader {
     options: GameImportExecutionOptions = {},
   ): Promise<{
     success: boolean;
-    manifest?: GameManifest;
+    manifest?: ResolvedGameManifest;
     error?: string;
     params?: Record<string, any>;
   }> {
@@ -238,7 +227,10 @@ export class GameLoader {
       );
 
       this.cache = null;
-      return { success: true, manifest };
+      return {
+        success: true,
+        manifest: this.resolveManifest(manifest),
+      };
     } catch (err: any) {
       if (err.code) {
         return { success: false, error: err.code, params: err.params };
@@ -532,11 +524,20 @@ export class GameLoader {
     ) {
       throw { code: "playersInvalid" };
     }
-    const parsed = GameManifestSchema.parse({
+    const locale = storeService.getSettings().language;
+    const parsed = GameManifestV2Schema.parse({
+      manifestVersion: 2,
       id: draft.id.trim(),
-      name: draft.name.trim(),
       version: draft.version.trim(),
-      description: draft.description?.trim() || "",
+      defaultLocale: locale,
+      localizations: {
+        [locale]: {
+          name: draft.name.trim(),
+          description: draft.description?.trim() || "",
+          achievements: {},
+          statistics: {},
+        },
+      },
       author: draft.author.trim(),
       platformVersion: app.getVersion(),
       entry,
@@ -544,6 +545,8 @@ export class GameLoader {
       icon: draft.icon?.trim() || undefined,
       cover: draft.cover?.trim() || undefined,
       type: draft.type,
+      achievements: [],
+      statistics: [],
       multiplayer: needsMultiplayerConfig
         ? {
             minPlayers,
@@ -644,7 +647,26 @@ export class GameLoader {
   }
 
   private static loadManifest(jsonPath: string): GameManifest {
-    return readGameManifestFile(jsonPath);
+    try {
+      return readGameManifestFile(jsonPath);
+    } catch (error) {
+      if (
+        !(error instanceof GameManifestFileError) ||
+        error.code !== "manifestPlaintextUnsupported"
+      ) {
+        throw error;
+      }
+    }
+    // 导入源目录按契约使用明文清单（游戏包 game.json 始终为明文）；
+    // 此处仅解析不改写源文件，落盘加密由 installGameFiles 统一完成，
+    // 游戏库内运行时读取仍只认密文（readGameManifestFile 保持严格）。
+    return parseGameManifest(JSON.parse(fs.readFileSync(jsonPath, "utf8")));
+  }
+
+  private static resolveManifest(
+    manifest: GameManifest,
+  ): ResolvedGameManifest {
+    return resolveGameManifest(manifest, storeService.getSettings().language);
   }
 
   private static async installGameFiles(
@@ -652,7 +674,8 @@ export class GameLoader {
     manifest: GameManifest,
     options: GameImportExecutionOptions,
   ): Promise<string> {
-    const gamesDir = options.storagePath || storeService.getGameStoragePath();
+    const gamesDir =
+      options.storagePath || storeService.getDefaultGameStoragePath();
     if (!fs.existsSync(gamesDir)) {
       fs.mkdirSync(gamesDir, { recursive: true });
     }
@@ -827,11 +850,12 @@ export class GameLoader {
   ): Promise<void> {
     const games = await storeService.getGames();
     let record = games.find((g) => g.id === manifest.id);
+    const location = storeService.getGameVersionLocation(targetPath);
 
     if (manifest.type === GameType.NetworkGame) {
       const versionRecord = {
         version: manifest.version,
-        path: targetPath,
+        ...location,
         addedAt: Date.now(),
         ...provenance,
         stats: {},
@@ -859,14 +883,14 @@ export class GameLoader {
         // Update path and addedAt for existing version
         record.versions = record.versions.map((v) =>
           v.version === manifest.version
-            ? { ...v, path: targetPath, addedAt: Date.now(), ...provenance }
+            ? { ...v, ...location, addedAt: Date.now(), ...provenance }
             : v,
         );
       } else {
         // Add new version
         record.versions.push({
           version: manifest.version,
-          path: targetPath,
+          ...location,
           addedAt: Date.now(),
           ...provenance,
           stats: {},
@@ -886,7 +910,7 @@ export class GameLoader {
         versions: [
           {
             version: manifest.version,
-            path: targetPath,
+            ...location,
             addedAt: Date.now(),
             ...provenance,
             stats: {},
@@ -902,14 +926,15 @@ export class GameLoader {
     await storeService.addGame(record);
   }
 
-  static async getAllGames(): Promise<GameManifest[]> {
+  static async getAllGames(): Promise<ResolvedGameManifest[]> {
     // Always scan and sync with disk to ensure paths are correct (portability)
     await this.scanAndSyncGames();
 
-    if (this.cache) return this.cache;
+    const locale = storeService.getSettings().language;
+    if (this.cache && this.cacheLocale === locale) return this.cache;
 
     const records = await storeService.getGames();
-    const manifests: GameManifest[] = [];
+    const manifests: ResolvedGameManifest[] = [];
 
     for (const record of records) {
       // Find the path for the latest version
@@ -917,12 +942,13 @@ export class GameLoader {
         (v) => v.version === record.latestVersion,
       );
       if (latest) {
-        const jsonPath = path.join(latest.path, "game.json");
+        const jsonPath = path.join(
+          storeService.resolveGameVersionPath(latest),
+          "game.json",
+        );
         if (fs.existsSync(jsonPath)) {
           try {
-            manifests.push(
-              readGameManifestFile(jsonPath, { migratePlaintext: true }),
-            );
+            manifests.push(resolveGameManifest(readGameManifestFile(jsonPath), locale));
           } catch (e) {
             logger.warn(`Failed to parse ${jsonPath}`, e);
           }
@@ -930,13 +956,17 @@ export class GameLoader {
       }
     }
     this.cache = manifests;
+    this.cacheLocale = locale;
     return manifests;
   }
 
   private static async scanAndSyncGames(): Promise<void> {
     const scanRoots = storeService.getGameStorageRoots();
     const records = await storeService.getGames();
-    const diskGames = new Map<string, Map<string, string>>();
+    const diskGames = new Map<
+      string,
+      Map<string, Pick<GameVersion, "libraryId" | "relativePath">>
+    >();
 
     for (const root of scanRoots) {
       if (!fs.existsSync(root)) continue;
@@ -962,7 +992,10 @@ export class GameLoader {
             }
             const versionMap = diskGames.get(gameId)!;
             if (!versionMap.has(version)) {
-              versionMap.set(version, versionPath);
+              versionMap.set(
+                version,
+                storeService.getGameVersionLocation(versionPath),
+              );
             }
           }
         }
@@ -987,7 +1020,7 @@ export class GameLoader {
         .filter((v) => diskVersions.has(v.version))
         .map((v) => ({
           ...v,
-          path: diskVersions.get(v.version)!,
+          ...diskVersions.get(v.version)!,
         }));
 
       for (const v of validVersions) {
@@ -995,10 +1028,10 @@ export class GameLoader {
       }
 
       // Add any new versions found on disk
-      for (const [ver, versionPath] of diskVersions.entries()) {
+      for (const [ver, location] of diskVersions.entries()) {
         validVersions.push({
           version: ver,
-          path: versionPath,
+          ...location,
           addedAt: Date.now(),
           installSource: "manual",
           marketId: null,
@@ -1025,9 +1058,9 @@ export class GameLoader {
     // 3. Add completely new games found on disk
     for (const [gameId, versions] of diskGames.entries()) {
       const gameVersions: GameVersion[] = Array.from(versions.entries()).map(
-        ([version, versionPath]) => ({
+        ([version, location]) => ({
           version,
-          path: versionPath,
+          ...location,
           addedAt: Date.now(),
           installSource: "manual",
           marketId: null,
@@ -1051,7 +1084,7 @@ export class GameLoader {
     }
 
     // Persist the current on-disk presence set. Missing entities remain in SQLite
-    // with is_present=0 and can be reactivated when discovered again.
+    // with lifecycle_state='removed' and can be reactivated when discovered again.
     await storeService.saveGames(newRecords);
     this.cache = null; // Invalidate cache
   }
@@ -1080,26 +1113,14 @@ export class GameLoader {
 
     if (!versionRecord) return null;
 
-    // Check if stored path exists
-    if (fs.existsSync(versionRecord.path)) {
-      return versionRecord.path;
-    }
-
-    const fallbackRoots = storeService.getGameStorageRoots();
-    for (const root of fallbackRoots) {
-      const standardPath = path.join(root, gameId, targetVersion);
-      if (fs.existsSync(standardPath)) {
-        return standardPath;
-      }
-    }
-
-    return null;
+    const versionPath = storeService.resolveGameVersionPath(versionRecord);
+    return fs.existsSync(versionPath) ? versionPath : null;
   }
 
   static async getManifest(
     gameId: string,
     version?: string,
-  ): Promise<GameManifest | null> {
+  ): Promise<ResolvedGameManifest | null> {
     const versionPath = await this.getVersionPath(gameId, version);
     if (!versionPath) return null;
 
@@ -1107,7 +1128,7 @@ export class GameLoader {
     if (!fs.existsSync(jsonPath)) return null;
 
     try {
-      return readGameManifestFile(jsonPath, { migratePlaintext: true });
+      return this.resolveManifest(readGameManifestFile(jsonPath));
     } catch (e) {
       logger.warn(
         `Failed to parse manifest for ${gameId} version ${version || "latest"}`,

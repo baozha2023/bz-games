@@ -61,7 +61,7 @@
         v-for="source in displayedSources"
         :key="source.marketId"
         class="market-source-grid-item"
-        @click="enterMarket(source.originalIndex)"
+        @click="enterMarket(source.marketId)"
       >
         <div class="source-card-shell">
           <n-card hoverable size="small" embedded content-style="padding: 0;">
@@ -137,16 +137,12 @@ import type { MarketSource } from "../../../shared/types";
 import { searchMarketSources } from "../../../shared/market-search";
 import CachedImg from "../components/CachedImg.vue";
 
-interface DisplaySource extends MarketSource {
-  originalIndex: number;
-}
-
 const { t } = useI18n();
 const router = useRouter();
 
 const isLoading = ref(false);
 const loadError = ref("");
-const sources = ref<DisplaySource[]>([]);
+const sources = ref<MarketSource[]>([]);
 const keyword = ref("");
 const isSearchExpanded = ref(false);
 
@@ -160,13 +156,7 @@ async function openGameHosting() {
 }
 
 const displayedSources = computed(() => {
-  const sortedSources = searchMarketSources(sources.value, keyword.value);
-  return sortedSources.map((source) => ({
-    ...source,
-    originalIndex: sources.value.findIndex(
-      (item) => item.marketId === source.marketId,
-    ),
-  }));
+  return searchMarketSources(sources.value, keyword.value);
 });
 
 function formatTime(iso: string): string {
@@ -195,9 +185,9 @@ async function loadSources(forceRefresh = false): Promise<void> {
   loadError.value = "";
   try {
     const directory = await window.electronAPI.market.getSources(forceRefresh);
-    sources.value = directory.sources
-      .map((s, i) => ({ ...s, originalIndex: i }))
-      .filter((s) => s.visibility !== "hidden");
+    sources.value = directory.sources.filter(
+      (source) => source.visibility !== "hidden",
+    );
   } catch (error) {
     const text = error instanceof Error ? error.message : String(error);
     loadError.value = text;
@@ -206,8 +196,8 @@ async function loadSources(forceRefresh = false): Promise<void> {
   }
 }
 
-function enterMarket(sourceIndex: number): void {
-  router.push(`/market/${sourceIndex}`);
+function enterMarket(marketId: string): void {
+  router.push({ name: "Market", params: { marketId } });
 }
 
 onMounted(async () => {

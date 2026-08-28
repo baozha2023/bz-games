@@ -39,7 +39,7 @@ describe("forum reference view models", () => {
       translate: (key) => key,
       marketApi: {
         getSources: vi.fn(async () => ({
-          schemaVersion: "1",
+          schemaVersion: 2 as const,
           sources: [
             {
               marketId: "official",
@@ -51,7 +51,7 @@ describe("forum reference view models", () => {
           ],
         })),
         getIndex: vi.fn(async () => ({
-          schemaVersion: "1",
+          schemaVersion: 2 as const,
           marketId: "official",
           marketName: "官方市场",
           generatedAt: "2026-08-24T00:00:00.000Z",
