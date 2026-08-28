@@ -16,6 +16,7 @@ export const config = {
   PLATFORM_SNAPSHOT_GC_GRACE_MS: Number(
     process.env.PLATFORM_SNAPSHOT_GC_GRACE_MS || 5 * 60 * 1000,
   ),
+  CLOUD_V2_MAINTENANCE: parseBoolean(process.env.CLOUD_V2_MAINTENANCE),
   MAX_FEEDBACK_REQUEST_BYTES: Number(
     process.env.MAX_FEEDBACK_REQUEST_BYTES || 24 * 1024 * 1024,
   ),

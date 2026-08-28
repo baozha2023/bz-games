@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import test from "node:test";
 
 import {
@@ -8,6 +9,7 @@ import {
 
 function createAuthHarness(sessionRow) {
   const cleanupCutoffs = [];
+  const deletedTokenHashes = [];
   let currentSessionRow = sessionRow;
   const mySqlService = {
     isEnabled: () => true,
@@ -16,6 +18,10 @@ function createAuthHarness(sessionRow) {
       if (sql.startsWith("DELETE FROM oauth_states"))
         return [{ affectedRows: 0 }];
       if (sql.startsWith("DELETE FROM auth_sessions")) {
+        if (sql.includes("token_hash")) {
+          deletedTokenHashes.push(params[0]);
+          return [{ affectedRows: 1 }];
+        }
         cleanupCutoffs.push(params[0]);
         if (
           currentSessionRow &&
@@ -36,12 +42,14 @@ function createAuthHarness(sessionRow) {
     service: createAuthService({
       config: {
         AUTH_EXPIRED_SESSION_RETENTION_MS: 7 * 24 * 60 * 60 * 1000,
+        RELAY_TOKEN: "relay-token",
         SESSION_COOKIE_NAME: "bz_games_session",
         PORTAL_PUBLIC_URL: "https://relay.example.com/admin/",
       },
       mySqlService,
     }),
     cleanupCutoffs,
+    deletedTokenHashes,
   };
 }
 
@@ -362,4 +370,122 @@ test("client bearer authentication is independent of portal role", async () => {
     assert.equal(result.status, "authenticated");
     assert.equal(result.auth.user.role, role);
   }
+});
+
+test("revokes the client bearer session on DELETE /api/v1/me/session", async () => {
+  const response = () => ({
+    status: 0,
+    body: null,
+    writeHead(status) {
+      this.status = status;
+    },
+    end(value = "") {
+      this.body = value ? JSON.parse(value) : null;
+    },
+  });
+  const sessionUrl = new URL("https://relay.example.com/api/v1/me/session");
+  const revoked = response();
+  const harness = createAuthHarness(sessionRow(new Date(Date.now() + 60_000)));
+  assert.equal(
+    await harness.service.handleRequest(
+      {
+        method: "DELETE",
+        headers: {
+          authorization: "Bearer valid",
+          "x-relay-token": "relay-token",
+        },
+      },
+      revoked,
+      sessionUrl,
+    ),
+    true,
+  );
+  assert.equal(revoked.status, 200);
+  assert.deepEqual(revoked.body, { ok: true });
+  assert.deepEqual(harness.deletedTokenHashes, [
+    crypto.createHash("sha256").update("valid").digest("hex"),
+  ]);
+
+  const missingBearer = response();
+  assert.equal(
+    await harness.service.handleRequest(
+      { method: "DELETE", headers: { "x-relay-token": "relay-token" } },
+      missingBearer,
+      sessionUrl,
+    ),
+    true,
+  );
+  assert.equal(missingBearer.status, 401);
+  assert.equal(missingBearer.body.error, "unauthorized");
+
+  const missingRelayToken = response();
+  assert.equal(
+    await harness.service.handleRequest(
+      { method: "DELETE", headers: { authorization: "Bearer valid" } },
+      missingRelayToken,
+      sessionUrl,
+    ),
+    true,
+  );
+  assert.equal(missingRelayToken.status, 401);
+  assert.equal(missingRelayToken.body.error, "unauthorized");
+  assert.equal(harness.deletedTokenHashes.length, 1);
+
+  const unknown = createAuthHarness(null);
+  const unknownToken = response();
+  assert.equal(
+    await unknown.service.handleRequest(
+      {
+        method: "DELETE",
+        headers: {
+          authorization: "Bearer unknown",
+          "x-relay-token": "relay-token",
+        },
+      },
+      unknownToken,
+      sessionUrl,
+    ),
+    true,
+  );
+  assert.equal(unknownToken.status, 401);
+  assert.equal(unknownToken.body.error, "session_invalid");
+  assert.deepEqual(unknown.deletedTokenHashes, []);
+
+  const cookieBearer = createAuthHarness(
+    sessionRow(new Date(Date.now() + 60_000)),
+  );
+  const cookieRequest = response();
+  assert.equal(
+    await cookieBearer.service.handleRequest(
+      {
+        method: "DELETE",
+        headers: {
+          cookie: "bz_games_session=valid",
+          "x-relay-token": "relay-token",
+        },
+      },
+      cookieRequest,
+      sessionUrl,
+    ),
+    true,
+  );
+  assert.equal(cookieRequest.status, 401);
+  assert.equal(cookieRequest.body.error, "session_invalid");
+  assert.deepEqual(cookieBearer.deletedTokenHashes, []);
+
+  const wrongMethod = response();
+  assert.equal(
+    await harness.service.handleRequest(
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer valid",
+          "x-relay-token": "relay-token",
+        },
+      },
+      wrongMethod,
+      sessionUrl,
+    ),
+    false,
+  );
 });

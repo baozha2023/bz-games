@@ -42,6 +42,7 @@ const cloudDataService = createCloudDataService({
   authService,
   mongoService,
   mySqlService,
+  rateLimitService,
 });
 const feedbackService = createFeedbackService({
   config,

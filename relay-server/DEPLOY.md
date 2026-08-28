@@ -4,7 +4,7 @@
 
 BZ-Games 官方服务是独立 Node.js 服务，提供 HTTP 房间查询、GitHub OAuth 登录、用户云数据存储和 WebSocket 透明转发能力。
 
-- HTTP：`/health`、`/rooms`、`/auth/github/start`、`/auth/github/callback`、`/api/portal/v1/session`、`/api/auth/logout`、`/api/cloud/platform-snapshot`。
+- HTTP：`/health`、`/rooms`、`/auth/github/start`、`/auth/github/callback`、`/api/portal/v1/session`、`/api/auth/logout`、`/api/v2/cloud/platform-snapshot`。
 - WebSocket：`relay:host`、`relay:join`、`relay:leave`、`relay:heartbeat`。
 - 转发内容：RoomMessage、Game API v1 JSON 消息、Game API v2 binary frame。
 - 房间码：中继服务器生成、发送和识别 `roomCode`。
@@ -54,6 +54,7 @@ relay-server/
 | `MAX_TEXT_BYTES`                     | `1048576`              | 单条文本消息最大字节数                                                      |
 | `MAX_BINARY_BYTES`                   | `12582912`             | 单条二进制消息最大字节数                                                    |
 | `MAX_PLATFORM_CLOUD_SNAPSHOT_BYTES`  | `134217728`            | 单次上传完整平台快照的大小上限                                              |
+| `CLOUD_V2_MAINTENANCE`               | `false`                | v4 清场期间设为 true，使新接口返回 503；旧接口始终返回 410                  |
 | `PLATFORM_SNAPSHOT_GC_GRACE_MS`      | `300000`               | 指针切换成功后旧平台快照的清理宽限期                                        |
 | `RELAY_TOKEN`                        | 空字符串               | 全接口鉴权 token；必须通过 systemd 环境变量配置，平台侧通过构建配置注入同值 |
 | `MAX_ROOMS`                          | `80`                   | 最大同时房间数                                                              |
@@ -89,6 +90,17 @@ relay-server/
 公网部署必须配置 `RELAY_TOKEN`，并与平台侧构建注入的 `relayToken` 保持一致。服务端不会兼容未携带 token 的旧版平台。
 如需启用 GitHub 登录，必须额外配置 `MYSQL_USER`、`MYSQL_PASSWORD`、`MYSQL_DATABASE`、`GITHUB_CLIENT_ID`、`GITHUB_CLIENT_SECRET`、`GITHUB_CALLBACK_URL`。
 如需启用云文件同步，还必须额外配置 `MONGODB_URI`。
+
+Cloud v1 到 v2 的一次性生产清场必须先安装
+`cloud-v2-maintenance.conf.example` 对应的 systemd drop-in，再使用
+`scripts/cloud-v2-production-ops.js` 按 `backup`、`verify-backup`、`purge`、
+重启服务、`verify-clean` 的顺序执行。`purge` 会在备份目录中原子维护
+`purge-state.json`，中断后使用同一命令和备份目录即可继续。清场完成后旧
+`cloud_sync_limits` 表不会重建，云同步限流统一写入 `rate_limit_records`。
+解除维护后先运行一次 `ensure-smoke-user` 创建固定的隔离测试账号，再运行
+`production-test`；后者只允许使用该账号，并在 HTTP 上传、meta、下载和 SHA-256
+校验完成后清理该账号的测试快照、云端限流与临时会话。该脚本只允许在
+已核对的生产主机上由运维人员手动运行，不属于服务启动流程。
 
 ## 快速启动
 
@@ -800,6 +812,6 @@ install -d -m 0750 /var/lib/bz-games-hosting/files
 install -d -m 0700 /var/lib/bz-games-hosting/tmp
 ```
 
-服务启动时初始化 `hosted_games`、`hosted_game_metadata_revisions`、`hosted_game_versions`、`hosted_game_assets` 四张表。`users.nickname` 是独立于 GitHub `name` 的客户端昵称字段，`users.is_online` 与 `users.last_online_at` 用于客户端主动在线状态；线上已有数据库需在本次发布前人工执行一次对应的 `ALTER TABLE`，该过程性 SQL 不写入仓库或服务启动代码。`users.role` 固定为 `player/creator/administrator/super_administrator`，服务端将角色映射为管理端 capability：管理员不能修改角色或上传桌面客户端版本，超级管理员拥有全部 capability。桌面客户端 Bearer 接口只校验是否登录，不读取角色。所有 OAuth 新用户为玩家，登录永不改变已有角色；GitHub ID `208792845` 由初始化定义幂等设为初始超级管理员。仓库只维护 `mysql-service.js` 中的最新初始化定义，不保存 ALTER 脚本。
+服务启动时初始化 `hosted_games`、`hosted_game_metadata_revisions`、`hosted_game_versions`、`hosted_game_assets` 四张表。托管 JSON 只接受市场 Schema 2，`gameManifest` override 只接受完整 Manifest V2；ZIP 内 `game.json` 不解压、不改写。历史托管 JSON 由维护窗口中的一次性 `scripts/convert-hosted-metadata-v2.mjs --service-env --apply` 转换，转换成功并验证后应从服务器删除该脚本和临时备份；服务启动路径不包含任何 V1 兼容或 `ALTER TABLE` 逻辑。`users.nickname` 是独立于 GitHub `name` 的客户端昵称字段，`users.is_online` 与 `users.last_online_at` 用于客户端主动在线状态；`users.role` 固定为 `player/creator/administrator/super_administrator`，服务端将角色映射为管理端 capability：管理员不能修改角色或上传桌面客户端版本，超级管理员拥有全部 capability。桌面客户端 Bearer 接口只校验是否登录，不读取角色。所有 OAuth 新用户为玩家，登录永不改变已有角色；GitHub ID `208792845` 由初始化定义幂等设为初始超级管理员。仓库只维护 `mysql-service.js` 中的最新初始化定义，不保存 ALTER 脚本。
 
 逻辑前缀 `games.bzgames.top/` 不需要 DNS 或 Nginx 配置。ZIP 与市场图片均由客户端解析到 `relayServerUrl`，并要求 `RELAY_TOKEN`。

@@ -10,6 +10,7 @@ import {
   setCookie,
 } from "../utils/http.js";
 import { sendJson } from "../utils/ws.js";
+import { requireHttpRelayToken } from "../utils/relay-auth.js";
 import { getCapabilities } from "./portal-authorization.js";
 
 const GITHUB_AUTHORIZE_URL = "https://github.com/login/oauth/authorize";
@@ -478,6 +479,22 @@ export function createAuthService({ config, mySqlService }) {
     return true;
   }
 
+  async function handleClientSessionRevocation(req, res, url) {
+    if (!mySqlService.isEnabled()) {
+      sendJson(res, 503, { error: "auth_not_configured" });
+      return true;
+    }
+    if (!requireHttpRelayToken(config, req, res, url)) return true;
+    const resolution = await getClientSessionFromRequest(req);
+    if (resolution.status !== "authenticated") {
+      sendAuthFailure(res, resolution.status);
+      return true;
+    }
+    await deleteSessionByToken(resolution.auth.sessionToken);
+    sendJson(res, 200, { ok: true });
+    return true;
+  }
+
   async function handleRequest(req, res, url) {
     if (req.method === "GET" && url.pathname === "/auth/github/start") {
       return handleGitHubStart(req, res, url);
@@ -493,6 +510,9 @@ export function createAuthService({ config, mySqlService }) {
     }
     if (req.method === "POST" && url.pathname === "/api/auth/logout") {
       return handleAuthLogout(req, res);
+    }
+    if (req.method === "DELETE" && url.pathname === "/api/v1/me/session") {
+      return handleClientSessionRevocation(req, res, url);
     }
     return false;
   }

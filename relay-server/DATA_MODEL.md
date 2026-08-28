@@ -28,22 +28,22 @@
 
 **主要字段**
 
-| 字段            | 类型              | 说明                                                          |
-| --------------- | ----------------- | ------------------------------------------------------------- |
-| `id`            | `BIGINT UNSIGNED` | 自增主键                                                      |
-| `github_id`     | `VARCHAR(64)`     | GitHub 用户 ID，唯一                                          |
-| `login`         | `VARCHAR(255)`    | GitHub 登录名                                                 |
-| `name`          | `VARCHAR(255)`    | GitHub 显示名                                                 |
-| `nickname`      | `VARCHAR(16)`     | BZ-Games 客户端昵称，默认 `玩家`                              |
-| `is_online`     | `TINYINT(1)`      | 客户端主动开启的在线标记，默认 `0`                             |
-| `last_online_at`| `DATETIME(3)`     | 最近一次在线心跳时间，超过 90 秒后视为离线                     |
-| `avatar_url`    | `TEXT`            | GitHub 头像地址                                               |
-| `profile_url`   | `TEXT`            | GitHub 主页地址                                               |
-| `email`         | `VARCHAR(255)`    | GitHub 邮箱，可能为空                                         |
-| `role`          | `ENUM`            | `player`、`creator`、`administrator` 或 `super_administrator` |
-| `created_at`    | `DATETIME(3)`     | 首次创建时间                                                  |
-| `updated_at`    | `DATETIME(3)`     | 最近资料更新时间                                              |
-| `last_login_at` | `DATETIME(3)`     | 最近一次登录时间                                              |
+| 字段             | 类型              | 说明                                                          |
+| ---------------- | ----------------- | ------------------------------------------------------------- |
+| `id`             | `BIGINT UNSIGNED` | 自增主键                                                      |
+| `github_id`      | `VARCHAR(64)`     | GitHub 用户 ID，唯一                                          |
+| `login`          | `VARCHAR(255)`    | GitHub 登录名                                                 |
+| `name`           | `VARCHAR(255)`    | GitHub 显示名                                                 |
+| `nickname`       | `VARCHAR(16)`     | BZ-Games 客户端昵称，默认 `玩家`                              |
+| `is_online`      | `TINYINT(1)`      | 客户端主动开启的在线标记，默认 `0`                            |
+| `last_online_at` | `DATETIME(3)`     | 最近一次在线心跳时间，超过 90 秒后视为离线                    |
+| `avatar_url`     | `TEXT`            | GitHub 头像地址                                               |
+| `profile_url`    | `TEXT`            | GitHub 主页地址                                               |
+| `email`          | `VARCHAR(255)`    | GitHub 邮箱，可能为空                                         |
+| `role`           | `ENUM`            | `player`、`creator`、`administrator` 或 `super_administrator` |
+| `created_at`     | `DATETIME(3)`     | 首次创建时间                                                  |
+| `updated_at`     | `DATETIME(3)`     | 最近资料更新时间                                              |
+| `last_login_at`  | `DATETIME(3)`     | 最近一次登录时间                                              |
 
 所有 OAuth 新用户统一创建为 `player`，登录只更新 GitHub 资料，不改变已有角色。服务端是管理 capability 的唯一策略源；桌面客户端 Bearer 接口不读取角色。`administrator` 不能修改角色或上传桌面客户端版本，`super_administrator` 拥有全部 capability，并可把其他非超级管理员调整为 `player`、`creator` 或 `administrator`；不能修改自己、修改其他超级管理员或通过接口授予新的超级管理员。GitHub ID `208792845` 由最新数据库初始化定义幂等设为初始超级管理员。
 
@@ -126,38 +126,34 @@ expires_at: 2026-06-11 21:18:20.511
 
 ### 4. user_platform_snapshots
 
-Each user has one current platform snapshot pointer. `user_id` is the primary key; `file_storage_id` references GridFS; `snapshot_version`, `size`, `sha256`, `content_type`, `created_at`, and `updated_at` describe the current object.
+Each user has one current Cloud v2 snapshot pointer. `user_id` is the primary key; `file_storage_id` references GridFS; `protocol_version=2`, `data_model_version=4`, `snapshot_version`, `size`, `sha256`, `content_type`, `created_at`, and `updated_at` describe the current object.
 
 Publication uploads the complete GridFS object first, then uses `SELECT ... FOR UPDATE` in a MySQL transaction to increment the version and switch the pointer. Old objects are deleted only after commit and a grace period.
 
-### 5. cloud_sync_limits
-
-Stores the most recent upload/download time by `user_id + action_type`. The single-snapshot protocol does not use operation IDs or a per-file operation table.
-
-### 6. rate_limit_records
+### 5. rate_limit_records
 
 Stores persistent per-user and per-endpoint rate-limit state. The primary key is
 `github_id + endpoint_key`, so all relay-server instances sharing this MySQL
 database observe the same cooldown.
 
 - `github_id`: authenticated GitHub account identifier;
-- `endpoint_key`: stable business identifier such as `feedback.submit`;
+- `endpoint_key`: stable business identifier such as `feedback.submit`, `cloud.upload`, or `cloud.download`;
 - `last_success_at`: last successfully committed operation time;
 - `reservation_token` and `reservation_expires_at`: short-lived reservation
   state used to prevent concurrent submissions and recover from a crashed
   request;
 - `created_at` and `updated_at`: record lifecycle timestamps.
 
-Reservations are acquired and committed with MySQL row locks. A successful
-business write and its rate-limit commit are performed in the same transaction
-when the caller supports it. Failed operations release their reservation.
+Reservations are acquired and committed with MySQL row locks. Cloud upload
+commits its pointer and rate limit in the same transaction; cloud download
+commits only after the response stream finishes. Failed operations release their reservation.
 Expired reservation leases can be taken over safely after the lease expires.
 
 ## MongoDB cloud object boundary
 
 The shared GridFS bucket is isolated by `metadata.kind`:
 
-- Platform snapshots use `kind=platform-snapshot` and filename `<userId>/platform-snapshot.json`.
+- Cloud v2 snapshots use `kind=platform-snapshot-v2` and filename `<userId>/platform-snapshot-v2.json`.
 - Feedback images use `kind=feedback-image`.
 - Future game saves reserve `kind=game-save` and must not be embedded in platform snapshots.
 
@@ -165,11 +161,11 @@ A platform snapshot is one JSON object containing sanitized encrypted configurat
 
 Downloads read one MySQL pointer and one GridFS object. Cleanup deletes only the explicitly replaced platform snapshot object and never scans other kinds.
 
-The legacy `user_file_refs`, `cloud_sync_operation_files`, and dual-object protocol are removed in v3.1.2 without cloud-data compatibility handling.
+All pre-v4 cloud objects and pointers are removed during the v4 production cutover. The server registers only the v2 routes and cannot recreate pre-v4 data.
 
 ## Local database merge boundary
 
-The SQL dump omits the local autoincrement implementation column `stats_reports.event_sequence` and merges by stable business keys in one SQLite transaction. `games` and `game_versions`, including favorites, ordering, `path`, and `is_present`, remain entirely device-local.
+The SQL dump omits the local autoincrement implementation column `stats_reports.event_sequence` and merges by stable business keys in one SQLite transaction. `games`, `game_libraries`, and `game_versions`, including favorites, ordering, `library_id`, `relative_path`, and lifecycle state, remain entirely device-local.
 
 ## 建言献策
 
@@ -214,6 +210,8 @@ The SQL dump omits the local autoincrement implementation column `stats_reports.
 # 游戏托管元数据
 
 托管元数据使用所有权、修订、版本、资源结构：
+
+所有 JSON 元数据均为市场 Schema 2：游戏使用 `defaultLocale + localizations`，版本使用按相同语言集合的 `localizations`；`gameManifest`（若存在）必须是完整 Manifest V2。历史平铺/V1 JSON 只允许通过一次性离线转换程序转换，运行时不保留兼容分支。
 
 - `hosted_games`：以 `game_id` 为主键，保存所有者、已发布公共配置和已通过最新版本；首次投稿审核前发布字段可为空。
 - `hosted_game_metadata_revisions`：保存公共信息修订、投稿人、审核人、驳回原因和审核时间。

@@ -12,6 +12,7 @@ function createHarness() {
   let snapshotRef = null;
   let failNextSnapshotPublish = false;
   const limits = new Map();
+  let reservationSequence = 0;
 
   const mySqlService = {
     isEnabled: () => true,
@@ -25,16 +26,6 @@ function createHarness() {
     transaction: async (callback) => {
       const connection = {
         query: async (sql, params) => {
-          if (sql.includes("FROM cloud_sync_limits")) {
-            const value = limits.get(`${params[0]}:${params[1]}`);
-            return [
-              [value ? { last_action_at: value } : undefined].filter(Boolean),
-            ];
-          }
-          if (sql.includes("INSERT INTO cloud_sync_limits")) {
-            limits.set(`${params[0]}:${params[1]}`, params[2]);
-            return [{ affectedRows: 1 }];
-          }
           if (sql.includes("FROM user_platform_snapshots")) {
             return [[snapshotRef].filter(Boolean)];
           }
@@ -45,13 +36,15 @@ function createHarness() {
             }
             snapshotRef = {
               user_id: params[0],
-              file_storage_id: params[1],
-              snapshot_version: params[2],
-              size: params[3],
-              sha256: params[4],
-              content_type: params[5],
-              created_at: params[6],
-              updated_at: params[7],
+              protocol_version: params[1],
+              data_model_version: params[2],
+              file_storage_id: params[3],
+              snapshot_version: params[4],
+              size: params[5],
+              sha256: params[6],
+              content_type: params[7],
+              created_at: params[8],
+              updated_at: params[9],
             };
             return [{ affectedRows: 1 }];
           }
@@ -59,6 +52,50 @@ function createHarness() {
         },
       };
       return callback(connection);
+    },
+  };
+
+  const rateLimitService = {
+    reserve: async ({ githubId, endpointKey, cooldownMs }) => {
+      const key = `${githubId}:${endpointKey}`;
+      const current = limits.get(key);
+      const now = Date.now();
+      if (current?.reservationToken) {
+        return {
+          ok: false,
+          retryAfterSeconds: 60,
+          resetAt: new Date(now + 60_000).toISOString(),
+        };
+      }
+      if (current?.lastSuccessAt + cooldownMs > now) {
+        const resetAt = new Date(current.lastSuccessAt + cooldownMs);
+        return {
+          ok: false,
+          retryAfterSeconds: Math.ceil((resetAt.getTime() - now) / 1000),
+          resetAt: resetAt.toISOString(),
+        };
+      }
+      const token = `reservation-${++reservationSequence}`;
+      limits.set(key, { ...current, reservationToken: token });
+      return { ok: true, token };
+    },
+    commit: async ({ githubId, endpointKey, token }) => {
+      const key = `${githubId}:${endpointKey}`;
+      const current = limits.get(key);
+      if (current?.reservationToken !== token) return false;
+      limits.set(key, { lastSuccessAt: Date.now(), reservationToken: null });
+      return true;
+    },
+    release: async ({ githubId, endpointKey, token }) => {
+      const key = `${githubId}:${endpointKey}`;
+      const current = limits.get(key);
+      if (current?.reservationToken !== token) return false;
+      if (current.lastSuccessAt) {
+        limits.set(key, { ...current, reservationToken: null });
+      } else {
+        limits.delete(key);
+      }
+      return true;
     },
   };
 
@@ -101,11 +138,12 @@ function createHarness() {
     config: {
       MAX_PLATFORM_CLOUD_SNAPSHOT_BYTES: 1024 * 1024,
       PLATFORM_SNAPSHOT_GC_GRACE_MS: 0,
+      CLOUD_V2_MAINTENANCE: false,
     },
     authService: {
       getClientSessionFromRequest: async () => ({
         status: "authenticated",
-        auth: { user: { id: 1 } },
+        auth: { user: { id: 1, github_id: "github-1" } },
       }),
       sendAuthFailure: (res, status) => {
         res.writeHead(401, { "content-type": "application/json" });
@@ -118,6 +156,7 @@ function createHarness() {
       getBucket: () => bucket,
     },
     mySqlService,
+    rateLimitService,
   });
   return {
     service,
@@ -145,18 +184,60 @@ async function listen(service) {
   };
 }
 
+test("cloud v2 rejects any legacy or non-canonical snapshot payload", async () => {
+  const harness = createHarness();
+  const server = await listen(harness.service);
+  try {
+    const response = await fetch(
+      `${server.baseUrl}/api/v2/cloud/platform-snapshot`,
+      {
+        method: "PUT",
+        body: JSON.stringify({
+          formatVersion: 1,
+          createdAt: "2026-08-26T00:00:00.000Z",
+          config: "legacy",
+          databaseSql: "legacy",
+        }),
+      },
+    );
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), {
+      error: "snapshot_format_invalid",
+    });
+    assert.equal(harness.getSnapshotRef(), null);
+
+    const retry = await fetch(
+      `${server.baseUrl}/api/v2/cloud/platform-snapshot`,
+      {
+        method: "PUT",
+        body: JSON.stringify({
+          formatVersion: 2,
+          dataModelVersion: 4,
+          createdAt: "2026-08-26T00:00:00.000Z",
+          config: "valid",
+          databaseSql: "BEGIN; COMMIT;",
+        }),
+      },
+    );
+    assert.equal(retry.status, 200);
+  } finally {
+    await server.close();
+  }
+});
+
 test("platform snapshot is uploaded and downloaded as one object", async () => {
   const harness = createHarness();
   const server = await listen(harness.service);
   const snapshot = {
-    formatVersion: 1,
+    formatVersion: 2,
+    dataModelVersion: 4,
     createdAt: "2026-07-29T00:00:00.000Z",
     config: "encrypted-config",
     databaseSql: "BEGIN; COMMIT;",
   };
   try {
     const upload = await fetch(
-      `${server.baseUrl}/api/cloud/platform-snapshot`,
+      `${server.baseUrl}/api/v2/cloud/platform-snapshot`,
       {
         method: "PUT",
         headers: { "content-type": "application/json" },
@@ -167,26 +248,18 @@ test("platform snapshot is uploaded and downloaded as one object", async () => {
     assert.equal(harness.getSnapshotRef().snapshot_version, 1);
 
     const meta = await fetch(
-      `${server.baseUrl}/api/cloud/platform-snapshot/meta`,
+      `${server.baseUrl}/api/v2/cloud/platform-snapshot/meta`,
     );
     assert.equal(meta.status, 200);
     assert.equal((await meta.json()).snapshot.version, 1);
 
     harness.resetLimits();
     const download = await fetch(
-      `${server.baseUrl}/api/cloud/platform-snapshot`,
+      `${server.baseUrl}/api/v2/cloud/platform-snapshot`,
     );
     assert.equal(download.status, 200);
     assert.deepEqual(await download.json(), snapshot);
 
-    assert.equal(
-      (await fetch(`${server.baseUrl}/api/cloud/files`)).status,
-      404,
-    );
-    assert.equal(
-      (await fetch(`${server.baseUrl}/api/cloud/files/config.json`)).status,
-      404,
-    );
   } finally {
     await server.close();
   }
@@ -196,26 +269,31 @@ test("publishing a replacement switches the pointer before deleting the old obje
   const harness = createHarness();
   const server = await listen(harness.service);
   try {
-    const first = await fetch(`${server.baseUrl}/api/cloud/platform-snapshot`, {
-      method: "PUT",
-      body: JSON.stringify({
-        formatVersion: 1,
-        createdAt: "1",
-        config: "1",
-        databaseSql: "1",
-      }),
-    });
+    const first = await fetch(
+      `${server.baseUrl}/api/v2/cloud/platform-snapshot`,
+      {
+        method: "PUT",
+        body: JSON.stringify({
+          formatVersion: 2,
+          dataModelVersion: 4,
+          createdAt: "2026-08-26T00:00:01.000Z",
+          config: "1",
+          databaseSql: "1",
+        }),
+      },
+    );
     assert.equal(first.status, 200);
     const firstId = harness.getSnapshotRef().file_storage_id;
 
     harness.resetLimits();
     const second = await fetch(
-      `${server.baseUrl}/api/cloud/platform-snapshot`,
+      `${server.baseUrl}/api/v2/cloud/platform-snapshot`,
       {
         method: "PUT",
         body: JSON.stringify({
-          formatVersion: 1,
-          createdAt: "2",
+          formatVersion: 2,
+          dataModelVersion: 4,
+          createdAt: "2026-08-26T00:00:02.000Z",
           config: "2",
           databaseSql: "2",
         }),
@@ -234,27 +312,32 @@ test("a failed pointer transaction preserves the current snapshot", async () => 
   const harness = createHarness();
   const server = await listen(harness.service);
   try {
-    const first = await fetch(`${server.baseUrl}/api/cloud/platform-snapshot`, {
-      method: "PUT",
-      body: JSON.stringify({
-        formatVersion: 1,
-        createdAt: "1",
-        config: "1",
-        databaseSql: "1",
-      }),
-    });
+    const first = await fetch(
+      `${server.baseUrl}/api/v2/cloud/platform-snapshot`,
+      {
+        method: "PUT",
+        body: JSON.stringify({
+          formatVersion: 2,
+          dataModelVersion: 4,
+          createdAt: "2026-08-26T00:00:01.000Z",
+          config: "1",
+          databaseSql: "1",
+        }),
+      },
+    );
     assert.equal(first.status, 200);
     const current = { ...harness.getSnapshotRef() };
 
     harness.resetLimits();
     harness.failNextSnapshotPublish();
     const failed = await fetch(
-      `${server.baseUrl}/api/cloud/platform-snapshot`,
+      `${server.baseUrl}/api/v2/cloud/platform-snapshot`,
       {
         method: "PUT",
         body: JSON.stringify({
-          formatVersion: 1,
-          createdAt: "2",
+          formatVersion: 2,
+          dataModelVersion: 4,
+          createdAt: "2026-08-26T00:00:02.000Z",
           config: "2",
           databaseSql: "2",
         }),
@@ -265,6 +348,21 @@ test("a failed pointer transaction preserves the current snapshot", async () => 
     assert.deepEqual(harness.getSnapshotRef(), current);
     assert.equal(harness.deleted.length, 1);
     assert.notEqual(harness.deleted[0], current.file_storage_id);
+    const retry = await fetch(
+      `${server.baseUrl}/api/v2/cloud/platform-snapshot`,
+      {
+        method: "PUT",
+        body: JSON.stringify({
+          formatVersion: 2,
+          dataModelVersion: 4,
+          createdAt: "2026-08-26T00:00:03.000Z",
+          config: "3",
+          databaseSql: "3",
+        }),
+      },
+    );
+    assert.equal(retry.status, 200);
+    assert.equal(harness.getSnapshotRef().snapshot_version, 2);
   } finally {
     await server.close();
   }

@@ -259,7 +259,36 @@ Origin: https://relay.example.com
 }
 ```
 
-接口只接受管理端 Cookie 并校验精确 Origin；Bearer Token 不作为退出凭据。
+接口只接受管理端 Cookie 并校验精确 Origin；桌面客户端 Bearer 会话的退出请使用
+`DELETE /api/v1/me/session`。
+
+### DELETE /api/v1/me/session
+
+吊销当前桌面客户端的 Bearer 会话（客户端"退出登录"使用）。接口只接受客户端
+Bearer Session 和 `X-Relay-Token`，不接受 Cookie，会话身份从当前 Session 解析；
+成功后该 Session Token 立即失效。
+
+请求：
+
+```http
+DELETE /api/v1/me/session HTTP/1.1
+Authorization: Bearer <session_token>
+X-Relay-Token: <relayToken>
+```
+
+响应：`200`
+
+```json
+{
+  "ok": true
+}
+```
+
+| 状态码 | error                                 | 说明                                           |
+| ------ | ------------------------------------- | ---------------------------------------------- |
+| 401    | `unauthorized`                        | 缺少 `X-Relay-Token` 或缺少 Bearer Session     |
+| 401    | `session_expired` / `session_invalid` | 会话已过期或已失效（此时客户端应清除本地会话） |
+| 503    | `auth_not_configured`                 | 服务器未启用用户存储                           |
 
 ### PATCH /api/v1/me/profile
 
@@ -328,9 +357,9 @@ X-Relay-Token: <relayToken>
 
 ---
 
-## Cloud snapshot sync (v3.1.2)
+## Cloud Snapshot v2（BZ-Games 4.0）
 
-Only the atomic platform snapshot protocol is supported. The legacy `/api/cloud/files/*` routes, dual writes, and fallback behavior have been removed.
+Cloud Snapshot v2 is the only cloud data protocol. The server does not register earlier snapshot or file routes.
 
 Authenticated HTTP endpoints use the following `401` response codes. Each response also includes a human-readable `message`:
 
@@ -338,25 +367,25 @@ Authenticated HTTP endpoints use the following `401` response codes. Each respon
 - `session_expired`: the supplied GitHub session has expired.
 - `session_invalid`: the supplied token is invalid, revoked, or unknown.
 
-`PlatformCloudSnapshot` contains `formatVersion: 1`, `createdAt`, an encrypted/sanitized `config` string, and a `databaseSql` dump. The dump contains only `play_sessions`, `achievement_unlocks`, and `stats_reports`; local `games` and `game_versions` rows are excluded.
+`PlatformCloudSnapshot` contains exactly `formatVersion: 2`, `dataModelVersion: 4`, `createdAt`, encrypted/sanitized `config`, and `databaseSql`. The dump contains only `play_sessions`, `achievement_unlocks`, and `stats_reports`; games, versions, libraries and files are excluded.
 
-### GET /api/cloud/platform-snapshot/meta
+### GET /api/v2/cloud/platform-snapshot/meta
 
 Returns `{ snapshot: { version, size, sha256, contentType, updatedAt } }`. Returns `404 snapshot_not_found` when the user has no snapshot.
 
-### GET /api/cloud/platform-snapshot
+### GET /api/v2/cloud/platform-snapshot
 
 Downloads exactly one current snapshot. Response headers include `content-length`, `etag`, `x-file-sha256`, and `cache-control: no-store`.
 
-### PUT /api/cloud/platform-snapshot
+### PUT /api/v2/cloud/platform-snapshot
 
 Uploads one complete JSON snapshot. `Content-Length` is required and cannot exceed `MAX_PLATFORM_CLOUD_SNAPSHOT_BYTES` (128 MiB by default).
 
-The server finishes the GridFS upload first, then atomically switches `user_platform_snapshots` inside a MySQL transaction. A failed transaction deletes the new object and preserves the old pointer. After a successful switch, the old object is deleted after `PLATFORM_SNAPSHOT_GC_GRACE_MS`.
+The server finishes the GridFS upload first, validates the stored object with a constant-memory streaming parser, then atomically switches `user_platform_snapshots` and commits the successful-upload rate limit inside one MySQL transaction. A validation or transaction failure deletes the new object, releases the temporary rate-limit reservation, and preserves the old pointer. After a successful switch, the old object is deleted after `PLATFORM_SNAPSHOT_GC_GRACE_MS`.
 
 Successful response: `{ ok: true, snapshot: { version, size, sha256, contentType, updatedAt } }`.
 
-Upload and download are independently limited to once per GitHub account per 24 hours. Common errors are `401 unauthorized`, `401 session_expired`, `401 session_invalid`, `404 snapshot_not_found`, `413 snapshot_too_large`, `429 cloud_sync_rate_limited`, `500 cloud_upload_failed`, and `503 cloud_not_configured`.
+Successful upload and download operations are independently limited to once per GitHub account per 24 hours. Failed validation, storage, pointer publication, and interrupted downloads release their reservation and do not consume the 24-hour cooldown. While `CLOUD_V2_MAINTENANCE=true`, all v2 endpoints return `503 cloud_v2_maintenance`. Other common errors are `401 unauthorized`, `401 session_expired`, `401 session_invalid`, `404 snapshot_not_found`, `413 snapshot_too_large`, `429 cloud_sync_rate_limited`, `500 cloud_upload_failed`, `500 cloud_download_failed`, `503 cloud_rate_limit_unavailable`, and `503 cloud_not_configured`.
 
 ## WebSocket 接口
 
@@ -980,7 +1009,7 @@ sequenceDiagram
 审核请求包含 `decision`、`expectedUpdatedAt`，驳回时必须包含 `reason`；版本通过时可传 `setLatest`。投稿在审核期间变化会返回 `409 submission_changed`。所有 Cookie 写请求必须来自 `PORTAL_PUBLIC_URL` 的同源 `Origin`。同一 `gameId + version` 唯一，大小、MIME、SHA-256 和逻辑地址均由服务端计算。
 每个游戏只有一个托管版本时，版本创建或替换请求才允许上传 `icon`、`cover`；版本数量按数据库中的全部版本记录计算，已有多个版本时仅可继续维护 ZIP 和版本信息。
 
-版本中的 `gameManifest` 遵循桌面端 `game.json` 约束：`windowedFullscreen` 仅适用于 `serve`、`url`、`.html` 和 `.htm` Web 入口；`args` 与 `env` 仅适用于 Native 入口。服务端会拒绝未知字段、非布尔的 `windowedFullscreen` 以及这些入口组合错误。
+托管游戏元数据只接受市场 Schema 2 结构：`defaultLocale + localizations` 提供游戏名、摘要和标签；每个版本的 `localizations` 提供描述和更新说明，语言集合必须完全一致。版本中的 `gameManifest` 只接受严格 Manifest V2：必须包含数值 `manifestVersion: 2`、`defaultLocale`、完整的本地化名称/描述、成就和统计稳定定义及对应文本。服务端拒绝 V1/平铺字段、未知字段、语言集合不一致和入口组合错误。ZIP 资源只校验文件本身，不解压或改写其中的 `game.json`；未提交 override 时原样保留。
 
 ## 下载接口
 
