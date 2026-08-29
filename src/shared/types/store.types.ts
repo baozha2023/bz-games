@@ -1,3 +1,5 @@
+import type { SupportedLocale } from "../localization";
+
 export type ManualUnlockCondition =
   | { type: "bzcoin"; amount: number }
   | { type: "playtime"; durationMs: number }
@@ -87,7 +89,8 @@ export interface GameInstallProvenance {
 
 export interface GameVersion {
   version: string;
-  path: string;
+  libraryId: string;
+  relativePath: string;
   addedAt: number;
   installSource: GameInstallSource;
   marketId: string | null;
@@ -186,85 +189,53 @@ export interface FeedbackDetail {
   images: FeedbackDetailImage[];
 }
 
-export interface PlatformCloudSnapshotMeta {
-  version: number;
-  size: number;
-  sha256: string;
-  contentType: string;
-  updatedAt: string;
-}
-
-export interface LocalCloudStatus {
+export interface LocalAccountStatus {
   configured: boolean;
   authenticated: boolean;
   userLogin: string;
   userName: string;
   userProfileUrl: string;
-  lastUploadedAt: string;
 }
 
-export interface CloudPresenceStatus {
+export interface AccountPresenceStatus {
   enabled: boolean;
 }
 
-export type CloudAuthChangedReason =
+export type AccountAuthChangedReason =
   | "login"
+  | "logout"
   | "session_expired"
   | "session_invalid";
 
-export interface CloudAuthChangedPayload {
-  reason: CloudAuthChangedReason;
-  status: LocalCloudStatus;
-}
-
-export interface CloudSyncResult {
-  success: boolean;
-  lastUploadedAt?: string;
-  error?: string;
-  message?: string;
-}
-
-export interface CloudSnapshotMetaResult {
-  success: boolean;
-  snapshot: PlatformCloudSnapshotMeta | null;
-  error?: string;
-  message?: string;
+export interface AccountAuthChangedPayload {
+  reason: AccountAuthChangedReason;
+  status: LocalAccountStatus;
 }
 
 export interface AppSettings {
   playerName: string;
   playerId: string;
   avatar?: string;
-  cloudSessionToken?: string;
-  cloudSessionExpiresAt?: string;
-  cloudUserLogin?: string;
-  cloudUserName?: string;
-  cloudUserProfileUrl?: string;
-  cloudLastUploadedAt?: string;
-  nicknameStyle?: NicknameStyle;
-  libraryLayout?: LibraryLayout;
-  lastJoinRoomAddress?: string;
-  language: "zh-CN" | "en-US" | "ja-JP" | "zh-TW" | "de-DE";
+  accountSessionToken: string;
+  accountSessionExpiresAt: string;
+  accountUserLogin: string;
+  accountUserName: string;
+  accountUserProfileUrl: string;
+  nicknameStyle: NicknameStyle;
+  libraryLayout: LibraryLayout;
+  lastJoinRoomAddress: string;
+  language: SupportedLocale;
   theme: "dark" | "light" | "auto";
   defaultRoomPort: number;
   closeBehavior: "tray" | "exit";
   autoLaunch: boolean;
-  migrationNoticeAcknowledgedVersion?: string;
-  gameStoragePath?: string;
-  gameStorageHistory?: string[];
-  lastOpenedAt?: number;
-  githubToken?: string;
+  githubToken: string;
   chatWindowBounds?: { x: number; y: number; width: number; height: number };
-  chatInputHeight?: number;
-  downloadFloatBall?: boolean;
-  sensitiveWordFilter?: boolean;
+  chatInputHeight: number;
+  downloadFloatBall: boolean;
+  sensitiveWordFilter: boolean;
   floatBallPosition?: { x: number; y: number };
-  ignoreDefaultGamesMigrationPrompt?: boolean;
-}
-
-export interface DefaultGamesMigrationStatus {
-  shouldPrompt: boolean;
-  defaultGamesPath: string;
+  updatePromptSuppressedForAppVersion?: string;
 }
 
 export interface DataHealthIssue {

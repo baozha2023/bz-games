@@ -17,72 +17,44 @@ import type {
   ManualUnlockCondition,
   ManualUnlockResult,
 } from "../../../shared/types";
-import {
-  DEFAULT_NICKNAME_STYLE,
-  normalizeNicknameEffect,
-} from "../../../shared/types";
 import { getAppRoot } from "../../utils/appPath";
 import { logger } from "../../utils/logger";
 import { AVATAR_FRAMES } from "../../../shared/avatar-frames";
 import { getGameCardProduct } from "../../../shared/game-card-products";
 import {
-  CONFIG_ENCRYPTION_SEED,
   PLAYTIME_REWARD_AMOUNT,
   PLAYTIME_REWARD_INTERVAL_MS,
 } from "../../../shared/AppConstants";
-import { compareGameVersionsDescending } from "../../../shared/game-manifest";
 import {
   GameManifestFileError,
   readGameManifestFileWithMetadata,
 } from "../game/GameManifestFileService";
-import { bzGamesDatabase } from "./database/BzGamesDatabase";
+import {
+  BUILTIN_LIBRARY_ID,
+  assertCanonicalGameVersionRelativePath,
+  bzGamesDatabase,
+  normalizeGameLibraryRoot,
+  type GameLibraryRecord,
+} from "./database/BzGamesDatabase";
 import { playSessionDatabaseService } from "./database/PlaySessionDatabaseService";
+import {
+  createDefaultV4Store,
+  deserializeV4Config,
+  serializeV4Config,
+} from "./ConfigCodec";
+import { lifecycleOperationGuard } from "../system/LifecycleOperationGuard";
+import { backupActivityGuard } from "../backup/BackupActivityGuard";
 
-const defaultSettings: AppSettings = {
-  playerName: "玩家",
-  playerId: "",
-  cloudSessionToken: "",
-  cloudSessionExpiresAt: "",
-  cloudUserLogin: "",
-  cloudUserName: "",
-  cloudUserProfileUrl: "",
-  cloudLastUploadedAt: "",
-  nicknameStyle: DEFAULT_NICKNAME_STYLE,
-  libraryLayout: "card",
-  lastJoinRoomAddress: "",
-  language: "zh-CN",
-  theme: "auto",
-  defaultRoomPort: 38080,
-  closeBehavior: "tray",
-  autoLaunch: false,
-  migrationNoticeAcknowledgedVersion: "",
-  gameStoragePath: "",
-  gameStorageHistory: [],
-  lastOpenedAt: undefined,
-  ignoreDefaultGamesMigrationPrompt: false,
-  chatInputHeight: 204,
-  downloadFloatBall: false,
-  sensitiveWordFilter: true,
-};
+const defaultStore = createDefaultV4Store();
+const defaultSettings = defaultStore.settings;
+const STORAGE_MIGRATION_MAX_ATTEMPTS = 3;
+const STORAGE_MIGRATION_RETRY_DELAY_MS = 500;
 
-const defaultUserData: UserData = {
-  bzCoins: 0,
-  checkIn: {
-    lastCheckInDate: "",
-    consecutiveDays: 0,
-    maxConsecutiveDays: 0,
-    totalDays: 0,
-  },
-  ownedFrames: [],
-  equippedFrame: undefined,
-  ownedGameCardProducts: [],
-  equippedGameCardProduct: undefined,
-};
-
-const defaultStore: AppStore = {
-  settings: defaultSettings,
-  userData: defaultUserData,
-};
+interface QuarantinedGameVersion {
+  originalPath: string;
+  quarantinedPath: string;
+  transactionRoot: string;
+}
 
 function normalizeNonNegativeInteger(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value)
@@ -144,84 +116,6 @@ function normalizeUserData(value: unknown): UserData {
   };
 }
 
-const CLOUD_SETTINGS_SYNC_BLACKLIST: Array<keyof AppSettings> = [
-  "githubToken",
-  "cloudSessionToken",
-  "cloudSessionExpiresAt",
-  "cloudUserLogin",
-  "cloudUserName",
-  "cloudUserProfileUrl",
-  "migrationNoticeAcknowledgedVersion",
-];
-
-function createConfigCipherKey(): Buffer {
-  return crypto.createHash("sha256").update(CONFIG_ENCRYPTION_SEED).digest();
-}
-
-function encryptConfigPayload(data: AppStore): string {
-  const key = createConfigCipherKey();
-  const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
-  const plaintext = JSON.stringify(data);
-  const encrypted = Buffer.concat([
-    cipher.update(plaintext, "utf8"),
-    cipher.final(),
-  ]);
-  const tag = cipher.getAuthTag();
-
-  return JSON.stringify({
-    __encrypted: true,
-    algorithm: "aes-256-gcm",
-    iv: iv.toString("base64"),
-    tag: tag.toString("base64"),
-    payload: encrypted.toString("base64"),
-  });
-}
-
-function decryptConfigPayload(raw: unknown): AppStore {
-  if (
-    !raw ||
-    typeof raw !== "object" ||
-    !("__encrypted" in raw) ||
-    raw.__encrypted !== true
-  ) {
-    throw new Error("config_encrypted_format_required");
-  }
-
-  try {
-    const envelope = raw as Record<string, unknown>;
-    if (
-      typeof envelope.iv !== "string" ||
-      typeof envelope.tag !== "string" ||
-      typeof envelope.payload !== "string"
-    ) {
-      throw new Error("config_encrypted_format_invalid");
-    }
-    const key = createConfigCipherKey();
-    const iv = Buffer.from(envelope.iv, "base64");
-    const tag = Buffer.from(envelope.tag, "base64");
-    const payload = Buffer.from(envelope.payload, "base64");
-    const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
-    decipher.setAuthTag(tag);
-    const decrypted = Buffer.concat([
-      decipher.update(payload),
-      decipher.final(),
-    ]).toString("utf8");
-    const parsed = JSON.parse(decrypted);
-    if (!parsed || typeof parsed !== "object") {
-      throw new Error("config_invalid_structure");
-    }
-    return parsed as AppStore;
-  } catch (error) {
-    if ((error as Error).message === "config_invalid_structure") throw error;
-    throw new Error("config_decrypt_failed", { cause: error });
-  }
-}
-
-function deserializeConfig(content: string): AppStore {
-  return decryptConfigPayload(JSON.parse(content));
-}
-
 async function pathExists(targetPath: string): Promise<boolean> {
   try {
     await fs.access(targetPath);
@@ -231,18 +125,13 @@ async function pathExists(targetPath: string): Promise<boolean> {
   }
 }
 
-function toSnapshotLabel(targetPath: string): string {
-  return targetPath
-    .replace(/[:\\\/]/g, "_")
-    .replace(/_+/g, "_")
-    .replace(/^_+|_+$/g, "");
-}
-
-class StoreService {
+export class StoreService {
   private store: ElectronStore<AppStore> | null = null;
   private _initPromise: Promise<void> | null = null;
   private gamesCache: GameRecord[] = [];
+  private gameLibrariesCache: GameLibraryRecord[] = [];
   private manualUnlockChain: Promise<void> = Promise.resolve();
+  private gameStorageMigrationRunning = false;
 
   private enqueueManualUnlock<T>(operation: () => Promise<T>): Promise<T> {
     const result = this.manualUnlockChain.then(operation, operation);
@@ -251,120 +140,6 @@ class StoreService {
       () => undefined,
     );
     return result;
-  }
-
-  private async restoreDataFromSnapshotIfNeeded(
-    dataRoot: string,
-  ): Promise<void> {
-    const configPath = path.join(dataRoot, "config.json");
-    const defaultGamesPath = path.join(dataRoot, "games");
-    const dbPath = path.join(dataRoot, "db");
-
-    let needConfig = !(await pathExists(configPath));
-    let needGames = !(await pathExists(defaultGamesPath));
-    let needDb = !(await pathExists(dbPath));
-
-    if (!needConfig && !needGames && !needDb) {
-      return;
-    }
-
-    const configBackupName = `config_${toSnapshotLabel(configPath)}.backup`;
-    const gamesBackupName = `games_${toSnapshotLabel(defaultGamesPath)}`;
-    const dbBackupName = `db_${toSnapshotLabel(dbPath)}`;
-    const snapshotRoot = path.join(
-      app.getPath("userData"),
-      ".update-snapshots",
-    );
-
-    let snapshots: Array<{ dirPath: string; createdAt: number }> = [];
-    try {
-      const entries = await fs.readdir(snapshotRoot, { withFileTypes: true });
-      const candidates = await Promise.all(
-        entries
-          .filter(
-            (entry) => entry.isDirectory() && !entry.name.includes(".tmp-"),
-          )
-          .map(async (entry) => {
-            const dirPath = path.join(snapshotRoot, entry.name);
-            try {
-              const metadata = JSON.parse(
-                await fs.readFile(
-                  path.join(dirPath, "snapshot-meta.json"),
-                  "utf-8",
-                ),
-              ) as { createdAt?: unknown };
-              if (
-                typeof metadata.createdAt === "number" &&
-                Number.isFinite(metadata.createdAt)
-              ) {
-                return { dirPath, createdAt: metadata.createdAt };
-              }
-            } catch {
-              // Legacy snapshots have no metadata; fall back to directory time.
-            }
-            try {
-              const stat = await fs.stat(dirPath);
-              return { dirPath, createdAt: stat.mtimeMs };
-            } catch (error) {
-              logger.warn(
-                `[StoreService] Ignoring unreadable update snapshot: ${dirPath}`,
-                error,
-              );
-              return null;
-            }
-          }),
-      );
-      snapshots = candidates.filter(
-        (candidate): candidate is { dirPath: string; createdAt: number } =>
-          candidate !== null,
-      );
-      snapshots.sort((a, b) => b.createdAt - a.createdAt);
-    } catch {
-      return;
-    }
-
-    for (const { dirPath } of snapshots) {
-      if (needConfig) {
-        const configBackups = [
-          path.join(dirPath, configBackupName),
-          path.join(dirPath, "config.json.backup"),
-        ];
-        for (const backupPath of configBackups) {
-          if (await pathExists(backupPath)) {
-            await fs.copyFile(backupPath, configPath);
-            logger.info(
-              `[StoreService] Restored config.json from snapshot: ${dirPath}`,
-            );
-            needConfig = false;
-            break;
-          }
-        }
-      }
-
-      if (needGames) {
-        const gamesBackupPath = path.join(dirPath, gamesBackupName);
-        if (await pathExists(gamesBackupPath)) {
-          await fs.cp(gamesBackupPath, defaultGamesPath, { recursive: true });
-          logger.info(
-            `[StoreService] Restored games dir from snapshot: ${dirPath}`,
-          );
-          needGames = false;
-        }
-      }
-
-      if (needDb) {
-        const dbBackupPath = path.join(dirPath, dbBackupName);
-        if (await pathExists(dbBackupPath)) {
-          await fs.cp(dbBackupPath, dbPath, { recursive: true });
-          logger.info(
-            `[StoreService] Restored db dir from snapshot: ${dirPath}`,
-          );
-          needDb = false;
-        }
-      }
-
-      if (!needConfig && !needGames && !needDb) return;
-    }
   }
 
   /**
@@ -379,7 +154,6 @@ class StoreService {
       try {
         const dataRoot = getAppRoot();
         await fs.mkdir(dataRoot, { recursive: true });
-        await this.restoreDataFromSnapshotIfNeeded(dataRoot);
 
         await bzGamesDatabase.initialize();
         const Store = (await import("electron-store")).default;
@@ -387,12 +161,15 @@ class StoreService {
           name: "config",
           defaults: defaultStore,
           cwd: dataRoot,
-          serialize: (data) => encryptConfigPayload(data),
-          deserialize: (content) => deserializeConfig(content),
+          serialize: (data) => serializeV4Config(data),
+          deserialize: (content) => deserializeV4Config(content),
         });
         logger.info(`[StoreService] Store initialized at: ${this.store.path}`);
 
-        this.gamesCache = await bzGamesDatabase.getGames();
+        [this.gamesCache, this.gameLibrariesCache] = await Promise.all([
+          bzGamesDatabase.getGames(),
+          bzGamesDatabase.getGameLibraries(),
+        ]);
       } catch (error) {
         logger.error("[StoreService] Failed to initialize store:", error);
         throw error;
@@ -400,51 +177,6 @@ class StoreService {
     })();
 
     return this._initPromise;
-  }
-
-  createCloudConfigContent(): string {
-    const store = this.getStore();
-    const data = store.store as AppStore;
-    const settings = { ...(data.settings || {}) } as Partial<AppSettings>;
-    for (const key of CLOUD_SETTINGS_SYNC_BLACKLIST) {
-      delete settings[key];
-    }
-    return encryptConfigPayload({ ...data, settings } as AppStore);
-  }
-
-  parseCloudConfigContent(content: string): Partial<AppStore> {
-    return deserializeConfig(content) as Partial<AppStore>;
-  }
-
-  applyCloudConfig(cloudData: Partial<AppStore>): void {
-    const store = this.getStore();
-    const currentSettings = this.getSettings();
-    const cloudSettings = { ...(cloudData.settings || {}) };
-    for (const key of CLOUD_SETTINGS_SYNC_BLACKLIST) {
-      delete cloudSettings[key];
-    }
-
-    const currentUserData = this.getUserData();
-    const nextUserData = normalizeUserData(
-      cloudData.userData
-        ? {
-            ...currentUserData,
-            ...cloudData.userData,
-            checkIn: {
-              ...currentUserData.checkIn,
-              ...(cloudData.userData.checkIn || {}),
-            },
-          }
-        : currentUserData,
-    );
-    store.store = {
-      ...store.store,
-      userData: nextUserData,
-      settings: {
-        ...currentSettings,
-        ...cloudSettings,
-      },
-    };
   }
 
   private getStore(): ElectronStore<AppStore> {
@@ -472,7 +204,10 @@ class StoreService {
   }
 
   async refreshGameDerivedData(): Promise<void> {
-    this.gamesCache = await bzGamesDatabase.getGames();
+    [this.gamesCache, this.gameLibrariesCache] = await Promise.all([
+      bzGamesDatabase.getGames(),
+      bzGamesDatabase.getGameLibraries(),
+    ]);
   }
 
   private async persistGamesAndRefresh(games: GameRecord[]): Promise<void> {
@@ -859,84 +594,101 @@ class StoreService {
     return { remaining, removing };
   }
 
-  private async removeVersionDirectories(
-    id: string,
+  private async quarantineVersionDirectories(
     versions: GameVersion[],
-  ): Promise<void> {
-    for (const v of versions) {
+  ): Promise<QuarantinedGameVersion[]> {
+    const operationId = crypto.randomUUID();
+    const quarantined: QuarantinedGameVersion[] = [];
+    try {
+      for (const [index, version] of versions.entries()) {
+        const originalPath = this.resolveGameVersionPath(version);
+        try {
+          await fs.lstat(originalPath);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+          throw error;
+        }
+        const library = this.gameLibrariesCache.find(
+          (item) => item.id === version.libraryId,
+        );
+        if (!library) throw new Error("game_library_not_found");
+        const transactionRoot = path.join(
+          this.getLibraryRoot(library),
+          ".bz-games-trash",
+          operationId,
+        );
+        const quarantinedPath = path.join(transactionRoot, String(index));
+        await fs.mkdir(transactionRoot, { recursive: true });
+        await fs.rename(originalPath, quarantinedPath);
+        quarantined.push({ originalPath, quarantinedPath, transactionRoot });
+      }
+      return quarantined;
+    } catch (error) {
       try {
-        await this.removePath(v.path, { recursive: true, force: true });
-        logger.info(`[StoreService] Removed game version directory: ${v.path}`);
-      } catch (e) {
+        await this.restoreQuarantinedVersionDirectories(quarantined);
+      } catch (rollbackError) {
+        throw new Error("game_delete_rollback_failed", {
+          cause: rollbackError,
+        });
+      }
+      throw new Error("game_delete_prepare_failed", { cause: error });
+    }
+  }
+
+  private async restoreQuarantinedVersionDirectories(
+    quarantined: QuarantinedGameVersion[],
+  ): Promise<void> {
+    for (const item of quarantined.slice().reverse()) {
+      await fs.mkdir(path.dirname(item.originalPath), { recursive: true });
+      await fs.rename(item.quarantinedPath, item.originalPath);
+    }
+    await this.removeQuarantineTransactionRoots(quarantined);
+  }
+
+  private async removeQuarantineTransactionRoots(
+    quarantined: QuarantinedGameVersion[],
+  ): Promise<void> {
+    const roots = new Set(quarantined.map((item) => item.transactionRoot));
+    for (const root of roots) {
+      try {
+        await this.removePath(root, {
+          recursive: true,
+          force: true,
+          maxRetries: 3,
+          retryDelay: 200,
+        });
+        await fs.rmdir(path.dirname(root)).catch((error) => {
+          const code = (error as NodeJS.ErrnoException).code;
+          if (code !== "ENOENT" && code !== "ENOTEMPTY") throw error;
+        });
+      } catch (error) {
         logger.error(
-          `[StoreService] Failed to remove game version directory for ${id} ${v.version}`,
-          e,
+          `[StoreService] Failed to clean quarantined game files: ${root}`,
+          error,
         );
       }
     }
   }
 
-  private async removeManifestGameVersionDirsInStorageRoot(
-    storageRoot: string,
+  private async finalizeQuarantinedVersionDirectories(
+    quarantined: QuarantinedGameVersion[],
   ): Promise<void> {
-    let gameDirs: fsSync.Dirent[];
-    try {
-      gameDirs = fsSync.readdirSync(storageRoot, { withFileTypes: true });
-    } catch {
-      return;
-    }
-
-    for (const gameDir of gameDirs) {
-      if (!gameDir.isDirectory()) continue;
-      const gameRoot = path.join(storageRoot, gameDir.name);
-      let versionDirs: fsSync.Dirent[];
+    await this.removeQuarantineTransactionRoots(quarantined);
+    const gameRoots = new Set(
+      quarantined.map((item) => path.dirname(item.originalPath)),
+    );
+    for (const gameRoot of gameRoots) {
       try {
-        versionDirs = fsSync.readdirSync(gameRoot, { withFileTypes: true });
-      } catch {
-        continue;
+        await fs.rmdir(gameRoot);
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code !== "ENOENT" && code !== "ENOTEMPTY") {
+          logger.warn(
+            `[StoreService] Could not remove empty game root: ${gameRoot}`,
+            error,
+          );
+        }
       }
-
-      for (const versionDir of versionDirs) {
-        if (!versionDir.isDirectory()) continue;
-        const versionPath = path.join(gameRoot, versionDir.name);
-        if (!fsSync.existsSync(path.join(versionPath, "game.json"))) continue;
-        await this.removePath(versionPath, { recursive: true, force: true });
-        logger.info(
-          `[StoreService] Removed game version directory by manifest: ${versionPath}`,
-        );
-      }
-
-      await this.removeDirectoryIfEmpty(gameRoot);
-    }
-  }
-
-  private async removeDirectoryIfEmpty(dirPath: string): Promise<boolean> {
-    try {
-      const entries = await fs.readdir(dirPath);
-      if (entries.length > 0) return false;
-      await fs.rmdir(dirPath);
-      logger.info(`[StoreService] Removed empty directory: ${dirPath}`);
-      return true;
-    } catch (e) {
-      logger.warn(
-        `[StoreService] Failed to remove empty directory: ${dirPath}`,
-        e,
-      );
-      return false;
-    }
-  }
-
-  private async removeGameRootByVersionPath(
-    versionPath: string | undefined,
-  ): Promise<void> {
-    if (!versionPath) return;
-    const parentDir = path.dirname(versionPath);
-
-    try {
-      await this.removePath(parentDir, { recursive: true, force: true });
-      logger.info(`[StoreService] Removed game root directory: ${parentDir}`);
-    } catch (e) {
-      logger.error(`[StoreService] Failed to remove game root directory`, e);
     }
   }
 
@@ -967,15 +719,6 @@ class StoreService {
     }
   }
 
-  private ensureLatestVersion(game: GameRecord): void {
-    if (game.versions.length === 0) return;
-    game.latestVersion = game.versions
-      .slice()
-      .sort((a, b) =>
-        compareGameVersionsDescending(a.version, b.version),
-      )[0].version;
-  }
-
   async removeGame(id: string, versions?: string[]): Promise<void> {
     const games = this.getGamesList();
     const entry = this.findGameById(games, id);
@@ -991,79 +734,33 @@ class StoreService {
       game.versions,
       new Set(requestedVersions),
     );
-    await this.removeVersionDirectories(id, removing);
-
-    if (remaining.length === 0) {
-      await this.removeGameRootByVersionPath(game.versions[0]?.path);
-      await bzGamesDatabase.softDelete(id);
-      await this.refreshGameDerivedData();
-      return;
+    const quarantined = await this.quarantineVersionDirectories(removing);
+    try {
+      if (remaining.length === 0) {
+        await bzGamesDatabase.softDelete(id);
+      } else {
+        await bzGamesDatabase.softDelete(
+          id,
+          removing.map((version) => version.version),
+        );
+      }
+    } catch (error) {
+      await this.restoreQuarantinedVersionDirectories(quarantined);
+      throw new Error("game_delete_database_failed", { cause: error });
     }
-
-    game.versions = remaining;
-    this.ensureLatestVersion(game);
-    games[entry.index] = game;
-    await bzGamesDatabase.softDelete(id, requestedVersions);
-    await this.refreshGameDerivedData();
+    try {
+      await this.refreshGameDerivedData();
+    } finally {
+      await this.finalizeQuarantinedVersionDirectories(quarantined);
+    }
   }
 
   getSettings(): AppSettings {
     const store = this.getStore();
     const settings = store.get("settings", defaultSettings);
 
-    const merged = {
-      ...defaultSettings,
-      ...settings,
-      nicknameStyle: {
-        ...DEFAULT_NICKNAME_STYLE,
-        ...(settings.nicknameStyle || {}),
-      },
-    } as AppSettings & { nicknameStyle: NicknameStyle } & Record<
-        string,
-        unknown
-      >;
-    const defaultGamesPath = path.join(getAppRoot(), "games");
+    const merged = { ...settings };
     let shouldPersist = false;
-
-    for (const legacyKey of [
-      "ignoredUpdateVersion",
-      "skipStartupUpdateCheck",
-    ]) {
-      if (Object.prototype.hasOwnProperty.call(merged, legacyKey)) {
-        delete merged[legacyKey];
-        shouldPersist = true;
-      }
-    }
-
-    const normalizedNicknameEffect = normalizeNicknameEffect(
-      merged.nicknameStyle.effect,
-    );
-    if (normalizedNicknameEffect !== merged.nicknameStyle.effect) {
-      merged.nicknameStyle.effect = normalizedNicknameEffect;
-      shouldPersist = true;
-    }
-
-    if (!merged.gameStorageHistory?.length) {
-      merged.gameStoragePath = defaultGamesPath;
-      merged.gameStorageHistory = [defaultGamesPath];
-      shouldPersist = true;
-    }
-
-    const previousDefaultPath = merged.gameStoragePath || "";
-    const previousHistory = JSON.stringify(merged.gameStorageHistory || []);
-    merged.gameStorageHistory = this.toStorageHistory(
-      merged.gameStorageHistory,
-      merged.gameStoragePath || "",
-    );
-    if (!merged.gameStoragePath?.trim()) {
-      merged.gameStoragePath = merged.gameStorageHistory[0] || defaultGamesPath;
-    }
-    if (
-      previousDefaultPath !== merged.gameStoragePath ||
-      previousHistory !== JSON.stringify(merged.gameStorageHistory)
-    ) {
-      shouldPersist = true;
-    }
 
     if (!merged.playerId) {
       merged.playerId = crypto.randomUUID();
@@ -1092,112 +789,134 @@ class StoreService {
     return merged;
   }
 
-  isFirstOpen(): boolean {
-    return !this.getSettings().lastOpenedAt;
-  }
-
-  recordAppClosed(): void {
-    const store = this.getStore();
-    const current = this.getSettings();
-    store.set("settings", {
-      ...current,
-      lastOpenedAt: Date.now(),
-    });
-  }
-
-  getGameStoragePath(): string {
-    return this.getDefaultGameStoragePath();
-  }
-
   getDefaultGameStoragePath(): string {
-    const settings = this.getSettings();
-    const roots = this.getConfiguredGameStoragePaths(settings);
-    const preferred = settings.gameStoragePath?.trim();
-    if (
-      preferred &&
-      roots.some((root) => path.resolve(root) === path.resolve(preferred))
-    ) {
-      return preferred;
-    }
-    const first = roots[0];
-    if (!first) {
+    const selected =
+      this.gameLibrariesCache.find((library) => library.is_default === 1) ||
+      this.gameLibrariesCache.find(
+        (library) => library.id === BUILTIN_LIBRARY_ID,
+      );
+    if (!selected) {
       throw new Error("game_storage_path_not_configured");
     }
-    return first;
+    return this.getLibraryRoot(selected);
   }
 
-  private getConfiguredGameStoragePaths(
-    settings = this.getSettings(),
-  ): string[] {
-    const roots = new Set<string>();
-    for (const p of settings.gameStorageHistory || []) {
-      if (typeof p === "string" && p.trim()) {
-        roots.add(p.trim());
-      }
-    }
-    return Array.from(roots);
+  private getLibraryRoot(library: GameLibraryRecord): string {
+    return library.kind === "builtin"
+      ? path.join(getAppRoot(), "games")
+      : library.root_path || "";
+  }
+
+  private getConfiguredGameStoragePaths(): string[] {
+    return this.gameLibrariesCache.map((library) =>
+      this.getLibraryRoot(library),
+    );
   }
 
   getGameStorageRoots(): string[] {
-    const roots = new Set<string>(this.getConfiguredGameStoragePaths());
-    for (const game of this.getGamesList()) {
-      for (const version of game.versions) {
-        if (typeof version.path !== "string" || !version.path.trim()) continue;
-        roots.add(path.dirname(path.dirname(version.path)));
+    return this.getConfiguredGameStoragePaths();
+  }
+
+  hasActiveStorageMigration(): boolean {
+    return this.gameStorageMigrationRunning;
+  }
+
+  getGameVersionLocation(versionPath: string): {
+    libraryId: string;
+    relativePath: string;
+  } {
+    const resolvedPath = path.resolve(versionPath);
+    const candidates = this.gameLibrariesCache
+      .map((library) => ({
+        library,
+        root: path.resolve(this.getLibraryRoot(library)),
+      }))
+      .sort((left, right) => right.root.length - left.root.length);
+
+    for (const candidate of candidates) {
+      const relativePath = path.relative(candidate.root, resolvedPath);
+      if (
+        relativePath &&
+        !relativePath.startsWith("..") &&
+        !path.isAbsolute(relativePath)
+      ) {
+        const canonicalRelativePath = relativePath.split(path.sep).join("/");
+        assertCanonicalGameVersionRelativePath(canonicalRelativePath);
+        return {
+          libraryId: candidate.library.id,
+          relativePath: canonicalRelativePath,
+        };
       }
     }
-    return Array.from(roots);
+    throw new Error(`game_version_outside_registered_library:${versionPath}`);
+  }
+
+  resolveGameVersionPath(
+    version: Pick<GameVersion, "libraryId" | "relativePath">,
+  ): string {
+    const library = this.gameLibrariesCache.find(
+      (candidate) => candidate.id === version.libraryId,
+    );
+    if (!library) {
+      throw new Error(`game_library_not_found:${version.libraryId}`);
+    }
+    assertCanonicalGameVersionRelativePath(version.relativePath);
+    const segments = version.relativePath.split("/");
+    const root = path.resolve(this.getLibraryRoot(library));
+    const resolvedPath = path.resolve(root, ...segments);
+    const relativeToRoot = path.relative(root, resolvedPath);
+    if (
+      !relativeToRoot ||
+      relativeToRoot.startsWith("..") ||
+      path.isAbsolute(relativeToRoot)
+    ) {
+      throw new Error(
+        `game_version_path_outside_library:${version.relativePath}`,
+      );
+    }
+    this.assertNoReparsePoints(resolvedPath);
+    return resolvedPath;
   }
 
   getGameStoragePathItems(): { path: string; isDefault: boolean }[] {
     const defaultPath = this.getDefaultGameStoragePath();
     return this.getConfiguredGameStoragePaths().map((storagePath) => ({
       path: storagePath,
-      isDefault: path.resolve(storagePath) === path.resolve(defaultPath),
+      isDefault:
+        normalizeGameLibraryRoot(storagePath) ===
+        normalizeGameLibraryRoot(defaultPath),
     }));
   }
 
-  addGameStoragePath(storagePath: string): AppSettings {
-    const normalizedPath = this.normalizeStoragePath(storagePath);
-    this.ensureStorageDirectoryEmpty(normalizedPath);
-    const store = this.getStore();
-    const current = this.getSettings();
-    const nextHistory = this.toStorageHistory(
-      current.gameStorageHistory,
-      normalizedPath,
-    );
-    const nextDefault = current.gameStoragePath?.trim() || normalizedPath;
-    const nextSettings = {
-      ...current,
-      gameStoragePath: nextDefault,
-      gameStorageHistory: nextHistory,
-    };
-    store.set("settings", nextSettings);
-    return nextSettings;
+  async addGameStoragePath(storagePath: string): Promise<void> {
+    this.beginGameLibraryMutation();
+    try {
+      const normalizedPath = this.normalizeStoragePath(storagePath);
+      this.ensureStorageDirectoryEmpty(normalizedPath);
+      await bzGamesDatabase.addExternalGameLibrary(normalizedPath);
+      this.gameLibrariesCache = await bzGamesDatabase.getGameLibraries();
+    } finally {
+      backupActivityGuard.end();
+    }
   }
 
-  setDefaultGameStoragePath(storagePath: string): AppSettings {
-    const normalizedPath = this.normalizeStoragePath(storagePath);
-    const store = this.getStore();
-    const current = this.getSettings();
-    if (
-      !this.getConfiguredGameStoragePaths(current).some(
-        (item) => path.resolve(item) === normalizedPath,
-      )
-    ) {
-      throw new Error("storage_path_not_registered");
+  async setDefaultGameStoragePath(storagePath: string): Promise<void> {
+    this.beginGameLibraryMutation();
+    try {
+      const normalizedPath = this.normalizeStoragePath(storagePath);
+      const library = this.gameLibrariesCache.find(
+        (item) =>
+          normalizeGameLibraryRoot(this.getLibraryRoot(item)) ===
+          normalizeGameLibraryRoot(normalizedPath),
+      );
+      if (!library) {
+        throw new Error("storage_path_not_registered");
+      }
+      await bzGamesDatabase.setDefaultGameLibrary(library.id);
+      this.gameLibrariesCache = await bzGamesDatabase.getGameLibraries();
+    } finally {
+      backupActivityGuard.end();
     }
-    const nextHistory = this.toStorageHistory(
-      current.gameStorageHistory,
-      normalizedPath,
-    );
-    const nextSettings = {
-      ...current,
-      gameStoragePath: normalizedPath,
-      gameStorageHistory: nextHistory,
-    };
-    store.set("settings", nextSettings);
-    return nextSettings;
   }
 
   getGameVersionStoragePath(gameId: string, version: string): string {
@@ -1206,26 +925,65 @@ class StoreService {
     const versionRecord = record?.versions.find(
       (item) => item.version === targetVersion,
     );
-    if (versionRecord?.path?.trim()) {
-      return versionRecord.path;
+    if (versionRecord) {
+      return this.resolveGameVersionPath(versionRecord);
     }
     return path.join(this.getDefaultGameStoragePath(), gameId, targetVersion);
   }
 
   private normalizeStoragePath(input: string): string {
-    const normalized = path.resolve(input.trim());
-    if (!normalized || normalized === path.parse(normalized).root) {
+    if (typeof input !== "string" || !input.trim()) {
       throw new Error("invalid_storage_path");
     }
+    const normalized = path.resolve(input.trim());
+    if (normalized === path.parse(normalized).root) {
+      throw new Error("invalid_storage_path");
+    }
+    this.assertNoReparsePoints(normalized);
     return normalized;
   }
 
+  private beginGameLibraryMutation(): void {
+    if (
+      lifecycleOperationGuard.blocksNewActivity() ||
+      !backupActivityGuard.tryBegin()
+    ) {
+      throw new Error("storage_migration_active");
+    }
+  }
+
+  private assertNoReparsePoints(targetPath: string): void {
+    let currentPath = path.resolve(targetPath);
+    while (true) {
+      try {
+        if (fsSync.lstatSync(currentPath).isSymbolicLink()) {
+          throw new Error("invalid_storage_path");
+        }
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message === "invalid_storage_path"
+        ) {
+          throw error;
+        }
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+          throw new Error("invalid_storage_path", { cause: error });
+        }
+      }
+      const parentPath = path.dirname(currentPath);
+      if (parentPath === currentPath) return;
+      currentPath = parentPath;
+    }
+  }
+
   private ensureStorageDirectoryEmpty(storagePath: string): void {
+    this.assertNoReparsePoints(storagePath);
     if (!fsSync.existsSync(storagePath)) {
       fsSync.mkdirSync(storagePath, { recursive: true });
+      this.assertNoReparsePoints(storagePath);
       return;
     }
-    if (!fsSync.statSync(storagePath).isDirectory()) {
+    if (!fsSync.lstatSync(storagePath).isDirectory()) {
       throw new Error("storage_path_not_directory");
     }
     const entries = fsSync.readdirSync(storagePath);
@@ -1261,36 +1019,115 @@ class StoreService {
     }
   }
 
-  private async migrateStorageDirectory(
+  private async retryStorageMigration<T>(
+    stage: string,
+    operation: (attempt: number) => Promise<T>,
+  ): Promise<T> {
+    let lastError: unknown;
+    for (
+      let attempt = 1;
+      attempt <= STORAGE_MIGRATION_MAX_ATTEMPTS;
+      attempt += 1
+    ) {
+      try {
+        return await operation(attempt);
+      } catch (error) {
+        lastError = error;
+        logger.warn(
+          `[StoreService] Storage migration ${stage} attempt ${attempt}/${STORAGE_MIGRATION_MAX_ATTEMPTS} failed`,
+          error,
+        );
+        if (attempt < STORAGE_MIGRATION_MAX_ATTEMPTS) {
+          await new Promise((resolve) =>
+            setTimeout(resolve, STORAGE_MIGRATION_RETRY_DELAY_MS),
+          );
+        }
+      }
+    }
+    throw lastError instanceof Error
+      ? lastError
+      : new Error(`storage_migration_${stage}_failed`);
+  }
+
+  private async getDirectorySignature(rootPath: string): Promise<string[]> {
+    const signature: string[] = [];
+    const visit = async (
+      currentPath: string,
+      relativeRoot: string,
+    ): Promise<void> => {
+      const entries = await fs.readdir(currentPath, { withFileTypes: true });
+      entries.sort((left, right) => left.name.localeCompare(right.name));
+      for (const entry of entries) {
+        const absolutePath = path.join(currentPath, entry.name);
+        const relativePath = path.join(relativeRoot, entry.name);
+        const stats = await fs.lstat(absolutePath);
+        if (entry.isSymbolicLink()) {
+          signature.push(
+            `${relativePath}\0link\0${await fs.readlink(absolutePath)}`,
+          );
+        } else if (entry.isDirectory()) {
+          signature.push(`${relativePath}\0directory`);
+          await visit(absolutePath, relativePath);
+        } else if (entry.isFile()) {
+          signature.push(`${relativePath}\0file\0${stats.size}`);
+        } else {
+          signature.push(`${relativePath}\0special\0${stats.mode}`);
+        }
+      }
+    };
+    await visit(rootPath, "");
+    return signature;
+  }
+
+  private async assertStorageDirectoriesEquivalent(
     sourceRoot: string,
     targetRoot: string,
   ): Promise<void> {
-    if (!fsSync.existsSync(sourceRoot)) {
-      throw new Error("source_storage_path_not_found");
+    const [sourceSignature, targetSignature] = await Promise.all([
+      this.getDirectorySignature(sourceRoot),
+      this.getDirectorySignature(targetRoot),
+    ]);
+    if (
+      sourceSignature.length !== targetSignature.length ||
+      sourceSignature.some((entry, index) => entry !== targetSignature[index])
+    ) {
+      throw new Error("storage_migration_copy_verification_failed");
     }
-    if (!fsSync.statSync(sourceRoot).isDirectory()) {
-      throw new Error("source_storage_path_not_directory");
-    }
+  }
 
+  private async copyStorageDirectoryWithRetry(
+    sourceRoot: string,
+    targetRoot: string,
+  ): Promise<void> {
     try {
-      await this.copyPath(sourceRoot, targetRoot, {
-        recursive: true,
-        force: true,
+      await this.retryStorageMigration("copy", async () => {
+        await this.clearDirectoryContents(targetRoot);
+        await this.copyPath(sourceRoot, targetRoot, {
+          recursive: true,
+          force: true,
+          errorOnExist: false,
+          preserveTimestamps: true,
+        });
+        await this.assertStorageDirectoriesEquivalent(sourceRoot, targetRoot);
       });
-      await this.removePath(sourceRoot, { recursive: true, force: true });
     } catch (error) {
       try {
-        await this.clearDirectoryContents(targetRoot);
+        await this.retryStorageMigration("copy-cleanup", () =>
+          this.clearDirectoryContents(targetRoot),
+        );
       } catch (cleanupError) {
-        logger.warn(
-          `[StoreService] Failed to clean partial migrated storage: ${targetRoot}`,
+        logger.error(
+          `[StoreService] Failed to clean migration target after copy failure: ${targetRoot}`,
           cleanupError,
         );
+        throw new Error("storage_migration_rollback_failed", {
+          cause: cleanupError,
+        });
       }
       if (this.isFileBusyError(error)) {
-        throw new Error("storage_migration_file_busy");
+        throw new Error("storage_migration_file_busy", { cause: error });
       }
-      throw error;
+      throw new Error("storage_migration_copy_failed", { cause: error });
     }
   }
 
@@ -1314,109 +1151,84 @@ class StoreService {
   }
 
   private isFileBusyError(error: unknown): boolean {
-    const code = (error as NodeJS.ErrnoException | undefined)?.code;
+    const cause = error instanceof Error && error.cause ? error.cause : error;
+    const code = (cause as NodeJS.ErrnoException | undefined)?.code;
     return code === "EBUSY" || code === "EPERM";
   }
 
-  private toStorageHistory(
-    currentHistory: string[] | undefined,
-    nextPath: string,
-  ): string[] {
-    const history = new Set<string>();
-    if (nextPath.trim()) {
-      history.add(nextPath.trim());
-    }
-    for (const p of currentHistory || []) {
-      if (typeof p === "string" && p.trim()) {
-        history.add(p.trim());
+  private async updateLibraryRootWithRetry(
+    libraryId: string,
+    rootPath: string,
+    expectedVersionCount: number,
+  ): Promise<void> {
+    await this.retryStorageMigration("database", async () => {
+      await bzGamesDatabase.updateExternalGameLibrary(libraryId, rootPath);
+      const [libraries, referenced] = await Promise.all([
+        bzGamesDatabase.getGameLibraries(),
+        bzGamesDatabase.get<{ count: number }>(
+          "SELECT COUNT(*) AS count FROM game_versions WHERE library_id = ?",
+          [libraryId],
+        ),
+      ]);
+      const updated = libraries.find((item) => item.id === libraryId);
+      if (
+        !updated ||
+        updated.kind !== "external" ||
+        normalizeGameLibraryRoot(updated.root_path || "") !==
+          normalizeGameLibraryRoot(rootPath) ||
+        (referenced?.count || 0) !== expectedVersionCount
+      ) {
+        throw new Error("storage_migration_database_verification_failed");
       }
-      if (history.size >= 20) break;
+      await this.refreshGameDerivedData();
+    });
+  }
+
+  private async rollbackStorageMigration(
+    libraryId: string,
+    sourceRoot: string,
+    targetRoot: string,
+    expectedVersionCount: number,
+    restoreSource: boolean,
+  ): Promise<void> {
+    try {
+      if (restoreSource) {
+        await fs.mkdir(sourceRoot, { recursive: true });
+        await this.retryStorageMigration("source-restore", async () => {
+          await this.clearDirectoryContents(sourceRoot);
+          await this.copyPath(targetRoot, sourceRoot, {
+            recursive: true,
+            force: true,
+            errorOnExist: false,
+            preserveTimestamps: true,
+          });
+          await this.assertStorageDirectoriesEquivalent(targetRoot, sourceRoot);
+        });
+      }
+      await this.updateLibraryRootWithRetry(
+        libraryId,
+        sourceRoot,
+        expectedVersionCount,
+      );
+      await this.retryStorageMigration("rollback-cleanup", () =>
+        this.clearDirectoryContents(targetRoot),
+      );
+    } catch (error) {
+      logger.error(
+        "[StoreService] Failed to roll back game library migration",
+        error,
+      );
+      throw new Error("storage_migration_rollback_failed", { cause: error });
     }
-    return Array.from(history).slice(0, 20);
   }
 
   saveSettings(settings: Partial<AppSettings>): void {
     const store = this.getStore();
     const current = this.getSettings();
-    const incomingHistory =
-      settings.gameStorageHistory || current.gameStorageHistory || [];
-    const incomingDefault =
-      settings.gameStoragePath?.trim() || current.gameStoragePath || "";
-    const nextHistory = this.toStorageHistory(incomingHistory, incomingDefault);
-    const finalStoragePath =
-      incomingDefault &&
-      nextHistory.some(
-        (item) => path.resolve(item) === path.resolve(incomingDefault),
-      )
-        ? incomingDefault
-        : nextHistory[0] || "";
-
     logger.info(`[StoreService] Updating settings`);
     store.set("settings", {
       ...current,
       ...settings,
-      gameStoragePath: finalStoragePath,
-      gameStorageHistory: nextHistory,
-    });
-  }
-
-  acknowledgeMigrationNotice(version: string): void {
-    const store = this.getStore();
-    store.set("settings", {
-      ...this.getSettings(),
-      migrationNoticeAcknowledgedVersion: version,
-    });
-  }
-
-  clearLegacyFeedbackHistory(): void {
-    const store = this.getStore();
-    // This key is intentionally absent from AppSettings but may exist in older stores.
-    store.delete("settings.feedbackHistory" as keyof AppStore);
-  }
-
-  getDefaultGamesMigrationStatus(): {
-    shouldPrompt: boolean;
-    defaultGamesPath: string;
-  } {
-    const settings = this.getSettings();
-    const defaultGamesPath = path.join(getAppRoot(), "games");
-    const defaultGamesRoot = path.resolve(defaultGamesPath);
-    const hasDefaultGamesStoragePath = this.getConfiguredGameStoragePaths(
-      settings,
-    ).some((storagePath) => path.resolve(storagePath) === defaultGamesRoot);
-
-    return {
-      shouldPrompt:
-        !this.isFirstOpen() &&
-        !settings.ignoreDefaultGamesMigrationPrompt &&
-        hasDefaultGamesStoragePath,
-      defaultGamesPath,
-    };
-  }
-
-  ignoreDefaultGamesMigrationPrompt(): void {
-    const store = this.getStore();
-    const current = this.getSettings();
-    store.set("settings", {
-      ...current,
-      ignoreDefaultGamesMigrationPrompt: true,
-    });
-  }
-
-  async migrateDefaultGamesLibrary(targetRoot: string): Promise<{
-    migratedGames: number;
-    migratedVersions: number;
-    gameStoragePath: string;
-  }> {
-    const normalizedTarget = this.normalizeStoragePath(targetRoot);
-    const defaultRoot = path.resolve(path.join(getAppRoot(), "games"));
-
-    if (normalizedTarget === defaultRoot) {
-      throw new Error("target_is_default_games_path");
-    }
-    return this.migrateGameStorageLibraryCore(defaultRoot, normalizedTarget, {
-      forceDefault: true,
-      ignoreDefaultGamesMigrationPrompt: true,
     });
   }
 
@@ -1428,101 +1240,118 @@ class StoreService {
     migratedVersions: number;
     gameStoragePath: string;
   }> {
-    const normalizedSource = this.normalizeStoragePath(sourceRoot);
-    const normalizedTarget = this.normalizeStoragePath(targetRoot);
-    const configuredPaths = this.getConfiguredGameStoragePaths();
-    const isRegisteredPath = configuredPaths.some(
-      (item) => path.resolve(item) === normalizedSource,
-    );
-    if (!isRegisteredPath) {
-      throw new Error("storage_path_not_registered");
+    if (this.gameStorageMigrationRunning) {
+      throw new Error("storage_migration_active");
     }
-    return this.migrateGameStorageLibraryCore(
-      normalizedSource,
-      normalizedTarget,
-    );
-  }
-
-  private async migrateGameStorageLibraryCore(
-    normalizedSource: string,
-    normalizedTarget: string,
-    options: {
-      forceDefault?: boolean;
-      ignoreDefaultGamesMigrationPrompt?: boolean;
-    } = {},
-  ): Promise<{
-    migratedGames: number;
-    migratedVersions: number;
-    gameStoragePath: string;
-  }> {
-    this.assertMigrationTargetAllowed(normalizedSource, normalizedTarget);
-    this.ensureStorageDirectoryEmpty(normalizedTarget);
-
-    await fs.mkdir(normalizedTarget, { recursive: true });
-
-    const store = this.getStore();
-    const games = this.getGamesList();
-    let migratedGames = 0;
-    let migratedVersions = 0;
-
-    for (const game of games) {
-      const versionCount = game.versions.filter((version) => {
-        if (!version.path?.trim()) return false;
-        return (
-          path.resolve(path.dirname(path.dirname(version.path))) ===
-          normalizedSource
-        );
-      }).length;
-      if (versionCount > 0) {
-        migratedGames += 1;
-        migratedVersions += versionCount;
+    this.beginGameLibraryMutation();
+    this.gameStorageMigrationRunning = true;
+    try {
+      const normalizedSource = this.normalizeStoragePath(sourceRoot);
+      const normalizedTarget = this.normalizeStoragePath(targetRoot);
+      const library = this.gameLibrariesCache.find(
+        (item) =>
+          normalizeGameLibraryRoot(this.getLibraryRoot(item)) ===
+          normalizeGameLibraryRoot(normalizedSource),
+      );
+      if (!library) {
+        throw new Error("storage_path_not_registered");
       }
-    }
-
-    await this.migrateStorageDirectory(normalizedSource, normalizedTarget);
-
-    for (const game of games) {
-      for (const version of game.versions) {
-        if (!version.path?.trim()) continue;
-        const versionRoot = path.resolve(
-          path.dirname(path.dirname(version.path)),
-        );
-        if (versionRoot !== normalizedSource) continue;
-        version.path = path.join(normalizedTarget, game.id, version.version);
+      if (library.kind === "builtin") {
+        throw new Error("builtin_library_path_is_fixed");
       }
+      if (
+        this.gameLibrariesCache.some(
+          (item) =>
+            item.id !== library.id &&
+            normalizeGameLibraryRoot(this.getLibraryRoot(item)) ===
+              normalizeGameLibraryRoot(normalizedTarget),
+        )
+      ) {
+        throw new Error("target_storage_path_already_registered");
+      }
+      if (!fsSync.existsSync(normalizedSource)) {
+        throw new Error("source_storage_path_not_found");
+      }
+      if (!fsSync.statSync(normalizedSource).isDirectory()) {
+        throw new Error("source_storage_path_not_directory");
+      }
+      this.assertMigrationTargetAllowed(normalizedSource, normalizedTarget);
+      this.ensureStorageDirectoryEmpty(normalizedTarget);
+
+      const referenced = await bzGamesDatabase.get<{
+        count: number;
+        installed_count: number;
+        installed_game_count: number;
+      }>(
+        `SELECT COUNT(*) AS count,
+         COALESCE(SUM(CASE WHEN lifecycle_state = 'installed' THEN 1 ELSE 0 END), 0)
+           AS installed_count,
+         COUNT(DISTINCT CASE WHEN lifecycle_state = 'installed' THEN game_id END)
+           AS installed_game_count
+         FROM game_versions WHERE library_id = ?`,
+        [library.id],
+      );
+      const expectedVersionCount = referenced?.count || 0;
+      const migratedVersions = referenced?.installed_count || 0;
+      const migratedGames = referenced?.installed_game_count || 0;
+
+      await fs.mkdir(normalizedTarget, { recursive: true });
+      await this.copyStorageDirectoryWithRetry(
+        normalizedSource,
+        normalizedTarget,
+      );
+
+      try {
+        await this.updateLibraryRootWithRetry(
+          library.id,
+          normalizedTarget,
+          expectedVersionCount,
+        );
+      } catch (error) {
+        await this.rollbackStorageMigration(
+          library.id,
+          normalizedSource,
+          normalizedTarget,
+          expectedVersionCount,
+          false,
+        );
+        throw new Error("storage_migration_database_failed", { cause: error });
+      }
+
+      try {
+        await this.retryStorageMigration("source-delete", async () => {
+          await this.removePath(normalizedSource, {
+            recursive: true,
+            force: true,
+            maxRetries: 3,
+            retryDelay: 200,
+          });
+          if (await pathExists(normalizedSource)) {
+            throw new Error("storage_migration_source_delete_incomplete");
+          }
+        });
+      } catch (error) {
+        await this.rollbackStorageMigration(
+          library.id,
+          normalizedSource,
+          normalizedTarget,
+          expectedVersionCount,
+          true,
+        );
+        throw new Error("storage_migration_source_delete_failed", {
+          cause: error,
+        });
+      }
+
+      return {
+        migratedGames,
+        migratedVersions,
+        gameStoragePath: normalizedTarget,
+      };
+    } finally {
+      this.gameStorageMigrationRunning = false;
+      backupActivityGuard.end();
     }
-
-    const currentSettings = this.getSettings();
-    const currentPath = currentSettings.gameStoragePath?.trim() || "";
-    const nextStoragePath =
-      options.forceDefault ||
-      (currentPath && path.resolve(currentPath) === normalizedSource)
-        ? normalizedTarget
-        : currentPath;
-    const filteredHistory = (currentSettings.gameStorageHistory || [])
-      .map((item) => item.trim())
-      .filter((item) => item && path.resolve(item) !== normalizedSource);
-    const nextHistory = this.toStorageHistory(
-      filteredHistory,
-      normalizedTarget,
-    );
-
-    await this.persistGamesAndRefresh(games);
-    store.set("settings", {
-      ...currentSettings,
-      gameStoragePath: nextStoragePath,
-      gameStorageHistory: nextHistory,
-      ignoreDefaultGamesMigrationPrompt:
-        options.ignoreDefaultGamesMigrationPrompt
-          ? true
-          : currentSettings.ignoreDefaultGamesMigrationPrompt,
-    });
-
-    return {
-      migratedGames,
-      migratedVersions,
-      gameStoragePath: nextStoragePath,
-    };
   }
 
   async removeGameStoragePath(storagePath: string): Promise<{
@@ -1530,78 +1359,51 @@ class StoreService {
     removedVersions: number;
     nextStoragePath: string;
   }> {
-    const normalizedTarget = this.normalizeStoragePath(storagePath);
-    const store = this.getStore();
-    const currentSettings = this.getSettings();
-    const configuredPaths = this.getConfiguredGameStoragePaths(currentSettings);
-    const isRegisteredPath = configuredPaths.some(
-      (item) => path.resolve(item) === normalizedTarget,
-    );
-    if (!isRegisteredPath) {
-      throw new Error("storage_path_not_registered");
-    }
-    if (configuredPaths.length <= 1) {
-      throw new Error("cannot_remove_last_storage_path");
-    }
-
-    const games = this.getGamesList();
-    const nextGames: GameRecord[] = [];
-    let removedGames = 0;
-    let removedVersions = 0;
-
-    for (const game of games) {
-      const versionsInPath = game.versions.filter((version) => {
-        if (!version.path?.trim()) return false;
-        const versionRoot = path.dirname(path.dirname(version.path));
-        return path.resolve(versionRoot) === normalizedTarget;
-      });
-      if (versionsInPath.length === 0) {
-        nextGames.push(game);
-        continue;
-      }
-
-      removedVersions += versionsInPath.length;
-      await this.removeVersionDirectories(game.id, versionsInPath);
-      const remaining = game.versions.filter(
-        (version) => !versionsInPath.some((v) => v.version === version.version),
+    this.beginGameLibraryMutation();
+    try {
+      const normalizedTarget = this.normalizeStoragePath(storagePath);
+      const library = this.gameLibrariesCache.find(
+        (item) =>
+          normalizeGameLibraryRoot(this.getLibraryRoot(item)) ===
+          normalizeGameLibraryRoot(normalizedTarget),
       );
-
-      if (remaining.length === 0) {
-        removedGames += 1;
-        continue;
+      if (!library) {
+        throw new Error("storage_path_not_registered");
+      }
+      if (library.kind === "builtin") {
+        throw new Error("builtin_library_cannot_be_removed");
+      }
+      const installedVersions = this.gamesCache.flatMap((game) =>
+        game.versions
+          .filter((version) => version.libraryId === library.id)
+          .map((version) => ({ gameId: game.id, version })),
+      );
+      const quarantined = await this.quarantineVersionDirectories(
+        installedVersions.map((item) => item.version),
+      );
+      try {
+        await bzGamesDatabase.deactivateExternalGameLibraryAndVersions(
+          library.id,
+        );
+      } catch (error) {
+        await this.restoreQuarantinedVersionDirectories(quarantined);
+        throw new Error("storage_library_database_failed", { cause: error });
+      }
+      try {
+        await this.refreshGameDerivedData();
+      } finally {
+        await this.finalizeQuarantinedVersionDirectories(quarantined);
       }
 
-      game.versions = remaining;
-      this.ensureLatestVersion(game);
-      nextGames.push(game);
+      return {
+        removedGames: new Set(installedVersions.map((item) => item.gameId))
+          .size,
+        removedVersions: installedVersions.length,
+        nextStoragePath: this.getDefaultGameStoragePath(),
+      };
+    } finally {
+      backupActivityGuard.end();
     }
-
-    await this.removeManifestGameVersionDirsInStorageRoot(normalizedTarget);
-    await this.removeDirectoryIfEmpty(normalizedTarget);
-
-    const filteredHistory = (currentSettings.gameStorageHistory || [])
-      .map((item) => item.trim())
-      .filter((item) => item && path.resolve(item) !== normalizedTarget);
-
-    const currentPath = currentSettings.gameStoragePath?.trim() || "";
-    const nextStoragePath =
-      currentPath && path.resolve(currentPath) === normalizedTarget
-        ? filteredHistory[0] || ""
-        : currentPath;
-    const nextHistory = this.toStorageHistory(filteredHistory, nextStoragePath);
-
-    await this.persistGamesAndRefresh(nextGames);
-    store.set("settings", {
-      ...currentSettings,
-      gameStoragePath: nextStoragePath,
-      gameStorageHistory: nextHistory,
-    });
-
-    return {
-      removedGames,
-      removedVersions,
-      nextStoragePath,
-    };
   }
 
   async healthCheck(): Promise<DataHealthReport> {
@@ -1621,41 +1423,15 @@ class StoreService {
     } else {
       try {
         const rawText = await fs.readFile(configPath, "utf-8");
-        let parsed: unknown;
-        let validJson = true;
         try {
-          parsed = JSON.parse(rawText);
-        } catch {
-          validJson = false;
+          deserializeV4Config(rawText);
+        } catch (error) {
           issues.push({
             level: "error",
-            code: "config_invalid_json",
-            message: "config.json is not valid JSON",
+            code: "config_decrypt_failed",
+            message: (error as Error).message,
             target: configPath,
           });
-          parsed = null;
-        }
-
-        if (validJson) {
-          if (parsed && typeof parsed === "object") {
-            try {
-              decryptConfigPayload(parsed);
-            } catch (error) {
-              issues.push({
-                level: "error",
-                code: "config_decrypt_failed",
-                message: (error as Error).message,
-                target: configPath,
-              });
-            }
-          } else {
-            issues.push({
-              level: "error",
-              code: "config_invalid_structure",
-              message: "config.json has an invalid structure",
-              target: configPath,
-            });
-          }
         }
       } catch (error) {
         issues.push({
@@ -1723,25 +1499,42 @@ class StoreService {
         }
         seenVersions.add(version.version);
 
-        const manifestPath = path.join(version.path, "game.json");
-        if (!(await pathExists(version.path))) {
+        let versionPath: string;
+        try {
+          versionPath = this.resolveGameVersionPath(version);
+        } catch (error) {
+          issues.push({
+            level: "error",
+            code: "version_path_invalid",
+            message: `Game version location is invalid: ${(error as Error).message}`,
+            params: {
+              gameId: game.id,
+              version: version.version,
+              reason: (error as Error).message,
+            },
+            target: `${version.libraryId}:${version.relativePath}`,
+          });
+          continue;
+        }
+        const manifestPath = path.join(versionPath, "game.json");
+        if (!(await pathExists(versionPath))) {
           issues.push({
             level: "error",
             code: "version_path_missing",
             message: `Game version directory does not exist: ${game.id}@${version.version}`,
             params: { gameId: game.id, version: version.version },
-            target: version.path,
+            target: versionPath,
           });
           continue;
         }
         try {
-          if (!(await fs.stat(version.path)).isDirectory()) {
+          if (!(await fs.stat(versionPath)).isDirectory()) {
             issues.push({
               level: "error",
               code: "version_path_not_directory",
               message: `Game version path is not a directory: ${game.id}@${version.version}`,
               params: { gameId: game.id, version: version.version },
-              target: version.path,
+              target: versionPath,
             });
             continue;
           }
@@ -1755,7 +1548,7 @@ class StoreService {
               version: version.version,
               reason: (error as Error).message,
             },
-            target: version.path,
+            target: versionPath,
           });
           continue;
         }
@@ -1840,7 +1633,7 @@ class StoreService {
           for (const referenced of referencedFiles) {
             if (!referenced.relativePath) continue;
             const referencedPath = path.join(
-              version.path,
+              versionPath,
               referenced.relativePath,
             );
             let isFile = false;

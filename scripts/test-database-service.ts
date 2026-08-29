@@ -22,11 +22,6 @@ import {
 import { RequestInterceptor } from "../src/main/utils/requestInterceptor";
 
 const source = new BzGamesDatabase("source.db", "database-service-test");
-const destination = new BzGamesDatabase(
-  "destination.db",
-  "database-service-test",
-);
-const legacy = new BzGamesDatabase("legacy.db", "database-service-test");
 
 function game(id: string, favorite?: boolean): GameRecord {
   return {
@@ -34,7 +29,8 @@ function game(id: string, favorite?: boolean): GameRecord {
     versions: [
       {
         version: "1.0.0",
-        path: `C:/${id}`,
+        libraryId: "builtin",
+        relativePath: `${id}/1.0.0`,
         addedAt: 1,
         installSource: "manual",
         marketId: null,
@@ -96,22 +92,6 @@ async function count(
 
 async function verifyReinstallRestoresDerivedData(): Promise<void> {
   await storeService.init();
-  storeService.acknowledgeMigrationNotice("3.4.2");
-  assert.equal(
-    storeService.getSettings().migrationNoticeAcknowledgedVersion,
-    "3.4.2",
-  );
-  const cloudConfig = storeService.parseCloudConfigContent(
-    storeService.createCloudConfigContent(),
-  );
-  assert.equal(
-    Object.prototype.hasOwnProperty.call(
-      cloudConfig.settings || {},
-      "migrationNoticeAcknowledgedVersion",
-    ),
-    false,
-    "migration notice acknowledgement must remain device-local",
-  );
   const gameId = "reinstall-cache";
   const version = "1.0.0";
   const gameRoot = path.join(process.cwd(), "games", gameId);
@@ -119,7 +99,6 @@ async function verifyReinstallRestoresDerivedData(): Promise<void> {
   await fs.mkdir(versionPath, { recursive: true });
 
   const installed = game(gameId, true);
-  installed.versions[0].path = versionPath;
   await storeService.addGame(installed);
   assert.equal(
     await storeService.unlockAchievement(
@@ -180,10 +159,10 @@ async function verifyReinstallRestoresDerivedData(): Promise<void> {
   await fs.mkdir(versionPath, { recursive: true });
   await fs.mkdir(nextVersionPath, { recursive: true });
   const reinstalled = game(gameId);
-  reinstalled.versions[0].path = versionPath;
   reinstalled.versions.push({
     version: nextVersion,
-    path: nextVersionPath,
+    libraryId: "builtin",
+    relativePath: `${gameId}/${nextVersion}`,
     addedAt: 2,
     installSource: "manual",
     marketId: null,
@@ -224,6 +203,96 @@ async function verifyReinstallRestoresDerivedData(): Promise<void> {
   assert.equal(await count(bzGamesDatabase, "achievement_unlocks"), 1);
 }
 
+async function verifyExternalLibraryLifecycle(): Promise<void> {
+  const libraryRoot = path.join(process.cwd(), "external-library");
+  await fs.mkdir(libraryRoot, { recursive: true });
+  await storeService.addGameStoragePath(libraryRoot);
+  const library = (await bzGamesDatabase.getGameLibraries()).find(
+    (item) => item.root_path === libraryRoot,
+  );
+  assert(library, "external library should be active after registration");
+
+  const gameId = "external-history";
+  const version = "1.0.0";
+  const versionPath = path.join(libraryRoot, gameId, version);
+  await fs.mkdir(versionPath, { recursive: true });
+  await fs.writeFile(path.join(versionPath, "payload.bin"), "payload");
+  const installed = game(gameId);
+  installed.versions[0].libraryId = library.id;
+  installed.versions[0].relativePath = `${gameId}/${version}`;
+  await storeService.addGame(installed);
+  await bzGamesDatabase.recordAchievement({
+    gameId,
+    gameName: "External History",
+    version,
+    achievementId: "kept",
+    achievementName: "Kept",
+    unlockedAt: 1,
+  });
+
+  const result = await storeService.removeGameStoragePath(libraryRoot);
+  assert.deepEqual(
+    {
+      removedGames: result.removedGames,
+      removedVersions: result.removedVersions,
+    },
+    { removedGames: 1, removedVersions: 1 },
+  );
+  await assert.rejects(fs.stat(versionPath));
+  assert.equal(
+    (await bzGamesDatabase.getGameLibraries()).some(
+      (item) => item.id === library.id,
+    ),
+    false,
+  );
+  const removedLibrary = await bzGamesDatabase.get<{
+    lifecycle_state: string;
+    removed_at: number | null;
+  }>("SELECT lifecycle_state, removed_at FROM game_libraries WHERE id = ?", [
+    library.id,
+  ]);
+  assert.equal(removedLibrary?.lifecycle_state, "removed");
+  assert.equal(typeof removedLibrary?.removed_at, "number");
+  assert.equal(
+    await count(bzGamesDatabase, "achievement_unlocks"),
+    2,
+    "removing a library must preserve achievement history",
+  );
+
+  await storeService.addGameStoragePath(libraryRoot);
+  const reactivated = (await bzGamesDatabase.getGameLibraries()).find(
+    (item) => item.root_path === libraryRoot,
+  );
+  assert.equal(reactivated?.id, library.id);
+
+  await storeService.setDefaultGameStoragePath(libraryRoot);
+  await bzGamesDatabase.close();
+  await bzGamesDatabase.initialize();
+  const librariesAfterRestart = await bzGamesDatabase.getGameLibraries();
+  assert.equal(
+    librariesAfterRestart.find((item) => item.id === library.id)?.is_default,
+    1,
+    "an active external library must remain a valid default after restart",
+  );
+  assert.equal(
+    librariesAfterRestart.find((item) => item.id === "builtin")?.is_default,
+    0,
+  );
+  await storeService.setDefaultGameStoragePath(
+    path.join(process.cwd(), "games"),
+  );
+  const librariesAfterSwitchBack = await bzGamesDatabase.getGameLibraries();
+  assert.equal(
+    librariesAfterSwitchBack.find((item) => item.id === "builtin")?.is_default,
+    1,
+    "switching back to the built-in library must not violate the unique default index",
+  );
+  assert.equal(
+    librariesAfterSwitchBack.find((item) => item.id === library.id)?.is_default,
+    0,
+  );
+}
+
 function localDateString(date: Date): string {
   return new Intl.DateTimeFormat("en-CA", {
     year: "numeric",
@@ -234,20 +303,26 @@ function localDateString(date: Date): string {
 
 async function verifyManualUnlockProgressData(): Promise<void> {
   const originalUserData = structuredClone(storeService.getUserData());
+  const replaceUserData = (userData: typeof originalUserData) =>
+    (
+      storeService as unknown as {
+        getStore(): { set(key: "userData", value: typeof userData): void };
+      }
+    )
+      .getStore()
+      .set("userData", userData);
   const now = new Date();
   const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
   const yesterdayString = localDateString(yesterday);
 
-  storeService.applyCloudConfig({
-    userData: {
-      ...originalUserData,
-      checkIn: {
-        ...originalUserData.checkIn,
-        lastCheckInDate: yesterdayString,
-        consecutiveDays: 4,
-        maxConsecutiveDays: 6,
-        totalDays: 10,
-      },
+  replaceUserData({
+    ...originalUserData,
+    checkIn: {
+      ...originalUserData.checkIn,
+      lastCheckInDate: yesterdayString,
+      consecutiveDays: 4,
+      maxConsecutiveDays: 6,
+      totalDays: 10,
     },
   });
   const continued = await storeService.performCheckIn();
@@ -255,15 +330,13 @@ async function verifyManualUnlockProgressData(): Promise<void> {
   assert.equal(storeService.getUserData().checkIn.consecutiveDays, 5);
   assert.equal(storeService.getUserData().checkIn.maxConsecutiveDays, 6);
 
-  storeService.applyCloudConfig({
-    userData: {
-      ...storeService.getUserData(),
-      checkIn: {
-        ...storeService.getUserData().checkIn,
-        lastCheckInDate: "2000-01-01",
-        consecutiveDays: 5,
-        maxConsecutiveDays: 6,
-      },
+  replaceUserData({
+    ...storeService.getUserData(),
+    checkIn: {
+      ...storeService.getUserData().checkIn,
+      lastCheckInDate: "2000-01-01",
+      consecutiveDays: 5,
+      maxConsecutiveDays: 6,
     },
   });
   const afterMissedDay = await storeService.performCheckIn();
@@ -330,104 +403,12 @@ async function verifyManualUnlockProgressData(): Promise<void> {
     await bzGamesDatabase.run(
       "DELETE FROM play_sessions WHERE id LIKE 'date-playtime-%'",
     );
-    storeService.applyCloudConfig({ userData: originalUserData });
-  }
-}
-
-async function verifyFinalNsisBridgeSnapshotRestore(): Promise<void> {
-  const dataRoot = process.cwd();
-  const configPath = path.join(dataRoot, "config.json");
-  const gamesPath = path.join(dataRoot, "games");
-  const dbPath = path.join(dataRoot, "db");
-  const label = (targetPath: string) =>
-    targetPath
-      .replace(/[:\\/]/g, "_")
-      .replace(/_+/g, "_")
-      .replace(/^_+|_+$/g, "");
-  const snapshotRoot = path.join(
-    dataRoot,
-    ".update-snapshots",
-    "version-3.4.2-bridge-test",
-  );
-  await fs.mkdir(snapshotRoot, { recursive: true });
-  await fs.writeFile(
-    path.join(snapshotRoot, `config_${label(configPath)}.backup`),
-    "snapshot-config",
-  );
-  await fs.mkdir(path.join(snapshotRoot, `games_${label(gamesPath)}`), {
-    recursive: true,
-  });
-  await fs.writeFile(
-    path.join(snapshotRoot, `games_${label(gamesPath)}`, "game.marker"),
-    "snapshot-game",
-  );
-  await fs.mkdir(path.join(snapshotRoot, `db_${label(dbPath)}`), {
-    recursive: true,
-  });
-  await fs.writeFile(
-    path.join(snapshotRoot, `db_${label(dbPath)}`, "db.marker"),
-    "snapshot-db",
-  );
-  await fs.writeFile(
-    path.join(snapshotRoot, "snapshot-meta.json"),
-    JSON.stringify({ createdAt: Date.now() }),
-  );
-
-  await (
-    storeService as unknown as {
-      restoreDataFromSnapshotIfNeeded: (root: string) => Promise<void>;
-    }
-  ).restoreDataFromSnapshotIfNeeded(dataRoot);
-
-  assert.equal(await fs.readFile(configPath, "utf8"), "snapshot-config");
-  assert.equal(
-    await fs.readFile(path.join(gamesPath, "game.marker"), "utf8"),
-    "snapshot-game",
-  );
-  assert.equal(
-    await fs.readFile(path.join(dbPath, "db.marker"), "utf8"),
-    "snapshot-db",
-  );
-
-  await Promise.all([
-    fs.rm(configPath, { force: true }),
-    fs.rm(gamesPath, { recursive: true, force: true }),
-    fs.rm(dbPath, { recursive: true, force: true }),
-    fs.rm(path.join(dataRoot, ".update-snapshots"), {
-      recursive: true,
-      force: true,
-    }),
-  ]);
-}
-
-async function verifyMigrationFixtureDatabase(): Promise<void> {
-  const sourcePath = process.env.BZ_MIGRATION_FIXTURE_DB;
-  assert.ok(sourcePath, "migration fixture database path is required");
-  const fixturePath = path.join(process.cwd(), "migration-fixture.db");
-  await fs.copyFile(sourcePath, fixturePath);
-  const fixture = new BzGamesDatabase(
-    "migration-fixture.db",
-    "bzgames-migration-v1-fixture",
-  );
-  try {
-    await fixture.initialize();
-    const games = await fixture.getGames();
-    assert.equal(games.length, 1);
-    assert.equal(games[0].id, "fixture-game");
-    assert.equal(
-      games[0].versions[0].path,
-      "C:\\BZ-Games\\games\\fixture-game\\1.0.0",
-    );
-    assert.deepEqual(await fixture.checkIntegrity(), []);
-  } finally {
-    await fixture.close();
+    replaceUserData(originalUserData);
   }
 }
 
 async function main(): Promise<void> {
   try {
-    await verifyMigrationFixtureDatabase();
-    await verifyFinalNsisBridgeSnapshotRestore();
     assert.equal(
       resolveGameHostingPortalUrl(),
       "https://relay.example.com/admin/game-hosting",
@@ -506,24 +487,24 @@ async function main(): Promise<void> {
     `);
     legacyDirect.close();
 
-    await legacy.initialize();
-    const legacyColumns = await legacy.all<{ name: string }>(
-      "PRAGMA table_info(game_versions)",
+    const rejectedLegacy = new BzGamesDatabase(
+      "legacy.db",
+      "database-service-test",
     );
-    assert.equal(
-      legacyColumns.some((column) => column.name === "install_source"),
-      true,
+    await assert.rejects(
+      rejectedLegacy.initialize(),
+      /SQLITE_ERROR|SQL logic error|database_(application_id|user_version|schema)/,
     );
-    assert.equal(
-      legacyColumns.some((column) => column.name === "market_id"),
-      true,
-    );
-    const legacyGames = await legacy.getGames();
-    assert.equal(legacyGames[0].versions[0].installSource, "manual");
-    assert.equal(legacyGames[0].versions[0].marketId, null);
+    await rejectedLegacy.close();
 
     await source.initialize();
-    await destination.initialize();
+
+    const mismatchedPathGame = game("path-identity");
+    mismatchedPathGame.versions[0].relativePath = "other-game/1.0.0";
+    await assert.rejects(
+      source.saveGames([mismatchedPathGame]),
+      /game_version_relative_path_invalid/,
+    );
 
     await source.saveGames([game("remote", true)]);
     await seedBusinessRecords(source, "remote");
@@ -538,13 +519,13 @@ async function main(): Promise<void> {
     assert.equal(
       queuedReadSettled,
       false,
-      "database work must wait while a migration snapshot is copied",
+      "database work must wait while a consistent snapshot is copied",
     );
-    await fs.copyFile("source.db", "migration-snapshot.db");
+    await fs.copyFile("source.db", "database-snapshot.db");
     source.resumeAfterSnapshot();
     assert.equal((await queuedRead).length, 1);
     const snapshot = new BzGamesDatabase(
-      "migration-snapshot.db",
+      "database-snapshot.db",
       "database-service-test",
     );
     try {
@@ -572,11 +553,11 @@ async function main(): Promise<void> {
     assert.equal(persistedMarketVersion.marketId, "official");
 
     await verifyReinstallRestoresDerivedData();
+    await verifyExternalLibraryLifecycle();
     await verifyManualUnlockProgressData();
 
     for (const table of [
       "games",
-      "game_versions",
       "play_sessions",
       "achievement_unlocks",
       "stats_reports",
@@ -586,6 +567,10 @@ async function main(): Promise<void> {
         [],
       );
     }
+    assert.equal(
+      (await source.all(`PRAGMA foreign_key_list("game_versions")`)).length,
+      2,
+    );
 
     for (const wrongKey of [null, "wrong-database-key"]) {
       let rejected = false;
@@ -607,72 +592,10 @@ async function main(): Promise<void> {
       assert.equal(rejected, true);
     }
 
-    await destination.saveGames([game("local", false)]);
-    await seedBusinessRecords(destination, "local");
-    await destination.recordStats([
-      {
-        gameId: "local",
-        gameName: "local",
-        version: "1.0.0",
-        statId: "score",
-        statName: "score",
-        value: 200,
-        mode: "full",
-        reportedAt: 200,
-      },
-    ]);
-    await source.recordStats([
-      {
-        gameId: "local",
-        gameName: "local",
-        version: "1.0.0",
-        statId: "score",
-        statName: "score",
-        value: 100,
-        mode: "full",
-        reportedAt: 100,
-      },
-    ]);
-
-    const dump = await source.exportCloudSqlDump();
-    assert.match(dump, /INSERT OR IGNORE INTO "play_sessions"/);
-    assert.doesNotMatch(dump, /DELETE\s+FROM/i);
-    assert.doesNotMatch(dump, /event_sequence/);
-    assert.doesNotMatch(dump, /INSERT OR IGNORE INTO "games"/);
-    assert.doesNotMatch(dump, /INSERT OR IGNORE INTO "game_versions"/);
-
-    await destination.importCloudSqlDump(dump);
-    await destination.importCloudSqlDump(dump);
-
-    for (const table of [
-      "play_sessions",
-      "achievement_unlocks",
-      "stats_reports",
-    ]) {
-      assert.equal(
-        await count(destination, table),
-        table === "stats_reports" ? 4 : 2,
-        `${table} should merge exactly once`,
-      );
-    }
-    const destinationGames = await destination.getGames();
-    assert.deepEqual(
-      destinationGames.map((item) => item.id),
-      ["local"],
-      "cloud import must not modify device-local game entities",
-    );
-    assert.equal(
-      destinationGames[0].versions[0].stats.score,
-      200,
-      "full statistics must be rebuilt by report time on a replacement device",
-    );
     assert.deepEqual(await source.checkIntegrity(), []);
-    assert.deepEqual(await destination.checkIntegrity(), []);
-    console.log("database repository and cloud merge tests passed");
+    console.log("database repository and game library tests passed");
   } finally {
     await source.close();
-    await destination.close();
-    await legacy.close();
     await bzGamesDatabase.close();
   }
 }

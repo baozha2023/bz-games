@@ -1,5 +1,6 @@
 import { createRequire } from "module";
 import { Worker } from "worker_threads";
+import crypto from "crypto";
 import path from "path";
 import { getAppRoot } from "../../../utils/appPath";
 import { logger } from "../../../utils/logger";
@@ -18,24 +19,11 @@ interface PendingTask<T> {
   reject: (error: Error) => void;
 }
 
-type RequestType =
-  | "run"
-  | "get"
-  | "all"
-  | "exec"
-  | "batch"
-  | "export"
-  | "close";
+type RequestType = "run" | "get" | "all" | "batch" | "close";
 
 export interface SqliteBatchStatement {
   sql: string;
   params?: SqliteParam[];
-}
-
-interface ExportedTable {
-  name: string;
-  columns: string[];
-  rows: Array<Record<string, unknown>>;
 }
 
 export class AsyncSqliteDatabase {
@@ -53,7 +41,16 @@ export class AsyncSqliteDatabase {
     private readonly relativeDbPath: string,
     private readonly schemaSql: string[],
     private readonly encryptionKey: Buffer,
+    private readonly applicationId: number,
+    private readonly userVersion: number,
   ) {}
+
+  private getSchemaFingerprint(): string {
+    return crypto
+      .createHash("sha256")
+      .update(this.schemaSql.join("\n"), "utf8")
+      .digest("hex");
+  }
 
   init(): void {
     if (this.worker) return;
@@ -67,14 +64,120 @@ const fs = require("fs");
 const Database = require(workerData.betterSqlite3Path);
 
 fs.mkdirSync(path.dirname(workerData.dbPath), { recursive: true });
-const db = new Database(workerData.dbPath, { nativeBinding: workerData.nativeBindingPath });
-db.pragma("cipher='chacha20'");
-db.key(Buffer.from(workerData.encryptionKeyHex, "hex"));
-db.prepare("SELECT name FROM sqlite_master LIMIT 1").get();
-db.pragma("journal_mode = WAL");
-for (const sql of workerData.schemaSql) db.exec(sql);
+const configure = (database) => {
+  database.pragma("cipher='chacha20'");
+  database.key(Buffer.from(workerData.encryptionKeyHex, "hex"));
+  database.pragma("foreign_keys = ON");
+};
+let db;
+let startupPhase = "load";
+try {
+const schemaShape = (database) => JSON.stringify(
+  database.prepare("SELECT type, name, tbl_name, sql " +
+    "FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' " +
+    "ORDER BY type, name").all(),
+);
+startupPhase = "reference-open";
+const reference = new Database(":memory:", {
+  nativeBinding: workerData.nativeBindingPath,
+});
+reference.pragma("foreign_keys = ON");
+startupPhase = "reference-schema";
+for (const [index, sql] of workerData.schemaSql.entries()) {
+  try {
+    reference.exec(sql);
+  } catch (error) {
+    throw new Error("database_schema_statement_" + index + ":" + error.message);
+  }
+}
+startupPhase = "reference-shape";
+const expectedSchemaShape = schemaShape(reference);
+reference.close();
+const validate = (database) => {
+  const metaTable = database.prepare(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'bz_schema_meta'",
+  ).get();
+  if (!metaTable) {
+    throw new Error("database_schema_meta_missing");
+  }
+  const meta = database.prepare(
+    "SELECT schema_fingerprint FROM bz_schema_meta WHERE singleton = 1",
+  ).get();
+  const applicationId = database.pragma("application_id", { simple: true });
+  const userVersion = database.pragma("user_version", { simple: true });
+  const integrity = database.pragma("integrity_check");
+  if (applicationId !== workerData.applicationId) {
+    throw new Error("database_application_id_mismatch");
+  }
+  if (userVersion !== workerData.userVersion) {
+    throw new Error("database_user_version_mismatch");
+  }
+  if (!meta || meta.schema_fingerprint !== workerData.schemaFingerprint) {
+    throw new Error("database_schema_fingerprint_mismatch");
+  }
+  if (schemaShape(database) !== expectedSchemaShape) {
+    throw new Error("database_schema_shape_mismatch");
+  }
+  if (integrity.length !== 1 || integrity[0].integrity_check !== "ok") {
+    throw new Error("database_integrity_failed");
+  }
+};
 
-parentPort?.on("message", (message) => {
+if (!fs.existsSync(workerData.dbPath)) {
+  startupPhase = "temporary-open";
+  const temporaryPath = workerData.dbPath + ".creating-" + process.pid + "-" + Date.now();
+  const temporary = new Database(temporaryPath, {
+    nativeBinding: workerData.nativeBindingPath,
+  });
+  try {
+    configure(temporary);
+    startupPhase = "temporary-schema";
+    temporary.exec("BEGIN IMMEDIATE");
+    try {
+      for (const [index, sql] of workerData.schemaSql.entries()) {
+        try {
+          temporary.exec(sql);
+        } catch (error) {
+          throw new Error("database_schema_statement_" + index + ":" + error.message);
+        }
+      }
+      temporary.prepare(
+        "INSERT INTO bz_schema_meta (singleton, schema_fingerprint) VALUES (1, ?)",
+      ).run(workerData.schemaFingerprint);
+      temporary.exec("COMMIT");
+    } catch (error) {
+      temporary.exec("ROLLBACK");
+      throw error;
+    }
+    startupPhase = "temporary-validate";
+    validate(temporary);
+    temporary.close();
+    fs.renameSync(temporaryPath, workerData.dbPath);
+  } catch (error) {
+    try { temporary.close(); } catch {}
+    try { fs.rmSync(temporaryPath, { force: true }); } catch {}
+    throw error;
+  }
+}
+
+startupPhase = "database-open";
+db = new Database(workerData.dbPath, { nativeBinding: workerData.nativeBindingPath });
+configure(db);
+startupPhase = "database-probe";
+db.prepare("SELECT name FROM sqlite_master LIMIT 1").get();
+startupPhase = "database-validate";
+validate(db);
+startupPhase = "database-wal";
+db.pragma("journal_mode = WAL");
+} catch (error) {
+  parentPort?.postMessage({
+    id: 0,
+    ok: false,
+    error: startupPhase + ":" + (error?.message || error?.code || String(error)),
+  });
+}
+
+if (db) parentPort?.on("message", (message) => {
   try {
     let result = null;
     if (message.type === "run") {
@@ -83,8 +186,6 @@ parentPort?.on("message", (message) => {
       result = db.prepare(message.sql).get(...message.params);
     } else if (message.type === "all") {
       result = db.prepare(message.sql).all(...message.params);
-    } else if (message.type === "exec") {
-      db.exec(message.sql);
     } else if (message.type === "batch") {
       const execute = db.transaction((statements) => {
         for (const statement of statements) {
@@ -92,32 +193,6 @@ parentPort?.on("message", (message) => {
         }
       });
       execute(message.statements);
-    } else if (message.type === "export") {
-      const quoteIdentifier = (value) => \`"\${String(value).replace(/"/g, '""')}"\`;
-      const exportTables = db.transaction((tableNames, omittedColumns) => {
-        const existingTables = new Set(
-          db.prepare(\`SELECT name FROM sqlite_master
-            WHERE type = 'table' AND name NOT LIKE 'sqlite_%'\`)
-            .all()
-            .map((row) => row.name),
-        );
-        return tableNames
-          .filter((tableName) => existingTables.has(tableName))
-          .map((tableName) => {
-            const omitted = new Set(omittedColumns[tableName] || []);
-            const columns = db
-              .prepare(\`PRAGMA table_info(\${quoteIdentifier(tableName)})\`)
-              .all()
-              .map((row) => row.name)
-              .filter((column) => !omitted.has(column));
-            const rows = db
-              .prepare(\`SELECT \${columns.map(quoteIdentifier).join(", ")}
-                FROM \${quoteIdentifier(tableName)} ORDER BY rowid\`)
-              .all();
-            return { name: tableName, columns, rows };
-          });
-      });
-      result = exportTables(message.tableNames, message.omittedColumns);
     } else if (message.type === "close") {
       db.close();
     } else {
@@ -134,6 +209,9 @@ parentPort?.on("message", (message) => {
       workerData: {
         dbPath: this.getDatabasePath(),
         schemaSql: this.schemaSql,
+        schemaFingerprint: this.getSchemaFingerprint(),
+        applicationId: this.applicationId,
+        userVersion: this.userVersion,
         encryptionKeyHex: this.encryptionKey.toString("hex"),
         betterSqlite3Path,
         nativeBindingPath: this.resolveNativeBindingPath(betterSqlite3Path),
@@ -141,8 +219,13 @@ parentPort?.on("message", (message) => {
     });
     worker.on("message", (message) => this.handleWorkerMessage(message));
     worker.on("error", (error) => {
-      logger.error(`[${this.serviceName}] Worker error`, error);
-      this.rejectAll(error instanceof Error ? error : new Error(String(error)));
+      const raw = error as Error & { code?: string };
+      const normalized =
+        raw.message && raw.message !== "[object Object]"
+          ? raw
+          : new Error(raw.code || "database_worker_startup_failed");
+      logger.error(`[${this.serviceName}] Worker error`, normalized);
+      this.rejectAll(normalized);
       this.worker = null;
     });
     worker.on("exit", (code) => {
@@ -163,7 +246,9 @@ parentPort?.on("message", (message) => {
   }
 
   getDatabasePath(): string {
-    return path.join(getAppRoot(), this.relativeDbPath);
+    return path.isAbsolute(this.relativeDbPath)
+      ? this.relativeDbPath
+      : path.join(getAppRoot(), this.relativeDbPath);
   }
 
   private resolveNativeBindingPath(packageEntryPath: string): string {
@@ -189,50 +274,17 @@ parentPort?.on("message", (message) => {
     return this.post<T[]>("all", sql, params);
   }
 
-  exec(sql: string): Promise<void> {
-    return this.post("exec", sql).then(() => undefined);
-  }
-
   batch(statements: SqliteBatchStatement[]): Promise<void> {
     return this.postWithPayload("batch", { statements }).then(() => undefined);
-  }
-
-  async exportSqlDump(
-    header: string,
-    tableNames: string[],
-    omittedColumns: Readonly<Record<string, readonly string[]>> = {},
-  ): Promise<string> {
-    const exportTables = await this.postWithPayload<ExportedTable[]>("export", {
-      tableNames,
-      omittedColumns,
-    });
-    const lines = [
-      header,
-      `-- generated_at: ${new Date().toISOString()}`,
-      `-- tables: ${exportTables.map((table) => table.name).join(",")}`,
-      "BEGIN TRANSACTION;",
-    ];
-    for (const table of exportTables) {
-      for (const row of table.rows) {
-        lines.push(
-          `INSERT OR IGNORE INTO ${this.quoteIdentifier(table.name)} (${table.columns.map((column) => this.quoteIdentifier(column)).join(", ")}) VALUES (${table.columns.map((column) => this.toSqlLiteral(row[column])).join(", ")});`,
-        );
-      }
-    }
-    lines.push("COMMIT;");
-    lines.push("");
-    return lines.join("\n");
-  }
-
-  importSqlDump(sql: string): Promise<void> {
-    return this.exec(sql);
   }
 
   async close(): Promise<void> {
     if (!this.worker) return;
     this.isClosing = true;
     await this.waitForIdle();
+    let closeError: unknown;
     await this.post("close").catch((error) => {
+      closeError = error;
       logger.error(`[${this.serviceName}] Failed to close database`, error);
     });
     const worker = this.worker;
@@ -244,6 +296,7 @@ parentPort?.on("message", (message) => {
       this.isClosing = false;
     }
     logger.info(`[${this.serviceName}] Closed`);
+    if (closeError) throw closeError;
   }
 
   async suspendForSnapshot(): Promise<void> {
@@ -313,6 +366,17 @@ parentPort?.on("message", (message) => {
       error?: string;
     };
     if (typeof payload.id !== "number") return;
+    if (payload.id === 0 && payload.ok === false) {
+      const error = new Error(
+        payload.error || `${this.serviceName}_worker_startup_failed`,
+      );
+      this.rejectAll(error);
+      const worker = this.worker;
+      this.worker = null;
+      if (worker) this.expectedWorkerExits.add(worker);
+      void worker?.terminate();
+      return;
+    }
     const task = this.pendingTasks.get(payload.id);
     if (!task) return;
     this.pendingTasks.delete(payload.id);
@@ -343,18 +407,5 @@ parentPort?.on("message", (message) => {
     if (this.pendingTasks.size > 0) return;
     for (const resolve of this.idleResolvers) resolve();
     this.idleResolvers.clear();
-  }
-
-  private quoteIdentifier(value: string): string {
-    return `"${String(value).replace(/"/g, '""')}"`;
-  }
-
-  private toSqlLiteral(value: unknown): string {
-    if (value === null || value === undefined) return "NULL";
-    if (Buffer.isBuffer(value)) return `X'${value.toString("hex")}'`;
-    if (typeof value === "number")
-      return Number.isFinite(value) ? String(value) : "NULL";
-    if (typeof value === "bigint") return String(value);
-    return `'${String(value).replace(/'/g, "''")}'`;
   }
 }
