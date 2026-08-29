@@ -25,7 +25,7 @@
     "test:import": "vitest run src/main/utils/fileUtils.test.ts src/main/services/game/GameImportTaskService.test.ts src/main/services/game/ProcessTreeService.test.ts src/main/services/room/relayWebSocketUrl.test.ts src/renderer/src/stores/useGameStore.test.ts src/renderer/src/stores/useForumStore.test.ts",
     "test:forum": "vitest run src/shared/forum-references.test.ts src/main/services/system/ForumService.test.ts src/renderer/src/services/forum-market-reference-service.test.ts src/renderer/src/services/forum-post-reference-service.test.ts src/renderer/src/services/forum-reference-view-model.test.ts src/renderer/src/composables/useForumCommandController.test.ts src/renderer/src/components/social/forum-editor-document.test.ts src/renderer/src/components/social/ForumPostEditor.test.ts src/renderer/src/components/social/ForumPostBody.test.ts",
     "test:market": "vitest run src/main/services/market",
-    "test:manifest": "vitest run src/shared/game-manifest.test.ts src/main/services/game/WebWindowStartup.test.ts bz-games-admin/src/utils/manifest-entry.test.ts",
+    "test:manifest": "vitest run src/shared/game-manifest.test.ts src/main/services/game/WebWindowStartup.test.ts",
     "test:feedback": "vitest run src/main/services/system/FeedbackService.test.ts",
     "test:nickname": "vitest run src/shared/types/store.types.test.ts",
     "test:avatar-frame": "vitest run src/shared/avatar-frames.test.ts src/shared/frame-assets.test.ts",

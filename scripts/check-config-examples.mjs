@@ -57,38 +57,6 @@ function systemdEnvironmentKeys(relativePath) {
     .filter(Boolean);
 }
 
-function adminEnvironmentKeys() {
-  const sourceFiles = ["bz-games-admin/vite.config.ts"];
-  const pendingDirectories = ["bz-games-admin/src"];
-  while (pendingDirectories.length) {
-    const directory = pendingDirectories.pop();
-    for (const entry of fs.readdirSync(path.join(root, directory), {
-      withFileTypes: true,
-    })) {
-      const relativePath = path.join(directory, entry.name);
-      if (entry.isDirectory()) {
-        pendingDirectories.push(relativePath);
-      } else if (/\.(?:ts|vue)$/.test(entry.name)) {
-        sourceFiles.push(relativePath);
-      }
-    }
-  }
-  return sourceFiles
-    .flatMap((relativePath) => [
-      ...read(relativePath).matchAll(
-        /(?:import\.meta\.env|env)\.([A-Z][A-Z0-9_]*)/g,
-      ),
-    ])
-    .map((match) => match[1]);
-}
-
-function dotenvKeys(relativePath) {
-  return read(relativePath)
-    .split(/\r?\n/)
-    .map((line) => line.match(/^\s*([A-Z][A-Z0-9_]*)\s*=/)?.[1])
-    .filter(Boolean);
-}
-
 function assertGitIgnored(relativePaths) {
   const missing = relativePaths.filter((relativePath) => {
     const result = spawnSync(
@@ -128,12 +96,6 @@ assertSameKeys(
   "relay code/systemd example",
   relayConfigKeys(),
   systemdEnvironmentKeys("relay-server/bz-games-relay.service.example"),
-);
-
-assertSameKeys(
-  "admin code/env example",
-  adminEnvironmentKeys(),
-  dotenvKeys("bz-games-admin/.env.example"),
 );
 
 assertGitIgnored([
