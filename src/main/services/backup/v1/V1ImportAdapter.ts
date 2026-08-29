@@ -151,6 +151,14 @@ function normalizeRoot(root: string): string {
   return path.resolve(root).toLocaleLowerCase("en-US");
 }
 
+function assertSafeLibraryRoot(root: string): string {
+  const resolved = path.resolve(root);
+  if (resolved === path.parse(resolved).root) {
+    throw new Error("v1_external_library_root_invalid");
+  }
+  return resolved;
+}
+
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object"
     ? (value as Record<string, unknown>)
@@ -439,25 +447,28 @@ export async function convertExtractedV1ToV4(
             .digest("hex"),
         );
 
-      const sourceGamesRoot = path.resolve(manifest.sourceGamesRoot);
+      const sourceGamesRoot = assertSafeLibraryRoot(manifest.sourceGamesRoot);
       const libraryByRoot = new Map<string, LibraryMapping>();
       const externalRoots = convertedConfig.legacyStorageRoots
-        .filter((root) => path.resolve(root) !== sourceGamesRoot)
+        .filter(
+          (root) => normalizeRoot(root) !== normalizeRoot(sourceGamesRoot),
+        )
         .map((root) => path.resolve(root));
       const defaultNormalized = convertedConfig.legacyDefaultRoot
         ? normalizeRoot(convertedConfig.legacyDefaultRoot)
         : "";
       const ensureExternalLibrary = (root: string): LibraryMapping => {
-        const normalized = normalizeRoot(root);
+        const safeRoot = assertSafeLibraryRoot(root);
+        const normalized = normalizeRoot(safeRoot);
         const existing = libraryByRoot.get(normalized);
         if (existing) return existing;
         const library: LibraryMapping = {
           id: crypto.randomUUID(),
           kind: "external",
-          sourceRoot: path.resolve(root),
-          targetRoot: path.resolve(root),
+          sourceRoot: safeRoot,
+          targetRoot: safeRoot,
           normalizedRoot: normalized,
-          displayName: path.basename(path.resolve(root)),
+          displayName: path.basename(safeRoot),
           isDefault: normalized === defaultNormalized ? 1 : 0,
         };
         libraryByRoot.set(normalized, library);

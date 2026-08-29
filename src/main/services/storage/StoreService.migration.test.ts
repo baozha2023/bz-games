@@ -278,6 +278,36 @@ describe("StoreService game library migration filesystem", () => {
     ).resolves.toBe("manifest");
   });
 
+  it("rejects a game version path that traverses a directory junction", async () => {
+    const outsidePath = path.join(temporaryRoot, "outside");
+    const linkedPath = path.join(sourcePath, "linked-game", "1.0.0");
+    await fs.mkdir(outsidePath);
+    await fs.mkdir(path.dirname(linkedPath), { recursive: true });
+    await fs.symlink(outsidePath, linkedPath, "junction");
+
+    const state = service as unknown as {
+      gameLibrariesCache: GameLibraryRecord[];
+    };
+    state.gameLibrariesCache = [
+      {
+        id: "library-1",
+        kind: "external",
+        root_path: sourcePath,
+        normalized_root: sourcePath.toLocaleLowerCase("en-US"),
+        display_name: "source",
+        is_default: 0,
+        created_at: 1,
+      },
+    ];
+
+    expect(() =>
+      service.resolveGameVersionPath({
+        libraryId: "library-1",
+        relativePath: "linked-game/1.0.0",
+      }),
+    ).toThrow("invalid_storage_path");
+  });
+
   it("restores quarantined game files when the database transaction fails", async () => {
     const game: GameRecord = {
       id: "game-a",

@@ -971,9 +971,11 @@ export class GameLoader {
     for (const root of scanRoots) {
       if (!fs.existsSync(root)) continue;
       try {
+        const rootStat = fs.lstatSync(root);
+        if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) continue;
         const gameDirs = fs.readdirSync(root);
         for (const gameId of gameDirs) {
-          if (gameId === ".imports") continue;
+          if (gameId === ".imports" || gameId === ".bz-games-trash") continue;
           const gameRoot = path.join(root, gameId);
           const gameRootStat = fs.lstatSync(gameRoot);
           if (!gameRootStat.isDirectory() || gameRootStat.isSymbolicLink()) {
