@@ -14,14 +14,14 @@
 
 ### 核心设计原则
 
-| 原则                 | 说明                                                                                                       |
-| -------------------- | ---------------------------------------------------------------------------------------------------------- |
-| **本地优先**         | 用户配置、游戏记录、经济数据与统计数据存储于本地；登录、云同步、论坛与反馈属于可选在线能力，不影响核心功能 |
-| **便携式存储**       | 配置默认存储在应用根目录，游戏可存放在默认目录或用户维护的多路径目录中                                     |
-| **开放式游戏管理**   | 用户可将符合平台规范的游戏载入平台，平台会自动复制并管理游戏文件                                           |
-| **统一联机基础设施** | 平台提供房间管理、玩家状态、聊天、游戏消息中继、断线重连与公网入口能力                                     |
-| **公网入口可切换**   | 局域网入口持续可用，公网入口支持用户自备 frp 与官方中继服务器短地址                                        |
-| **Windows 专用**     | 面向 Windows 10/11 x64 设计、开发、测试与打包                                                              |
+| 原则                 | 说明                                                                                               |
+| -------------------- | -------------------------------------------------------------------------------------------------- |
+| **本地优先**         | 用户配置、游戏记录、经济数据与统计数据存储于本地；账号、论坛与反馈属于可选在线能力，不影响核心功能 |
+| **便携式存储**       | 配置默认存储在应用根目录，游戏可存放在默认目录或用户维护的多路径目录中                             |
+| **开放式游戏管理**   | 用户可将符合平台规范的游戏载入平台，平台会自动复制并管理游戏文件                                   |
+| **统一联机基础设施** | 平台提供房间管理、玩家状态、聊天、游戏消息中继、断线重连与公网入口能力                             |
+| **公网入口可切换**   | 局域网入口持续可用，公网入口支持用户自备 frp 与官方中继服务器短地址                                |
+| **Windows 专用**     | 面向 Windows 10/11 x64 设计、开发、测试与打包                                                      |
 
 ### 平台核心功能
 
@@ -38,11 +38,11 @@
 - 游戏托管（创作者、管理员和超级管理员上传 ZIP 到官方服务器；创作者提交后需审核，管理员与超级管理员直接发布，市场通过逻辑地址下载）
 - 个性化系统（头像框解锁、装备、预览，支持多场景展示）
 - 系统设置（玩家信息、主题、端口、语言、版本迁移、游戏库列表、GitHub Token）
-- 官方登录与云同步服务（GitHub OAuth 登录；脱敏配置与三张业务表 SQL 逻辑备份组成单一平台快照，原子发布并在本地幂等合并）
+- 官方账号服务（GitHub OAuth 登录、资料昵称同步与用户主动开启的在线状态）
 - 建言献策（仅 GitHub 登录用户可提交文字与图片，每个账号每 12 小时一次）
 - 论坛（仅登录用户；帖子纯文本+图片、服务端敏感词过滤、点赞/评论、游标信息流与独立详情页）
 - 创作者中心（所有 GitHub 用户可登录；数据库 RBAC 控制反馈管理、游戏投稿、审核和发布；Vue 3 + Vite 独立构建为 `/admin/` 同源静态站点；生产由 Nginx 直接托管页面并将接口转发给本机 Relay）
-- 客户端卸载系统（游戏进程批量收口、游戏库可选择删除、路径安全校验、符号链接防护）
+- 客户端卸载系统（根目录独立 Rust 卸载器、崩溃恢复、任务阻塞、可选数据清理与路径安全防护）
 - 默认封面/图标静态回退（`GameCover.vue` / `GameIcon.vue` 在无自定义资源时使用内置静态图片）
 - 官网最新安装包下载（正式 GitHub Release 原子同步到官方服务器，固定接口支持断点续传并对全部并发下载合计限速 100 Mbps）
 - 平台版本管理（管理员可查看当前版本，仅超级管理员可在管理端上传稳定版 EXE，手动上传允许升版或降版；Actions 仍只允许升版；两条链路统一经过暂存、SHA-256/PE/semver 校验、发布锁和 latest 原子切换，并把发布文件归一到发布目录属主、属组与 `0640` 权限）
@@ -61,17 +61,18 @@
 | 页面截图        | html2canvas                                  | 统计热力图分享图生成                                                                |
 | 静态文件服务    | serve-static                                 | `entry=serve` 游戏本地 HTTP 服务，根路径回落到 `index.html`                         |
 | 构建工具        | electron-vite                                | <br />                                                                              |
-| 打包工具        | electron-builder                             | <br />                                                                              |
-| 包管理器        | pnpm                                         | <br />                                                                              |
+| 打包与更新      | electron-builder + Velopack 1.2.0            | electron-builder 只生成 Electron 目录包，Velopack 管理 `.runtime` 全量/增量更新     |
+| 原生引导层      | Rust                                         | 根目录稳定启动器、独立卸载器、安装向导、健康守护与回滚                              |
+| 包管理器        | npm                                          | 以 `package-lock.json` 为唯一锁文件                                                 |
 | 进程间通信      | Electron IPC（contextBridge）                | <br />                                                                              |
 | 本地数据存储    | electron-store                               | v10+ (ESM)，需在构建中配置 include                                                  |
 | SQLite 数据存储 | better-sqlite3-multiple-ciphers              | ChaCha20 加密的游戏实体、会话、成就与统计事件                                       |
-| 在线服务元数据  | MySQL                                        | 用户、OAuth、会话、云文件元数据、反馈以及论坛帖子/评论/点赞/搜索 outbox             |
-| 云文件对象存储  | MongoDB GridFS                               | 保存云同步文件、反馈图片与论坛帖子图片                                              |
+| 在线服务元数据  | MySQL                                        | 用户、OAuth、会话、在线状态、反馈以及论坛帖子/评论/点赞/搜索 outbox                 |
+| 图片对象存储    | MongoDB GridFS                               | 保存反馈图片与论坛帖子图片                                                          |
 | Multipart 解析  | busboy                                       | 中继服务流式接收反馈和论坛图片并限制字段、文件数量及大小                            |
 | 论坛搜索        | 可选 Elasticsearch 8.19.x + analysis-ik      | MySQL 为事实源；ES 未配置或未就绪时隐藏搜索，标题/正文使用 `ik_max_word`/`ik_smart` |
 | 管理前端        | Vue 3 + TypeScript + Vite + Pinia + Naive UI | 构建为 `/admin/` 同源静态站点                                                       |
-| 版本迁移        | 7zip-bin / `.bzgames` v1                     | v3.4.2 最终 NSIS 桥接版，只导出、不删除源数据                                       |
+| 本地备份        | 7zip-bin / `.bzgames` V1、V2                 | V1 永久只读导入 v3.4.2；V2 为 4.x 长期导入导出协议，源文件永不删除                  |
 | WebSocket 服务  | ws                                           | Game API、Room Server、Room Client 均基于 WebSocket，v2 高频通信支持原始二进制帧    |
 | 版本比较        | semver                                       | 用于平台版本与游戏版本兼容性检查                                                    |
 | ZIP/7Z 解压     | 7zip-bin (7za)                               | 通过 `child_process.spawn` 调用，统一处理 .zip 和 .7z                               |
@@ -89,11 +90,8 @@ bz-games/
 ├── DEVELOPER_GUIDE.md                    # 面向游戏接入方的开发接入指南
 ├── docs/
 │   └── GAME_API_V1_V2_REFERENCE.md        # Game API v1/v2 接口说明文档
-├── bz-games-admin/                        # 公开源码的反馈与论坛管理前端（生产构建由中继服务同源提供）
-│   ├── .env.example                       # 当前零字段环境配置声明
-│   ├── src/                               # 路由、管理员会话、反馈/论坛列表与详情界面
-│   └── vite.config.ts                     # `/admin/` 构建与本机中继开发代理
-├── relay-server/                          # 官方服务端（中继 / OAuth / 云同步 / 反馈 / 论坛 / 管理 API）
+├── bz-games-admin/                        # 被父仓库忽略的独立管理端仓库；不参与父仓库提交
+├── relay-server/                          # 官方服务端（中继 / OAuth / 账号 / 反馈 / 论坛 / 管理 API）
 │   ├── API.md                             # 中继服务器接口规范
 │   ├── DATA_MODEL.md                      # MySQL/MongoDB 数据模型说明
 │   ├── DEPLOY.md                          # 中继服务器部署手册
@@ -101,7 +99,6 @@ bz-games/
 │   ├── package.json                       # 中继服务器独立依赖
 │   ├── scripts/
 │   │   ├── relay-e2e-test.js              # 房间中继端到端测试
-│   │   ├── cloud-data-service.test.js     # 单一平台快照原子发布与旧端点收口测试
 │   │   ├── feedback-service.test.js       # 反馈限流、上传与管理接口测试
 │   │   ├── forum-service.test.js          # 论坛鉴权、轻量游标和搜索降级测试
 │   │   ├── auth-service.test.js           # OAuth 回跳白名单测试
@@ -119,7 +116,6 @@ bz-games/
 │       │   ├── auth-service.js            # GitHub OAuth 认证与会话管理
 │       │   ├── access-control-service.js  # Portal 认证、RBAC、所有权与同源写入校验
 │       │   ├── admin-static-service.js     # Relay 直连/开发时的 `/admin/` 静态资源、SPA fallback 与安全响应头
-│       │   ├── cloud-data-service.js      # 单一平台快照上传、下载与原子指针发布
 │       │   ├── feedback-service.js        # 登录反馈上传、限流、GridFS 图片与管理 API
 │       │   ├── forum-service.js           # 论坛帖子、评论、点赞、限流、GridFS 图片与管理 API
 │       │   ├── forum-search-service.js    # Elasticsearch 索引、search_after 与 alias 适配
@@ -138,15 +134,16 @@ bz-games/
 │           ├── protocol.js                # 通信协议常量（relay:* 指令集）
 │           ├── relay-auth.js              # HTTP/WS 统一 relayToken 鉴权工具（timingSafeEqual）
 │           └── ws.js                      # WebSocket 消息序列化与广播发送
-├── build/
-│   └── installer.nsh                     # NSIS 自定义安装/卸载钩子（多语言支持）
+├── native/bootstrap/                     # Rust 稳定启动器、独立卸载器、安装向导与健康回滚
 ├── package.json                          # 依赖、脚本与打包发布配置
 ├── private-build.config.example.json      # 私有构建配置模板（CDN/OSS/中继/加密种子等环境变量）
 ├── scripts/
-│   ├── check-config-examples.mjs          # 三端配置示例字段及敏感路径忽略规则检查
+│   ├── check-config-examples.mjs          # 客户端/服务端配置示例字段及敏感路径忽略规则检查
 │   ├── run-database-test.mjs              # 隔离目录内构建并运行数据库服务测试
-│   └── test-database-service.ts           # 旧数据迁移、加密仓储及云端幂等合并测试
-├── pnpm-lock.yaml                        # pnpm 依赖锁定文件
+│   ├── test-database-service.ts           # v4 最终 Schema、旧库拒绝、路径规则与仓储行为测试
+│   ├── run-v1-conversion.mjs              # 独立执行 v3.4.2 V1 转换器
+│   └── build-velopack.ps1                 # Electron、Velopack 与 Rust 安装器构建链
+├── package-lock.json                     # npm 依赖锁定文件
 ├── tsconfig.json                         # TypeScript 根配置
 ├── tsconfig.node.json                    # 主进程/预加载/共享代码 TS 配置
 ├── tsconfig.web.json                     # 渲染进程 TS 配置
@@ -176,15 +173,16 @@ bz-games/
 │   │   ├── services/
 │   │   │   ├── storage/
 │   │   │   │   ├── database/
-│   │   │   │   │   ├── AsyncSqliteDatabase.ts        # 加密异步 SQLite 引擎（Worker Thread、事务批处理、SQL dump）
-│   │   │   │   │   ├── BzGamesDatabase.ts            # 当前统一 schema、游戏仓储与云同步表导入导出
+│   │   │   │   │   ├── AsyncSqliteDatabase.ts        # 加密异步 SQLite 引擎（Worker Thread、事务批处理）
+│   │   │   │   │   ├── BzGamesDatabase.ts            # v4 最终 schema、游戏仓储、完整性与外键校验
 │   │   │   │   │   └── PlaySessionDatabaseService.ts # 游玩会话启动/结束及统计查询
+│   │   │   │   ├── ConfigCodec.ts          # v4 配置密文信封、严格 Schema 与 AES-256-GCM 编解码
 │   │   │   │   └── StoreService.ts        # 本地数据读写与业务数据维护
 │   │   │   ├── game/
 │   │   │   │   ├── GameEnvironment.ts     # 游戏启动环境变量、bz-config.js 生成与清理
 │   │   │   │   ├── GameImportTaskService.ts # 手动导入任务队列、持久化、取消/重试与中断恢复
 │   │   │   │   ├── GameLoader.ts          # 统一异步复制、原子落盘、校验与记录同步
-│   │   │   │   ├── GameManifestFileService.ts # 已安装 Manifest 的 Schema 校验、AES-GCM 加解密、原子写入与明文迁移
+│   │   │   │   ├── GameManifestFileService.ts # 已安装 Manifest 的 AES-GCM 严格读写；v4 运行时拒绝明文
 │   │   │   │   ├── GameWindowIdentityRegistry.ts # WebContents 与 gameId/version 的可信身份绑定，供存储 IPC 鉴权
 │   │   │   │   ├── ProcessTreeService.ts  # 跨平台进程树查询与终止（Windows PowerShell / macOS/Linux ps）
 │   │   │   │   └── GameManager.ts         # 游戏进程启动/停止与生命周期管理
@@ -203,14 +201,15 @@ bz-games/
 │   │   │   ├── market/
 │   │   │   │   ├── MarketCatalogClient.ts # 市场目录请求、来源切换与索引解析
 │   │   │   │   └── MarketService.ts       # 市场内存缓存、下载、校验、解压与安装
+│   │   │   ├── backup/                  # V2 导入导出、完整替换与正式 V1 导入转换器
 │   │   │   └── system/
-│   │       ├── CloudSyncService.ts    # 云端数据同步（GitHub OAuth 登录 / 配置与数据库上传下载 / 哈希校验 / 进度事件 / 上传黑名单过滤敏感字段 / 下载选择性合并 config）
+│   │       ├── AccountService.ts      # GitHub OAuth、登出、账号资料同步与主动在线状态
 │   │       ├── FeedbackService.ts     # 图片选择/验证、multipart 上传、历史详情查询与被动登录失效联动
 │   │       ├── ForumService.ts        # 论坛鉴权、信息流/搜索、帖子引用解析、发帖评论与图片上传客户端
 │   │       ├── NotificationService.ts # 系统通知窗口服务
-│   │       ├── UninstallService.ts    # 游戏进程收口、游戏库清理与系统卸载器启动确认
-│   │       ├── MigrationActivityGuard.ts # 迁移导出期间阻止新游戏、市场安装与导入任务
-│   │       └── MigrationExportService.ts # config.json / games / db 的 .bzgames 导出与校验
+│   │       ├── UninstallService.ts    # 卸载任务阻塞、版本化计划与临时 worker 安全交接
+│   │       ├── HealthService.ts       # 写入健康令牌并校验刷新根目录卸载器
+│   │       └── UpdateService.ts       # Velopack 检查、下载、应用与更新前快照
 │   │   └── utils/
 │   │       ├── appPath.ts                 # 应用根路径工具
 │   │       ├── externalUrl.ts             # 外部链接 http/https 协议白名单校验与统一打开
@@ -337,7 +336,8 @@ bz-games/
 │           └── store.types.ts              # 本地存储模型类型
 │
 ├── resources/
-│   ├── icon.png                            # 应用图标资源
+│   ├── icon.png                            # 应用图标源图（运行时及设计资源）
+│   ├── icon.ico                            # Windows 安装器、启动器和 Electron 包的多尺寸图标
 │   ├── avatar-frames/                      # 头像框图片资源（16款透明 PNG，平台运行时读取）
 │   ├── default_cover.png                   # 默认游戏封面回退图片（16:9，GameCover.vue 在无自定义封面时使用）
 │   ├── default_icon.png                    # 默认游戏图标回退图片（1:1，GameIcon.vue 在无自定义图标时使用）
@@ -359,7 +359,7 @@ bz-games/
 | **Room Client**                           | 非房主玩家的平台连接 Room Server 的 WebSocket 客户端                                                                                                                |
 | **Game API Server**                       | 平台在本机运行的本地 WebSocket 服务（`127.0.0.1`），供游戏进程调用平台能力；控制面走 JSON，v2 高频实时数据可走二进制帧                                              |
 | **v2 二进制帧**                           | 高频实时通信帧格式：4字节 big-endian header 长度 + UTF-8 JSON header + 原始 binary body，仅用于 `message.send` / `message.broadcast` / `message.publish`            |
-| **官方中继服务器 (Relay Server)**         | 公网 Node.js HTTP + WebSocket 服务；房间链路保持透明转发，同时提供 OAuth、云同步、反馈和管理员 API。                                                                |
+| **官方中继服务器 (Relay Server)**         | 公网 Node.js HTTP + WebSocket 服务；房间链路保持透明转发，同时提供 OAuth、账号、反馈和管理员 API。                                                                  |
 | **官方短地址**                            | 平台按 `DEFAULT_RELAY_PUBLIC_HOST + roomCode` 拼接的 `<relay-public-host>:随机数字` 地址，展示、复制、服务器列表和手动输入统一使用该格式。                          |
 | **官方房间码**                            | 中继服务器生成并识别的数字房间码；平台从短地址中解析后通过 `relay:join.payload.roomCode` 发送给中继服务器。                                                         |
 | **房间发现 (Room Discovery)**             | 平台房间页面的局域网/服务器 Tab。局域网 Tab 合并了物理局域网和虚拟局域网（通过 `Promise.all` 并发扫描），按网卡分类过滤；服务器通过官方中继 `/rooms` 获取房间列表。 |
@@ -382,7 +382,7 @@ bz-games/
                           │  • 房间注册 / 短地址     │
                           │  • WebSocket 透明转发    │
                           │  • GitHub OAuth 认证     │
-                          │  • 云端文件同步          │
+                          │  • 账号 / 在线状态       │
                           │  • 建言献策 / 管理后台   │
                           │  • MySQL + MongoDB       │
                           └────┬──────────┬─────────┘
@@ -402,7 +402,7 @@ bz-games/
 │  │  • RoomServer        │    │    │    │  │  • RoomClient        │    │  │
 │  │  • RelayRoomService  │    │    │    │  │  • RoomDiscoverySvc  │    │  │
 │  │  • GameApiServer ◄───┼──┐ │    │    │  │  • GameApiServer ◄───┼──┐ │  │
-│  │  • CloudSyncService  │  │ │    │    │  │                      │  │ │  │
+│  │  • AccountService    │  │ │    │    │  │                      │  │ │  │
 │  └──────────────────────┘  │ │    │    │  └──────────────────────┘  │ │  │
 │                             │ │    │    │                             │ │  │
 │  ┌──────────────────────┐   │ │    │    │  ┌──────────────────────┐   │ │  │
@@ -436,26 +436,30 @@ bz-games/
 
 ### 4.0 游戏库路径体系
 
-- **游戏库列表**：`settings.gameStorageHistory` 维护用户配置的游戏库路径列表；首次初始化写入 exe 同级 `games/`。
-- **默认游戏库**：`settings.gameStoragePath` 表示当前默认项，且必须存在于 `gameStorageHistory` 中；设置页维护游戏库列表与默认项。
-- **路径获取边界**：业务模块通过 `StoreService.getDefaultGameStoragePath()` / `getGameStoragePath()` 获取默认游戏库。
-- **迁移与删除安全**：迁移游戏库复制源游戏库全部文件，复制完成后删除原游戏库；迁移失败时提示用户、清空目标目录中已迁移数据并保留目标文件夹。文件占用类错误展示“当前有文件正在打开，无法迁移，已回退”。删除游戏库时按 `gameId/version/game.json` 识别平台游戏内容，保留用户自有文件。删除单个游戏时按游戏根目录递归删除。
-- **默认库迁移提示**：`settings.lastOpenedAt` 标记首次打开；非首次打开且游戏库列表中存在 exe 同级 `games/` 时，提示用户迁移或选择不再提醒。
+- **游戏库列表**：`game_libraries` 是唯一事实源；内置库记录固定为 `id=builtin, kind=builtin`，真实路径始终由 `<数据根>/games` 推导，外部库保存规范绝对根路径。
+- **默认游戏库**：`game_libraries.is_default` 的唯一部分索引与启动不变量保证全局恰好一个 active 默认库；默认库可以是 builtin 或 external，builtin 必须始终 active，但不得被误判为必须始终默认。配置文件不再保存任何游戏库路径数组。
+- **路径获取边界**：业务模块统一通过 `StoreService.getDefaultGameStoragePath()` 获取默认游戏库；版本绝对路径只能通过 `resolveGameVersionPath()` 在主进程文件系统边界生成。
+- **迁移与删除安全**：迁移游戏库只接受空目标目录，并拒绝目录联接、符号链接及其祖先重解析点；完整复制并校验目录结构后，以稳定 `library_id` 更新 `game_libraries` 并核对 `game_versions` 引用数，最后才删除源目录。复制、数据库更新和源目录删除均最多重试 3 次。复制失败会清空目标；数据库更新失败会恢复原仓库记录并清空目标；源目录删除失败会从目标副本恢复源目录、恢复数据库并清空目标。游戏或版本删除采用“同卷原子隔离目录 → SQLite 批事务更新生命周期 → 清理隔离目录”的两阶段提交；扫描器忽略 `.imports` 与 `.bz-games-trash`，准备或数据库提交失败必须恢复原路径。数据库不物理删除游戏、版本、游戏库、游玩、成就或统计历史；外部游戏库使用 `active/removed` 生命周期，从设置移除后不再参与路径解析，再次添加时重新激活原记录。
+- **版本路径**：`game_versions` 只保存 `library_id + relative_path`，运行时解析为实际路径；禁止写回旧版绝对 `path`、`is_present` 字段。
 
 ### 4.1 Game Manifest 规范
 
+- **版本分派**：只有精确数值 `manifestVersion: 2` 使用 Manifest V2；字段缺失或任何非 2 值均按长期保留的 V1 单语言协议解析。版本判断只允许存在于 `parseGameManifest()`。
+- **V2 国际化**：V2 使用 `defaultLocale + localizations`，游戏名、简介、成就标题/描述和统计显示名属于完整语言包；已声明语言必须覆盖全部稳定成就/统计 ID。当前语言不存在时整包回退到 `defaultLocale`，禁止逐字段混用语言。
+- **业务消费边界**：主进程和渲染进程业务只能消费 `ResolvedGameManifest`。切换语言后刷新投影缓存，不重写加密 `game.json`；游戏与版本关系、成就解锁和统计聚合以稳定 ID 为身份，历史事件表可以额外保存事件发生时的本地化显示文本快照，但不得用显示文本参与关联或去重。
 - **存储边界**：开发者目录、手动导入源和市场安装包继续使用明文 `game.json`；复制到 `<游戏库>/<id>/<version>` 后由 `GameManifestFileService` 写为 AES-256-GCM 版本化密文信封，平台只在内存中透明解密。
 - **密钥注入**：`private-build.config.json` 必须配置至少 32 字节随机值的 Base64 `gameManifestEncryptionSeed`，构建期注入 `GAME_MANIFEST_ENCRYPTION_SEED`。缺失或无效时开发启动和构建必须直接失败，禁止降级为明文。
-- **兼容迁移**：已安装的旧明文 Manifest 首次成功通过 Schema 校验后原子迁移为密文；迁移或解密失败必须保留原文件并返回明确错误。更换种子后旧密文不可读取，本期不支持密钥轮换。
+- **运行时隔离**：Manifest V1 与 V2 都是长期游戏接入能力，不属于兼容设计。游戏库内的运行时 Manifest 读取（`readGameManifestFile` 及其全部调用方）只接受密文，明文必须直接拒绝。导入源目录是唯一例外：手动导入校验（`GameLoader.loadManifest`）与市场安装包（`MarketService`）允许明文 `game.json`，用 `parseGameManifest` 只读解析且禁止改写源文件，落盘统一由 `installGameFiles` 写为密文；v3.4.2 的正式 V1 数据导入中，明文 `game.json` 的校验和加密只允许在 `backup/v1/V1ImportAdapter.ts` 内执行。更换种子后旧密文不可读取，本期不支持密钥轮换。
 - **安全边界**：密钥编译在桌面客户端中，Manifest 加密用于阻止直接查看和普通篡改，不能抵御能够逆向客户端的攻击者。
 - **路径与 URL 约束**：`version` 必须是完整 SemVer；`platformVersion` 必须是有效 SemVer 范围或合法闭区间；`entry`、游戏媒体及成就图标只能是游戏目录内的安全相对路径；`author_url`、`web_url` 只允许 HTTP(S)。`entry=serve` 必须存在根目录 `index.html`。
-- **字段关系约束**：`multiplayer` / `singlemultiple` 必须声明合法且有序的玩家人数范围；`networkgame` 必须使用 `entry=url`；`env` 禁止声明平台保留的 `BZ_` 前缀。市场 `gameManifest` 覆盖层从同一 Base Schema 派生，最终合并结果再次通过完整 Schema。
-- **统计信息国际化**：`statistics` 字段支持键值对格式（`[{ "key": "Display Name" }]`），用于在平台统计界面显示本地化的统计项名称。
+- **字段关系约束**：`multiplayer` / `singlemultiple` 必须声明合法且有序的玩家人数范围；`networkgame` 必须使用 `entry=url`；`env` 禁止声明平台保留的 `BZ_` 前缀。市场 V1/V2 `gameManifest` 生成结果必须再次通过对应完整 Schema。
+- **统计与成就国际化**：V1 保留原单语言显示字段；V2 基础定义只保存稳定 ID、模式和图标，显示文本全部来自当前语言包。
 - **时间追踪**：平台自动追踪并记录所有游戏的游玩时长（`time`）；游戏不得通过 `stats.report` 上报或覆盖该平台保留统计项。
 - **详情媒体扩展**：`video` 字段为可选项，指向游戏目录内预览视频（`mp4/webm/ogv/mov/m4v`），仅用于详情页展示。
 - **本地存储加密开关**：`encryptLocalStorage` 为可选布尔字段，仅作用于 Web 游戏 `localStorage` 对应的 `gamedata.json` 持久化。
 - **游戏类型**：`type` 支持 `singleplayer`、`multiplayer`、`singlemultiple`、`networkgame`，通过 `src/shared/types/game.types.ts` 的 `GameType` 枚举维护；调整类型时同步 Schema、业务判断和 UI 文案。`singlemultiple` 代表同时支持单人与联机，`networkgame` 代表远程网页游戏。
 - **网页游戏版本规则**：`networkgame` 类型游戏导入/安装时以 `id` 判断是否已存在，但仍必须声明合法 SemVer；同一 `id` 的网页游戏通过删除旧版本后重新导入完成更新。
+- **语言注入**：Native 游戏获得 `BZ_LOCALE`；本地 `serve/html` 游戏获得 `window.BZ_CONFIG.locale`。`entry=url` 远程网页保持隔离，不注入本地配置。
 - **远程网页启动**：`entry=url` 时 Manifest 必须提供合法 `web_url`，平台直接打开该网页地址。
 - **作者主页链接**：`author_url` 为可选合法 URL，在游戏详情页和市场详情展开卡片展示跳转图标；市场游戏的 `author_url` 可在 `gameManifest` 中覆盖，默认继承 Market Game 层级配置。
 
@@ -463,10 +467,11 @@ bz-games/
 
 - **托管方式**：游戏市场索引文件由独立 GitHub 仓库维护并同步到 OSS，固定文件名为 `market.json`。官方文件优先读取构建期 `marketOssIndexUrl` 指定的 OSS 镜像；OSS 单次请求包含响应体解析，最多等待 5 秒，任何失败均整份切换到 GitHub 原始地址 `https://raw.githubusercontent.com/baozha2023/bz-games-market/master/market.json`。GitHub 单次最多等待 8 秒，仅网络错误、超时、HTTP 408/429/5xx 在等待 1 秒后重试一次；确定性 4xx、JSON 或 Schema 错误不重试。
 - **两级市场架构**：顶层 `market.json` 作为**市场目录**，`sources` 数组列出所有可用市场源；每个市场源的仓库中有自己的
-  `market.json`。顶层 `market.json` 同时保留 `games` 字段（对应 `sources[0]`）。外部市场源从其仓库 raw 地址直接加载。
+  `market.json`。顶层 `market.json` 同时保留 `games` 字段，官方索引通过自身 `marketId` 与 `sources` 中的同 ID 项关联。外部市场源从其仓库 raw 地址直接加载。
 - **拉取时机**：用户首次进入"游戏市场"列表页面时通过 `getSources` 拉取官方文件，进入具体市场时通过 `getIndex` 获取索引。官方一级目录与官方二级索引从同一响应原子解析并共用 1 小时内存缓存；相同的进行中请求会被合并。第三方索引按 `marketId + repository + branch` 缓存，直接请求 GitHub Raw 并使用相同的 GitHub 超时与重试策略。
 - **镜像同步**：市场仓库通过 GitHub Actions 等自动化流程同步 OSS 镜像；平台按 OSS 优先、GitHub 兜底顺序读取官方目录和官方索引。外部市场源仍从各自仓库的 raw 地址直接加载，不使用官方 OSS 镜像。
-- **展示目标**：索引文件必须同时满足“列表展示”“下载校验”“安装校验”三类需求，因此除基础元信息外，还需要包含封面、简介、标签、文件校验值、包大小等字段。
+- **协议边界**：市场只接受严格数值 `schemaVersion: 2`，不存在 Schema 1.x 解析或字段别名。可达但版本错误或结构无效的外部市场直接隐藏；网络失败保留来源供用户重试。
+- **展示目标**：索引文件必须同时满足“列表展示”“下载校验”“安装校验”三类需求。游戏名、简介、标签、版本描述和更新说明通过 `defaultLocale + localizations` 提供完整语言包。
 - **安装原则**：市场下载安装本质上仍走统一导入流程；平台下载并解压版本包后，必须继续校验包内 `game.json` 与市场索引中的
   `id`、`version`、`platformVersion` 是否一致。
 
@@ -474,7 +479,7 @@ bz-games/
 
 ```json
 {
-  "schemaVersion": "1.0.0",
+  "schemaVersion": 2,
   "marketId": "official",
   "marketName": "BZ Games Market",
   "generatedAt": "2026-05-22T04:21:02.000Z",
@@ -501,15 +506,15 @@ bz-games/
 
 | 字段            | 类型             | 必填 | 说明                                                                         |
 | --------------- | ---------------- | ---- | ---------------------------------------------------------------------------- |
-| `schemaVersion` | `string`         | 是   | 市场索引格式版本，使用语义化版本，供兼容逻辑识别。                           |
-| `marketId`      | `string`         | 是   | 当前市场的唯一标识，与 `sources[0].marketId` 一致。                          |
+| `schemaVersion` | `number`         | 是   | 固定为数值 `2`；其他值拒绝。                                                 |
+| `marketId`      | `string`         | 是   | 当前市场的唯一标识，必须与 `sources` 中恰好一个同 ID 项关联。                |
 | `marketName`    | `string`         | 是   | 当前市场的显示名称。                                                         |
 | `generatedAt`   | `string`         | 是   | 索引生成时间，ISO 8601 格式。首次创建时填写。                                |
 | `updatedAt`     | `string`         | 是   | 索引最后更新时间，ISO 8601 格式。每次更新需刷新。                            |
 | `repository`    | `string`         | 否   | 该市场的 GitHub 仓库地址。                                                   |
 | `author`        | `string`         | 否   | 该市场的维护作者。                                                           |
 | `sources`       | `MarketSource[]` | 是   | 市场源列表，至少 1 项。平台一级界面展示所有 `visibility !== "hidden"` 的源。 |
-| `games`         | `MarketGame[]`   | 是   | 当前市场（sources[0]）中的游戏列表。                                         |
+| `games`         | `MarketGame[]`   | 是   | `marketId` 所标识官方市场中的游戏列表。                                      |
 
 #### 市场源对象 `MarketSource`
 
@@ -529,12 +534,11 @@ bz-games/
 | 字段            | 类型                  | 必填 | 说明                                                                                                     |
 | --------------- | --------------------- | ---- | -------------------------------------------------------------------------------------------------------- |
 | `id`            | `string`              | 是   | 游戏唯一 ID，必须与安装包内 `game.json.id` 一致，推荐使用反向域名格式。                                  |
-| `name`          | `string`              | 是   | 游戏名。                                                                                                 |
+| `defaultLocale` | `SupportedLocale`     | 是   | 默认语言，必须存在于 `localizations`。                                                                   |
+| `localizations` | `object`              | 是   | 每种语言完整提供 `name`、`summary` 和国际化 `tags`。                                                     |
 | `author`        | `string`              | 是   | 游戏作者或工作室名称。                                                                                   |
 | `author_url`    | `string`              | 否   | 作者主页链接，详情页展开后作者名称旁将显示跳转图标。                                                     |
 | `type`          | `string`              | 是   | 游戏类型，取值与 `game.json.type` 一致：`singleplayer`、`multiplayer`、`singlemultiple`、`networkgame`。 |
-| `summary`       | `string`              | 是   | 游戏简介，列表卡片和详情页都使用该字段展示，建议 1~2 句话。                                              |
-| `tags`          | `string[]`            | 否   | 游戏标签，如 `["休闲", "平台跳跃"]`。                                                                    |
 | `iconUrl`       | `string`              | 否   | 游戏图标远程地址，建议 HTTPS。                                                                           |
 | `coverUrl`      | `string`              | 否   | 游戏封面远程地址，建议 16:9。                                                                            |
 | `screenshots`   | `string[]`            | 否   | 详情页截图列表。                                                                                         |
@@ -547,51 +551,47 @@ bz-games/
 
 #### 版本对象 `MarketGameVersion`
 
-| 字段              | 类型      | 必填 | 说明                                                                                                                                                                    |
-| ----------------- | --------- | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `version`         | `string`  | 是   | 版本号，语义化版本格式，必须与安装包内 `game.json.version` 一致。                                                                                                       |
-| `description`     | `string`  | 是   | 该版本说明或版本简介。                                                                                                                                                  |
-| `platformVersion` | `string`  | 是   | 当前版本对平台版本的兼容范围，使用 `semver` 语法，如 `>=1.9.5`。                                                                                                        |
-| `downloadUrl`     | `string`  | 是   | 版本安装包下载地址，建议 HTTPS。                                                                                                                                        |
-| `sha256`          | `string`  | 否   | 安装包 SHA-256 摘要，用于完整性校验。全可选（任何 downloadUrl 均可省略），若提供则格式必须为 64 位 hex。                                                                |
-| `size`            | `number`  | 否\* | 安装包字节大小，用于展示下载体积和二次校验。`downloadUrl` 为 GitHub Releases 直链时可省略，平台下载时自动获取。非 GitHub 直链时**必填**。                               |
-| `publishedAt`     | `string`  | 否   | 版本发布时间，ISO 8601 格式。                                                                                                                                           |
-| `releaseNotes`    | `string`  | 否   | 更详细的版本更新内容。                                                                                                                                                  |
-| `isPrerelease`    | `boolean` | 否   | 是否为预发布版本；预发布版本默认不作为 `latestVersion`。                                                                                                                |
-| `gameManifest`    | `object`  | 否   | Manifest 覆盖配置（`GameManifestOverride`），可覆盖/补充安装包内 `game.json` 的任意字段。当安装包内不含 `game.json` 时，该项**必填**，平台将据此自动生成完整 Manifest。 |
+| 字段              | 类型      | 必填 | 说明                                                                                                                                                                                                          |
+| ----------------- | --------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `version`         | `string`  | 是   | 版本号，语义化版本格式，必须与安装包内 `game.json.version` 一致。                                                                                                                                             |
+| `localizations`   | `object`  | 是   | 语言集合必须与所属游戏一致，每种语言提供 `description` 和可选 `releaseNotes`。                                                                                                                                |
+| `platformVersion` | `string`  | 是   | 当前版本对平台版本的兼容范围，使用 `semver` 语法，如 `>=1.9.5`。                                                                                                                                              |
+| `downloadUrl`     | `string`  | 是   | 版本安装包下载地址，建议 HTTPS。                                                                                                                                                                              |
+| `sha256`          | `string`  | 否   | 安装包 SHA-256 摘要，用于完整性校验。全可选（任何 downloadUrl 均可省略），若提供则格式必须为 64 位 hex。                                                                                                      |
+| `size`            | `number`  | 否\* | 安装包字节大小，用于展示下载体积和二次校验。`downloadUrl` 为 GitHub Releases 直链时可省略，平台下载时自动获取。非 GitHub 直链时**必填**。                                                                     |
+| `publishedAt`     | `string`  | 否   | 版本发布时间，ISO 8601 格式。                                                                                                                                                                                 |
+| `isPrerelease`    | `boolean` | 否   | 是否为预发布版本；预发布版本默认不作为 `latestVersion`。                                                                                                                                                      |
+| `gameManifest`    | `object`  | 否   | Manifest 生成配置；市场客户端支持 V1/V2 包，管理端托管接口只接受严格 V2 override。override 可继承市场公共字段，但成就、统计和语言集合必须形成可生成完整 V2 Manifest 的闭合数据。声明后不会合并包内 Manifest。 |
 
 #### GameManifestOverride 覆盖机制
 
-当市场游戏安装包内不包含 `game.json` 文件时（例如通用 HTML5 游戏包），市场维护者可通过 `gameManifest` 字段为每个版本提供 Manifest 覆盖配置。覆盖规则如下：
+市场版本声明 `gameManifest` 后，解压暂存目录中原有 `game.json` 必须先删除，再以市场元数据和该配置从零生成新文件，禁止字段覆盖合并。未声明时才读取包内原有 V1/V2 Manifest。
 
 ```typescript
 // src/shared/types/market.types.ts — GameManifestOverrideSchema
-// 所有字段均为可选（覆盖粒度），结构完全对齐 GameManifestSchema
+// 公共运行字段按覆盖粒度可选；最终生成结果必须通过 GameManifestV1Schema 或 GameManifestV2Schema
 ```
 
-- **字段覆盖优先级**：`gameManifest` 中的值 > MarketGame 层级对应字段 > 默认值
-  - `name` → `gm.name || game.name`
-  - `description` → `gm.description || game.summary`
+- **V1/V2 生成**：桌面市场把 V1 与 V2 作为并列、长期支持的 Manifest 能力，并按精确 `manifestVersion: 2` 分派；托管管理端只生成 V2 override。V2 override 可省略各语言 `name/description` 并由市场游戏本地化字段补齐，但已声明的成就和统计必须在市场游戏的每种语言中完整覆盖。
+- **公共字段优先级**：`gameManifest` 明确字段 > MarketGame/MarketVersion 对应字段 > 默认值
   - `author` → `gm.author || game.author`
   - `author_url` → `gm.author_url !== undefined ? gm.author_url : game.author_url`
   - `type` → `gm.type || game.type`
   - `platformVersion` → `gm.platformVersion || targetVersion.platformVersion`
   - `entry` → `gm.entry`（若为空则自动探测 `detectEntryFile(importDir)`）
   - `multiplayer` → `gm.multiplayer`（类型为多人且未配置时从 `game.minPlayers`/`game.maxPlayers` 生成）
-- **安装流程**：`resolveExtractedImportDir()` 查找包内 `game.json`，未找到时使用 `gameManifest` 构建完整 Manifest，写入安装目录后继续执行标准导入流程。进度模拟（`startProgressSim` / `tickProgress`）在 verify（65→69）、extract（70→94）、install（95→99）阶段以 500ms 间隔平滑推进。
-- **Manifest 构建**：`buildManifestFromMarket()` 在 `game.json` 缺失时触发。
+- **安装流程**：`prepareManifestForInstall()` 实施“包内原文件读取”或“声明后删除并重建”二选一；生成后统一校验并写成加密 Manifest，再进入标准导入流程。
 
 #### 安装包约束
 
 - **格式识别**：平台根据 `downloadUrl` 的文件后缀自动识别压缩包格式；支持 `.zip` 和 `.7z`，统一使用 `7zip-bin` 内置 `7za` 通过 `child_process.spawn` 解压。
 - **解压方式**：`.zip` 和 `.7z` 均使用 `7zip-bin` 内置的 `7za` 二进制通过 `spawn` 调用。
-- **目录约束**：压缩包解压后的根目录或第一层单子目录中必须存在 `game.json`，且整体目录结构应能直接作为一次普通"本地导入"
-  输入目录。若安装包内无 `game.json`，必须通过 `gameManifest` 字段提供完整覆盖配置，平台将自动生成并安装。
+- **目录约束**：未声明 `gameManifest` 时，压缩包根目录或第一层单子目录必须存在合法 V1/V2 `game.json`；声明时允许平台从市场配置生成。两种路径最终都使用相同校验和加密写入。
 - **一致性校验**：平台安装前校验下载包的 `size`、`game.json.id`、`game.json.version`。`sha256` 在校验值存在时执行比对；未提供 sha256 时跳过哈希校验。`size` 为 GitHub Release 直链时可由平台下载阶段自动补齐。`game.json.platformVersion` 使用 `semver` 做语义化兼容性检查（支持 string 和 tuple 两种 manifest 格式）。
-- **安全约束**：压缩包内出现绝对路径、盘符路径或 `../` 路径穿越条目时拒绝安装。
+- **安全约束**：解压前必须显式列出并校验全部归档条目，拒绝绝对路径、盘符路径、空路径、`../` 路径穿越、ADS、符号链接、目录联接和其他重解析点；解压后再次以 `lstat` 校验暂存树。不得把 7za 的默认行为当作安全边界。本阶段点击下载时只按安装包声明大小检查下载缓存所在磁盘的剩余空间，不预估解压后的安装体积。
 - **覆盖策略**：本地已存在相同 `id + version` 时视为"已安装"。**网页游戏（`networkgame`）仅以 `id` 判断**，同一 `id` 的更新通过删除旧版本后重新导入完成。
 - **托管地址**：`games.bzgames.top/<gameId>/<version>/<role>/<encodedFileName>` 是不依赖 DNS 的市场逻辑地址，`role` 仅允许 `package/icon/cover`。客户端严格校验规范编码后，将安装包与市场图片统一改写到构建配置 `relayServerUrl` 下的 `/api/v1/game-hosting/assets/*`，并由主进程附加 Relay Token；普通 HTTP(S) 地址保持原行为，不兼容旧 UUID 托管地址。
-- **落盘路径**：市场安装目标目录必须通过 `StoreService.getDefaultGameStoragePath()` 获取当前默认游戏库；若列表为空，`StoreService.getSettings()` 会初始化 exe 同级 `games/` 作为首个游戏库。
+- **落盘路径**：市场安装目标目录必须通过 `StoreService.getDefaultGameStoragePath()` 获取当前默认游戏库；全新 v4 数据库初始化时固定创建 `builtin` 游戏库记录，其实际路径由数据根目录下的 `games/` 推导，配置文件不参与游戏库初始化。
 
 #### 市场任务状态与错误码类型
 
@@ -758,7 +758,7 @@ interface FloatBallProgress {
 - 通过 `PlaySessionDatabaseService` 自动记录每次游戏启动→关闭为一次"游玩会话"（写入 SQLite `bz_games.db`）
 - 通过 `StoreService` 与统一数据库仓储记录成就解锁和统计事件（写入加密 SQLite `bz_games.db`）
 - 系统托盘动态菜单：游戏退出时自动刷新「最近游玩」列表，支持从托盘快速启动最近玩过的游戏
-- 迁移导出由 `MigrationExportService` 统一处理；v3.4.2 不发起更新检查，也不能下载或安装后续版本
+- 本地备份由 `backup/` 统一处理；更新由 Velopack `UpdateService` 处理。v4.0.0 未发布前不保留实验协议、旧字段、别名或运行时兼容分支；v3.4.2 V1 数据导入是物理隔离的正式转换能力，不进入运行时路径。
 
 #### 渲染进程 (Renderer Process)
 
@@ -776,9 +776,10 @@ interface FloatBallProgress {
 
 ### 5.3 本地数据存储结构
 
-使用 `electron-store`，数据存储于应用根目录下的`config.json`（便携模式）：
+数据根目录固定保存 `config.json`、`games/` 和 `db/bz_games.db`，程序运行区只存在于 `.runtime/`：
 
-- **配置加密存储**：`config.json` 只接受当前加密格式，不提供明文回退或旧 `games` 字段迁移；游戏实体只存在于当前加密 SQLite 数据库。
+- **配置加密存储**：`ConfigCodec` 只接受严格的 `{ format:"bz-games-config", formatVersion:4, algorithm:"aes-256-gcm", iv, tag, payload }` 信封；`iv` 必须是 12 字节规范 Base64，认证标签必须是 16 字节规范 Base64，载荷和整个配置文件有大小上限。解密后的 `settings`、`userData` 使用严格白名单，未知字段、错误类型和错误版本直接拒绝。
+- **运行时只接受最终结构**：配置不存在才创建默认值；运行时不得清理、重命名或补齐任何旧字段。`feedbackHistory`、NSIS 迁移字段、旧更新忽略字段和旧游戏库路径只由正式 V1 导入转换器读取并一次性转换或丢弃。
 
 ```typescript
 // src/shared/types/store.types.ts
@@ -845,39 +846,29 @@ interface NicknameStyle {
   weight: "normal" | "semibold" | "bold";
 }
 
-interface FeedbackHistoryItem {
-  id: string;
-  submittedAt: number;
-} // 仅表示当前反馈弹窗内存中的服务端响应，不属于 AppSettings 持久化字段
-
 interface AppSettings {
   playerName: string;
   playerId: string;
   avatar?: string;
-  cloudSessionToken?: string;
-  cloudSessionExpiresAt?: string;
-  cloudUserLogin?: string;
-  cloudUserName?: string;
-  cloudUserProfileUrl?: string;
-  cloudLastUploadedAt?: string;
-  nicknameStyle?: NicknameStyle;
-  libraryLayout?: "card" | "icon" | "steam";
-  lastJoinRoomAddress?: string;
+  accountSessionToken: string;
+  accountSessionExpiresAt: string;
+  accountUserLogin: string;
+  accountUserName: string;
+  accountUserProfileUrl: string;
+  nicknameStyle: NicknameStyle;
+  libraryLayout: "card" | "icon" | "steam";
+  lastJoinRoomAddress: string;
   language: "zh-CN" | "en-US" | "ja-JP" | "zh-TW" | "de-DE";
   theme: "dark" | "light" | "auto";
   defaultRoomPort: number;
   closeBehavior: "tray" | "exit";
   autoLaunch: boolean;
-  migrationNoticeAcknowledgedVersion?: string;
-  gameStoragePath?: string;
-  gameStorageHistory?: string[];
-  lastOpenedAt?: number;
-  ignoreDefaultGamesMigrationPrompt?: boolean;
-  githubToken?: string;
+  updatePromptSuppressedForAppVersion?: string;
+  githubToken: string;
   chatWindowBounds?: { x: number; y: number; width: number; height: number };
-  chatInputHeight?: number;
-  downloadFloatBall?: boolean;
-  sensitiveWordFilter?: boolean;
+  chatInputHeight: number;
+  downloadFloatBall: boolean;
+  sensitiveWordFilter: boolean;
   floatBallPosition?: { x: number; y: number };
 }
 ```
@@ -906,7 +897,7 @@ interface AppSettings {
 
 ### 5.5 代码组织与内聚性
 
-- **模块化**：复杂逻辑（如 `GameLoader.loadGameFromDialog`）拆分为独立函数（`validateManifestFile`, `checkPlatformVersion`,
+- **模块化**：复杂逻辑（如异步游戏导入任务）拆分为独立函数（`validateManifestFile`, `checkPlatformVersion`,
   `checkEntryFile` 等），提升可读性与可维护性。
 - **环境配置抽离**：`game-launch.ts` 统一四入口分类及 Web/Native 配置映射；`GameEnvironment` 只负责读取 Electron/房间上下文和临时文件 I/O。Native 环境过滤 `ELECTRON_`/`NODE_`/`NPM_`/`VSCODE_`，Manifest `args` 原样传递，平台 `BZ_` 变量最后注入且不可覆盖。
 - **统一游戏运行时**：`GameManager.activeRuntimes` 是运行状态的唯一内存记录。Native 游戏记录入口 PID 和已发现的子进程 PID，由 `ProcessTreeService` 通过 Windows PowerShell `Get-CimInstance Win32_Process` 或 macOS/Linux `ps` 查询进程树；入口进程退出但已记录子进程仍存活时，游戏继续视为运行中，进程树为空后才结束。Web 游戏记录 `BrowserWindow` 和 `webContents.getOSProcessId()`，窗口关闭或 `render-process-gone` 后结束。进程树查询连续失败时降级为入口进程跟踪并记录日志。
@@ -938,49 +929,43 @@ interface AppSettings {
   `storeService.updatePlaytime()` 从会话表推导累计时间并结算奖励，SQLite 会话是游玩历史和时长统计的唯一数据源。
   `handleProcessExit` 中通过动态 `import("../window")` 调用 `updateTrayMenu()` 刷新托盘快捷菜单。
 - **SQLite 异步架构**：
-  - **AsyncSqliteDatabase**：通过 `worker_threads` 隔离数据库访问，连接后先设置 ChaCha20 和密钥再读取 schema，支持 `run`/`get`/`all`/`exec`/`batch`/`close`。
-  - **BzGamesDatabase**：唯一数据库工厂和当前数据仓储，维护游戏、版本、会话、成就与统计事件；不包含旧 schema、旧路径或兼容分支，表之间只使用逻辑关联，不声明物理外键。
+  - **AsyncSqliteDatabase**：通过 `worker_threads` 隔离访问。新库在同卷临时文件中以完整 `V4_SCHEMA_SQL` 单事务创建、校验后原子提交；已有库必须通过 `application_id`、`user_version=40000`、Schema 指纹、结构指纹、`integrity_check` 与 `foreign_key_check`。
+  - **BzGamesDatabase**：`V4_SCHEMA_SQL` 是唯一结构真相来源，维护 `game_libraries`、相对版本路径、生命周期以及会话/成就/统计；初始化还验证 builtin 库结构与 active 状态、恰好一个 active 默认库及已安装版本不得指向已移除库。运行时代码禁止 `ALTER TABLE`、`PRAGMA table_info` 自动补列、旧字段重命名和 Schema 兼容分支。
   - **卸载重装数据语义**：删除游戏只软删除本机 `games` / `game_versions` 实体，必须保留同一 `gameId + version` 的游玩会话、成就和统计事件；重新扫描、导入或安装后，`StoreService` 必须从 `BzGamesDatabase.getGames()` 重建完整缓存，禁止用新建记录中的空派生字段覆盖数据库结果。渲染进程读取游戏记录前必须先等待磁盘扫描同步完成，确保重装后立即恢复历史数据；成就重复解锁继续保持幂等。
   - **数据库加密边界**：`databaseEncryptionSeed` 是离线生成一次后固定使用的规范 Base64，解码结果必须恰好为 32 个随机字节；运行时禁止生成、替换或修复种子，缺失或无效时开发启动和构建必须直接失败。种子由私有构建配置注入主进程，运行时经 SHA-256 派生 ChaCha20 密钥。种子编译在桌面客户端中，只用于提高本地文件直接读取门槛，不能抵御能够逆向客户端的攻击者。
-  - **PlaySessionDatabaseService**：只封装会话启动、结束和统计查询；云同步导入导出由统一数据库负责。
+  - **PlaySessionDatabaseService**：只封装会话启动、结束和统计查询。
   - SQLite WAL 模式：`journal_mode = WAL` 提升并发读写性能（在 Worker 初始化时设置）。
-  - 应用退出路径必须先停止接受新的云同步，等待当前同步结束，再等待统一数据库 `close()` 完成及 Worker 退出，最后才允许 Electron 进程退出。
-- **CloudSyncService 设计**：
-  - **单快照协议**：客户端与服务端只支持 `/api/cloud/platform-snapshot` 和 `/api/cloud/platform-snapshot/meta`；不保留旧 `/api/cloud/files/*` 协议、双写或降级逻辑。`PlatformCloudSnapshot` 将脱敏加密配置与 SQL dump 封装为一个 GridFS 对象，MySQL `user_platform_snapshots` 仅保存每个用户的唯一当前指针。
-  - **原子发布**：完整对象先写入 GridFS，再在 MySQL 事务中锁定并切换当前指针；旧对象在宽限期后清理。下载只读取一次指针，禁止拼接不同上传批次。GridFS 元数据必须使用 `kind=platform-snapshot`，清理不得触碰其他 kind。
-  - **数据库范围**：SQL dump 只包含 `play_sessions`、`achievement_unlocks`、`stats_reports`，并排除本地自增字段 `stats_reports.event_sequence`；`games`、`game_versions` 及其 `path`、`is_present`、收藏和排序状态完全属于当前设备，不上传、不下载、不合并。当前按单设备日常使用、换机时整包恢复设计，不实现多设备并发合并；统计记录按 `reported_at`、`event_id` 的稳定顺序重建，不能使用新电脑上的本机自增序号决定 `full` 报告的覆盖顺序。
-  - **下载应用顺序**：配置先在内存中解密确认可应用，SQL 在单一事务中完成幂等合并，随后从统一数据库刷新游戏缓存中的会话、成就和统计派生数据，最后才一次性提交配置；SQL 导入或缓存刷新失败时不得写入配置。
-  - **同步黑名单**：`CLOUD_SETTINGS_SYNC_BLACKLIST` 在上传与下载合并时都排除 `githubToken`、云会话和云用户身份字段，并只合并 `userData` 与非敏感设置。
-  - **被动会话失效**：设置页只通过 `getLocalCloudStatus()` 读取 `config.json`，不轮询且不调用任何 Portal 会话或权限接口主动探测。OAuth 成功以及客户端业务接口返回 `session_expired` / `session_invalid` 时，主进程发送 `system:cloud:authChanged`；仅这两类稳定错误会清空 `cloudSessionToken` 与 `cloudSessionExpiresAt`。普通 `unauthorized`、网络错误、超时、限流和服务端错误不得清理本地令牌。快照元数据只在上传或下载成功后按需查询。
-  - **设置写入隔离**：渲染进程提交完整或部分普通设置时，`system.ipc.ts` 必须按明确白名单提取允许渲染层维护的字段；`playerId`、云会话/云用户身份、存储迁移状态、更新时间和窗口位置等字段均由主进程或专用 IPC 独占写入，防止旧表单或陈旧状态覆盖后台更新的数据。
-  - **未来边界**：游戏云存档不得加入 `PlatformCloudSnapshot`。未来必须使用独立的 `GameSaveCloudService`、`/api/cloud/game-saves/*`、引用表和 `kind=game-save` 对象。
+  - 应用退出路径必须先停止账号在线状态心跳，再等待统一数据库 `close()` 完成及 Worker 退出，最后才允许 Electron 进程退出。
+- **AccountService 设计**：
+  - **职责边界**：只负责 GitHub OAuth 登录、登出、账号资料昵称同步与用户主动开启的在线状态；客户端与服务端均不存在 Platform Snapshot 上传、下载、元数据、进度事件或平台数据云同步接口。
+  - **本地状态**：设置页通过 `getLocalStatus()` 同步读取已保存账号状态，不为验证登录而轮询网络。OAuth 成功后保存 `accountSession*` / `accountUser*` 字段并发送 `system:account:authChanged`。
+  - **在线状态**：每次应用启动都重置为离线，只有用户主动开启后才发送在线状态并启动单实例串行心跳；关闭、登出或应用退出必须停止心跳并尽力发送离线状态。
+  - **被动会话失效**：仅业务接口返回 `session_expired` / `session_invalid` 时清空本地账号会话并通知渲染进程。普通 `unauthorized`、网络错误、超时、限流和服务端错误不得清理本地令牌。
+  - **设置写入隔离**：渲染进程提交普通设置时，`system.ipc.ts` 必须按明确白名单提取字段；`playerId`、账号会话/账号身份和窗口位置由主进程或专用 IPC 独占写入，防止陈旧表单覆盖后台状态。
+  - **未来边界**：若未来增加游戏存档云端存储，必须独立设计对象、引用、冲突和恢复协议，不复活已删除的平台快照。经验记录见 `docs/GAME_SAVE_CLOUD_STORAGE_DESIGN_LESSONS.md`。
 - **MarketService 设计**：
   - **职责分离**：`MarketCatalogClient` 负责官方 OSS→GitHub 来源切换、第三方 GitHub Raw 请求、结构化错误与索引解析；`MarketService` 只负责内存缓存、进行中请求合并及市场安装业务。目录请求不复用下载或 Release Asset 的通用重试逻辑。
-  - **官方原子目录**：官方 `market.json` 每轮只下载一次，同一原始对象同时解析 `MarketDirectory` 和官方 `MarketIndex`，并在写入缓存前校验 `sources[0].marketId === index.marketId`。目录或索引任一步失败时整份数据切换来源，禁止 OSS/GitHub 混用。
-  - **严格边界与条目隔离**：目录和索引顶层字段严格按当前 Schema 校验，不接受旧字段或别名；游戏和版本逐条校验，无效版本被跳过，过滤后没有有效版本的游戏被跳过，`hidden` 游戏不展示。
+  - **官方原子目录**：官方 `market.json` 每轮只下载一次，同一原始对象同时解析 `MarketDirectory` 和官方 `MarketIndex`，并在写入缓存前按 `index.marketId` 查找同 ID source；目录顺序不承载业务身份。目录或索引任一步失败时整份数据切换来源，禁止 OSS/GitHub 混用。
+  - **严格边界**：目录和索引整体严格按 Schema 2 校验，不接受旧字段、别名或逐条容错；任一结构错误使整个外部市场隐藏，`hidden` 游戏不展示。
   - **有界请求**：OSS 只请求一次且超时 5 秒。GitHub 单次超时 8 秒，仅网络错误、超时、HTTP 408/429/5xx 延迟 1 秒重试一次，最长约 17 秒；官方链路含 OSS 时最长约 22 秒。所有请求继续通过 `RequestInterceptor.buildHeaders()` 注入 Referer 和可选 GitHub Token。
   - **缓存与刷新**：官方目录和官方索引共用 1 小时原子内存缓存；第三方索引以 `marketId + repository + branch` 为键缓存；相同远程请求共享 Promise。`forceRefresh=true` 绕过缓存并清除图片缓存，第三方刷新会先刷新官方目录。刷新失败明确报错但不覆盖此前有效缓存；应用重启后缓存自动失效，不落盘。
   - `getCachedImageDataUrl(url)` 为按需图片缓存方法，通过 `fetch(url)` 下载远程图片并转 base64 Data URL，缓存于
-    `cachedImages` Map（1 小时 TTL）。15 秒超时 + `AbortController` 保护，`finally` 块必定清理定时器。**双重防线**：校验
-    response body 非空和 `content-type` 必须以 `image/` 开头。
+    `cachedImages` Map（1 小时 TTL）。15 秒超时 + `AbortController` 保护，`finally` 块必定清理定时器，同时校验 response body 非空和 `content-type` 以 `image/` 开头。市场 JSON 不设置业务大小上限；安装包在任务创建前按声明 `size` 与已下载分片计算剩余所需空间，下载缓存磁盘不足时拒绝启动。
     渲染进程的 `<CachedImg>` 组件按需触发下载。
   - `CachedImg` 为通用图片缓存组件，初始显示原始 URL（浏览器直连），异步调用 `getCachedImage` IPC 拿到 Data URL 后无缝替换。
     `onUnmounted` 时 abort 飞行中的请求，防止内存泄漏。
-  - `downloadAndInstall(gameId, version, sourceIdx)` 中 `sourceIdx` 为**必传参数**，直接从对应 source
-    拉取索引后查找目标游戏。
+  - `downloadAndInstall(gameId, version, marketId)` 只接受稳定 `marketId`；路由、IPC、缓存、任务快照、恢复和论坛引用均禁止使用数组下标。平台全局保证不同市场不存在重复游戏 ID，因此市场任务身份固定为 `gameId + version`；终态延迟清理器必须绑定任务实例或 generation，绝不能删除同键的新任务。
   - `gitToRawUrl()` 从 GitHub 仓库地址推导 raw 文件
     URL：`https://raw.githubusercontent.com/{owner}/{repo}/{branch}/market.json`。
   - `inferArchiveType()` 根据 `downloadUrl` 后缀自动识别压缩包格式，支持 `.zip` 和 `.7z`。`.zip` 和 `.7z` 统一使用 `7zip-bin` 内置的 `7za` 通过 `child_process.spawn` 解压。
   - **Electron asar 补丁防御**：`copyFolderRecursiveSync()` 在执行文件复制前设置 `process.noAsar = true`，复制完成后通过 `finally` 块恢复原值，用于复制含 `.asar` 的游戏包。
-  - **EBUSY 重试防御**：`removeIfExists()` 和 `GameLoader.installGameFiles()` 中的 `fs.rmSync` 统一使用 `{ maxRetries: 10, retryDelay: 500 }` 参数。
-  - **安装包内 .asar 防御**：`GameLoader.installGameFiles()` 检查 `gameRootDir` 是否为文件；若为文件则先 `rmSync` 删除后再创建目录。
+  - **清理失败语义**：`MarketCacheCleaner.prepare()` 是进入下载、解压或安装阶段前的强制前置条件，异步有限重试、删除及不存在验证任一步失败都必须终止任务；`MarketCacheCleaner.reclaim()` 只负责终态缓存回收，失败写入持久错误日志并保留残留，但绝不能改写已经确定的 completed/error/canceled 结果。禁止在未清空的解压目录上覆盖安装。
+  - **安装目标类型防御**：`GameLoader.installGameFiles()` 发现 `gameRootDir` 已存在且不是普通目录时必须拒绝安装，不得自动删除未知文件。
   - **下载管线架构**：下载子系统采用 **不可变元数据 + 活动任务 + 单一状态机** 三层模型。
-    - `TaskMeta`（不可变元数据）：包含 `downloadUrl`、`sha256`、`size`、`downloadPath`、`archiveType`、`sourceIdx` 等固定参数。
+    - `TaskMeta`（不可变元数据）：包含 `downloadUrl`、`sha256`、`size`、`downloadPath`、`archiveType`、`marketId` 等固定参数。
     - `ActiveTask`：运行时对象，绑定 `state`（MarketTaskState）、`meta`（TaskMeta）、`abort`（AbortController）。
       每个活动任务绑定一个 `AbortController`。
-    - `transition(taskId, status, extra?)` 是**唯一的状态转换入口**（Single Source of Truth），内置状态机守卫：终态（
-      completed/error/canceled）不可再转换。`paused` / `interrupted` 可被 `cancel` 正常取消（并清理快照文件）。
-      所有状态变更必须经过此方法。
+    - `transition(taskId, status, extra?)` 是**唯一的状态转换入口**（Single Source of Truth），转换规则集中定义在 `MarketTaskStateMachine` 的显式矩阵中：归档安装只允许 `idle → downloading → verifying → extracting → installing → completed`，Manifest-only 安装只允许 `idle → installing → completed`；下载、校验、解压和安装允许同阶段进度更新；活动阶段允许进入 error/canceled，只有 downloading/verifying 可进入 paused，paused/interrupted 只允许进入 canceled，completed/error/canceled 不允许任何后续转换。恢复会从快照创建新任务实例，不在旧实例上反向转换。缺失任务、跳阶段、倒退和终态改写均拒绝应用 extra 字段并记录持久错误日志。
   - **Pipeline 与状态管理解耦**：`startPipeline()` (fire-and-forget) → `runPipeline()`（纯执行，仅接收 `AbortSignal`
     参数）。`runPipeline()` 编排五阶段流程（download → verify → extract → install → finalize），各阶段之间通过
     `signal.throwIfAborted()` 检查是否被中止。错误处理统一在 `startPipeline().catch()` 中：若 `signal.aborted`
@@ -999,7 +984,6 @@ interface AppSettings {
     `restorePendingTasks()` 读取快照重建 `interrupted` 状态任务，前端通过 `getPendingTasks` 在 `onMounted` 时同步到 UI。
   - **文件生命周期**：`finalize()` 在终态（completed/error/canceled）时删除临时下载文件与解压目录。暂停/中断时**保留**
     部分文件以便续传。
-  - **容错解析**：`parseGameTolerant(rawGame)` 提供两层容错机制：先尝试 `MarketGameSchema.safeParse()` 严格解析，成功则直接返回；失败后分别校验游戏元数据（宽松版 `GameMetaSchema`，ID 只需非空即可）和版本列表（`MarketGameVersionSchema.safeParse` 逐个版本校验），跳过无效版本但保留有效版本。至少有一个有效版本的游戏才会被展示，全部无效则记录警告并跳过该游戏。
   - **sha256 全可选 + 下载时懒解析**：版本对象的 `sha256` 字段已变为全可选。下载阶段 `downloadAndInstall()` 按优先级获取 sha256/size：① 版本对象直接提供 → ② `resolvedAssets` 缓存（1小时 TTL）→ ③ GitHub Releases 直链时通过 `resolveGitHubAssetInfo()` 实时从 GitHub API 获取（`parseGitHubReleaseUrl()` 解析 owner/repo/tag/assetName，调用 `GET /repos/{owner}/{repo}/releases/tags/{tag}` 获取 asset 的 digest/size）。GitHub API 返回值中的 digest 必须同时满足 64 位长度和纯 hex 格式才被接受为 sha256，否则置 undefined。若 size 最终仍为 null，拒绝下载（`market_missing_size`）；sha256 为 undefined 时仅跳过校验不拒绝。
   - **下载校验条件化**：`verifyArchive()` 中 size 校验仅当 `meta.size > 0` 时执行，sha256 校验仅当 `meta.sha256` 存在时执行。若版本未提供 sha256 且 GitHub API 也未返回有效 sha256，则跳过哈希校验直接进入解压阶段。
   - 错误分类由 `classifyErrorCode()` 统一处理，根据错误消息自动归类为四种错误码（download/verify/extract/install）。
@@ -1113,20 +1097,19 @@ interface AppSettings {
 - **反馈系统设计（FeedbackService）**：
   - **图片选择与验证（v3.1.3 追加模式）**：`selectImages(existingSelectionId?)` 支持传入已有选区 ID 时以追加模式在现有图片上叠加新图片。读取文件后：① 魔术字节检测实际 MIME；② 比对实际格式与扩展名声明是否一致（`getDeclaredContentType`）；③ `nativeImage.createFromBuffer` 验证图形有效性；④ 每张图片生成 SHA-256 哈希用于跨批次去重（同一选区中哈希重复的图片被拒绝，前端弹出 `duplicate_image` 提示）。追加时若原选区已满 4 张或总图片数超限则返回 `too_many_images`；传入已过期选区 ID 返回 `feedback_images_expired`。通过后将 Buffer 与哈希存入进程内存 Map（`selectionId` 为键），供后续 multipart 上传引用。整组图片 30 分钟后自动清理；单张移除后刷新 `createdAt`。
   - **释放语义**：`releaseImages(selectionId, imageId?)` 支持单张移除或整组释放；单张移除后若 selection 为空则自动删除 Map 条目，否则刷新 `createdAt` 时间戳。
-  - **提交管线**：建言献策仅对已登录用户开放；设置页仅在 GitHub 会话有效时显示入口，主进程的图片选择、历史读取、详情查询和提交 IPC 也独立校验本地会话。`submit()` 校验 content ≤ 5000 字、selectionId 有效性、文字或图片至少存在一种，通过 `FormData` 构造 multipart，注入 `appVersion` 与 `platform`，并由 `RequestInterceptor.buildHeaders()` 注入 relayToken 和必需的 GitHub Bearer Token。POST `/api/v1/feedback` 超时 45 秒。通过 `cloudSyncService.handleAuthFailure(body.error)` 统一处理登录失效——仅 `session_expired` / `session_invalid` 时清除本地云会话。
-  - **反馈历史**：打开历史 Tab 时，主进程在首屏请求前删除旧版本 `config.json` 中的 `settings.feedbackHistory`，再通过 `GET /api/v1/feedback?limit=10&cursor=` 按当前登录账号查询反馈编号和提交时间；服务端按 `created_at DESC, id DESC` 使用键集游标固定返回 10 条，客户端用 `IntersectionObserver` 在滚动区距底部 320px 时加载下一页并按 ID 去重。翻页失败时保留当前游标和 `hasMore`，不把瞬时错误误判为已经到底；用户重新滚动到触发区后可重试。客户端不再主动持久化反馈历史。展开条目时调用 `getFeedbackDetail(id)` 从服务端查询正文、状态、回复与图片，收起后再次展开会重新查询，不设定时刷新。首屏列表加载期间显示骨架屏。
+  - **提交管线**：建言献策仅对已登录用户开放；设置页仅在 GitHub 会话有效时显示入口，主进程的图片选择、历史读取、详情查询和提交 IPC 也独立校验本地会话。`submit()` 校验 content ≤ 5000 字、selectionId 有效性、文字或图片至少存在一种，通过 `FormData` 构造 multipart，注入 `appVersion` 与 `platform`，并由 `RequestInterceptor.buildHeaders()` 注入 relayToken 和必需的 GitHub Bearer Token。POST `/api/v1/feedback` 超时 45 秒。通过 `accountService.handleAuthFailure(body.error)` 统一处理登录失效——仅 `session_expired` / `session_invalid` 时清除本地账号会话。
+  - **反馈历史**：通过 `GET /api/v1/feedback?limit=10&cursor=` 按当前登录账号查询；服务端按 `created_at DESC, id DESC` 使用键集游标固定返回 10 条，客户端用 `IntersectionObserver` 在滚动区距底部 320px 时加载下一页并按 ID 去重。翻页失败时保留当前游标和 `hasMore`。v4 运行时不读取或清理任何旧 `feedbackHistory`，该字段只在 V1 转换器中丢弃。展开条目按需查询详情且不设定时刷新。
   - **反馈详情查询**：`getDetail(feedbackId)` 通过 `/api/v1/feedback/:id` 获取用户可见详情。主进程校验 UUID 格式反馈 ID，然后校验响应结构（id、content、status、reply、imageCount、createdAt、updatedAt 及 images 数组的每个元素的类型与大小）。随后逐个通过 `/api/v1/feedback/:id/images/:imageId` 下载图片，校验实际 Content-Type 与 MySQL 记录的 MIME 一致、实际 body 长度与声明 size 一致、不超 MAX_IMAGE_BYTES。任一步不通过返回 `feedback_invalid_response`。通过 auth 失败或权限不足由 `handleAuthFailure` 统一收口。
   - **IPC 边界**：渲染进程仅通过 `FeedbackModal.vue` → `electronAPI.settings.selectFeedbackImages / releaseFeedbackImages / submitFeedback / getFeedbackHistory / getFeedbackDetail` 与主进程交互，不直接接触文件路径或服务端 relayToken / GitHub 会话。`getFeedbackHistory` 从服务端查询当前账号列表，主进程必须校验历史和详情响应结构、图片数量、大小、MIME 和实际响应长度后再生成 Data URL。
   - **服务端并联（v3.1.3 用户详情接口）**：`POST /api/v1/feedback`、`GET /api/v1/feedback`、`GET /api/v1/feedback/:id` 和图片读取接口均要求发行版 relayToken、有效 GitHub Bearer Token，并对历史、详情和图片校验反馈所有者。历史接口只返回当前账号的 `id/submittedAt` 及 `hasMore/nextCursor` 分页元数据；详情返回 `id/content/status/reply/imageCount/createdAt/updatedAt/images`，不含 `adminNote`；图片接口返回单张图片原始流。管理 API 详情额外包含 `adminNote`，更新接口接受 `status/adminNote/reply`，备注与回复均不超过 5000 字符。提交采用 busboy 流式 multipart、魔法字节校验、GitHub ID 进程内冷却、MySQL 事务 + GridFS。
   - **Portal 前端**：`bz-games-admin/` 为独立 Vue 3 + Vite + Pinia 项目，构建为 `/admin/` 同源静态站点。生产环境由 Nginx 直接从 `/var/www/campusmate/admin` 托管页面，Relay 的 `ADMIN_STATIC_DIR` 保留为本机直连或开发回退；Nginx 与 Relay 静态服务都必须提供 SPA fallback、路径穿越防护和 CSP/`nosniff`/`DENY` iframe 等安全响应头。服务端会话接口返回唯一 capability 集合，前端 `rbac.ts` 只校验能力契约，不维护角色到能力的映射；菜单、路由、按钮和提交前置检查均调用 `auth.can(capability)`。玩家进入欢迎页并管理自己的反馈，创作者仅管理自己的游戏托管，管理员无用户角色调整、托管容量查看、系统监控和桌面客户端版本上传能力，超级管理员拥有全部界面与操作。服务端仍是唯一授权决策源，并独立执行 capability、资源所有权、状态机和精确 Origin 校验。
 - **卸载系统设计（UninstallService）**：
-  - **状态互斥**：`running` 布尔标志防止重复卸载调用。
-  - **游戏进程收口**：`shutdownForUninstall()` 设置 `shuttingDownForUninstall = true` 拒新启，等待 `launchingGames` 清空（5s 超时），然后调用 `GameManager.shutdownForUninstall()` 通过统一运行时记录停止所有原生进程树、Web 游戏窗口及本地游戏服务。
-  - **GameManager 联动**：`launch()` 增加 `shuttingDownForUninstall` 前置检查，卸载期间直接拒绝新启动请求。
-  - **路径安全校验**：`normalizeUninstallStorageRoots()` 对每个游戏库路径执行 `path.resolve` 并校验：① 不是盘符根；② 不包含安装目录；③ 不与系统保护路径（home/appData/userData/temp）相同或为符号链接。任一项不满足时拒绝卸载，返回 `unsafe_game_storage_path` 错误。
-  - **兜底防御**：`removeStorageRoots()` 删除前额外检查目标路径是否为符号链接；`fs.rmSync` 使用 `maxRetries: 5` + `retryDelay: 250` 重试防御，删除后再次 `existsSync` 核验。
-  - **前置拦截**：活跃市场下载任务时返回 `uninstall_market_tasks_active` 错误，不进入卸载流程。
-  - **自删除语义**：卸载器启动成功后 `setTimeout(() => app.quit(), 500)` 延迟退出 Electron 进程。禁止使用依赖父进程退出后继续运行的临时 PowerShell/批处理辅助链路。
+  - **唯一入口**：安装根固定包含 `BZ-Games-Uninstall.exe`，Windows `UninstallString` 固定为 `"<root>\BZ-Games-Uninstall.exe" --system`；根启动器只负责启动、健康检查和自动回退。系统入口始终保留全部游戏库、配置和数据库。
+  - **安全交接**：游戏内入口原子写入 `UninstallPlanV1`，将卸载器复制到 `%LOCALAPPDATA%\BZ-Games\UninstallWork\<operationId>\uninstall-worker.exe`，并等待 worker 完成计划、根标记、journal 和资源预检后写入 `ready.json`。`accepted: true` 只表示 worker 已安全接管。
+  - **任务互斥**：统一 `LifecycleOperationGuard` 只管理卸载与更新两个客户端操作；游戏、市场、导入、存储迁移、备份、更新与房间任务会阻止卸载，卸载不取消、不等待且不强制结束活动任务。自动回退由应用进程外的根启动器执行，不存在客户端回退操作类型。
+  - **可恢复状态机**：journal 按 `prepared → waiting_for_processes → preflight_complete → recovery_registered → launcher_quarantined → runtime_removed → shell_integration_removed → optional_data_cleanup → root_binaries_removed → finalized` 逐阶段原子提交。提交前把卸载注册表临时切到 worker 的 `--resume`；同一安装根优先恢复未完成 journal。
+  - **提交顺序**：worker 等待 Electron 退出后再次验证绝对路径、`.bz-games-root`、普通文件、重解析点、卷根、保护目录和危险嵌套；先隔离根启动器，再调用 Velopack 删除 `.runtime`。卸载是单向提交，失败时保留已完成阶段并由工作目录 worker 或根卸载器继续，不恢复启动器、运行时或用户数据；核心完成后才逐路径清理用户勾选的数据。
+  - **结果语义**：游戏内“删除所有游戏库”和“删除配置与数据”相互独立；单个可选数据路径失败不改变核心卸载结果，只生成残留报告。完全成功静默清理工作目录；核心失败或存在残留时在 `%LOCALAPPDATA%\BZ-Games\UninstallReports` 写日志并显示原生窗口。全程普通用户权限，不使用重启后删除。
 - **默认封面/图标回退**：
   - `GameCover.vue` 在无自定义 cover 且无 video 时，使用构建期 `import defaultCoverUrl from "resources/default_cover.png"` 提供的静态回退图片（16:9）。
   - `GameIcon.vue` 在无自定义 icon 时，使用构建期 `import defaultIconUrl from "resources/default_icon.png"` 提供的静态回退图片（1:1），不再渲染文本首字符。
@@ -1149,7 +1132,7 @@ interface AppSettings {
 
 ## 六、开发规范与约束
 
-- **静态质量检查**：提交前运行 `pnpm run lint`、`pnpm run typecheck` 与 `pnpm run build`。ESLint 覆盖 `src/` 下的 TypeScript、JavaScript 和 Vue 文件及根目录构建配置；生成目录和独立 `relay-server/` 不由根配置重复扫描。
+- **静态质量检查**：提交前运行 `npm run lint`、`npm run typecheck` 与 `npm run build`。ESLint 覆盖 `src/` 下的 TypeScript、JavaScript 和 Vue 文件及根目录构建配置；生成目录和独立 `relay-server/` 不由根配置重复扫描。
 
 ### 6.1 游戏导入与市场安装规范
 
@@ -1187,7 +1170,7 @@ interface AppSettings {
     `handleDownload` 覆盖 `paused`/`interrupted` 防重复（暂停态按钮 disabled + 后端状态机守卫）。`handleCancel` 覆盖
     active + paused + interrupted 全态。`finally` 块清理 Set。
   - **后端**：`downloadAndInstall` 覆盖 `ACTIVE_STATUSES` + `paused` + `interrupted` 所有非终态。`transition()`
-    状态机守卫终态不可再转换、paused 不可被 cancel 覆盖。`startPipeline().catch()` 通过 `signal.aborted` 静默返回，不覆写已设置的状态。
+    严格执行显式转换矩阵；paused/interrupted 可以被用户取消，但不能被旧 pipeline 覆盖为 verifying/error 等其他状态。`startPipeline().catch()` 通过 `signal.aborted` 静默返回，不覆写已设置的状态。
 - **市场内存管理**：`finalize()` 在终态（completed/error/canceled）时删除临时下载文件与解压目录，延迟 30 秒清理 `tasks` Map
   条目。
 - **市场下载背压处理**：`downloadArchive` 写入流检查 `writer.write()` 返回值，返回 `false` 时 await `drain`
@@ -1212,38 +1195,34 @@ interface AppSettings {
   - `entry=url` 时必须提供 `web_url`（合法 URL）。
   - `icon/cover` 若填写则必须是游戏目录内存在的相对路径。
 
-### 6.1.1 NSIS 多语言安装程序
+### 6.1.1 Velopack 与 Rust 安装生命周期
 
-- **语言选择**：`electron-builder` NSIS 配置启用 `displayLanguageSelector: true` + `multiLanguageInstaller: true`，支持 `zh_CN`、`en_US`、`ja_JP`
-  三种安装语言。安装向导第一步显示语言选择器，用户选择后 NSIS 继续以该语言完成安装流程。
-- **语言标记文件**：`build/installer.nsh` 在 `customInstall` 钩子中根据 `$LANGUAGE` 常量（1033=en-US, 2052=zh-CN,
-  1041=ja-JP）写入 `.initial-language` 标记文件到安装目录。首次启动时 `StoreService.getSettings()`
-  读取该文件，覆盖默认语言设置后立即删除文件，确保语言设置只生效一次。
-- **卸载数据清理**：`installer.nsh` 的 `customUnInstall` 钩子在卸载时清理 `%APPDATA%\BZ-Games` 目录，确保卸载后无残留数据。
-- **Windows 安装包**：`installer.nsh` 为 NSIS 专用脚本，对 Windows 平台打包生效。
+- **目录边界**：根目录稳定保存 `BZ-Games.exe`、`BZ-Games-Uninstall.exe`、`.bz-games-root`、`config.json`、`games/`、`db/`；Velopack 只管理 `.runtime/`，不得覆盖或卸载同级用户数据。
+- **安装路径**：Rust 安装器使用两页原生 Windows 向导，先展示产品介绍，再让用户选择父目录并自动创建 `BZ-Games` 子目录；禁止系统目录、磁盘根、用户主目录根、网络路径、重解析点和不支持可靠原子重命名的位置；目标安装目录非空时不得覆盖。`--install-dir` 仅供自动化调用，表示明确的最终安装根目录。
+- **稳定入口**：快捷方式、协议和自启动指向根目录启动器，卸载入口独立指向根目录卸载器；Velopack 使用 `--shortcuts None`。
+- **卸载语义**：Windows 系统入口只移除客户端并保留 `config.json`、`games/`、`db/`；游戏内入口才允许分别选择删除全部游戏库或删除 `config.json`、`db/`，删除动作在 Electron 退出且核心预检通过后执行。
+- **构建链**：`npm run build:win` 依次生成 Rust 根启动器与卸载器、Electron 目录包、Velopack 资产，以及同时嵌入 Setup、启动器和卸载器的最终 `BZ-Games-Setup-<version>.exe`。4.0.0 或显式 `-FullOnly` 只生成 full；后续常规构建必须先从 GitHub 下载上一稳定版 full/feed，并同时生成当前 full、delta 和 feed，下载或 delta 缺失时构建失败。
 
 ### 6.1.2 游戏库列表管理
 
 - **空目录约束**：`system:selectGameStoragePath` 通过 `fs.readdirSync` 检查所选目录是否为空。非空时返回
   `{ path, error: "directory_not_empty" }`，由前端通过 `dialog.warning()` 弹出友好提示（使用三语 i18n
   文案），阻止选择。
-- **默认项约束**：默认游戏库由 `settings.gameStoragePath` 表示，且必须存在于 `settings.gameStorageHistory`；设置页维护“游戏库列表”。
+- **默认项约束**：默认游戏库由 `game_libraries.is_default` 表示，数据库唯一索引保证至多一个默认项；设置页只调用数据库接口。
 - **精确清理**：`system:removeGameStoragePath` 删除游戏库时，删除标准结构 `gameId/version` 下存在 `game.json` 的版本目录，并在游戏根目录或库根目录为空时删除空目录。
-- **迁移语义**：迁移游戏库复制源游戏库中的全部文件；复制全部成功后删除原游戏库并更新游戏记录和游戏库列表。迁移失败时主进程返回结构化错误，并删除目标目录中已复制的部分数据。
+- **迁移语义**：迁移游戏库严格执行“目标空目录校验 → 复制与结构/大小校验 → 数据库仓库根路径更新与版本引用数验证 → 删除源目录”。各阶段最多重试 3 次；提交数据库或删除源目录失败时恢复原路径、内存缓存和文件状态，不允许数据库路径与实际有效仓库分叉。v4 配置文件不保存游戏库路径，唯一持久化来源为 `game_libraries`。
 - **单游戏删除**：`game:remove` 删除单个游戏时沿用游戏根目录递归删除策略。
 
 ### 6.2 IPC 接口清单
 
-- `game:load`：兼容旧调用的直接导入接口；游戏库手动导入 UI 不得调用，必须使用异步任务接口。
 - `game:prepareImport`：导入前预检查目录并返回建议草稿信息。
-- `game:loadWithManifest`：兼容旧调用的补录 Manifest 直接导入接口；新流程通过 `game:startImport` 传入草稿。
 - `game:checkIdExists`：校验游戏 ID 是否已存在。
 - `game:selectImportDirectory`：只选择单个手动导入目录，不执行复制。
 - `game:startImport`：快速校验并创建异步手动导入任务，立即返回任务状态。
 - `game:getImportTasks`：获取全部手动导入任务快照。
 - `game:cancelImport` / `game:retryImport` / `game:dismissImport`：取消、完整重试或移除终态手动导入任务。
 - `game:getAll`：获取用于展示的完整游戏列表数据。
-- `game:getRecords`：获取原始游戏记录（版本路径等）。
+- `game:getRecords`：获取原始游戏记录；版本位置仅包含 `libraryId + relativePath`，绝对路径只在主进程文件系统边界解析。
 - `game:getManifest`：透明解密并读取指定游戏版本的 `game.json`，返回内存中的已校验 Manifest 对象。
 - `game:getVideo`：读取指定版本视频并返回 Data URL。
 - `game:getCover`：读取指定版本封面并返回 Data URL。
@@ -1300,17 +1279,15 @@ interface AppSettings {
 - `system:getSettings`：读取当前应用设置。
 - `system:getAppVersion`：获取当前平台版本号（供渲染进程进行平台兼容性判断）。
 - `system:getSensitiveWords`：从 `resources/vocabulary/` 加载并返回去重排序后的敏感词列表（按长度降序），结果缓存在主进程模块级变量中。
-- `system:cloud:getLocalStatus`：从本地 `config.json` 读取云同步状态（同步返回，不发起网络请求）。
-- `system:cloud:getSnapshotMeta`：按需从服务端查询当前平台快照的元信息（版本、大小、sha256、更新时间）。
-- `system:cloud:loginGithub`：触发 GitHub OAuth 登录流程。
-- `system:cloud:upload`：上传脱敏加密配置与 SQL dump 组成的单一平台快照。
-- `system:cloud:download`：下载云端平台快照，合并 JSON 配置后在 SQLite 事务中幂等导入。
-- `system:cloud:sync:event`：主进程 → 渲染进程推送云端同步进度事件（stage + percentage）。
-- `system:cloud:authChanged`：主进程 → 渲染进程推送登录/会话过期/会话失效事件（含 `LocalCloudStatus`）。仅在 OAuth 登录成功或接收到 `session_expired` / `session_invalid` 时触发。
+- `system:account:getLocalStatus`：从本地 `config.json` 同步读取账号状态，不发起网络请求。
+- `system:account:getPresenceStatus` / `system:account:setPresence`：读取或由用户主动切换在线状态。
+- `system:account:presenceChanged`：主进程 → 渲染进程推送在线状态变化。
+- `system:account:loginGithub` / `system:account:logout`：触发 GitHub OAuth 登录或撤销当前账号会话。
+- `system:account:authChanged`：主进程 → 渲染进程推送登录、登出、会话过期或会话失效事件（含 `LocalAccountStatus`）。
 - `system:feedback:selectImages`：打开文件对话框选择反馈图片（支持传入 `selectionId` 追加模式），主进程侧执行 MIME 声明与实际格式一致性校验、SHA-256 去重。
 - `system:feedback:releaseImages`：释放单张或全部已选反馈图片。
 - `system:feedback:submit`：文本 ≤ 5000 字 + 可选图片 multipart 上传。
-- `system:feedback:getHistory`：携带可选游标从服务端读取当前登录账号固定 10 条的反馈历史编号、提交时间戳和下一页元数据，并在首屏查询前清理旧版本地历史。
+- `system:feedback:getHistory`：携带可选游标从服务端读取当前登录账号固定 10 条的反馈历史编号、提交时间戳和下一页元数据。
 - `system:feedback:getDetail`：从服务端查询反馈详情（正文、处理状态、回复、图片），主进程侧校验响应结构后再返回 Data URL。
 - `forum:listPosts` / `forum:getPost` / `forum:getComments`：主进程携带 relayToken 与登录 Bearer Session 读取论坛轻量列表、帖子详情和评论游标页。
 - `forum:getSearchAvailability`：主进程读取服务端 ES 可用性；不可用时客户端不显示论坛搜索框。
@@ -1326,12 +1303,11 @@ interface AppSettings {
 - `system:getGameStoragePaths`：返回游戏库列表及默认项标记。
 - `system:addGameStoragePath`：添加新的空游戏库目录。
 - `system:setDefaultGameStoragePath`：将游戏库列表中的指定路径设为默认游戏库。
-- `system:migrateDefaultGamesLibrary`：迁移 exe 同级默认 `games/` 中的全部文件并同步已记录游戏版本路径，支持“不再提醒”。
-- `system:migrateGameStorageLibrary`：迁移任意已配置游戏库中的全部文件并同步游戏库列表；失败时返回结构化错误并清理目标目录中的部分迁移数据。
+- `system:migrateGameStorageLibrary`：迁移已配置的外部游戏库；目标必须为空。复制、数据库提交和源目录删除均有限重试，失败时返回结构化错误并执行文件与数据库回退。
 - `system:openPath`：在系统文件管理器中打开路径。
 - `system:removeGameStoragePath`：删除游戏库列表项及其内部已导入游戏数据。仅删除标准 `gameId/version/game.json` 可确认的游戏版本目录，不删除存储根目录下的用户自有文件或子目录。
-- `system:uninstall`：卸载客户端。先检查 `Uninstall BZ-Games.exe`、阻止活跃市场任务，并停止平台启动的游戏进程及本地游戏服务；若勾选删除游戏库，再以重试机制删除并核验全部游戏库，任一路径失败时终止卸载并返回失败路径。通过 Electron `shell.openPath()` 启动系统卸载程序，必须等待 Windows Shell 返回成功后再延迟退出客户端；禁止使用依赖父进程退出后继续运行的临时 PowerShell/批处理辅助链路。返回 `{ success: boolean; error?: string; paths?: string[] }`。
-- `system:clearCache`：清除应用 C 盘缓存目录（`Roaming\bz-launcher` 和 `Local\bz-launcher-updater`），逐项删除并静默跳过锁定文件。返回 `{ totalSize: number; clearedSize: number }`。
+- `system:uninstall`：游戏内卸载入口。“删除所有游戏库”和“删除配置与数据”是两个独立选项；活动游戏、市场、导入、迁移、备份、更新或房间任务会返回完整 blocker 列表。主进程生成版本化计划并等待临时 Rust worker 安全接管，返回 `{ accepted: true, operationId }` 或 `{ accepted: false, error, blockers? }`；后续删除与恢复完全由 worker journal 驱动。
+- `system:clearCache`：通过 Electron Session API 清除当前应用身份对应的 HTTP 缓存，并清理当前 `app.getPath("userData")/.market-cache` 与市场内存缓存；存在可恢复下载任务时保留任务缓存。不得扫描或删除旧应用身份的目录。返回 `{ totalSize: number; clearedSize: number }`。
 - `system:getUserData`：读取用户经济与签到数据。
 - `system:checkIn`：执行每日签到并返回奖励结果。
 - `system:buyFrame`：原子购买头像框（校验余额 + 已拥有，成功自动装备）。
@@ -1340,11 +1316,11 @@ interface AppSettings {
 - `system:unequipFrame`：原子卸下头像框（仅当前装备时生效）。
 - `system:getAvatarFrameImage`：从 `resources/avatar-frames/` 读取帧图返回 base64 Data URL。
 - `system:dataHealthCheck`：执行本地数据健康检查，返回结构化报告（错误/警告/摘要）。
-- `migration:export`：选择目标文件并导出 `.bzgames` v1；单任务互斥，返回最终结构化状态。
-- `migration:cancel`：取消当前导出，仅清理临时快照与未完成文件。
-- `migration:get-status`：读取迁移导出当前状态。
-- `migration:acknowledge-notice`：仅接受当前应用版本号，记录用户已确认本版本迁移公告。
-- `migration:event`：推送准备、打包、校验、完成、取消或错误状态及真实字节进度。
+- `backup:export`：选择目标文件并导出 `.bzgames` V2；只备份内置游戏库，源数据永不删除。
+- `backup:import` / `backup:import-confirm`：预检 V1/V2 并经二次确认完整替换当前数据；V1 由隔离转换器生成全新 v4 数据。
+- `backup:cancel` / `backup:get-status` / `backup:event`：统一取消、状态和真实进度；单任务互斥。
+- `update:check` / `update:download` / `update:cancel` / `update:apply` / `update:get-status` / `update:event`：Velopack 更新最小职责接口。
+- 客户端不暴露回退查询或执行 IPC，也不接受用户指定的版本、包路径或快照路径。回退只能由根启动器在同一目标版本连续两次健康启动失败后自动触发，并同时恢复更新前配置和数据库。
 - `system:log:error`：渲染进程错误日志回传主进程统一记录（`ipcRenderer.send` 单向推送，无需返回值）。
 - `room:event`：主进程推送房间事件给渲染层。
 - `game:process:started`：推送平台托管的游戏运行实体启动事件。Native 在入口进程 `spawn` 后发送；Web 在窗口加载成功并创建游玩会话后发送。
@@ -1365,7 +1341,7 @@ interface AppSettings {
 - **返回导航**：所有二级页面（设置、统计、成就等）的 `n-page-header` 必须包含返回按钮，统一导航回 `Library` 页面。
 - **市场入口位置**：在游戏库左侧导航区域"游戏市场"按钮，点击后进入市场列表页面（一级界面 `/markets`）。
 - **市场两级导航**：一级界面（`MarketListView`）以响应式四列卡片网格展示所有可用市场源（来自 `sources`
-  数组），支持按市场名称搜索并展示市场封面、名称、更新时间。筛选结果保留原始 source 索引，用户点击任意市场卡片进入对应游戏列表（二级界面 `/market/:sourceIdx`
+  数组），支持按市场名称搜索并展示市场封面、名称、更新时间。用户点击卡片后始终以稳定 `marketId` 进入对应游戏列表（二级界面 `/market/:marketId`
   ）。二级界面左上角有返回按钮可回到市场列表。
 - **市场刷新行为**：市场列表和游戏索引均有 1
   小时内存缓存。首次进入或缓存过期时自动拉取最新数据；加载中展示骨架屏或加载态；全部来源失败时展示错误态与重试按钮。用户可通过"
@@ -1437,12 +1413,13 @@ interface AppSettings {
 - **房间开始按钮冷却**：房间内收到 `room:game:end` 后，Host 的「开始游戏」按钮需禁用 5 秒。
 - **客机重连按钮**：客机游戏进程意外退出后，由 `RoomServer` 将 `playerId` 加入 `RoomInfo.reconnectPlayerIds` 并广播状态同步。前端 `isReconnectMode` 从该数组派生，无需手动管理。重连状态下 Ready/Unready 按钮位替换为"重连"按钮。点击后重新 `launch()` 同一游戏版本。`room:game:start` 或 `playing→waiting` 时 `reconnectPlayerIds` 被清空，按钮恢复原状。
 - **统计界面**：卡片右上角需展示该游戏的所有版本号，使用自动换行布局。
-- **设置页更新说明入口**：设置页提供「更新说明」按钮，始终可重新打开 v3.4.2 迁移公告；首次启动自动展示，只有主动关闭或成功导出后才记录已确认版本。导出成功的 message 出现后不再显示进度条，但保留完成状态与目标路径。
+- **设置页更新入口**：健康启动完成 30 秒后每次启动至多自动检查一次，不存在周期定时器；自动失败静默。用户点击“稍后再说”写入当前安装版本，当前版本后续启动连网络检查也跳过；手动检查始终有效，升级后自动恢复。下载和安装都必须由用户分别确认。
+- **设置页备份入口**：V2 导出与 V1/V2 导入使用同一弹窗。导入明确为完整替换且不删除源 `.bzgames`；成功 message 出现后进度条立即消失，应用自动经根启动器重启并执行健康检查。
 - **玩家昵称校验**：昵称输入框限制 16 个字符（`maxlength="16" show-count`），表单校验规则包含三个维度：① 非空（`required`）；② 最长 16 字符（`max: 16`）；③ 禁止 `< > " ' \` & \\ /`等特殊字符（正则`/^[^<>\"'\`&\\\\/]+$/`）。`canSave`computed 通过`nicknameValid`门控：空名或包含非法字符时保存按钮 disabled。所有 6 种语言均提供`nameTooLong`/`nameInvalidChars` 错误提示。
 - **设置页卸载入口**：设置页底部（与保存按钮同行，`justify-content: space-between`）提供"卸载客户端"按钮（
   `type="error" secondary`），右侧提供"清除缓存"按钮。点击卸载弹出 NaiveUI 自定义确认弹窗，包含不可撤销的警告文案、是否同时删除所有游戏库目录的勾选项、以及删除路径列表预览。确认后调用
   `system:uninstall` IPC 执行卸载。卸载准备期间锁定弹窗并显示加载状态；市场任务活跃、游戏库被占用、路径不安全、辅助进程或卸载器不可用时不得静默继续，必须保留客户端并展示对应错误。
-- **设置页清除缓存入口**：设置页底部"卸载客户端"按钮右侧提供"清除缓存"按钮（`secondary`），旁边提供"迁移游戏库"按钮（`type="warning" secondary` 黄色样式）。点击"清除缓存"后弹出 `n-modal preset="card"` 弹窗（400px），展示确认文案。点击"清除缓存"后启动模拟进度条（200ms 间隔随机递增 5-20%，最高到 90%），同时通过 `system:clearCache` IPC 调用主进程执行实际清理。主进程清理 `AppData\Roaming\bz-launcher` 和 `AppData\Local\bz-launcher-updater` 两个缓存目录，逐项删除并静默跳过锁定文件（`force: true, maxRetries: 3`），返回已清理的空间大小。IPC 完成后进度条跳至 100%，展示释放空间结果。取消/确认按钮统一在弹窗右下角（`#action` slot + `justify="end"`）。
+- **设置页清除缓存入口**：设置页底部全宽操作栏提供"清除缓存"按钮（`secondary`）和"迁移游戏库"按钮（`type="warning" secondary` 黄色样式）。点击"清除缓存"后弹出 `n-modal preset="card"` 弹窗（400px）并调用 `system:clearCache`。主进程只清理当前 Electron Session HTTP 缓存、动态 `userData/.market-cache` 和市场内存缓存；为保证暂停或中断下载可恢复，存在保留任务时不删除市场任务缓存。IPC 完成后展示实际释放空间，取消/确认按钮统一位于弹窗右下角。
 - **设置页未保存变更拦截**：进入页面时记录 `originalSettings` JSON 快照，`hasUnsavedChanges` 计算属性实时比对当前表单与快照。`onBeforeRouteLeave` 路由守卫检测到未保存变更时弹出 NaiveUI `dialog.warning`，提供"保存并离开 / 不保存 / 取消"三个选项。页面顶部返回按钮（`n-page-header @back`）同样先检查变更再跳转。保存成功后同步更新快照，不再触发拦截。
 - **设置页头像裁切**：上传头像后弹出裁切弹窗（`n-modal preset="card"` 520px），Canvas 绘制原图 + 正方形裁切框（70% 容器边长，带九宫格参考线）。支持鼠标拖拽平移和滚轮/滑块缩放（自适应最小缩放至覆盖裁切框）。确认后从裁切框区域提取正方形内容，缩放至 256×256 JPEG 并自动保存。存储为正方形，圆形效果由 CSS `border-radius: 50%` 实现。
 - **设置页头像预览**：点击设置页头像缩略图（`AvatarWithFrame` 组件，40px），弹出
@@ -1453,14 +1430,14 @@ interface AppSettings {
 @click.prevent` 拦截默认跳转后通过 `system:openUrl` IPC 调用 `shell.openExternal` 打开系统默认浏览器。
   - **设置页建言献策**：仅登录用户可见底部入口，入口打开固定 72vw × 72vh 的 `FeedbackModal`，使用“建言献策 / 历史记录”两个 Tab，不再打开第二层历史弹窗。文字最多 5,000 字，可选最多 4 张 PNG/JPEG/WebP（单张 5 MiB）；重复选择通过顶部 message 提示，新增图片追加到当前选择，缩略图按最长边 `contain`，文件名完整换行显示。渲染进程只持有主进程生成的预览和选择 ID，不接触文件路径、发行版中继令牌或 GitHub 会话令牌。已登录用户每 12 小时可提交一次；触发限制时只展示服务端 `resetAt` 对应的一条提示。历史列表默认全部收起，右侧只显示展开按钮；展开时从服务端查询正文、图片、处理状态和回复，详情区内部显示状态，历史较多时在固定弹窗内容区滚动。
 - **GitHub Token 设置**：设置页提供 `githubToken` 字段（`n-input type="password"`，`@copy.prevent` + `@cut.prevent` 防剪贴板泄漏）。填写有效的 GitHub Personal Access Token 后，平台所有 GitHub API 请求自动携带 `Authorization: Bearer <token>`，将 API 限流从 60 次/小时提升至 5000 次/小时（用于 Release Asset 解析）。
-- **云端同步说明**：设置页 GitHub 登录区域在上传/下载按钮旁提供 `?` 帮助按钮，hover 展示 `cloudSyncHelp` tooltip，说明上传会排除 GitHub Token 与登录会话字段、下载 config.json 仅更新云端存在的字段。
-- **设置页数据自检**：设置页需提供“数据自检”按钮。清单检查必须复用 `GameManifestFileService`，在不迁移或覆盖原文件的前提下识别明文/密文、验证密文信封/密钥/认证标签和最新 `GameManifestSchema`，并核对游戏 ID/版本、平台兼容范围、入口及图标/封面/视频/成就图标文件。明文为警告，解密、格式、密钥或 Schema 问题为错误；主进程返回稳定错误码和参数，渲染层使用六语 i18n 展示，不直接显示主进程硬编码文案。
-- **迁移导出错误诊断**：迁移导出失败时前端按共享错误码展示本地化原因；技术细节仅写入主进程日志，不向用户泄露绝对源路径或内部异常。
+- **账号与在线状态**：设置页 GitHub 登录区域只提供登录、登出、账号资料和在线状态开关；在线状态默认关闭且不持久化，Platform Snapshot 入口与说明均不存在。
+- **设置页数据自检**：设置页需提供“数据自检”按钮。清单检查复用 `GameManifestFileService` 严格验证密文信封、密钥、认证标签和最新 Schema；运行时明文 Manifest 是错误，不得自动改写。主进程返回稳定错误码和参数，渲染层使用 i18n 展示。
+- **备份错误诊断**：导入导出失败时前端按共享错误码展示本地化原因；技术细节仅写入主进程日志，不向用户泄露绝对源路径或内部异常。
 - **设置页游戏库列表管理**：
   - 支持维护多个游戏库路径，并为每个项提供默认游戏库切换、打开路径和删除入口。
   - 默认游戏库影响新导入或市场下载安装的游戏，已导入游戏所在目录保持不变。
   - 删除游戏库时必须阻止删除最后一个路径，并通过 i18n 展示结构化错误文案。
-  - 迁移游戏库时先选择源游戏库，再选择新的空目录；迁移源目录中的全部文件，成功后删除源目录，并同步更新游戏记录和游戏库列表。
+  - 迁移游戏库时先选择外部源游戏库，再选择新的空目录；复制与校验成功后同步数据库和内存缓存，最后删除源目录。任一提交阶段失败均有限重试并自动恢复原仓库。
   - 支持展示“当前 + 历史”路径列表、打开路径、删除路径。
   - 删除路径时只删除该路径中平台可识别的游戏版本目录，并更新本地记录；用户自行放入的非游戏文件必须保留。
 - **房间管理增强**：
@@ -1486,18 +1463,18 @@ interface AppSettings {
   - **版本完整性分级**：前端使用 `getVersionIntegrity()` 返回五档结果：`"ok"`（一切正常）、`"missingSha256"`（缺 sha256，黄色警告标签）、`"missingSize"`（缺 size，黄色警告标签）、`"invalid"`（下载链接非法或非 GitHub 直链缺少 size，红色错误标签）、`null`（GitHub 直链 Asset 信息尚未解析，不显示标签）。`isVersionDownloadable()` 仅用于下载按钮禁用判断：非 GitHub 直链缺 size 时禁用。
   - **下载阶段**：`downloadAndInstall()` 按优先级获取 sha256/size：① 版本对象 → ② `resolvedAssets` 缓存 → ③ GitHub 直链实时 API。size 缺失则拒绝下载（`market_missing_size`），sha256 缺失仅跳过哈希校验不拒绝。
 
-### 6.5 v3.4.2 最终 NSIS 桥接与迁移规范
+### 6.5 v4 更新、V1 转换与 V2 备份规范
 
-- **终止版本**：v3.4.2 是最后一个可由旧版 NSIS 自动更新机制安装的版本；自身不包含 `electron-updater`，不检查、下载或安装后续版本。
-- **桥接发布**：仍由 electron-builder 生成 NSIS 安装包、`latest.yml` 与 blockmap，供 v3.4.1 及更早客户端升级到 v3.4.2。现有 `StoreService.restoreDataFromSnapshotIfNeeded()` 必须保留，以恢复旧客户端在更新前创建的快照。
-- **手工安装边界**：不为用户直接运行 v3.4.2 安装包覆盖旧目录增加备份或阻止逻辑；受保证路径是旧客户端内置更新到 v3.4.2。
-- **导出范围**：固定为 exe 同级 `config.json`、`games/`、`db/`。外部游戏库不复制；`config.json`、`db/` 与普通文件 `db/bz_games.db` 必须存在，`games/` 可为空。
-- **数据保留承诺**：导出不得删除或移动任何源数据。为获得一致快照可以正常关闭 SQLite 并将 WAL 检查点落盘。取消和失败只能清理临时快照及 `.partial-*` 文件；成功导入新版本后由用户主动卸载，客户端不得自动卸载。
-- **一致性与互斥**：活动游戏、市场任务或手动导入存在时拒绝导出。导出期间阻止新任务；SQLite 进入排队维护窗口，关闭 WAL worker 后复制完整 `db/`，随后必须在 `finally` 中恢复。
-- **空间与取消**：目标盘和临时盘分开校验可用空间；二者位于同一卷时必须按归档与数据库快照的合计占用校验。取消 7za 后必须等待子进程真正退出，再删除 `.partial-*` 与临时快照。
-- **归档契约**：使用 `-t7z -mx=0` 生成 `.bzgames`，根目录仅允许 `migration-manifest.json`、`config.json`、`games/`、`db/`；生成后必须通过 `7za t`，再以同目录单次重命名原子替换正式文件，替换失败时保留已有有效备份。完整格式见 `docs/MIGRATION_BUNDLE_V1.md`。
-- **路径安全**：拒绝符号链接、目录联接和特殊文件；备份目标必须位于当前程序根目录之外，并通过 `realpath` 复核，防止从外部目录联接回程序目录。未来导入器只重映射旧 `sourceGamesRoot` 下的路径，外部路径保持原值并提示重新关联。
-- **回归样本**：`docs/fixtures/BZ-Games-Migration-v1-sample.bzgames` 是固定 v1 导入样本，邻接 SHA-256 文件校验其确定性；`npm run fixture:migration` 必须可重复生成相同字节，样本仅使用测试密钥和合成数据。
+- **更新检查**：更新与健康 IPC 只接受主窗口 sender；同一次运行的健康提交必须幂等。仅在一次健康启动完成 30 秒后检查一次；`updatePromptSuppressedForAppVersion` 与当前安装版本相同时自动检查完全跳过。可选的回滚抑制标记损坏时丢弃并记录，不能阻断核心健康提交。设置页手动检查不受抑制字段影响。禁止恢复 `electron-updater` 或周期检查定时器。
+- **更新提交**：自动检查不下载。用户分别确认下载和安装；下载前必须从 Velopack 当前包缓存将唯一匹配的当前版本 full 包保存到 `.runtime/rollback-package`，下载完成后不允许回退到旧回滚点或再次猜测包来源。应用前阻止新任务、等待已有任务结束、刷新配置并关闭 SQLite，仅从这份已验证暂存包以临时目录事务式生成 `.runtime/rollback`。最终回滚点固定包含当前 full 包、SHA-256、`config.json`、完整 `db/` 和 `rollback-state.json`；完整落盘后才原子替换旧点，游戏文件不进入快照。
+- **健康与自动回滚**：同一安装根同时只允许一个根启动器执行健康守护；并发启动仅转交参数，不得重复累计更新失败。根启动器以随机令牌等待配置解密、SQLite、游戏索引、IPC、本地 API 和渲染首屏全部健康，健康记录的进程 ID 必须与受守护子进程一致；同一待更新版本连续失败两次后才自动回滚。客户端不提供手动回退入口。健康升级成功后立即清理已消费的回滚点；自动回滚使用固定路径、严格清单、版本关系、full 包 SHA-256、数据恢复和恢复后健康检查，成功后消费回滚点并抑制回退版本的自动更新检查，手动检查更新不受影响。
+- **版本展示**：构建脚本把 `package.json` 版本注入 Rust 安装器；每次健康启动后根启动器使用健康文件中的合法 SemVer 刷新卸载注册表 `DisplayVersion`，升级和回退后的 Windows“已安装的应用”版本必须与实际运行版本一致。
+- **正式 V1 导入能力**：V1 是 v4 的长期只读导入协议，不是运行时兼容设计；转换代码物理隔离在 `src/main/services/backup/v1/`。V1 只读打开 `db/bz_games.db`，使用旧数据的既定密钥读取后生成全新 v4 数据库；其他数据库、WAL、SHM、零字节库和 `.imports` 全部忽略，转换目标 `db/` 最终只能有 `bz_games.db`。
+- **V1 路径、Manifest 与字段同步**：旧内置绝对路径转换为 `builtin + relative_path`；外部路径使用与 v4 业务代码相同的根路径规范化规则，版本相对路径必须通过最终规范校验。所有游戏版本的明文 `game.json` 在转换期加密；旧账号/云同步会话、账号身份与 `githubToken` 不导入。凡修改既有配置、数据库、游戏库或 Manifest 字段，必须同步检查 V1 自动转换映射和固定样本。
+- **V2 长期契约**：根目录严格且仅包含 `backup-manifest.json`、`config.json`、`games/`、`db/`，其中 `db/` 只能有 `bz_games.db`；`formatVersion=2` 且独立声明 `dataModelVersion`。只复制内置游戏库，外部库只保存数据库引用；归档中的配置必须清空账号会话、账号身份与 `githubToken`。完整格式见 `docs/BACKUP_BUNDLE_V2.md`。
+- **完整替换与回滚**：导入前执行 CRC、严格 Manifest Schema、根白名单、路径穿越、ADS、硬/符号链接、目录联接/重解析点、特殊文件、归档炸弹和空间检查，并展示预览后二次确认。当前数据逐项移入回滚目录并分别记录“已备份旧项”和“已安装新项”；失败时只撤销实际安装的新项并原样恢复已备份旧项，回滚本身失败必须保留现场。新数据健康启动后才删除回滚目录，源 `.bzgames` 永不删除。
+- **最终数据结构**：v4 运行时只接受最终配置、数据库与 Manifest 结构，不提供启动迁移、旧字段回退或双读分支。开发阶段每次结构定稿后必须用一次性维护程序手工调整当前 dev 数据并通过严格 Schema、数据库指纹、完整性和外键检查；该维护程序不得进入正式运行路径。
+- **回归样本**：V1、V2 样本和 SHA-256 必须使用测试密钥和合成数据；V1 导入能力长期保留，4.x 不反向导出 V1。修改 V1 转换器、Schema、配置或 Manifest 契约后必须执行 `npm run test:v1-fixture`；该测试需同时覆盖旧独立数据库/WAL/SHM/`.imports` 丢弃、路径相对化、配置字段映射和明文 Manifest 加密。
 
 ### 6.6 建言献策、管理后台与配置安全
 
@@ -1507,14 +1484,14 @@ interface AppSettings {
 - **上传安全**：服务端使用 busboy 流式解析，总请求、字段、文件数量及单文件大小都必须设限；图片必须同时校验声明 MIME、文件签名、容器结构和合理尺寸。MySQL 失败时尽力删除本次 GridFS 文件，临时目录始终清理。
 - **会话错误协议**：受保护 HTTP 接口统一区分 `authenticated / missing / expired / invalid`。缺少令牌返回 `401 unauthorized`，过期返回 `401 session_expired`，无效、撤销或未知令牌返回 `401 session_invalid`，并同时返回稳定 `error` 与可读 `message`。过期会话默认保留 7 天以便识别，由 `AUTH_EXPIRED_SESSION_RETENTION_MS` 配置；普通 `unauthorized` 不触发客户端清理登录。
 - **Portal RBAC 与认证边界**：`users.role` 是唯一角色来源，只允许 `player`、`creator`、`administrator`、`super_administrator`。服务端唯一授权模块把角色映射为固定 capability 集合，未知角色和未知能力默认拒绝；超级管理员拥有全部能力，管理员无用户角色调整、托管容量查看、系统监控和桌面客户端版本上传能力，创作者仅能托管自己的游戏且提交必须审核，玩家仅能进入欢迎页并管理自己的反馈。`GET /api/portal/v1/session` 只通过同源 Session Cookie 返回当前用户、能力集合和过期时间，Portal 接口拒绝 Bearer 或混合凭据，写接口还必须校验精确 Origin；前端只消费能力集合，不得按角色推断授权。桌面客户端接口只接受 Bearer Session，需要登录的接口仅校验会话有效性，不读取角色或 capability。OAuth 只负责创建默认玩家、刷新 GitHub 资料和建立会话，永不自动修改已有角色。角色修改只允许超级管理员操作其他非超级管理员，且不能授予超级管理员。GitHub OAuth 的 Portal 回跳只允许 `PORTAL_PUBLIC_URL` 同源 `/admin/` 路径，Cookie 使用 HttpOnly、SameSite=Lax。管理静态文件必须阻止路径穿越和符号链接越界，并发送 CSP、`nosniff`、拒绝 iframe 等安全响应头。
-- **MySQL schema 生命周期**：仓库代码只在 `mysql-service.js` 的 `ensureSchema()` 中维护最新、完整、幂等的 `CREATE TABLE IF NOT EXISTS` 初始化结构，不加入 `ALTER TABLE`、迁移脚本或自动补列逻辑。已发布表新增或改变列、索引、约束时，必须在部署前检查线上实际结构，并通过单独审核的手工 SQL 完成变更；部署文档需说明目标结构、执行顺序、历史数据默认值、管理员角色赋值和验证查询。反馈图片继续复用现有 GridFS Bucket。
+- **MySQL schema 生命周期**：仓库代码只在 `mysql-service.js` 的 `ensureSchema()` 中维护最新、完整、幂等的 `CREATE TABLE IF NOT EXISTS` 初始化结构，不加入 `ALTER TABLE`、启动迁移或自动补列逻辑。历史托管 JSON 只能在维护窗口使用一次性离线转换程序处理，不能进入运行时路径。已发布表新增或改变列、索引、约束时，必须在部署前检查线上实际结构，并通过单独审核的手工 SQL 完成变更；部署文档需说明目标结构、执行顺序、历史数据默认值、管理员角色赋值和验证查询。反馈图片继续复用现有 GridFS Bucket。
 - **三端接口**：反馈提交成功仅返回 `{ ok, id }`；登录账号限流返回 `429 + error + retryAfterSeconds + resetAt`。玩家列表与详情只能访问自己的反馈，详情返回 `id/content/status/reply/imageCount/createdAt/updatedAt/images`，不得包含 `adminNote`；玩家图片和删除接口复用同一所有权规则。管理详情额外返回 `adminNote`，更新接受 `status/adminNote/reply`，管理删除需要对应 capability。所有字段以 `relay-server/API.md` 为准，服务端测试、客户端共享类型、预加载声明与管理端 TypeScript 类型必须同步。
-- **托管接口对齐**：逻辑地址的 `gameId/version/role/encodedFileName` 规则、市场导出结构、Portal 请求/响应类型和服务端校验必须保持同一字段语义；新增、替换、审核、设为最新、删除及下载分别使用最小职责接口，写接口由服务端执行角色、所有权、状态机和精确 Origin 校验，不能依赖前端隐藏按钮。客户端仅可把规范逻辑地址改写到配置的 Relay `origin`。
+- **托管接口对齐**：逻辑地址的 `gameId/version/role/encodedFileName` 规则、市场导出结构、Portal 请求/响应类型和服务端校验必须保持同一字段语义；托管游戏/版本元数据只接受 Schema 2，`gameManifest` override 只接受严格 V2，并在继承市场公共字段后满足完整 Manifest 的语言覆盖与字段关系。ZIP 内部 `game.json` 不由 Relay 解压或改写。新增、替换、审核、设为最新、删除及下载分别使用最小职责接口，写接口由服务端执行角色、所有权、状态机和精确 Origin 校验，不能依赖前端隐藏按钮。客户端仅可把规范逻辑地址改写到配置的 Relay `origin`。
 - **令牌注入边界**：客户端附加 GitHub Token、Relay Token 或专用 Referer 前，必须使用 `URL` 解析并精确校验协议、`origin` 与允许的路径边界；禁止使用字符串 `startsWith` 判断可信主机，禁止向相似前缀域名、用户信息段、重定向后的第三方地址或任意市场 URL 发送凭据。
   - **配置唯一来源**：客户端真实关键配置只允许出现在被 Git 忽略的 `private-build.config.json`；服务端真实关键配置只允许存在于服务器的 systemd 主单元及 drop-in 配置，权限必须为 `root:root 0600`；管理端生产环境使用同源 `/api` 与 `/auth`，当前无环境字段。生产管理端构建产物只部署到 Nginx 的 `/var/www/campusmate/admin`，不把服务器真实配置回写仓库。
   - **生产公网入口唯一化**：Nginx 只监听公网 `:38090`，Relay 只监听本机 `127.0.0.1:38091`；Nginx 直接托管 `/admin/` 静态页面，并将当前 `/api/...`、`/auth/...`、房间 HTTP 接口和 `/ws/` WebSocket 转发到本机 Relay。不得保留旧服务前缀或 Relay `:38091` 的公网兼容入口。官网和客户端发行版下载统一使用 `/api/v1/releases/latest/download`；GitHub Actions 发布通过 SSH 调用服务器发布脚本，超级管理员桌面版本上传使用 `/api/admin/v1/desktop-release`，客户端托管游戏下载使用 `/api/v1/game-hosting/assets/*`，创作者上传使用 `/api/portal/v1/game-hosting/*`。
   - **桌面版本发布语义**：GitHub Actions 与管理端上传复用同一原子发布器和发布锁。Actions 对同版本同文件返回 `already_current`，对同版本不同 SHA-256 返回 `current_retained` 并保留当前文件，两者都按幂等成功结束；管理 API 必须把 `current_retained` 映射为 `409 desktop_release_version_conflict`，不得让页面把未发生的替换提示为发布成功。
-- **示例同步**：`private-build.config.example.json`、`relay-server/bz-games-relay.service.example` 和 `bz-games-admin/.env.example` 分别对应三端。新增或删除配置字段后必须运行 `npm run check:config`（对应 `scripts/check-config-examples.mjs`，自动校验三端配置字段一致性、`.gitignore` 敏感路径覆盖及 SERVICE 示例完整性），禁止在源码或文档写入真实公网地址、管理员 ID、令牌、数据库连接串或 OAuth Secret。
+- **示例同步**：`private-build.config.example.json` 与 `relay-server/bz-games-relay.service.example` 分别对应客户端和服务端。新增或删除配置字段后必须运行 `npm run check:config`（对应 `scripts/check-config-examples.mjs`，自动校验两端配置字段一致性、`.gitignore` 敏感路径覆盖及 SERVICE 示例完整性）。`bz-games-admin/` 是被父仓库忽略的独立仓库，其环境示例与测试由该仓库自行维护；禁止在任一源码或文档写入真实公网地址、管理员 ID、令牌、数据库连接串或 OAuth Secret。
 
 ---
 

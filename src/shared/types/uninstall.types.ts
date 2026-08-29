@@ -11,7 +11,6 @@ export type UninstallBlocker =
   | "game_import"
   | "storage_migration"
   | "backup"
-  | "cloud_sync"
   | "update"
   | "room";
 

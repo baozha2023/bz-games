@@ -13,8 +13,9 @@ import type {
   MarketIndex,
   MarketTaskEvent,
   MarketTaskState,
-  MigrationExportResult,
-  MigrationExportState,
+  BackupImportSelectionResult,
+  BackupResult,
+  BackupState,
   UserData,
   NicknameStyle,
   GameLaunchFailurePayload,
@@ -22,11 +23,9 @@ import type {
   RoomCreateResult,
   FeedbackHistoryPage,
   FeedbackDetail,
-  CloudAuthChangedPayload,
-  CloudPresenceStatus,
-  CloudSnapshotMetaResult,
-  CloudSyncResult,
-  LocalCloudStatus,
+  AccountAuthChangedPayload,
+  AccountPresenceStatus,
+  LocalAccountStatus,
   ManualUnlockResult,
   GameImportStartResult,
   GameImportTaskEvent,
@@ -38,8 +37,10 @@ import type {
   ForumPage,
   ForumPostDetail,
   ForumPostSummary,
+  UpdateState,
+  UninstallStartResult,
 } from "../../../shared/types";
-import type { GameManifest } from "../../../shared/game-manifest";
+import type { ResolvedGameManifest as GameManifest } from "../../../shared/game-manifest";
 
 declare global {
   interface Window {
@@ -96,12 +97,6 @@ declare global {
         onImportEvent: (
           callback: (payload: GameImportTaskEvent) => void,
         ) => () => void;
-        load: (sourcePath?: string) => Promise<{
-          success: boolean;
-          manifest?: GameManifest;
-          error?: string;
-          params?: Record<string, any>;
-        }>;
         prepareImport: (sourcePath: string) => Promise<{
           sourcePath: string;
           hasManifest: boolean;
@@ -110,29 +105,6 @@ declare global {
           suggestedName: string;
           suggestedEntry: string;
         } | null>;
-        loadWithManifest: (
-          sourcePath: string,
-          draft: {
-            id: string;
-            name: string;
-            version: string;
-            description?: string;
-            author: string;
-            entry?: string;
-            web_url?: string;
-            platformVersion?: string;
-            icon?: string;
-            cover?: string;
-            type: GameType;
-            minPlayers?: number;
-            maxPlayers?: number;
-          },
-        ) => Promise<{
-          success: boolean;
-          manifest?: GameManifest;
-          error?: string;
-          params?: Record<string, any>;
-        }>;
         checkIdExists: (id: string) => Promise<boolean>;
         getPathForFile: (file: File) => string;
         remove: (id: string, versions?: string[]) => Promise<void>;
@@ -224,14 +196,14 @@ declare global {
         openGameHosting: () => Promise<boolean>;
         getSources: (forceRefresh?: boolean) => Promise<MarketDirectory>;
         getIndex: (
-          sourceIdx: number,
+          marketId: string,
           forceRefresh?: boolean,
         ) => Promise<MarketIndex>;
         getCachedImage: (url: string) => Promise<string>;
         downloadAndInstall: (
           gameId: string,
           version: string,
-          sourceIdx: number,
+          marketId: string,
         ) => Promise<MarketTaskState>;
         getTaskState: (taskId: string) => Promise<MarketTaskState | null>;
         cancelTask: (taskId: string) => Promise<boolean>;
@@ -253,13 +225,13 @@ declare global {
         get: () => Promise<AppSettings>;
         getAppVersion: () => Promise<string>;
         getSensitiveWords: () => Promise<string[]>;
-        getLocalCloudStatus: () => Promise<LocalCloudStatus>;
-        getPresenceStatus: () => Promise<CloudPresenceStatus>;
-        setPresenceEnabled: (enabled: boolean) => Promise<CloudPresenceStatus>;
-        getCloudSnapshotMeta: () => Promise<CloudSnapshotMetaResult>;
+        getLocalAccountStatus: () => Promise<LocalAccountStatus>;
+        getPresenceStatus: () => Promise<AccountPresenceStatus>;
+        setPresenceEnabled: (
+          enabled: boolean,
+        ) => Promise<AccountPresenceStatus>;
         loginWithGitHub: () => Promise<{ success: boolean; error?: string }>;
-        uploadCloudData: () => Promise<CloudSyncResult>;
-        downloadCloudData: () => Promise<CloudSyncResult>;
+        logoutAccount: () => Promise<{ success: boolean; error?: string }>;
         selectFeedbackImages: (selectionId?: string) => Promise<{
           success: boolean;
           canceled?: boolean;
@@ -308,27 +280,11 @@ declare global {
           path: string;
           error?: string;
         } | null>;
-        selectGameStoragePathRelaxed: () => Promise<{ path: string } | null>;
-        getDefaultGamesMigrationStatus: () => Promise<{
-          shouldPrompt: boolean;
-          defaultGamesPath: string;
-        }>;
         getGameStoragePaths: () => Promise<
           Array<{ path: string; isDefault: boolean }>
         >;
-        addGameStoragePath: (targetPath: string) => Promise<AppSettings>;
-        setDefaultGameStoragePath: (targetPath: string) => Promise<AppSettings>;
-        migrateDefaultGamesLibrary: (payload: {
-          targetPath?: string;
-          ignore?: boolean;
-        }) => Promise<{
-          success: boolean;
-          ignored?: boolean;
-          migratedGames?: number;
-          migratedVersions?: number;
-          gameStoragePath?: string;
-          error?: string;
-        }>;
+        addGameStoragePath: (targetPath: string) => Promise<void>;
+        setDefaultGameStoragePath: (targetPath: string) => Promise<void>;
         migrateGameStorageLibrary: (payload: {
           sourcePath: string;
           targetPath: string;
@@ -349,11 +305,10 @@ declare global {
           error?: string;
         }>;
         dataHealthCheck: () => Promise<DataHealthReport>;
-        uninstall: (payload?: { deleteGames?: boolean }) => Promise<{
-          success: boolean;
-          error?: string;
-          paths?: string[];
-        }>;
+        uninstall: (payload?: {
+          deleteGames?: boolean;
+          deleteUserData?: boolean;
+        }) => Promise<UninstallStartResult>;
         clearCache: () => Promise<{ totalSize: number; clearedSize: number }>;
         savePng: (
           dataUrl: string,
@@ -364,24 +319,30 @@ declare global {
           filePath?: string;
           error?: string;
         }>;
-        onCloudSyncEvent: (
-          callback: (payload: { stage: string; percentage: number }) => void,
-        ) => () => void;
-        onCloudAuthChanged: (
-          callback: (payload: CloudAuthChangedPayload) => void,
+        onAccountAuthChanged: (
+          callback: (payload: AccountAuthChangedPayload) => void,
         ) => () => void;
         onPresenceChanged: (
-          callback: (payload: CloudPresenceStatus) => void,
+          callback: (payload: AccountPresenceStatus) => void,
         ) => () => void;
       };
-      migration: {
-        exportData: () => Promise<MigrationExportResult>;
+      backup: {
+        exportData: () => Promise<BackupResult>;
+        selectImport: () => Promise<BackupImportSelectionResult>;
+        confirmImport: (token: string) => Promise<BackupResult>;
         cancel: () => Promise<boolean>;
-        getStatus: () => Promise<MigrationExportState>;
-        acknowledgeNotice: (version: string) => Promise<boolean>;
-        onEvent: (
-          callback: (payload: MigrationExportState) => void,
-        ) => () => void;
+        getStatus: () => Promise<BackupState>;
+        onEvent: (callback: (payload: BackupState) => void) => () => void;
+      };
+      update: {
+        rendererHealthy: () => Promise<boolean>;
+        getStatus: () => Promise<UpdateState>;
+        check: () => Promise<UpdateState>;
+        download: () => Promise<UpdateState>;
+        cancel: () => Promise<UpdateState>;
+        apply: () => Promise<UpdateState>;
+        suppressForCurrentVersion: () => Promise<UpdateState>;
+        onEvent: (callback: (payload: UpdateState) => void) => () => void;
       };
       forum: {
         selectImages: (

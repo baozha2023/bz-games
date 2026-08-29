@@ -71,21 +71,6 @@ export function createMySqlService({ config }) {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
     await pool.query(`
-      CREATE TABLE IF NOT EXISTS user_platform_snapshots (
-        user_id BIGINT UNSIGNED NOT NULL,
-        protocol_version SMALLINT UNSIGNED NOT NULL,
-        data_model_version INT UNSIGNED NOT NULL,
-        file_storage_id VARCHAR(64) NOT NULL,
-        snapshot_version BIGINT UNSIGNED NOT NULL,
-        size BIGINT UNSIGNED NOT NULL,
-        sha256 CHAR(64) NOT NULL,
-        content_type VARCHAR(255) NOT NULL,
-        created_at DATETIME(3) NOT NULL,
-        updated_at DATETIME(3) NOT NULL,
-        PRIMARY KEY (user_id)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    `);
-    await pool.query(`
       CREATE TABLE IF NOT EXISTS rate_limit_records (
         github_id VARCHAR(64) NOT NULL,
         endpoint_key VARCHAR(128) NOT NULL,

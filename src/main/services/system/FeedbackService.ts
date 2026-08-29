@@ -7,7 +7,7 @@ import { DEFAULT_RELAY_SERVER_URL } from "../../../shared/AppConstants";
 import { requestInterceptor } from "../../utils/requestInterceptor";
 import { logger } from "../../utils/logger";
 import { storeService } from "../storage/StoreService";
-import { cloudSyncService } from "./CloudSyncService";
+import { accountService } from "./AccountService";
 import type {
   FeedbackDetail,
   FeedbackHistoryItem,
@@ -152,7 +152,7 @@ export class FeedbackService {
   async selectImages(
     existingSelectionId?: unknown,
   ): Promise<FeedbackSelectionResult> {
-    if (!storeService.getSettings().cloudSessionToken) {
+    if (!storeService.getSettings().accountSessionToken) {
       return { success: false, error: "unauthorized" };
     }
     const requestedSelectionId =
@@ -263,19 +263,8 @@ export class FeedbackService {
   }
 
   async getHistory(cursor = ""): Promise<FeedbackHistoryPage> {
-    if (!cursor) {
-      try {
-        storeService.clearLegacyFeedbackHistory();
-      } catch (error) {
-        logger.warn(
-          "[FeedbackService] Failed to clear legacy feedback history",
-          error,
-        );
-      }
-    }
-
     const settings = storeService.getSettings();
-    if (!settings.cloudSessionToken || !this.baseUrl) {
+    if (!settings.accountSessionToken || !this.baseUrl) {
       return { items: [], nextCursor: null, hasMore: false };
     }
 
@@ -288,7 +277,7 @@ export class FeedbackService {
     try {
       const response = await fetch(requestUrl, {
         headers: requestInterceptor.buildHeaders(requestUrl, {
-          Authorization: `Bearer ${settings.cloudSessionToken}`,
+          Authorization: `Bearer ${settings.accountSessionToken}`,
         }),
         signal: controller.signal,
       });
@@ -298,7 +287,7 @@ export class FeedbackService {
         hasMore?: unknown;
         error?: string;
       };
-      cloudSyncService.handleAuthFailure(body.error);
+      accountService.handleAuthFailure(body.error);
       if (!response.ok) {
         throw new Error(body.error || `feedback_http_${response.status}`);
       }
@@ -352,7 +341,7 @@ export class FeedbackService {
   }
 
   async getDetail(feedbackId: unknown): Promise<FeedbackDetailResult> {
-    if (!storeService.getSettings().cloudSessionToken) {
+    if (!storeService.getSettings().accountSessionToken) {
       return { success: false, error: "unauthorized" };
     }
     const id = typeof feedbackId === "string" ? feedbackId.trim() : "";
@@ -367,8 +356,8 @@ export class FeedbackService {
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     try {
       const settings = storeService.getSettings();
-      const authorization = settings.cloudSessionToken
-        ? { Authorization: `Bearer ${settings.cloudSessionToken}` }
+      const authorization = settings.accountSessionToken
+        ? { Authorization: `Bearer ${settings.accountSessionToken}` }
         : undefined;
       const detailUrl = `${this.baseUrl}/api/v1/feedback/${encodeURIComponent(id)}`;
       const response = await fetch(detailUrl, {
@@ -379,7 +368,7 @@ export class FeedbackService {
         string,
         unknown
       >;
-      cloudSyncService.handleAuthFailure(
+      accountService.handleAuthFailure(
         typeof body.error === "string" ? body.error : undefined,
       );
       if (!response.ok) {
@@ -438,7 +427,7 @@ export class FeedbackService {
             const errorBody = (await imageResponse
               .json()
               .catch(() => ({}))) as Record<string, unknown>;
-            cloudSyncService.handleAuthFailure(
+            accountService.handleAuthFailure(
               typeof errorBody.error === "string" ? errorBody.error : undefined,
             );
             throw new Error(
@@ -504,7 +493,7 @@ export class FeedbackService {
 
   async submit(payload: unknown): Promise<FeedbackSubmitResult> {
     const settings = storeService.getSettings();
-    if (!settings.cloudSessionToken) {
+    if (!settings.accountSessionToken) {
       return { success: false, error: "unauthorized" };
     }
     if (!this.baseUrl) {
@@ -545,7 +534,7 @@ export class FeedbackService {
     }
 
     const headers = requestInterceptor.buildHeaders(url, {
-      Authorization: `Bearer ${settings.cloudSessionToken}`,
+      Authorization: `Bearer ${settings.accountSessionToken}`,
     });
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -563,7 +552,7 @@ export class FeedbackService {
         error?: string;
         message?: string;
       };
-      cloudSyncService.handleAuthFailure(body.error);
+      accountService.handleAuthFailure(body.error);
       if (!response.ok) {
         return {
           success: false,

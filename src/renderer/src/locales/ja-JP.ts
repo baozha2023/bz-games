@@ -112,6 +112,28 @@ export default {
     addSuccessWithVersion: "{name}（{version}）を追加しました",
     addError: "ゲームの追加に失敗しました",
     userCanceled: "ユーザーによりキャンセルされました",
+    importTask: {
+      cancel: "キャンセル",
+      retry: "再試行",
+      remove: "削除",
+      working: "ゲームを準備中",
+      ready: "ゲームの準備が完了しました",
+      attention: "確認が必要です",
+      filesFound: "{count} 個のファイルが見つかりました",
+      localImport: "ライブラリにコピー中",
+      marketInstall: "マーケットからのインストールを完了中",
+      status: {
+        queued: "インポート待機中",
+        validating: "検証中",
+        scanning: "ファイルをスキャン中",
+        copying: "インポート中",
+        finalizing: "ライブラリを更新中",
+        completed: "インポート完了",
+        failed: "インポート失敗",
+        canceled: "キャンセル済み",
+        interrupted: "インポートが中断されました",
+      },
+    },
     importError: {
       canceled: "選択がキャンセルされました",
       notDirectory: "ディレクトリを選択してください",
@@ -135,11 +157,15 @@ export default {
       playersInvalid: "プレイヤー人数設定が無効です",
       iconNotFound: "アイコンファイルが見つかりません: {file}",
       coverNotFound: "カバーファイルが見つかりません: {file}",
+      symbolicLinkUnsupported:
+        "シンボリックリンクはインポートできません: {file}",
       webUrlInvalid:
         "web_url が無効です。http:// または https:// のURLを入力してください",
       unknown: "インポート失敗: {message}",
-      migrationExportInProgress:
-        "移行データを書き出し中です。完了またはキャンセルしてから再試行してください",
+      interrupted: "インポートが中断されました。再試行してください",
+      taskNotRetryable: "現在このタスクは再試行できません",
+      backupTaskInProgress:
+        "バックアップまたは復元中です。完了またはキャンセルしてから再試行してください",
     },
     importDraftTitle: "ゲーム情報を補完",
     importDraftDesc:
@@ -223,6 +249,8 @@ export default {
     taskAlreadyDone: "タスクはすでに終了しています",
     loadFailed: "市場の読み込みに失敗しました",
     downloadFailed: "ダウンロードまたはインストールに失敗しました",
+    insufficientDiskSpace:
+      "ディスクの空き容量が不足しているため、ゲームパッケージをダウンロードできません",
     networkError:
       "ネットワーク接続に失敗しました。ネットワークを確認して再試行してください",
     downloadError: "ダウンロード失敗",
@@ -508,50 +536,56 @@ export default {
     playtimeDescription:
       "記録されたゲームプレイ時間が10分増えるごとに、10 BZコインを自動的に獲得します。手動で受け取る必要はありません。",
   },
-  migration: {
-    title: "BZ-Games 更新とデータ移行のお知らせ",
-    finalVersionTitle: "自動更新サービス終了のお知らせ",
-    finalVersionBody:
-      "v{version} は旧 NSIS 自動更新でインストールできる最後のバージョンです。このバージョンから後続リリースの確認・ダウンロード・インストールはできません。",
-    downloadBody:
-      "今後のバージョンは BZ-Games 公式サイトから再ダウンロードしてください。",
-    exportBody:
-      "新バージョンをインストールする前に移行データを書き出し、インポートが成功するまで旧バージョンを保持してください。新バージョンの「設定—データをインポート」からこのファイルを選択できます。",
-    afterImport:
-      "バックアップの書き出しによって元データが削除されることはありません。新バージョンへのインポート成功を確認後、このクライアントを手動でアンインストールできます。自動ではアンインストールされません。",
-    localGamesOnly:
-      "現在のアプリディレクトリ内の config.json、games、db のみを書き出します。外部ゲームライブラリはコピーされません。",
-    securityNotice:
-      ".bzgames には個人設定、データベース、ゲームファイルが含まれ、追加のパスワード保護はありません。安全に保管してください。",
-    openWebsite: "公式サイトを開く",
-    exportData: "データを書き出す",
-    exportSuccess: "移行データの書き出しが完了しました",
+  backup: {
+    title: "データのバックアップとインポート",
+    openManager: "バックアップまたはインポート",
+    versionPolicyTitle: "長期バックアップ形式",
+    versionPolicyBody:
+      "v3.4.2 の V1 は恒久的にインポート可能です。4.0 以降は V2 を使用し、内蔵ライブラリのみを保存します。外部ライブラリは参照のみです。",
+    replaceTitle: "インポートは現在のデータを完全に置換します",
+    replaceBody:
+      "設定、データベース、内蔵ゲームライブラリを完全に置換し、マージしません。先に現在のデータを書き出し、ゲームとダウンロードを停止してください。",
+    sourcePreserved: "元の .bzgames ファイルは削除されません。",
+    formatVersion: "形式",
+    sourceVersion: "元バージョン",
+    fileCount: "ファイル数",
+    dataSize: "データサイズ",
+    externalLibraries: "外部ライブラリ参照",
+    importData: ".bzgames をインポート",
+    exportData: "V2 を書き出す",
+    confirmReplace: "完全置換を確認",
+    exportSuccess: "V2 バックアップを作成しました",
+    importSuccessRestarting:
+      "インポート完了。再起動してヘルスチェックを実行します。",
     progressDetail: "{files} ファイル中 {processed} / {total} を処理済み",
     status: {
-      idle: "書き出しは開始されていません",
+      idle: "未開始",
       preparing: "データを確認して準備しています…",
-      archiving: ".bzgames ファイルを作成しています…",
-      verifying: "書き出したファイルを検証しています…",
-      completed: "書き出しと整合性検証が完了しました",
-      canceled: "書き出しをキャンセルしました。元データは変更されていません",
-      error: "書き出しに失敗しました",
+      archiving: ".bzgames を作成しています…",
+      verifying: ".bzgames を検証しています…",
+      awaiting_confirmation: "検証完了。完全置換を確認してください",
+      importing: "データを原子的に置換し、復元点を作成しています…",
+      completed: "操作と整合性検証が完了しました",
+      canceled: "キャンセルしました。元データは変更されていません",
+      error: "操作に失敗しました",
     },
     errors: {
-      game_running: "実行中のゲームをすべて終了してください",
-      market_task_active:
-        "マーケットのタスクを完了またはキャンセルしてください",
-      import_task_active:
-        "ゲームのインポートを完了またはキャンセルしてください",
-      export_in_progress: "別の書き出しが進行中です",
-      source_missing: "config.json またはデータベースが見つかりません",
-      unsafe_source_entry: "未対応のリンクまたは特殊ファイルが含まれています",
-      unsafe_destination:
-        "バックアップはアプリディレクトリの外に保存してください",
-      insufficient_space: "保存先または一時ドライブの空き容量が不足しています",
-      archive_failed: ".bzgames ファイルの作成または検証に失敗しました",
+      game_running: "実行中のゲームを終了してください",
+      market_task_active: "マーケットタスクを完了または中止してください",
+      import_task_active: "ゲームインポートを完了または中止してください",
+      backup_task_active: "別のバックアップまたはインポートが進行中です",
+      source_missing: "config.json またはデータベースがありません",
+      unsafe_source_entry: "未対応のリンクまたは特殊ファイルがあります",
+      unsafe_destination: "アプリの外に保存してください",
+      insufficient_space: "空き容量が不足しています",
+      archive_failed: ".bzgames の作成または検証に失敗しました",
       database_snapshot_failed:
-        "整合性のあるデータベーススナップショットを作成できません",
-      unknown: "書き出しに失敗しました。ログを確認して再試行してください",
+        "整合性のある DB スナップショットを作成できません",
+      unsupported_backup:
+        "v3.4.2 V1 またはデータモデル v4 の V2 のみ対応します",
+      backup_validation_failed: "形式、パス、または整合性の検証に失敗しました",
+      replacement_failed: "置換に失敗し、以前のデータを復元しました",
+      unknown: "操作に失敗しました。ログを確認してください",
     },
   },
   settings: {
@@ -592,8 +626,8 @@ export default {
     uploadAvatar: "アバターをアップロード",
     login: "ログイン",
     githubLogin: "GitHubでログイン",
-    cloudSettings: "クラウド設定",
-    cloudData: "クラウドデータ",
+    logout: "ログアウト",
+    accountSettings: "アカウント設定",
     onlineStatus: "オンライン状態",
     onlineStatusHint: "有効にすると毎分サーバーへオンライン状態を送信します",
     online: "オンライン",
@@ -602,46 +636,21 @@ export default {
       "オンライン状態を有効にできません。ネットワークまたはログインを確認してください",
     githubLoginOpened:
       "GitHub認証ページを開きました。ログイン完了後にセッションが保存されます。",
-    cloudUpload: "クラウドアップロード",
-    cloudDownload: "クラウドダウンロード",
-    cloudSyncHelpTitle: "クラウド同期の説明",
-    cloudSyncHelp:
-      "クラウドアップロード: 設定、ユーザーデータ、プレイセッション、実績、統計をアップロードし、既存のクラウドオブジェクトを上書きします。ゲーム実体とバージョン一覧、GitHub Token、ログインセッションはアップロードされません。\nクラウドダウンロード: config.json はクラウドに存在する項目のみ更新します。セッション、実績、統計は一意キーで統合され、ゲーム実体は作成されません。",
-    cloudNeverUploaded: "クラウド時刻: 未アップロード",
-    cloudLastUploadedAt: "クラウド時刻: {time}",
-    cloudUploadSuccess: "クラウドアップロードが完了しました",
-    cloudDownloadSuccess:
-      "クラウドダウンロードが完了しました。ローカルデータを上書きしました。",
-    cloudProgress: {
-      checking: "クラウド状態を確認中...",
-      uploading: "クラウドデータを上書きアップロード中...",
-      downloading: "クラウドデータをダウンロード中...",
-      applying: "ローカルデータを上書き中...",
-      completed: "同期完了",
-    },
-    cloudErrors: {
-      cloud_not_configured: "クラウド同期が設定されていません",
+    logoutConfirmTitle: "ログアウトしますか？",
+    logoutConfirmContent: "GitHub アカウントとの接続を解除します。",
+    logoutConfirmAction: "ログアウト",
+    logoutSuccess: "ログアウトしました",
+    accountErrors: {
+      account_not_configured: "アカウントサービスが設定されていません",
       unauthorized: "先にGitHub認証ログインを完了してください",
       session_expired:
         "GitHubログインの有効期限が切れました。再度ログインしてください。",
       session_invalid: "GitHubログインが無効です。再度ログインしてください。",
-      snapshot_not_found:
-        "クラウドにプラットフォームスナップショットがありません。先にアップロードしてください。",
-      snapshot_too_large:
-        "プラットフォームスナップショットがクラウド同期サイズ上限を超えています",
-      cloud_upload_failed:
-        "クラウドへのアップロードに失敗しました。しばらくしてから再試行してください。",
-      internal_error:
-        "クラウド同期サービスでエラーが発生しました。しばらくしてから再試行してください。",
-      cloud_snapshot_invalid:
-        "プラットフォームスナップショットの形式が無効です",
-      cloud_hash_mismatch:
-        "プラットフォームスナップショットの検証に失敗しました。再試行してください。",
-      cloud_sync_busy: "別のクラウド同期が進行中です",
-      app_shutting_down: "アプリを終了中のため、クラウド同期を開始できません",
-      cloud_sync_rate_limited:
-        "クラウド同期が頻繁すぎます。同一アカウントではアップロードとダウンロードがそれぞれ24時間に1回までです。",
-      unknown: "クラウド同期に失敗しました",
+      app_shutting_down: "アプリを終了中のため、アカウント操作を開始できません",
+      logout_failed: "ログアウトに失敗しました。後でもう一度お試しください。",
+      logout_network_error:
+        "サーバーに接続できません。ネットワークを確認して再試行してください。",
+      unknown: "アカウント操作に失敗しました",
     },
     closeBehavior: "メインウィンドウを閉じる",
     closeToTray: "トレイに最小化",
@@ -669,14 +678,6 @@ export default {
     defaultStoragePath: "既定",
     setDefaultStoragePath: "既定に設定",
     addStoragePath: "新しいゲームライブラリを追加",
-    defaultGamesMigrationTitle: "既定ゲームライブラリの移動を推奨",
-    defaultGamesMigrationContent:
-      "より良い体験のため、実行ファイルと同じ階層の既定ゲームライブラリを別の場所へ移動することをおすすめします。移動時はこのライブラリ内のすべてのファイルを移動し、すべて成功した場合のみ元のディレクトリを削除します。現在のライブラリ: {path}",
-    migrateNow: "今すぐ移動",
-    doNotRemind: "今後表示しない",
-    defaultGamesMigrationSuccess:
-      "ゲームライブラリを移動しました。{gameCount} 件のゲーム、{versionCount} 件のバージョンを移動しました",
-    defaultGamesMigrationFailed: "ゲームライブラリの移動に失敗しました",
     openPathFailed: "パスを開けませんでした",
     storagePathNotEmptyTitle: "ディレクトリが空ではありません",
     storagePathNotEmptyContent:
@@ -704,6 +705,8 @@ export default {
         "移動先パスを移動元ライブラリ内にすることはできません。",
       source_inside_target_path:
         "移動元ライブラリを移動先パス内にすることはできません。",
+      target_storage_path_already_registered:
+        "移動先パスは別のゲームライブラリとして登録済みです。",
       target_is_default_games_path:
         "移動先パスを実行ファイル横の既定 games ディレクトリのままにすることはできません。",
       game_storage_path_not_configured:
@@ -714,6 +717,19 @@ export default {
         "移動元ゲームライブラリは有効なフォルダーではありません。更新してから再試行してください。",
       storage_migration_file_busy:
         "現在ファイルが開かれているため、移動できません。変更はロールバックされました。",
+      storage_migration_active: "ゲームライブラリの移動がすでに実行中です。",
+      storage_migration_copy_failed:
+        "複数回試行してもコピーできなかったため、移動先を空にして中止しました。",
+      storage_migration_database_verification_failed:
+        "データベースのゲームバージョン参照がライブラリと一致しないため、中止しました。",
+      storage_migration_database_failed:
+        "データベース更新が複数回失敗したため、元のライブラリを復元しました。",
+      storage_migration_source_delete_failed:
+        "移動元の削除が複数回失敗したため、元のライブラリを復元して中止しました。",
+      storage_migration_rollback_failed:
+        "移動に失敗し、自動ロールバックも完了しませんでした。移動元・移動先を手動削除せず、ログを確認してください。",
+      storage_library_database_failed:
+        "ゲームライブラリのデータベース更新に失敗したため、ファイル変更を元に戻しました",
       unknown: "不明なゲームライブラリエラー",
     },
     dataHealth: "データ健全性",
@@ -763,20 +779,62 @@ export default {
         "{gameId} の最新バージョン記録が無効です: {version}",
       storage_root_missing: "ゲームライブラリの保存先がありません",
     },
-    update: "バージョン移行",
+    update: "ソフトウェア更新",
+    versionControl: "バージョン管理",
     updateNotice: "更新のお知らせ",
+    checkUpdate: "更新を確認",
+    updatePromptTitle: "新しいバージョンがあります",
+    updatePromptMessage:
+      "BZ-Games v{version} が公開されました。自動確認ではダウンロードせず、確認後にのみ開始します。",
+    updateViewReleaseNotes: "更新内容を表示",
+    updateLater: "後で通知",
+    updateNow: "今すぐ更新",
+    updateReady:
+      "更新パッケージのダウンロードと検証が完了しました。再起動してインストールしてください。",
+    updateRestartInstall: "再起動してインストール",
+    updateReleaseOpenFailed: "更新内容を開けませんでした",
+    updateUpToDate: "現在のバージョンが最新です",
+    updateUnsupported: "開発環境ではソフトウェア更新を実行しません",
+    updateErrors: {
+      network_error:
+        "更新の確認に失敗しました。ネットワーク接続を確認してください。",
+      feed_missing:
+        "Velopack の更新元に releases.stable.json または対応する nupkg ファイルがありません。",
+      feed_invalid: "更新元から無効なデータが返されました。",
+      download_failed:
+        "更新パッケージをダウンロードできませんでした。後で再試行できます。",
+      verify_failed: "更新パッケージの整合性検証に失敗しました。",
+      permission_denied:
+        "更新フォルダーが使用中、または書き込み権限がありません。",
+      task_active:
+        "ゲーム、ダウンロード、インポート、バックアップを先に終了してください。",
+      unsupported_dev_mode: "開発環境ではソフトウェア更新を実行しません。",
+      unknown: "更新に失敗しました。ログを確認して再試行してください。",
+    },
     currentVersion: "現在のバージョン: {version}",
     officialWebsite: "公式サイト",
     uninstallClient: "クライアントのアンインストール",
     uninstallClientDescription:
-      "この操作は取り消せません。BZ-Games が完全に削除されます。",
+      "BZ-Games アプリを削除します。選択していないゲームライブラリ、設定、データは保持されます。選択して削除したデータは復元できません。",
     uninstallDeleteGames: "すべてのゲームディレクトリも削除する",
+    uninstallDeleteUserData: "設定とデータ（config.json、db）も削除する",
     uninstallNotAvailable:
       "アンインストーラーは利用できません。インストール版のみ対応しています。",
     uninstallMarketTasksActive:
       "進行中のゲームのダウンロードまたはインストールを完了するか、キャンセルしてください。",
-    uninstallGameLibraryDeleteFailed:
-      "一部のゲームライブラリが別のプログラムで使用中です。クライアントはアンインストールされていません。使用中のプログラムを閉じて再試行してください：\n{paths}",
+    uninstallTasksActive:
+      "ゲーム、ルーム、またはバックグラウンド処理が実行中です。終了してから再試行してください。ブロック項目:",
+    uninstallAccepted:
+      "アンインストール処理への引き継ぎが完了し、クライアントを終了しています。この操作はキャンセルできません。",
+    uninstallBlockerGame: "実行中のゲーム",
+    uninstallBlockerMarket: "マーケットのダウンロードまたはインストール",
+    uninstallBlockerGameImport: "ゲームのインポート",
+    uninstallBlockerStorageMigration: "ストレージの移行",
+    uninstallBlockerBackup: "バックアップまたは復元",
+    uninstallBlockerUpdate: "更新またはロールバック",
+    uninstallBlockerRoom: "マルチプレイルーム",
+    uninstallHandoffFailed:
+      "アンインストール処理を安全に引き継げませんでした。クライアントを開いたまま再試行してください。",
     uninstallUnsafeStoragePath:
       "ゲームライブラリのパスが安全でないため、アンインストールを停止しました。ライブラリ設定を確認してください。",
     uninstallFailed:

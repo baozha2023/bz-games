@@ -13,10 +13,10 @@ const router = createRouter({
     },
     {
       path: "/market",
-      redirect: "/market/0",
+      redirect: "/markets",
     },
     {
-      path: "/market/:sourceIdx",
+      path: "/market/:marketId",
       name: "Market",
       component: () => import("../views/MarketView.vue"),
     },

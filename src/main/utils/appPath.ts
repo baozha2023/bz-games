@@ -14,8 +14,17 @@ export function getExecutableDir(): string {
 }
 
 export function getAppRoot(): string {
+  const launcherDataRoot = process.env.BZ_GAMES_DATA_ROOT?.trim();
+  if (launcherDataRoot) {
+    return path.resolve(launcherDataRoot);
+  }
   if (app.isPackaged) {
-    return getExecutableDir();
+    const executableDir = getExecutableDir();
+    const normalized = executableDir.replace(/\\/g, "/").toLowerCase();
+    if (normalized.includes("/.runtime/current")) {
+      return path.resolve(executableDir, "..", "..");
+    }
+    return executableDir;
   }
   return process.cwd();
 }

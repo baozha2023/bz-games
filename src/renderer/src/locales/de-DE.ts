@@ -114,6 +114,28 @@ export default {
     addSuccessWithVersion: "{name} ({version}) hinzugefügt",
     addError: "Spiel konnte nicht hinzugefügt werden",
     userCanceled: "Vom Benutzer abgebrochen",
+    importTask: {
+      cancel: "Abbrechen",
+      retry: "Erneut versuchen",
+      remove: "Entfernen",
+      working: "Spiel wird vorbereitet",
+      ready: "Spiel ist bereit",
+      attention: "Eingriff erforderlich",
+      filesFound: "{count} Dateien gefunden",
+      localImport: "Wird in die Bibliothek kopiert",
+      marketInstall: "Marktinstallation wird abgeschlossen",
+      status: {
+        queued: "Wartet auf Import",
+        validating: "Wird geprüft",
+        scanning: "Dateien werden gescannt",
+        copying: "Wird importiert",
+        finalizing: "Bibliothek wird aktualisiert",
+        completed: "Import abgeschlossen",
+        failed: "Import fehlgeschlagen",
+        canceled: "Abgebrochen",
+        interrupted: "Import unterbrochen",
+      },
+    },
     importError: {
       canceled: "Auswahl abgebrochen",
       notDirectory: "Bitte wähle einen Ordner aus",
@@ -139,11 +161,15 @@ export default {
       playersInvalid: "Ungültige Spielerzahl, bitte Min/Max prüfen",
       iconNotFound: "Symboldatei nicht gefunden: {file}",
       coverNotFound: "Coverdatei nicht gefunden: {file}",
+      symbolicLinkUnsupported:
+        "Symbolische Links werden nicht unterstützt: {file}",
       webUrlInvalid:
         "Ungültige web_url. Bitte eine gültige http:// oder https:// URL verwenden",
       unknown: "Import fehlgeschlagen: {message}",
-      migrationExportInProgress:
-        "Migrationsdaten werden exportiert. Schließe den Export zuerst ab oder brich ihn ab",
+      interrupted: "Der Import wurde unterbrochen. Bitte erneut versuchen",
+      taskNotRetryable: "Diese Aufgabe kann derzeit nicht wiederholt werden",
+      backupTaskInProgress:
+        "Eine Sicherung oder Wiederherstellung läuft. Schließe sie zuerst ab oder brich sie ab",
     },
     importDraftTitle: "Spielinformationen vervollständigen",
     importDraftDesc:
@@ -227,6 +253,8 @@ export default {
     taskAlreadyDone: "Aufgabe bereits abgeschlossen",
     loadFailed: "Markt konnte nicht geladen werden",
     downloadFailed: "Download oder Installation fehlgeschlagen",
+    insufficientDiskSpace:
+      "Nicht genügend freier Speicherplatz zum Herunterladen des Spielpakets",
     networkError:
       "Netzwerkverbindung fehlgeschlagen, bitte Netzwerk prüfen und erneut versuchen",
     downloadError: "Download fehlgeschlagen",
@@ -517,54 +545,59 @@ export default {
     playtimeDescription:
       "Für jeweils 10 Minuten erfasste Spielzeit werden automatisch 10 BZ-Münzen gutgeschrieben. Eine manuelle Abholung ist nicht erforderlich.",
   },
-  migration: {
-    title: "BZ-Games Update- und Datenmigration",
-    finalVersionTitle: "Automatische Updates werden eingestellt",
-    finalVersionBody:
-      "v{version} ist die letzte Version, die über den bisherigen NSIS-Updater installiert werden kann. Diese Version kann spätere Versionen nicht prüfen, herunterladen oder installieren.",
-    downloadBody:
-      "Zukünftige Versionen bitte von der BZ-Games-Website herunterladen.",
-    exportBody:
-      "Exportiere vor der Installation einer neuen Version deine Migrationsdaten und behalte diese Installation, bis der Import erfolgreich war. Wähle die Datei in der neuen Version unter Einstellungen — Daten importieren.",
-    afterImport:
-      "Der Export löscht keine Quelldaten. Nach einem erfolgreichen Import kannst du diesen Client selbst deinstallieren; er wird nicht automatisch deinstalliert.",
-    localGamesOnly:
-      "Exportiert werden nur config.json, games und db im aktuellen Programmverzeichnis. Externe Spielebibliotheken werden nicht kopiert.",
-    securityNotice:
-      "Die .bzgames-Datei enthält persönliche Einstellungen, Datenbankeinträge und Spieldateien. Sie besitzt keinen zusätzlichen Passwortschutz und muss sicher aufbewahrt werden.",
-    openWebsite: "Website öffnen",
-    exportData: "Daten exportieren",
-    exportSuccess: "Migrationsdaten wurden exportiert",
+  backup: {
+    title: "Datensicherung und Import",
+    openManager: "Daten sichern oder importieren",
+    versionPolicyTitle: "Langfristige Sicherungsformate",
+    versionPolicyBody:
+      "V1 aus v3.4.2 bleibt dauerhaft importierbar. Ab 4.0 wird V2 exportiert und importiert; externe Bibliotheken werden nur referenziert.",
+    replaceTitle: "Der Import ersetzt alle aktuellen Daten",
+    replaceBody:
+      "Konfiguration, Datenbank und interne Spielebibliothek werden vollständig ersetzt und nicht zusammengeführt. Sichere zuerst die aktuellen Daten und beende Spiele und Downloads.",
+    sourcePreserved: "Die ursprüngliche .bzgames-Datei wird nie gelöscht.",
+    formatVersion: "Format",
+    sourceVersion: "Quellversion",
+    fileCount: "Dateien",
+    dataSize: "Datengröße",
+    externalLibraries: "Externe Bibliotheksverweise",
+    importData: ".bzgames importieren",
+    exportData: "V2-Sicherung exportieren",
+    confirmReplace: "Vollständiges Ersetzen bestätigen",
+    exportSuccess: "V2-Sicherung exportiert",
+    importSuccessRestarting:
+      "Import abgeschlossen. Die App startet neu und führt eine Integritätsprüfung aus.",
     progressDetail: "{processed} / {total} in {files} Dateien verarbeitet",
     status: {
-      idle: "Export wurde noch nicht gestartet",
+      idle: "Nicht gestartet",
       preparing: "Daten werden geprüft und vorbereitet…",
-      archiving: ".bzgames-Datei wird erstellt…",
-      verifying: "Exportdatei wird geprüft…",
-      completed: "Export und Integritätsprüfung abgeschlossen",
-      canceled: "Export abgebrochen; Quelldaten wurden nicht verändert",
-      error: "Export fehlgeschlagen",
+      archiving: ".bzgames wird erstellt…",
+      verifying: ".bzgames wird geprüft…",
+      awaiting_confirmation:
+        "Prüfung erfolgreich; vollständiges Ersetzen bestätigen",
+      importing: "Daten werden atomar ersetzt und ein Rücksetzpunkt erstellt…",
+      completed: "Vorgang und Integritätsprüfung abgeschlossen",
+      canceled: "Abgebrochen; Quelldaten unverändert",
+      error: "Vorgang fehlgeschlagen",
     },
     errors: {
       game_running: "Beende zuerst alle laufenden Spiele",
-      market_task_active:
-        "Schließe zuerst aktive Marktplatz-Aufgaben ab oder brich sie ab",
-      import_task_active:
-        "Schließe zuerst aktive Spielimporte ab oder brich sie ab",
-      export_in_progress: "Ein anderer Export läuft bereits",
-      source_missing: "config.json oder Datenbankdaten fehlen",
+      market_task_active: "Schließe Marktplatz-Aufgaben ab oder brich sie ab",
+      import_task_active: "Schließe Spielimporte ab oder brich sie ab",
+      backup_task_active: "Eine Sicherung oder ein Import läuft bereits",
+      source_missing: "config.json oder Datenbank fehlen",
       unsafe_source_entry:
-        "Die Daten enthalten einen nicht unterstützten Link oder eine Spezialdatei",
-      unsafe_destination:
-        "Speichere die Sicherung außerhalb des Programmverzeichnisses",
-      insufficient_space:
-        "Auf dem Ziel- oder temporären Laufwerk ist nicht genug Speicher frei",
-      archive_failed:
-        "Die .bzgames-Datei konnte nicht erstellt oder geprüft werden",
-      database_snapshot_failed:
-        "Es konnte kein konsistenter Datenbank-Snapshot erstellt werden",
-      unknown:
-        "Export fehlgeschlagen. Prüfe das Protokoll und versuche es erneut",
+        "Nicht unterstützter Link oder Spezialdatei gefunden",
+      unsafe_destination: "Speichere außerhalb des Programmverzeichnisses",
+      insufficient_space: "Nicht genug Speicherplatz",
+      archive_failed: ".bzgames konnte nicht erstellt oder geprüft werden",
+      database_snapshot_failed: "Kein konsistenter Datenbank-Snapshot möglich",
+      unsupported_backup:
+        "Nur v3.4.2 V1 oder V2 mit Datenmodell v4 wird unterstützt",
+      backup_validation_failed:
+        "Format-, Pfad- oder Integritätsprüfung fehlgeschlagen",
+      replacement_failed:
+        "Ersetzen fehlgeschlagen; vorherige Daten wurden wiederhergestellt",
+      unknown: "Vorgang fehlgeschlagen. Prüfe das Protokoll",
     },
   },
   settings: {
@@ -606,8 +639,8 @@ export default {
     uploadAvatar: "Avatar hochladen",
     login: "Anmelden",
     githubLogin: "Mit GitHub anmelden",
-    cloudSettings: "Cloud-Einstellungen",
-    cloudData: "Cloud-Daten",
+    logout: "Abmelden",
+    accountSettings: "Kontoeinstellungen",
     onlineStatus: "Online-Status",
     onlineStatusHint:
       "Bei Aktivierung wird jede Minute ein Online-Heartbeat an den Server gesendet",
@@ -617,47 +650,24 @@ export default {
       "Online-Status konnte nicht aktiviert werden. Netzwerk oder Anmeldung prüfen.",
     githubLoginOpened:
       "GitHub-Autorisierungsseite geöffnet. Die Sitzung wird nach der Anmeldung automatisch gespeichert.",
-    cloudUpload: "Cloud-Upload",
-    cloudDownload: "Cloud-Download",
-    cloudSyncHelpTitle: "Cloud-Sync-Details",
-    cloudSyncHelp:
-      "Cloud-Upload: Lädt Einstellungen, Benutzerdaten, Spielsitzungen, Erfolge und Statistiken hoch und überschreibt die vorhandenen Cloud-Objekte. Spielentitäten und Versionslisten sowie GitHub-Token und Anmeldesitzungen werden nicht hochgeladen.\nCloud-Download: In config.json werden nur vorhandene Felder aktualisiert; Sitzungen, Erfolge und Statistiken werden anhand eindeutiger Schlüssel zusammengeführt, ohne Spielentitäten anzulegen.",
-    cloudNeverUploaded: "Cloud-Zeit: Nie hochgeladen",
-    cloudLastUploadedAt: "Cloud-Zeit: {time}",
-    cloudUploadSuccess: "Cloud-Upload abgeschlossen",
-    cloudDownloadSuccess:
-      "Cloud-Download abgeschlossen, lokale Daten überschrieben",
-    cloudProgress: {
-      checking: "Prüfe Cloud-Status...",
-      uploading: "Lade hoch und überschreibe Cloud-Daten...",
-      downloading: "Lade Cloud-Daten herunter...",
-      applying: "Überschreibe lokale Daten...",
-      completed: "Synchronisation abgeschlossen",
-    },
-    cloudErrors: {
-      cloud_not_configured: "Cloud-Synchronisation nicht konfiguriert",
+    logoutConfirmTitle: "Abmelden?",
+    logoutConfirmContent:
+      "Die Verbindung zu deinem GitHub-Konto wird getrennt.",
+    logoutConfirmAction: "Abmelden",
+    logoutSuccess: "Abgemeldet",
+    accountErrors: {
+      account_not_configured: "Kontodienst ist nicht konfiguriert",
       unauthorized: "Bitte zuerst mit GitHub anmelden",
       session_expired:
         "Die GitHub-Anmeldung ist abgelaufen. Bitte erneut anmelden.",
       session_invalid:
         "Die GitHub-Anmeldung ist ungültig. Bitte erneut anmelden.",
-      snapshot_not_found:
-        "Kein Plattform-Snapshot vorhanden. Bitte zuerst hochladen.",
-      snapshot_too_large:
-        "Plattform-Snapshot überschreitet das Cloud-Sync-Limit",
-      cloud_upload_failed:
-        "Cloud-Upload fehlgeschlagen. Bitte später erneut versuchen.",
-      internal_error:
-        "Beim Cloud-Synchronisationsdienst ist ein Fehler aufgetreten. Bitte später erneut versuchen.",
-      cloud_snapshot_invalid: "Format des Plattform-Snapshots ist ungültig",
-      cloud_hash_mismatch:
-        "Prüfung des Plattform-Snapshots fehlgeschlagen, bitte erneut versuchen",
-      cloud_sync_busy: "Eine andere Cloud-Synchronisation läuft bereits",
       app_shutting_down:
-        "Die App wird beendet; Cloud-Sync kann nicht gestartet werden",
-      cloud_sync_rate_limited:
-        "Cloud-Sync zu häufig. Upload und Download sind jeweils auf einmal pro 24 Stunden pro Konto begrenzt",
-      unknown: "Cloud-Synchronisation fehlgeschlagen",
+        "Die App wird beendet; Kontovorgänge können nicht gestartet werden",
+      logout_failed: "Abmelden fehlgeschlagen. Bitte später erneut versuchen.",
+      logout_network_error:
+        "Server nicht erreichbar. Netzwerk prüfen und erneut versuchen.",
+      unknown: "Kontovorgang fehlgeschlagen",
     },
     closeBehavior: "Hauptfenster schließen",
     closeToTray: "In Tray minimieren",
@@ -685,14 +695,6 @@ export default {
     defaultStoragePath: "Standard",
     setDefaultStoragePath: "Als Standard",
     addStoragePath: "Neuen Bibliothekspfad hinzufügen",
-    defaultGamesMigrationTitle: "Migration der Standardbibliothek empfohlen",
-    defaultGamesMigrationContent:
-      "Für ein besseres Erlebnis wird empfohlen, die Standardbibliothek aus dem EXE-Verzeichnis zu verschieben. Alle Dateien werden migriert, das Originalverzeichnis wird nach Erfolg gelöscht. Aktuelle Bibliothek: {path}",
-    migrateNow: "Jetzt migrieren",
-    doNotRemind: "Nicht mehr erinnern",
-    defaultGamesMigrationSuccess:
-      "Migration abgeschlossen, {gameCount} Spiele, {versionCount} Versionen",
-    defaultGamesMigrationFailed: "Migration fehlgeschlagen",
     openPathFailed: "Pfad konnte nicht geöffnet werden",
     storagePathNotEmptyTitle: "Ordner nicht leer",
     storagePathNotEmptyContent:
@@ -718,6 +720,8 @@ export default {
         "Zielpfad darf nicht innerhalb der Quellbibliothek liegen",
       source_inside_target_path:
         "Quellbibliothek darf nicht innerhalb des Zielpfads liegen",
+      target_storage_path_already_registered:
+        "Der Zielpfad ist bereits als andere Bibliothek registriert",
       target_is_default_games_path:
         "Zielpfad darf nicht das Standard-Games-Verzeichnis neben der EXE sein",
       game_storage_path_not_configured: "Kein Bibliothekspfad konfiguriert",
@@ -727,6 +731,19 @@ export default {
         "Quellbibliothek ist kein gültiger Ordner, bitte aktualisieren",
       storage_migration_file_busy:
         "Datei wird verwendet, Migration abgebrochen und zurückgesetzt",
+      storage_migration_active: "Eine Bibliotheksmigration läuft bereits",
+      storage_migration_copy_failed:
+        "Die Bibliothek konnte nach mehreren Versuchen nicht kopiert werden; das Ziel wurde geleert",
+      storage_migration_database_verification_failed:
+        "Die Versionsverweise der Datenbank stimmen nicht mit der Bibliothek überein; Migration gestoppt",
+      storage_migration_database_failed:
+        "Die Datenbank konnte nach mehreren Versuchen nicht aktualisiert werden; die Quellbibliothek wurde wiederhergestellt",
+      storage_migration_source_delete_failed:
+        "Die Quellbibliothek konnte nicht gelöscht werden; sie wurde wiederhergestellt und die Migration abgebrochen",
+      storage_migration_rollback_failed:
+        "Migration und automatische Rückkehr konnten nicht vollständig abgeschlossen werden. Keine Verzeichnisse manuell löschen; Protokoll prüfen",
+      storage_library_database_failed:
+        "Die Bibliotheksdatenbank konnte nicht aktualisiert werden; Dateiänderungen wurden zurückgesetzt",
       unknown: "Unbekannter Bibliotheksfehler",
     },
     dataHealth: "Datenprüfung",
@@ -775,20 +792,65 @@ export default {
         "Der neueste Versionseintrag für {gameId} ist ungültig: {version}",
       storage_root_missing: "Ein Speicherpfad der Spielebibliothek fehlt",
     },
-    update: "Versionsmigration",
+    update: "Softwareaktualisierung",
+    versionControl: "Versionsverwaltung",
     updateNotice: "Update-Hinweise",
+    checkUpdate: "Nach Updates suchen",
+    updatePromptTitle: "Neue Version verfügbar",
+    updatePromptMessage:
+      "BZ-Games v{version} ist verfügbar. Die automatische Prüfung lädt nichts herunter; der Download beginnt erst nach Bestätigung.",
+    updateViewReleaseNotes: "Update-Hinweise anzeigen",
+    updateLater: "Später erinnern",
+    updateNow: "Jetzt aktualisieren",
+    updateReady:
+      "Das Update wurde heruntergeladen und geprüft. Bestätige den Neustart zur Installation.",
+    updateRestartInstall: "Neu starten und installieren",
+    updateReleaseOpenFailed: "Update-Hinweise konnten nicht geöffnet werden",
+    updateUpToDate: "Die aktuelle Version ist bereits installiert",
+    updateUnsupported: "Softwareupdates sind im Entwicklungsmodus deaktiviert",
+    updateErrors: {
+      network_error:
+        "Updateprüfung fehlgeschlagen. Prüfe die Netzwerkverbindung.",
+      feed_missing:
+        "Die Velopack-Updatequelle enthält weder releases.stable.json noch die zugehörige nupkg-Datei.",
+      feed_invalid: "Die Updatequelle lieferte ungültige Daten.",
+      download_failed:
+        "Das Update konnte nicht heruntergeladen werden. Versuche es später erneut.",
+      verify_failed:
+        "Die Integritätsprüfung des Updatepakets ist fehlgeschlagen.",
+      permission_denied:
+        "Das Updateverzeichnis wird verwendet oder ist nicht beschreibbar.",
+      task_active: "Beende zuerst Spiele, Downloads, Importe oder Backups.",
+      unsupported_dev_mode:
+        "Softwareupdates sind im Entwicklungsmodus deaktiviert.",
+      unknown:
+        "Das Update ist fehlgeschlagen. Prüfe die Protokolle und versuche es erneut.",
+    },
     currentVersion: "Aktuelle Version: {version}",
     officialWebsite: "Offizielle Website",
     uninstallClient: "Client deinstallieren",
     uninstallClientDescription:
-      "Dieser Vorgang kann nicht rückgängig gemacht werden und entfernt den BZ-Games-Client vollständig.",
+      "Die BZ-Games-Anwendung wird entfernt. Nicht ausgewählte Bibliotheken, Einstellungen und Daten bleiben erhalten; ausgewählte Daten können nicht wiederhergestellt werden.",
     uninstallDeleteGames: "Auch alle Bibliotheksordner löschen",
+    uninstallDeleteUserData:
+      "Auch Einstellungen und Daten löschen (config.json und db)",
     uninstallNotAvailable:
       "Deinstallationsprogramm nicht verfügbar, nur in der Installationsversion unterstützt.",
     uninstallMarketTasksActive:
       "Schließe laufende Spiele-Downloads und Installationen zuerst ab oder brich sie ab.",
-    uninstallGameLibraryDeleteFailed:
-      "Einige Spielebibliotheken werden noch von anderen Programmen verwendet. Der Client wurde nicht deinstalliert. Schließe die betreffenden Programme und versuche es erneut:\n{paths}",
+    uninstallTasksActive:
+      "Ein Spiel, Raum oder Hintergrundvorgang ist aktiv. Beende ihn vor der Deinstallation. Blockiert durch:",
+    uninstallAccepted:
+      "Der Deinstallationsprozess hat sicher übernommen und der Client wird beendet. Der Vorgang kann nicht abgebrochen werden.",
+    uninstallBlockerGame: "laufendes Spiel",
+    uninstallBlockerMarket: "Markt-Download oder Installation",
+    uninstallBlockerGameImport: "Spielimport",
+    uninstallBlockerStorageMigration: "Speichermigration",
+    uninstallBlockerBackup: "Sicherung oder Wiederherstellung",
+    uninstallBlockerUpdate: "Update oder Rollback",
+    uninstallBlockerRoom: "Mehrspielerraum",
+    uninstallHandoffFailed:
+      "Der Deinstallationsprozess konnte nicht sicher übernehmen. Lass den Client geöffnet und versuche es erneut.",
     uninstallUnsafeStoragePath:
       "Die Deinstallation wurde wegen eines unsicheren Bibliothekspfads gestoppt. Prüfe zuerst die Bibliothekseinstellungen.",
     uninstallFailed:

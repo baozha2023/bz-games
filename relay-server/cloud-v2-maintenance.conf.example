@@ -1,2 +1,0 @@
-[Service]
-Environment=CLOUD_V2_MAINTENANCE=true

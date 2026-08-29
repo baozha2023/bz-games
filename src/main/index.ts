@@ -1,4 +1,6 @@
 import { app, BrowserWindow, session } from "electron";
+import { spawn } from "child_process";
+import { VelopackApp } from "velopack";
 import path from "path";
 import {
   createWindow,
@@ -13,12 +15,30 @@ import { marketService } from "./services/market/MarketService";
 import { bzGamesDatabase } from "./services/storage/database/BzGamesDatabase";
 import { requestInterceptor } from "./utils/requestInterceptor";
 import { roomDiscoveryService } from "./services/room/RoomDiscoveryService";
-import { cloudSyncService } from "./services/system/CloudSyncService";
+import { roomServer } from "./services/room/RoomServer";
+import { roomClient } from "./services/room/RoomClient";
+import { accountService } from "./services/system/AccountService";
 import { logger } from "./utils/logger";
 import { gameImportTaskService } from "./services/game/GameImportTaskService";
-import { migrationExportService } from "./services/system/MigrationExportService";
+import { backupExportService } from "./services/backup/BackupExportService";
+import { backupImportService } from "./services/backup/BackupImportService";
+import { updateService } from "./services/system/UpdateService";
+import { getAppRoot } from "./utils/appPath";
 
 logger.installGlobalHandlers();
+VelopackApp.build().setAutoApplyOnStartup(false).run();
+
+if (app.isPackaged && process.argv.includes("--bz-handoff-root")) {
+  const launcher = path.join(getAppRoot(), "BZ-Games.exe");
+  const child = spawn(launcher, [], {
+    cwd: getAppRoot(),
+    detached: true,
+    stdio: "ignore",
+    windowsHide: true,
+  });
+  child.unref();
+  app.exit(0);
+}
 
 const gotTheLock = app.requestSingleInstanceLock();
 const PROTOCOL_SCHEME = "bzgames";
@@ -43,7 +63,11 @@ function registerProtocolClient(): void {
     ]);
     return;
   }
-  app.setAsDefaultProtocolClient(PROTOCOL_SCHEME);
+  const rootLauncher = path.join(getAppRoot(), "BZ-Games.exe");
+  app.setAsDefaultProtocolClient(
+    PROTOCOL_SCHEME,
+    app.isPackaged ? rootLauncher : process.execPath,
+  );
 }
 
 function showMainWindow(): void {
@@ -66,7 +90,7 @@ function handleProtocolUrl(url: string): void {
     pendingProtocolUrls.push(url);
     return;
   }
-  void cloudSyncService.completeOAuth(url).finally(showMainWindow);
+  void accountService.completeOAuth(url).finally(showMainWindow);
 }
 
 function flushPendingProtocolUrls(): void {
@@ -94,18 +118,21 @@ if (!gotTheLock) {
   });
 
   app.whenReady().then(async () => {
-    electronApp.setAppUserModelId("com.bz.launcher");
+    electronApp.setAppUserModelId("com.bzgames.desktop");
 
     requestInterceptor.registerSessionHandler(session.defaultSession);
 
     await storeService.init();
-    void cloudSyncService.resetPresenceOnStartup();
+    void accountService.resetPresenceOnStartup();
     await gameImportTaskService.restoreTasks();
     appServicesInitialized = true;
     appReadyForProtocol = true;
     const settings = storeService.getSettings();
     app.setLoginItemSettings({
       openAtLogin: settings.autoLaunch,
+      ...(app.isPackaged
+        ? { path: path.join(getAppRoot(), "BZ-Games.exe"), args: [] }
+        : {}),
     });
 
     app.on("browser-window-created", (_, window) => {
@@ -166,11 +193,14 @@ app.on("before-quit", (event) => {
   void (async () => {
     try {
       if (appServicesInitialized) {
-        storeService.recordAppClosed();
         roomDiscoveryService.stop();
       }
-      await cloudSyncService.shutdown();
-      await migrationExportService.shutdown();
+      roomClient.disconnect();
+      await roomServer.stop();
+      await accountService.shutdown();
+      updateService.shutdown();
+      await backupImportService.cancel();
+      await backupExportService.shutdown();
       await gameImportTaskService.shutdown();
       await bzGamesDatabase.close();
     } catch (error) {

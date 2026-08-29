@@ -13,17 +13,16 @@ import type {
   GameType,
   DiscoveredRoom,
   RoomEvent,
-  MigrationExportResult,
-  MigrationExportState,
+  BackupImportSelectionResult,
+  BackupResult,
+  BackupState,
   NicknameStyle,
   GameLaunchFailurePayload,
   RoomConnectResult,
   RoomCreateResult,
-  CloudAuthChangedPayload,
-  CloudPresenceStatus,
-  CloudSnapshotMetaResult,
-  CloudSyncResult,
-  LocalCloudStatus,
+  AccountAuthChangedPayload,
+  AccountPresenceStatus,
+  LocalAccountStatus,
   ManualUnlockResult,
   GameImportStartResult,
   GameImportTaskEvent,
@@ -35,6 +34,8 @@ import type {
   ForumPostDetail,
   ForumPostSummary,
   ForumPostReferenceResult,
+  UpdateState,
+  UninstallStartResult,
 } from "../shared/types";
 
 installErrorForwarding("main-window");
@@ -76,28 +77,8 @@ export const electronAPI = {
       ipcRenderer.on(IPC.GAME_IMPORT_EVENT, handler);
       return () => ipcRenderer.removeListener(IPC.GAME_IMPORT_EVENT, handler);
     },
-    load: (sourcePath?: string) =>
-      ipcRenderer.invoke(IPC.GAME_LOAD, sourcePath),
     prepareImport: (sourcePath: string) =>
       ipcRenderer.invoke(IPC.GAME_PREPARE_IMPORT, sourcePath),
-    loadWithManifest: (
-      sourcePath: string,
-      draft: {
-        id: string;
-        name: string;
-        version: string;
-        description?: string;
-        author: string;
-        entry?: string;
-        web_url?: string;
-        platformVersion?: string;
-        icon?: string;
-        cover?: string;
-        type: GameType;
-        minPlayers?: number;
-        maxPlayers?: number;
-      },
-    ) => ipcRenderer.invoke(IPC.GAME_LOAD_WITH_MANIFEST, sourcePath, draft),
     checkIdExists: (id: string) =>
       ipcRenderer.invoke(IPC.GAME_CHECK_ID_EXISTS, id),
     getPathForFile: (file: File) => webUtils.getPathForFile(file),
@@ -230,22 +211,22 @@ export const electronAPI = {
     getSources: (forceRefresh?: boolean): Promise<MarketDirectory> =>
       ipcRenderer.invoke(IPC.MARKET_GET_SOURCES, forceRefresh),
     getIndex: (
-      sourceIdx: number,
+      marketId: string,
       forceRefresh?: boolean,
     ): Promise<MarketIndex> =>
-      ipcRenderer.invoke(IPC.MARKET_GET_INDEX, sourceIdx, forceRefresh),
+      ipcRenderer.invoke(IPC.MARKET_GET_INDEX, marketId, forceRefresh),
     getCachedImage: (url: string): Promise<string> =>
       ipcRenderer.invoke(IPC.MARKET_GET_CACHED_IMAGE, url),
     downloadAndInstall: (
       gameId: string,
       version: string,
-      sourceIdx: number,
+      marketId: string,
     ): Promise<MarketTaskState> =>
       ipcRenderer.invoke(
         IPC.MARKET_DOWNLOAD_AND_INSTALL,
         gameId,
         version,
-        sourceIdx,
+        marketId,
       ),
     getTaskState: (taskId: string): Promise<MarketTaskState | null> =>
       ipcRenderer.invoke(IPC.MARKET_GET_TASK_STATE, taskId),
@@ -289,19 +270,15 @@ export const electronAPI = {
     getAppVersion: () => ipcRenderer.invoke(IPC.SYSTEM_GET_APP_VERSION),
     getSensitiveWords: (): Promise<string[]> =>
       ipcRenderer.invoke(IPC.SYSTEM_GET_SENSITIVE_WORDS),
-    getLocalCloudStatus: (): Promise<LocalCloudStatus> =>
-      ipcRenderer.invoke(IPC.SYSTEM_CLOUD_GET_LOCAL_STATUS),
+    getLocalAccountStatus: (): Promise<LocalAccountStatus> =>
+      ipcRenderer.invoke(IPC.SYSTEM_ACCOUNT_GET_LOCAL_STATUS),
     getPresenceStatus: () =>
-      ipcRenderer.invoke(IPC.SYSTEM_CLOUD_GET_PRESENCE_STATUS),
+      ipcRenderer.invoke(IPC.SYSTEM_ACCOUNT_GET_PRESENCE_STATUS),
     setPresenceEnabled: (enabled: boolean) =>
-      ipcRenderer.invoke(IPC.SYSTEM_CLOUD_SET_PRESENCE, enabled),
-    getCloudSnapshotMeta: (): Promise<CloudSnapshotMetaResult> =>
-      ipcRenderer.invoke(IPC.SYSTEM_CLOUD_GET_SNAPSHOT_META),
-    loginWithGitHub: () => ipcRenderer.invoke(IPC.SYSTEM_CLOUD_LOGIN_GITHUB),
-    uploadCloudData: (): Promise<CloudSyncResult> =>
-      ipcRenderer.invoke(IPC.SYSTEM_CLOUD_UPLOAD),
-    downloadCloudData: (): Promise<CloudSyncResult> =>
-      ipcRenderer.invoke(IPC.SYSTEM_CLOUD_DOWNLOAD),
+      ipcRenderer.invoke(IPC.SYSTEM_ACCOUNT_SET_PRESENCE, enabled),
+    loginWithGitHub: () => ipcRenderer.invoke(IPC.SYSTEM_ACCOUNT_LOGIN_GITHUB),
+    logoutAccount: (): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke(IPC.SYSTEM_ACCOUNT_LOGOUT),
     selectFeedbackImages: (selectionId?: string) =>
       ipcRenderer.invoke(IPC.SYSTEM_FEEDBACK_SELECT_IMAGES, selectionId),
     releaseFeedbackImages: (selectionId: string, imageId?: string) =>
@@ -329,20 +306,12 @@ export const electronAPI = {
       ipcRenderer.invoke(IPC.SYSTEM_GET_AVATAR_FRAME_IMAGE, fileName),
     selectGameStoragePath: () =>
       ipcRenderer.invoke(IPC.SYSTEM_SELECT_GAME_STORAGE_PATH),
-    selectGameStoragePathRelaxed: () =>
-      ipcRenderer.invoke(IPC.SYSTEM_SELECT_GAME_STORAGE_PATH_RELAXED),
-    getDefaultGamesMigrationStatus: () =>
-      ipcRenderer.invoke(IPC.SYSTEM_GET_DEFAULT_GAMES_MIGRATION_STATUS),
     getGameStoragePaths: () =>
       ipcRenderer.invoke(IPC.SYSTEM_GET_GAME_STORAGE_PATHS),
     addGameStoragePath: (targetPath: string) =>
       ipcRenderer.invoke(IPC.SYSTEM_ADD_GAME_STORAGE_PATH, targetPath),
     setDefaultGameStoragePath: (targetPath: string) =>
       ipcRenderer.invoke(IPC.SYSTEM_SET_DEFAULT_GAME_STORAGE_PATH, targetPath),
-    migrateDefaultGamesLibrary: (payload: {
-      targetPath?: string;
-      ignore?: boolean;
-    }) => ipcRenderer.invoke(IPC.SYSTEM_MIGRATE_DEFAULT_GAMES_LIBRARY, payload),
     migrateGameStorageLibrary: (payload: {
       sourcePath: string;
       targetPath: string;
@@ -356,7 +325,8 @@ export const electronAPI = {
       ipcRenderer.invoke(IPC.SYSTEM_DATA_HEALTH_CHECK),
     uninstall: (payload?: {
       deleteGames?: boolean;
-    }): Promise<{ success: boolean; error?: string; paths?: string[] }> =>
+      deleteUserData?: boolean;
+    }): Promise<UninstallStartResult> =>
       ipcRenderer.invoke(IPC.SYSTEM_UNINSTALL, payload),
     clearCache: (): Promise<{ totalSize: number; clearedSize: number }> =>
       ipcRenderer.invoke(IPC.SYSTEM_CLEAR_CACHE),
@@ -369,47 +339,61 @@ export const electronAPI = {
       filePath?: string;
       error?: string;
     }> => ipcRenderer.invoke(IPC.SYSTEM_SAVE_PNG, dataUrl, defaultName),
-    onCloudSyncEvent: (
-      callback: (payload: { stage: string; percentage: number }) => void,
-    ) => {
-      const handler = (
-        _: any,
-        payload: { stage: string; percentage: number },
-      ) => callback(payload);
-      ipcRenderer.on(IPC.SYSTEM_CLOUD_SYNC_EVENT, handler);
-      return () =>
-        ipcRenderer.removeListener(IPC.SYSTEM_CLOUD_SYNC_EVENT, handler);
-    },
-    onCloudAuthChanged: (
-      callback: (payload: CloudAuthChangedPayload) => void,
+    onAccountAuthChanged: (
+      callback: (payload: AccountAuthChangedPayload) => void,
     ) => {
       const handler = (_: any, payload: Parameters<typeof callback>[0]) =>
         callback(payload);
-      ipcRenderer.on(IPC.SYSTEM_CLOUD_AUTH_CHANGED, handler);
+      ipcRenderer.on(IPC.SYSTEM_ACCOUNT_AUTH_CHANGED, handler);
       return () =>
-        ipcRenderer.removeListener(IPC.SYSTEM_CLOUD_AUTH_CHANGED, handler);
+        ipcRenderer.removeListener(IPC.SYSTEM_ACCOUNT_AUTH_CHANGED, handler);
     },
-    onPresenceChanged: (callback: (payload: CloudPresenceStatus) => void) => {
-      const handler = (_: any, payload: CloudPresenceStatus) =>
+    onPresenceChanged: (callback: (payload: AccountPresenceStatus) => void) => {
+      const handler = (_: any, payload: AccountPresenceStatus) =>
         callback(payload);
-      ipcRenderer.on(IPC.SYSTEM_CLOUD_PRESENCE_CHANGED, handler);
+      ipcRenderer.on(IPC.SYSTEM_ACCOUNT_PRESENCE_CHANGED, handler);
       return () =>
-        ipcRenderer.removeListener(IPC.SYSTEM_CLOUD_PRESENCE_CHANGED, handler);
+        ipcRenderer.removeListener(
+          IPC.SYSTEM_ACCOUNT_PRESENCE_CHANGED,
+          handler,
+        );
     },
   },
-  migration: {
-    exportData: (): Promise<MigrationExportResult> =>
-      ipcRenderer.invoke(IPC.MIGRATION_EXPORT),
-    cancel: (): Promise<boolean> => ipcRenderer.invoke(IPC.MIGRATION_CANCEL),
-    getStatus: (): Promise<MigrationExportState> =>
-      ipcRenderer.invoke(IPC.MIGRATION_GET_STATUS),
-    acknowledgeNotice: (version: string): Promise<boolean> =>
-      ipcRenderer.invoke(IPC.MIGRATION_ACKNOWLEDGE_NOTICE, version),
-    onEvent: (callback: (payload: MigrationExportState) => void) => {
-      const handler = (_: unknown, payload: MigrationExportState) =>
-        callback(payload);
-      ipcRenderer.on(IPC.MIGRATION_EVENT, handler);
-      return () => ipcRenderer.removeListener(IPC.MIGRATION_EVENT, handler);
+  backup: {
+    exportData: (): Promise<BackupResult> =>
+      ipcRenderer.invoke(IPC.BACKUP_EXPORT),
+    selectImport: (): Promise<BackupImportSelectionResult> =>
+      ipcRenderer.invoke(IPC.BACKUP_IMPORT),
+    confirmImport: (token: string): Promise<BackupResult> =>
+      ipcRenderer.invoke(IPC.BACKUP_IMPORT_CONFIRM, token),
+    cancel: (): Promise<boolean> => ipcRenderer.invoke(IPC.BACKUP_CANCEL),
+    getStatus: (): Promise<BackupState> =>
+      ipcRenderer.invoke(IPC.BACKUP_GET_STATUS),
+    onEvent: (callback: (payload: BackupState) => void) => {
+      const handler = (_: unknown, payload: BackupState) => callback(payload);
+      ipcRenderer.on(IPC.BACKUP_EVENT, handler);
+      return () => ipcRenderer.removeListener(IPC.BACKUP_EVENT, handler);
+    },
+  },
+  update: {
+    rendererHealthy: (): Promise<boolean> =>
+      ipcRenderer.invoke(IPC.SYSTEM_RENDERER_HEALTHY),
+    getStatus: (): Promise<UpdateState> =>
+      ipcRenderer.invoke(IPC.SYSTEM_UPDATE_GET_STATUS),
+    check: (): Promise<UpdateState> =>
+      ipcRenderer.invoke(IPC.SYSTEM_UPDATE_CHECK),
+    download: (): Promise<UpdateState> =>
+      ipcRenderer.invoke(IPC.SYSTEM_UPDATE_DOWNLOAD),
+    cancel: (): Promise<UpdateState> =>
+      ipcRenderer.invoke(IPC.SYSTEM_UPDATE_CANCEL),
+    apply: (): Promise<UpdateState> =>
+      ipcRenderer.invoke(IPC.SYSTEM_UPDATE_APPLY),
+    suppressForCurrentVersion: (): Promise<UpdateState> =>
+      ipcRenderer.invoke(IPC.SYSTEM_UPDATE_SUPPRESS),
+    onEvent: (callback: (payload: UpdateState) => void) => {
+      const handler = (_: unknown, payload: UpdateState) => callback(payload);
+      ipcRenderer.on(IPC.SYSTEM_UPDATE_EVENT, handler);
+      return () => ipcRenderer.removeListener(IPC.SYSTEM_UPDATE_EVENT, handler);
     },
   },
   forum: {

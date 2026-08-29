@@ -13,7 +13,7 @@ export function sendJson(res, status, body) {
     "access-control-allow-headers":
       "content-type,authorization,x-relay-token,x-bz-relay-token",
     "access-control-expose-headers":
-      "etag,x-file-sha256,x-snapshot-updated-at,x-ratelimit-reset,retry-after,accept-ranges,content-range",
+      "etag,x-file-sha256,x-ratelimit-reset,retry-after,accept-ranges,content-range",
   });
   if (status === 204) {
     res.end();

@@ -5,7 +5,8 @@ import { registerSystemIpc } from "./system.ipc";
 import { registerStorageIpc } from "./storage.ipc";
 import { registerStatisticsIpc } from "./statistics.ipc";
 import { registerLogIpc } from "./log.ipc";
-import { registerMigrationIpc } from "./migration.ipc";
+import { registerBackupIpc } from "./backup.ipc";
+import { registerUpdateIpc } from "./update.ipc";
 
 export function registerAllIpc() {
   registerLogIpc();
@@ -15,5 +16,6 @@ export function registerAllIpc() {
   registerSystemIpc();
   registerStorageIpc();
   registerStatisticsIpc();
-  registerMigrationIpc();
+  registerBackupIpc();
+  registerUpdateIpc();
 }

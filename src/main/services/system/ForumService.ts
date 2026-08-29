@@ -19,7 +19,7 @@ import type {
 import { requestInterceptor } from "../../utils/requestInterceptor";
 import { logger } from "../../utils/logger";
 import { storeService } from "../storage/StoreService";
-import { cloudSyncService } from "./CloudSyncService";
+import { accountService } from "./AccountService";
 
 const MAX_IMAGES = 4;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -162,7 +162,7 @@ export class ForumService {
   }
 
   private token(): string {
-    return storeService.getSettings().cloudSessionToken?.trim() || "";
+    return storeService.getSettings().accountSessionToken?.trim() || "";
   }
 
   private async request<T = unknown>(
@@ -191,7 +191,7 @@ export class ForumService {
         string,
         unknown
       >;
-      cloudSyncService.handleAuthFailure(
+      accountService.handleAuthFailure(
         typeof body.error === "string" ? body.error : undefined,
       );
       if (!response.ok)
@@ -372,7 +372,7 @@ export class ForumService {
       });
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
-        cloudSyncService.handleAuthFailure(
+        accountService.handleAuthFailure(
           typeof body?.error === "string" ? body.error : undefined,
         );
         throw new Error(

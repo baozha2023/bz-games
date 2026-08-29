@@ -1,6 +1,6 @@
 {
-  "name": "bz-launcher",
-  "version": "3.4.2",
+  "name": "bz-games-desktop",
+  "version": "4.0.0",
   "description": "BZ-Games game platform",
   "main": "./out/main/index.js",
   "author": {
@@ -15,17 +15,25 @@
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint \"src/**/*.{js,jsx,cjs,mjs,ts,tsx,cts,mts,vue}\" \"*.{js,cjs,mjs,ts}\" --fix",
+    "ensure:electron": "node scripts/ensure-electron-installed.mjs",
+    "predev": "npm run ensure:electron",
+    "prestart": "npm run ensure:electron",
+    "prebuild": "npm run ensure:electron",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
     "typecheck:web": "vue-tsc --noEmit -p tsconfig.web.json",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "check:config": "node scripts/check-config-examples.mjs",
     "fixture:migration": "node scripts/build-migration-fixture.mjs",
-    "test": "npm run test:import && npm run test:migration && npm run test:forum && npm run test:market && npm run test:manifest && npm run test:nickname && npm run test:avatar-frame && npm run test:game-card && npm run test:feedback && npm run test:database && npm run test:all --prefix relay-server",
-    "test:migration": "vitest run src/main/services/system/MigrationExportService.test.ts",
-    "test:import": "vitest run src/main/utils/fileUtils.test.ts src/main/services/game/GameImportTaskService.test.ts src/main/services/game/ProcessTreeService.test.ts src/main/services/room/relayWebSocketUrl.test.ts src/renderer/src/stores/useGameStore.test.ts src/renderer/src/stores/useForumStore.test.ts",
+    "test": "npm run test:uninstall && npm run test:import && npm run test:backup && npm run test:update && npm run test:storage-migration && npm run test:v1-fixture && npm run test:forum && npm run test:market && npm run test:manifest && npm run test:nickname && npm run test:avatar-frame && npm run test:game-card && npm run test:feedback && npm run test:database && npm run test:all --prefix relay-server",
+    "test:uninstall": "vitest run src/main/services/system/LifecycleOperationGuard.test.ts src/main/services/system/UninstallService.test.ts",
+    "test:backup": "vitest run src/main/services/backup",
+    "test:update": "vitest run src/main/services/system/UpdateRollbackService.test.ts",
+    "test:storage-migration": "vitest run src/main/services/storage/StoreService.migration.test.ts",
+    "test:v1-fixture": "node scripts/test-v1-migration-fixture.mjs",
+    "test:import": "vitest run src/main/utils/fileUtils.test.ts src/main/services/game/GameImportTaskService.test.ts src/main/services/game/GameLoader.manifest.test.ts src/main/services/game/ProcessTreeService.test.ts src/main/services/room/relayWebSocketUrl.test.ts src/renderer/src/stores/useGameStore.test.ts src/renderer/src/stores/useForumStore.test.ts",
     "test:forum": "vitest run src/shared/forum-references.test.ts src/main/services/system/ForumService.test.ts src/renderer/src/services/forum-market-reference-service.test.ts src/renderer/src/services/forum-post-reference-service.test.ts src/renderer/src/services/forum-reference-view-model.test.ts src/renderer/src/composables/useForumCommandController.test.ts src/renderer/src/components/social/forum-editor-document.test.ts src/renderer/src/components/social/ForumPostEditor.test.ts src/renderer/src/components/social/ForumPostBody.test.ts",
     "test:market": "vitest run src/main/services/market",
-    "test:manifest": "vitest run src/shared/game-manifest.test.ts src/main/services/game/WebWindowStartup.test.ts",
+    "test:manifest": "vitest run src/shared/game-manifest.test.ts src/shared/game-launch.test.ts src/shared/market-localization.test.ts src/main/services/game/WebWindowStartup.test.ts",
     "test:feedback": "vitest run src/main/services/system/FeedbackService.test.ts",
     "test:nickname": "vitest run src/shared/types/store.types.test.ts",
     "test:avatar-frame": "vitest run src/shared/avatar-frames.test.ts src/shared/frame-assets.test.ts",
@@ -34,9 +42,10 @@
     "start": "electron-vite preview",
     "dev": "electron-vite dev",
     "build": "npm run typecheck && electron-vite build",
-    "postinstall": "electron-builder install-app-deps",
+    "postinstall": "npm run ensure:electron && electron-builder install-app-deps",
     "build:unpack": "npm run build && electron-builder --dir",
-    "build:win": "npm run build && electron-builder --win",
+    "build:electron-win": "npm run build && electron-builder --win --dir",
+    "build:win": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-velopack.ps1",
     "build:mac": "electron-builder --mac",
     "build:linux": "electron-builder --linux"
   },
@@ -51,6 +60,7 @@
     "pinia": "^2.2.4",
     "semver": "^7.7.4",
     "serve-static": "^2.2.1",
+    "velopack": "1.2.0",
     "vue": "^3.5.40",
     "vue-i18n": "^9.14.5",
     "vue-router": "^4.4.5",
@@ -81,7 +91,7 @@
     "vue-tsc": "^2.1.6"
   },
   "build": {
-    "appId": "com.bz.launcher",
+    "appId": "com.bzgames.desktop",
     "productName": "BZ-Games",
     "directories": {
       "output": "dist",
@@ -98,7 +108,8 @@
       "resources/vocabulary/**/*",
       "node_modules/better-sqlite3-multiple-ciphers/**/*",
       "node_modules/bindings/**/*",
-      "node_modules/file-uri-to-path/**/*"
+      "node_modules/file-uri-to-path/**/*",
+      "node_modules/velopack/**/*"
     ],
     "asarUnpack": [
       "**/*.node",
@@ -111,6 +122,10 @@
         "filter": [
           "7za.exe"
         ]
+      },
+      {
+        "from": "native/bootstrap/target/release/bz-games-uninstaller.exe",
+        "to": "bootstrap/BZ-Games-Uninstall.exe"
       }
     ],
     "publish": [
@@ -121,33 +136,9 @@
       }
     ],
     "win": {
-      "icon": "resources/icon.png",
+      "icon": "resources/icon.ico",
       "artifactName": "${productName}-Setup-${version}.${ext}",
-      "target": [
-        {
-          "target": "nsis",
-          "arch": [
-            "x64"
-          ]
-        }
-      ]
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "displayLanguageSelector": true,
-      "multiLanguageInstaller": true,
-      "installerLanguages": [
-        "zh_CN",
-        "en_US",
-        "ja_JP",
-        "zh_TW",
-        "de_DE"
-      ],
-      "include": "build/installer.nsh"
+      "target": "dir"
     }
-  },
-  "packageManager": "pnpm@11.3.0+sha512.2c403d6594527287672b1f7056343a1f7c3634036a67ffabfcc2b3d7595d843768f8787148d1b57cf7956c90606bbd192857c363af19e96d2d0ec9ec5741d215"
+  }
 }

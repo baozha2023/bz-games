@@ -95,12 +95,12 @@ export const FORUM_PAGES: readonly ForumPageDefinition[] = [
     query: { forumAction: "bz-coin-guide" },
   },
   {
-    id: "settings.cloud",
+    id: "settings.account",
     group: "settings",
-    labelKey: "forumCommands.pages.cloud",
-    descriptionKey: "forumCommands.pages.cloudDescription",
+    labelKey: "forumCommands.pages.account",
+    descriptionKey: "forumCommands.pages.accountDescription",
     routeName: "Settings",
-    query: { forumAction: "cloud" },
+    query: { forumAction: "account" },
   },
   {
     id: "settings.feedback",

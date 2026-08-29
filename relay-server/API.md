@@ -9,7 +9,7 @@ BZ-Games 官方服务端提供中继联机、GitHub OAuth 登录和云端数据�
 - 平台负责短地址拼接、展示、复制、输入和解析。
 - 平台向中继服务器加入房间时只发送 `roomCode`。
 - 中继服务器透明转发 RoomMessage、Game API v1 JSON 消息和 Game API v2 binary frame。
-- 登录与云同步服务依赖 MySQL + MongoDB，用于用户身份认证，以及脱敏加密配置与业务 SQL dump 组成的单一平台快照同步。
+- 账号、反馈与论坛服务使用 MySQL；反馈和论坛图片使用 MongoDB GridFS。Platform Snapshot 及其上传、下载、元数据接口均不存在。
 
 ## 基础地址
 
@@ -153,7 +153,7 @@ X-Relay-Token: <relayToken>
 - HTTP Header: `Authorization: Bearer <token>`
 - Cookie: `bz_games_session=<token>`
 
-桌面端登录时，平台会打开 `/auth/github/start?returnTo=bzgames://oauth-complete`。GitHub 回调服务端后，服务端再跳转到 `bzgames://oauth-complete#session_token=...&expires_at=...&login=...`，Electron 主进程接收自定义协议并保存云同步会话。
+桌面端登录时，平台会打开 `/auth/github/start?returnTo=bzgames://oauth-complete`。GitHub 回调服务端后，服务端再跳转到 `bzgames://oauth-complete#session_token=...&expires_at=...&login=...`，Electron 主进程接收自定义协议并保存账号会话。
 
 ### GET /auth/github/start
 
@@ -356,36 +356,6 @@ X-Relay-Token: <relayToken>
 未登录或会话失效返回 `401`；请求体错误返回 `400`。
 
 ---
-
-## Cloud Snapshot v2（BZ-Games 4.0）
-
-Cloud Snapshot v2 is the only cloud data protocol. The server does not register earlier snapshot or file routes.
-
-Authenticated HTTP endpoints use the following `401` response codes. Each response also includes a human-readable `message`:
-
-- `unauthorized`: no GitHub session token was supplied.
-- `session_expired`: the supplied GitHub session has expired.
-- `session_invalid`: the supplied token is invalid, revoked, or unknown.
-
-`PlatformCloudSnapshot` contains exactly `formatVersion: 2`, `dataModelVersion: 4`, `createdAt`, encrypted/sanitized `config`, and `databaseSql`. The dump contains only `play_sessions`, `achievement_unlocks`, and `stats_reports`; games, versions, libraries and files are excluded.
-
-### GET /api/v2/cloud/platform-snapshot/meta
-
-Returns `{ snapshot: { version, size, sha256, contentType, updatedAt } }`. Returns `404 snapshot_not_found` when the user has no snapshot.
-
-### GET /api/v2/cloud/platform-snapshot
-
-Downloads exactly one current snapshot. Response headers include `content-length`, `etag`, `x-file-sha256`, and `cache-control: no-store`.
-
-### PUT /api/v2/cloud/platform-snapshot
-
-Uploads one complete JSON snapshot. `Content-Length` is required and cannot exceed `MAX_PLATFORM_CLOUD_SNAPSHOT_BYTES` (128 MiB by default).
-
-The server finishes the GridFS upload first, validates the stored object with a constant-memory streaming parser, then atomically switches `user_platform_snapshots` and commits the successful-upload rate limit inside one MySQL transaction. A validation or transaction failure deletes the new object, releases the temporary rate-limit reservation, and preserves the old pointer. After a successful switch, the old object is deleted after `PLATFORM_SNAPSHOT_GC_GRACE_MS`.
-
-Successful response: `{ ok: true, snapshot: { version, size, sha256, contentType, updatedAt } }`.
-
-Successful upload and download operations are independently limited to once per GitHub account per 24 hours. Failed validation, storage, pointer publication, and interrupted downloads release their reservation and do not consume the 24-hour cooldown. While `CLOUD_V2_MAINTENANCE=true`, all v2 endpoints return `503 cloud_v2_maintenance`. Other common errors are `401 unauthorized`, `401 session_expired`, `401 session_invalid`, `404 snapshot_not_found`, `413 snapshot_too_large`, `429 cloud_sync_rate_limited`, `500 cloud_upload_failed`, `500 cloud_download_failed`, `503 cloud_rate_limit_unavailable`, and `503 cloud_not_configured`.
 
 ## WebSocket 接口
 
@@ -741,13 +711,6 @@ __relayTo -> relayTo -> to -> targetPlayerId -> payload.__relayTo
 | ------------------------------------ | ---------- | -------------------------------------------------- |
 | `FEEDBACK_AUTHENTICATED_COOLDOWN_MS` | `43200000` | 已登录用户建言献策成功后的冷却时间（默认 12 小时） |
 | `RATE_LIMIT_RESERVATION_TTL_MS`      | `300000`   | 通用限流 reservation 租约时间（默认 5 分钟）       |
-
-### 云同步
-
-| 变量                                | 默认值      | 说明                                     |
-| ----------------------------------- | ----------- | ---------------------------------------- |
-| `MAX_PLATFORM_CLOUD_SNAPSHOT_BYTES` | `134217728` | 完整平台快照上传大小上限（默认 128 MiB） |
-| `PLATFORM_SNAPSHOT_GC_GRACE_MS`     | `300000`    | 原子切换后旧快照对象的清理宽限期         |
 
 ### MySQL
 

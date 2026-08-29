@@ -19,7 +19,7 @@ import { roomClient } from "../room/RoomClient";
 import { roomServer } from "../room/RoomServer";
 import { mainWindow } from "../../window";
 import { IPC } from "../../../shared/ipc-channels";
-import type { GameManifest } from "../../../shared/game-manifest";
+import type { ResolvedGameManifest as GameManifest } from "../../../shared/game-manifest";
 import { playSessionDatabaseService } from "../storage/database/PlaySessionDatabaseService";
 import { openExternalHttpUrl } from "../../utils/externalUrl";
 import { gameWindowIdentityRegistry } from "./GameWindowIdentityRegistry";
@@ -31,7 +31,8 @@ import {
   resolveWebWindowStartupOptions,
 } from "./WebWindowStartup";
 import { processTreeService } from "./ProcessTreeService";
-import { migrationActivityGuard } from "../system/MigrationActivityGuard";
+import { backupActivityGuard } from "../backup/BackupActivityGuard";
+import { lifecycleOperationGuard } from "../system/LifecycleOperationGuard";
 
 type GameRuntimeKind = "native" | "web";
 
@@ -58,7 +59,6 @@ class GameManager {
   private gameApiServers: Map<string, GameApiServer> = new Map();
   private launchingGames: Set<string> = new Set();
   private finishingGames: Set<string> = new Set();
-  private shuttingDownForUninstall = false;
   private startTimes: Map<
     string,
     { start: number; version: string; sessionId: string }
@@ -81,8 +81,8 @@ class GameManager {
 
   async launch(id: string, version?: string): Promise<boolean> {
     if (
-      migrationActivityGuard.isExporting() ||
-      this.shuttingDownForUninstall ||
+      backupActivityGuard.isActive() ||
+      lifecycleOperationGuard.blocksNewActivity() ||
       this.isGameRunning(id) ||
       this.launchingGames.has(id)
     ) {
@@ -190,28 +190,6 @@ class GameManager {
 
   isRunning(id: string): boolean {
     return this.isGameRunning(id);
-  }
-
-  async shutdownForUninstall(): Promise<void> {
-    this.shuttingDownForUninstall = true;
-    const launchDeadline = Date.now() + 5000;
-    while (this.launchingGames.size > 0 && Date.now() < launchDeadline) {
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    }
-    if (this.launchingGames.size > 0) {
-      throw new Error("game_shutdown_timeout");
-    }
-
-    const gameIds = new Set([
-      ...this.activeRuntimes.keys(),
-      ...this.activeServers.keys(),
-      ...this.gameApiServers.keys(),
-      ...this.startTimes.keys(),
-    ]);
-
-    await Promise.all(
-      Array.from(gameIds).map((gameId) => this.stopRuntime(gameId)),
-    );
   }
 
   relayToGame(gameId: string, msg: RoomMessage) {

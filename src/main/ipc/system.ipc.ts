@@ -1,7 +1,16 @@
-import { app, ipcMain, dialog, nativeImage, shell } from "electron";
+import {
+  app,
+  ipcMain,
+  dialog,
+  nativeImage,
+  session,
+  shell,
+  type IpcMainInvokeEvent,
+} from "electron";
 import fs from "fs";
 import path from "path";
 import { IPC } from "../../shared/ipc-channels";
+import { getAppRoot } from "../utils/appPath";
 import { storeService } from "../services/storage/StoreService";
 import { logger } from "../utils/logger";
 import type { AppSettings, NicknameStyle } from "../../shared/types";
@@ -10,7 +19,7 @@ import {
   destroyFloatBallWindow,
   mainWindow,
 } from "../window";
-import { cloudSyncService } from "../services/system/CloudSyncService";
+import { accountService } from "../services/system/AccountService";
 import { feedbackService } from "../services/system/FeedbackService";
 import { forumService } from "../services/system/ForumService";
 import { uninstallService } from "../services/system/UninstallService";
@@ -20,6 +29,7 @@ import {
   getGameCardProductAsset,
 } from "../../shared/game-card-products";
 import { openExternalHttpUrl } from "../utils/externalUrl";
+import { marketService } from "../services/market/MarketService";
 
 let sensitiveWordCache: string[] | null = null;
 const ALLOWED_AVATAR_FRAME_FILES = new Set(
@@ -73,6 +83,24 @@ function selectRendererWritableSettings(
     }
   }
   return selected as RendererWritableSettings;
+}
+
+function assertMainWindowSender(event: IpcMainInvokeEvent): void {
+  if (
+    !mainWindow ||
+    mainWindow.isDestroyed() ||
+    event.sender.id !== mainWindow.webContents.id
+  ) {
+    throw new Error("system_ipc_sender_not_allowed");
+  }
+}
+
+function getRendererVisibleSettings(): AppSettings {
+  return {
+    ...storeService.getSettings(),
+    accountSessionToken: "",
+    accountSessionExpiresAt: "",
+  };
 }
 
 function decodePngDataUrl(dataUrl: unknown): Buffer {
@@ -141,6 +169,17 @@ function loadSensitiveWords(): string[] {
 }
 
 export function registerSystemIpc() {
+  function applyAutoLaunchSetting(
+    settings: AppSettings | Partial<AppSettings>,
+  ) {
+    if (typeof settings.autoLaunch !== "boolean") return;
+    app.setLoginItemSettings({
+      openAtLogin: settings.autoLaunch,
+      ...(app.isPackaged
+        ? { path: path.join(getAppRoot(), "BZ-Games.exe"), args: [] }
+        : {}),
+    });
+  }
   function applyFloatBallSetting(settings: AppSettings | Partial<AppSettings>) {
     if (!("downloadFloatBall" in settings)) return;
     if (settings.downloadFloatBall) {
@@ -151,7 +190,7 @@ export function registerSystemIpc() {
   }
 
   ipcMain.handle(IPC.SYSTEM_GET_SETTINGS, async () => {
-    return storeService.getSettings();
+    return getRendererVisibleSettings();
   });
 
   ipcMain.handle(IPC.SYSTEM_GET_APP_VERSION, async () => {
@@ -162,36 +201,32 @@ export function registerSystemIpc() {
     return loadSensitiveWords();
   });
 
-  ipcMain.handle(IPC.SYSTEM_CLOUD_GET_LOCAL_STATUS, () => {
-    return cloudSyncService.getLocalStatus();
+  ipcMain.handle(IPC.SYSTEM_ACCOUNT_GET_LOCAL_STATUS, (event) => {
+    assertMainWindowSender(event);
+    return accountService.getLocalStatus();
   });
 
-  ipcMain.handle(IPC.SYSTEM_CLOUD_GET_PRESENCE_STATUS, () => {
-    return cloudSyncService.getPresenceStatus();
+  ipcMain.handle(IPC.SYSTEM_ACCOUNT_GET_PRESENCE_STATUS, (event) => {
+    assertMainWindowSender(event);
+    return accountService.getPresenceStatus();
   });
 
-  ipcMain.handle(IPC.SYSTEM_CLOUD_SET_PRESENCE, async (_, enabled: unknown) => {
-    return cloudSyncService.setPresenceEnabled(enabled === true);
+  ipcMain.handle(
+    IPC.SYSTEM_ACCOUNT_SET_PRESENCE,
+    async (event, enabled: unknown) => {
+      assertMainWindowSender(event);
+      return accountService.setPresenceEnabled(enabled === true);
+    },
+  );
+
+  ipcMain.handle(IPC.SYSTEM_ACCOUNT_LOGIN_GITHUB, async (event) => {
+    assertMainWindowSender(event);
+    return await accountService.loginWithGitHub();
   });
 
-  ipcMain.handle(IPC.SYSTEM_CLOUD_GET_SNAPSHOT_META, async () => {
-    return await cloudSyncService.getSnapshotMeta();
-  });
-
-  ipcMain.handle(IPC.SYSTEM_CLOUD_LOGIN_GITHUB, async () => {
-    return await cloudSyncService.loginWithGitHub();
-  });
-
-  ipcMain.handle(IPC.SYSTEM_CLOUD_UPLOAD, async () => {
-    return await cloudSyncService.upload((progress) => {
-      mainWindow?.webContents.send(IPC.SYSTEM_CLOUD_SYNC_EVENT, progress);
-    });
-  });
-
-  ipcMain.handle(IPC.SYSTEM_CLOUD_DOWNLOAD, async () => {
-    return await cloudSyncService.download((progress) => {
-      mainWindow?.webContents.send(IPC.SYSTEM_CLOUD_SYNC_EVENT, progress);
-    });
+  ipcMain.handle(IPC.SYSTEM_ACCOUNT_LOGOUT, async (event) => {
+    assertMainWindowSender(event);
+    return await accountService.logout();
   });
 
   ipcMain.handle(IPC.SYSTEM_FEEDBACK_SELECT_IMAGES, (_, selectionId: unknown) =>
@@ -311,13 +346,9 @@ export function registerSystemIpc() {
         typeof safeSettings.playerName === "string" &&
         safeSettings.playerName !== previousPlayerName
       ) {
-        void cloudSyncService.syncPlayerName(safeSettings.playerName);
+        void accountService.syncPlayerName(safeSettings.playerName);
       }
-      if (typeof safeSettings.autoLaunch === "boolean") {
-        app.setLoginItemSettings({
-          openAtLogin: safeSettings.autoLaunch,
-        });
-      }
+      applyAutoLaunchSetting(safeSettings);
       applyFloatBallSetting(safeSettings);
       return true;
     } catch (error) {
@@ -332,11 +363,12 @@ export function registerSystemIpc() {
       const safeSettings = selectRendererWritableSettings(partial);
       const previousPlayerName = storeService.getSettings().playerName;
       storeService.saveSettings(safeSettings);
+      applyAutoLaunchSetting(safeSettings);
       if (
         typeof safeSettings.playerName === "string" &&
         safeSettings.playerName !== previousPlayerName
       ) {
-        void cloudSyncService.syncPlayerName(safeSettings.playerName);
+        void accountService.syncPlayerName(safeSettings.playerName);
       }
       applyFloatBallSetting(safeSettings);
     },
@@ -401,21 +433,6 @@ export function registerSystemIpc() {
     return { path: selectedPath };
   });
 
-  ipcMain.handle(IPC.SYSTEM_SELECT_GAME_STORAGE_PATH_RELAXED, async () => {
-    const { canceled, filePaths } = await dialog.showOpenDialog({
-      title: "Select Game Storage Directory",
-      properties: ["openDirectory", "createDirectory"],
-    });
-    if (canceled || filePaths.length === 0) {
-      return null;
-    }
-    return { path: filePaths[0] };
-  });
-
-  ipcMain.handle(IPC.SYSTEM_GET_DEFAULT_GAMES_MIGRATION_STATUS, async () => {
-    return storeService.getDefaultGamesMigrationStatus();
-  });
-
   ipcMain.handle(IPC.SYSTEM_GET_GAME_STORAGE_PATHS, async () => {
     return storeService.getGameStoragePathItems();
   });
@@ -431,32 +448,6 @@ export function registerSystemIpc() {
     IPC.SYSTEM_SET_DEFAULT_GAME_STORAGE_PATH,
     async (_, targetPath: string) => {
       return storeService.setDefaultGameStoragePath(targetPath);
-    },
-  );
-
-  ipcMain.handle(
-    IPC.SYSTEM_MIGRATE_DEFAULT_GAMES_LIBRARY,
-    async (_, payload?: { targetPath?: string; ignore?: boolean }) => {
-      try {
-        if (payload?.ignore) {
-          storeService.ignoreDefaultGamesMigrationPrompt();
-          return { success: true, ignored: true };
-        }
-
-        if (!payload?.targetPath) {
-          return { success: false, error: "target_path_required" };
-        }
-
-        const result = await storeService.migrateDefaultGamesLibrary(
-          payload.targetPath,
-        );
-        return { success: true, ...result };
-      } catch (error) {
-        return {
-          success: false,
-          error: error instanceof Error ? error.message : String(error),
-        };
-      }
     },
   );
 
@@ -649,8 +640,21 @@ export function registerSystemIpc() {
 
   ipcMain.handle(
     IPC.SYSTEM_UNINSTALL,
-    async (_, payload?: { deleteGames?: boolean }) => {
-      return uninstallService.uninstall(payload?.deleteGames === true);
+    async (
+      event,
+      payload?: { deleteGames?: boolean; deleteUserData?: boolean },
+    ) => {
+      if (
+        !mainWindow ||
+        mainWindow.isDestroyed() ||
+        event.sender.id !== mainWindow.webContents.id
+      ) {
+        throw new Error("uninstall_ipc_sender_not_allowed");
+      }
+      return uninstallService.uninstall({
+        deleteGames: payload?.deleteGames === true,
+        deleteUserData: payload?.deleteUserData === true,
+      });
     },
   );
 
@@ -680,11 +684,7 @@ export function registerSystemIpc() {
   );
 
   ipcMain.handle(IPC.SYSTEM_CLEAR_CACHE, async () => {
-    const targets: string[] = [
-      path.join(app.getPath("appData"), "bz-launcher"),
-      path.join(app.getPath("home"), "AppData", "Local", "bz-launcher-updater"),
-      path.join(app.getPath("userData"), ".market-cache"),
-    ];
+    const marketCachePath = path.join(app.getPath("userData"), ".market-cache");
 
     let totalSize = 0;
     let clearedSize = 0;
@@ -711,18 +711,28 @@ export function registerSystemIpc() {
       return size;
     }
 
-    for (const target of targets) {
-      if (fs.existsSync(target)) {
-        totalSize += calcDirSize(target);
-      }
+    const httpCacheSize = await session.defaultSession
+      .getCacheSize()
+      .catch(() => 0);
+    totalSize += httpCacheSize;
+    try {
+      await session.defaultSession.clearCache();
+      clearedSize += httpCacheSize;
+    } catch (error) {
+      logger.warn(
+        "[SystemIPC] Failed to clear current Electron HTTP cache",
+        error,
+      );
     }
 
-    for (const target of targets) {
-      if (!fs.existsSync(target)) continue;
+    if (!marketService.hasRetainedTasks() && fs.existsSync(marketCachePath)) {
+      totalSize += calcDirSize(marketCachePath);
       try {
-        const entries = fs.readdirSync(target, { withFileTypes: true });
+        const entries = fs.readdirSync(marketCachePath, {
+          withFileTypes: true,
+        });
         for (const entry of entries) {
-          const fullPath = path.join(target, entry.name);
+          const fullPath = path.join(marketCachePath, entry.name);
           try {
             const entrySize = entry.isDirectory()
               ? calcDirSize(fullPath)
@@ -739,9 +749,13 @@ export function registerSystemIpc() {
           }
         }
       } catch {
-        logger.warn(`[SystemIPC] Cache clear failed to read: ${target}`);
+        logger.warn(
+          `[SystemIPC] Cache clear failed to read: ${marketCachePath}`,
+        );
       }
     }
+
+    marketService.clearMemoryCaches();
 
     return { totalSize, clearedSize };
   });

@@ -1,16 +1,18 @@
-# BZ-Games 登录 / 云同步数据结构说明
+# BZ-Games 账号与在线服务数据结构说明
 
 ## 概览
 
 当前服务端采用混合存储：
 
-- **MySQL**：保存用户基础资料、OAuth 临时状态、登录会话、云文件元数据
-- **MongoDB GridFS**：保存单一平台快照和反馈图片；平台快照封装脱敏加密配置与业务 SQL dump
+- **MySQL**：保存用户基础资料、OAuth 临时状态、登录会话、在线状态、反馈和论坛事实数据
+- **MongoDB GridFS**：只保存反馈图片与论坛图片
 
 这样拆分的原因：
 
-- 用户资料、会话、文件版本信息需要唯一约束和关系查询，适合 MySQL
-- 平台快照中的 `databaseSql` 是 SQLite 逻辑 SQL dump，适合随配置一起作为一个不可拆分对象保存在 GridFS
+- 用户资料、会话、内容状态和关联关系需要唯一约束及关系查询，适合 MySQL
+- 图片属于大对象，适合放入 GridFS；事实表只保存精确对象 ID 与经验证的元数据
+
+Platform Snapshot 已从客户端和服务端完全删除。生产清理只能按旧对象的精确 `metadata.kind` 和文件 ID 执行，不得影响反馈或论坛图片；未来游戏存档云存储的设计经验见 `../docs/GAME_SAVE_CLOUD_STORAGE_DESIGN_LESSONS.md`。
 
 ---
 
@@ -102,7 +104,7 @@ expires_at: 2026-07-11 21:08:31.002
 - 保存 GitHub OAuth 登录流程中的临时 `state`
 - 防止 CSRF，同时保存登录完成后的跳回地址 `return_to`
 
-`return_to` 只允许 `bzgames://`、`http://127.0.0.1:` 和 `http://localhost:` 前缀。桌面端默认使用 `bzgames://oauth-complete`，由 Electron 主进程在协议回调里取出 `session_token` 并写入本地云同步配置。
+`return_to` 只允许 `bzgames://`、`http://127.0.0.1:` 和 `http://localhost:` 前缀。桌面端默认使用 `bzgames://oauth-complete`，由 Electron 主进程在协议回调里取出 `session_token` 并写入本地账号配置。
 
 **主要字段**
 
@@ -124,48 +126,33 @@ created_at: 2026-06-11 21:08:20.511
 expires_at: 2026-06-11 21:18:20.511
 ```
 
-### 4. user_platform_snapshots
-
-Each user has one current Cloud v2 snapshot pointer. `user_id` is the primary key; `file_storage_id` references GridFS; `protocol_version=2`, `data_model_version=4`, `snapshot_version`, `size`, `sha256`, `content_type`, `created_at`, and `updated_at` describe the current object.
-
-Publication uploads the complete GridFS object first, then uses `SELECT ... FOR UPDATE` in a MySQL transaction to increment the version and switch the pointer. Old objects are deleted only after commit and a grace period.
-
-### 5. rate_limit_records
+### 4. rate_limit_records
 
 Stores persistent per-user and per-endpoint rate-limit state. The primary key is
 `github_id + endpoint_key`, so all relay-server instances sharing this MySQL
 database observe the same cooldown.
 
 - `github_id`: authenticated GitHub account identifier;
-- `endpoint_key`: stable business identifier such as `feedback.submit`, `cloud.upload`, or `cloud.download`;
+- `endpoint_key`: stable business identifier such as `feedback.submit`;
 - `last_success_at`: last successfully committed operation time;
 - `reservation_token` and `reservation_expires_at`: short-lived reservation
   state used to prevent concurrent submissions and recover from a crashed
   request;
 - `created_at` and `updated_at`: record lifecycle timestamps.
 
-Reservations are acquired and committed with MySQL row locks. Cloud upload
-commits its pointer and rate limit in the same transaction; cloud download
-commits only after the response stream finishes. Failed operations release their reservation.
-Expired reservation leases can be taken over safely after the lease expires.
+Reservations are acquired and committed with MySQL row locks. Failed operations
+release their reservation. Expired reservation leases can be taken over safely
+after the lease expires.
 
-## MongoDB cloud object boundary
+## MongoDB object boundary
 
 The shared GridFS bucket is isolated by `metadata.kind`:
 
-- Cloud v2 snapshots use `kind=platform-snapshot-v2` and filename `<userId>/platform-snapshot-v2.json`.
 - Feedback images use `kind=feedback-image`.
-- Future game saves reserve `kind=game-save` and must not be embedded in platform snapshots.
+- Forum images use `kind=forum-image`.
 
-A platform snapshot is one JSON object containing sanitized encrypted configuration and the SQL dump for `play_sessions`, `achievement_unlocks`, and `stats_reports`. It never contains `games`, `game_versions`, game directories, Web `gamedata.json`, or native save files.
-
-Downloads read one MySQL pointer and one GridFS object. Cleanup deletes only the explicitly replaced platform snapshot object and never scans other kinds.
-
-All pre-v4 cloud objects and pointers are removed during the v4 production cutover. The server registers only the v2 routes and cannot recreate pre-v4 data.
-
-## Local database merge boundary
-
-The SQL dump omits the local autoincrement implementation column `stats_reports.event_sequence` and merges by stable business keys in one SQLite transaction. `games`, `game_libraries`, and `game_versions`, including favorites, ordering, `library_id`, `relative_path`, and lifecycle state, remain entirely device-local.
+Object deletion must always select exact file ids from the owning business record or
+an exact `metadata.kind`; it must never scan and delete the shared bucket wholesale.
 
 ## 建言献策
 

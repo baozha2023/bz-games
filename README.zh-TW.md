@@ -21,7 +21,7 @@
 - **🪙 經濟系統**：簽到領 BZ 幣，累計遊玩時長自動獎勵。頭像框解鎖與裝備、暱稱顏色／字型／特效個性化裝扮。
 - **🚀 程序管理**：自動啟動／關閉遊戲程序，處理異常退出與崩潰恢復。
 - **🎨 遊戲 API**：提供本地 Game API 服務（V1/V2 協定），遊戲可透過 HTTP 讀取存檔、上報統計與成就。
-- **🌍 國際化**：支援簡體中文、繁體中文、英文、日文和德文。
+- **🌍 國際化**：平台、Game Manifest V2 與市場 Schema 2 支援簡體中文、繁體中文、英文、日文和德文；遊戲資訊、標籤、成就、統計與版本文字採完整語言包回退。
 
 ## 📸 介面預覽
 
@@ -55,13 +55,15 @@
 ### 環境要求
 
 - Node.js 20+
-- pnpm 9+
+- npm 10+
+- Rust stable（包含 MSVC 工具鏈）
+- .NET 10 Runtime 與 Velopack CLI 1.2.0
 - Windows 10/11 x64
 
 ### 安裝依賴
 
 ```bash
-pnpm install
+npm install
 ```
 
 ### 開發模式
@@ -69,15 +71,15 @@ pnpm install
 啟動開發伺服器（包含主程序與渲染程序熱重載）：
 
 ```bash
-pnpm dev
+npm run dev
 ```
 
 ### 構建生產版本
 
-構建適用於 Windows 的安裝包與免安裝包：
+構建適用於 Windows 的安裝包與 Velopack 更新包：
 
 ```bash
-pnpm build:win
+npm run build:win
 ```
 
 構建產物將位於 `dist` 目錄。
@@ -85,7 +87,7 @@ pnpm build:win
 ## 📁 專案結構
 
 ```
-bz-launcher/
+bz-games/
 ├── resources/             # 應用圖示、佔位圖等靜態資源
 ├── src/
 │   ├── main/              # Electron 主程序
@@ -98,7 +100,7 @@ bz-launcher/
 │   │   │   ├── room/            # RoomServer、RoomClient、區域網路/UDP/中繼發現
 │   │   │   ├── market/          # 市場下載與安裝任務管理
 │   │   │   ├── storage/         # 加密 SQLite（遊戲、版本、會話、成就、統計）
-│   │   │   └── system/          # CloudSync、Update、Notification
+│   │   │   └── system/          # Account、Update、Health、Notification
 │   │   └── utils/            # 日誌、檔案工具、路徑處理
 │   ├── preload/           # Preload 指令碼（game.ts / index.ts + API 橋接）
 │   ├── renderer/          # 渲染程序（Vue 3）
@@ -107,12 +109,12 @@ bz-launcher/
 │   │   │   ├── components/    # 公共元件（game / room / settings / heatmap）
 │   │   │   ├── stores/        # Pinia（game / room / settings）
 │   │   │   ├── composables/   # 組合式函數
-│   │   │   ├── locales/       # 6 語言國際化
+│   │   │   ├── locales/       # 5 語言國際化
 │   │   │   └── router/        # Vue Router
 │   │   └── index.html
 │   └── shared/            # 前後端共享（型別、常數、IPC 通道、協定）
 ├── relay-server/          # 官方中繼伺服器（獨立部署）
-├── bz-games-admin/        # 管理後台（回饋審核）
+├── bz-games-admin/        # 管理後台（回饋、論壇、託管、使用者與平台運維）
 └── electron.vite.config.ts
 ```
 

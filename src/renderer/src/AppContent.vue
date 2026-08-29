@@ -104,14 +104,15 @@
     </n-layout>
     <CheckInModal v-model:show="showCheckIn" />
     <BzCoinGuideModal v-model:show="showBzCoinGuide" />
-    <MigrationNotice />
+    <BackupManager />
+    <UpdatePrompt />
   </n-layout>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRouter, useRoute } from "vue-router";
-import { NSpace, NIcon, NButton, useDialog, useMessage } from "naive-ui";
+import { NSpace, NIcon, NButton, useMessage } from "naive-ui";
 import { useI18n } from "vue-i18n";
 import { useSettingsStore } from "./stores/useSettingsStore";
 import { useRoomStore } from "./stores/useRoomStore";
@@ -119,17 +120,14 @@ import { useGameStore } from "./stores/useGameStore";
 import { Calendar } from "@vicons/ionicons5";
 import CheckInModal from "./components/CheckInModal.vue";
 import BzCoinGuideModal from "./components/BzCoinGuideModal.vue";
-import MigrationNotice from "./components/settings/MigrationNotice.vue";
+import BackupManager from "./components/settings/BackupManager.vue";
+import UpdatePrompt from "./components/settings/UpdatePrompt.vue";
 import AvatarWithFrame from "./components/AvatarWithFrame.vue";
 import NicknameText from "./components/NicknameText.vue";
 import { AchievementNotifier } from "./utils/achievementNotifier";
 import bzCoinIcon from "./assets/images/bz-coin.png";
-import {
-  MIGRATION_NOTICE_VERSION,
-  type MarketTaskState,
-} from "../../shared/types";
+import { type MarketTaskState } from "../../shared/types";
 import { getFrameImageFileName } from "../../shared/avatar-frames";
-import { showMigrationNotice } from "./composables/useMigrationNotice";
 
 const marketNotifiedTaskIds = new Set<string>();
 const manualImportNotifiedTaskIds = new Set<string>();
@@ -140,14 +138,11 @@ const route = useRoute();
 const settingsStore = useSettingsStore();
 const roomStore = useRoomStore();
 const gameStore = useGameStore();
-const dialog = useDialog();
 const message = useMessage();
 const showCheckIn = ref(false);
 const showBzCoinGuide = ref(false);
 const isOnline = ref(false);
-const isLoggedIn = computed(() =>
-  Boolean(settingsStore.settings?.cloudSessionToken),
-);
+const isLoggedIn = ref(false);
 
 async function consumeForumAction(): Promise<void> {
   const action =
@@ -164,6 +159,15 @@ watch(
   () => route.query.forumAction,
   () => void consumeForumAction(),
   { immediate: true },
+);
+
+watch(
+  () => settingsStore.settings?.language,
+  (language, previousLanguage) => {
+    if (language && previousLanguage && language !== previousLanguage) {
+      void gameStore.loadGames();
+    }
+  },
 );
 
 const topBarFrameFileName = computed(() => {
@@ -208,75 +212,13 @@ let cleanupAchievements: (() => void) | undefined;
 let cleanupGameImportEvent: (() => void) | undefined;
 let cleanupMarketEvent: (() => void) | undefined;
 let cleanupPresence: (() => void) | undefined;
+let cleanupAccountAuth: (() => void) | undefined;
 const achievementNotifier = new AchievementNotifier({
   delayMs: 5200,
   onProcess: async () => {
     await gameStore.loadGames();
   },
 });
-
-const handleStartupPrompts = async () => {
-  if (isPopupWindow.value) return;
-  await settingsStore.loadSettings();
-  if (
-    settingsStore.settings?.migrationNoticeAcknowledgedVersion !==
-    MIGRATION_NOTICE_VERSION
-  ) {
-    showMigrationNotice();
-    return;
-  }
-  await handleGameStorageStartupPrompt();
-};
-
-const handleGameStorageStartupPrompt = async (): Promise<boolean> => {
-  const status =
-    await window.electronAPI.settings.getDefaultGamesMigrationStatus();
-  if (!status.shouldPrompt) return false;
-
-  dialog.warning({
-    title: t("settings.defaultGamesMigrationTitle"),
-    content: t("settings.defaultGamesMigrationContent", {
-      path: status.defaultGamesPath,
-    }),
-    positiveText: t("settings.migrateNow"),
-    negativeText: t("settings.doNotRemind"),
-    maskClosable: false,
-    closable: false,
-    onPositiveClick: async () => {
-      const result =
-        await window.electronAPI.settings.selectGameStoragePathRelaxed();
-      if (!result) return false;
-      const migrated =
-        await window.electronAPI.settings.migrateDefaultGamesLibrary({
-          targetPath: result.path,
-        });
-      if (!migrated.success) {
-        message.error(t("settings.defaultGamesMigrationFailed"));
-        return false;
-      }
-      await settingsStore.loadSettings();
-      await gameStore.loadGames();
-      message.success(
-        t("settings.defaultGamesMigrationSuccess", {
-          gameCount: migrated.migratedGames || 0,
-          versionCount: migrated.migratedVersions || 0,
-        }),
-      );
-      return true;
-    },
-    onNegativeClick: () => {
-      void window.electronAPI.settings
-        .migrateDefaultGamesLibrary({ ignore: true })
-        .then(() => settingsStore.loadSettings())
-        .catch((error: any) => {
-          message.error(
-            `${t("settings.saveFail")}: ${error?.message || error}`,
-          );
-        });
-    },
-  });
-  return true;
-};
 
 const MARKET_ERROR_KEYS: Record<string, string> = {
   network: "market.networkError",
@@ -303,13 +245,28 @@ const refreshPresenceStatus = async () => {
   }
 };
 
+const refreshAccountStatus = async () => {
+  try {
+    const status = await window.electronAPI.settings.getLocalAccountStatus();
+    isLoggedIn.value = status.authenticated;
+  } catch {
+    isLoggedIn.value = false;
+  }
+};
+
 onMounted(() => {
   if (isPopupWindow.value) return;
 
   cleanupPresence = window.electronAPI.settings.onPresenceChanged((payload) => {
     isOnline.value = payload.enabled;
   });
+  cleanupAccountAuth = window.electronAPI.settings.onAccountAuthChanged(
+    (payload) => {
+      isLoggedIn.value = payload.status.authenticated;
+    },
+  );
   void refreshPresenceStatus();
+  void refreshAccountStatus();
 
   if (window.electronAPI?.room?.onEvent) {
     cleanup = window.electronAPI.room.onEvent((event) => {
@@ -375,7 +332,10 @@ onMounted(() => {
     });
   }
 
-  void handleStartupPrompts();
+  void settingsStore.loadSettings().then(async () => {
+    await gameStore.loadGames();
+    await window.electronAPI.update.rendererHealthy();
+  });
 });
 
 onUnmounted(() => {
@@ -384,6 +344,7 @@ onUnmounted(() => {
   if (cleanupGameImportEvent) cleanupGameImportEvent();
   if (cleanupMarketEvent) cleanupMarketEvent();
   if (cleanupPresence) cleanupPresence();
+  if (cleanupAccountAuth) cleanupAccountAuth();
   achievementNotifier.dispose();
 });
 </script>

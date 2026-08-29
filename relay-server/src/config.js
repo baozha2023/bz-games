@@ -1,6 +1,8 @@
 function parseBoolean(value, fallback = false) {
   if (value === undefined) return fallback;
-  return ["1", "true", "yes", "on"].includes(String(value).trim().toLowerCase());
+  return ["1", "true", "yes", "on"].includes(
+    String(value).trim().toLowerCase(),
+  );
 }
 
 export const config = {
@@ -10,13 +12,6 @@ export const config = {
   HEARTBEAT_INTERVAL_MS: Number(process.env.HEARTBEAT_INTERVAL_MS || 30000),
   MAX_TEXT_BYTES: Number(process.env.MAX_TEXT_BYTES || 1024 * 1024),
   MAX_BINARY_BYTES: Number(process.env.MAX_BINARY_BYTES || 12 * 1024 * 1024),
-  MAX_PLATFORM_CLOUD_SNAPSHOT_BYTES: Number(
-    process.env.MAX_PLATFORM_CLOUD_SNAPSHOT_BYTES || 128 * 1024 * 1024,
-  ),
-  PLATFORM_SNAPSHOT_GC_GRACE_MS: Number(
-    process.env.PLATFORM_SNAPSHOT_GC_GRACE_MS || 5 * 60 * 1000,
-  ),
-  CLOUD_V2_MAINTENANCE: parseBoolean(process.env.CLOUD_V2_MAINTENANCE),
   MAX_FEEDBACK_REQUEST_BYTES: Number(
     process.env.MAX_FEEDBACK_REQUEST_BYTES || 24 * 1024 * 1024,
   ),
@@ -57,12 +52,8 @@ export const config = {
   MAX_FORUM_REQUEST_BYTES: Number(
     process.env.MAX_FORUM_REQUEST_BYTES || 24 * 1024 * 1024,
   ),
-  MAX_FORUM_TITLE_LENGTH: Number(
-    process.env.MAX_FORUM_TITLE_LENGTH || 80,
-  ),
-  MAX_FORUM_BODY_LENGTH: Number(
-    process.env.MAX_FORUM_BODY_LENGTH || 5000,
-  ),
+  MAX_FORUM_TITLE_LENGTH: Number(process.env.MAX_FORUM_TITLE_LENGTH || 80),
+  MAX_FORUM_BODY_LENGTH: Number(process.env.MAX_FORUM_BODY_LENGTH || 5000),
   MAX_FORUM_COMMENT_LENGTH: Number(
     process.env.MAX_FORUM_COMMENT_LENGTH || 1000,
   ),

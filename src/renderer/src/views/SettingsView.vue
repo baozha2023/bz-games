@@ -1,367 +1,385 @@
 <template>
-  <div style="padding: 24px; max-width: 600px; margin: 0 auto">
-    <n-page-header :title="t('settings.title')" @back="handleBack" />
-    <n-divider />
-    <n-form
-      ref="formRef"
-      :model="formValue"
-      :rules="rules"
-      v-if="formValue"
-      label-placement="left"
-      label-width="120"
-    >
-      <n-form-item :label="t('settings.playerName')" path="playerName">
-        <n-input
-          v-model:value="formValue.playerName"
-          :placeholder="t('settings.playerNamePlaceholder')"
-          maxlength="16"
-          show-count
-        />
-      </n-form-item>
-
-      <n-form-item :label="t('settings.login')">
-        <div class="login-setting-row">
-          <n-button
-            class="github-login-button"
-            :disabled="cloudBusy"
-            @click="handleGitHubLogin"
-          >
-            <template #icon>
-              <n-icon :size="18">
-                <LogoGithub />
-              </n-icon>
-            </template>
-            {{ t("settings.githubLogin") }}
-          </n-button>
-          <button
-            v-if="cloudStatus.authenticated && cloudAccountLabel"
-            class="github-account-link"
-            type="button"
-            :disabled="!cloudStatus.userProfileUrl"
-            @click="handleOpenGitHubProfile"
-          >
-            {{ cloudAccountLabel }}
-          </button>
-          <n-button
-            v-if="cloudStatus.authenticated"
-            type="primary"
-            secondary
-            :disabled="cloudBusy"
-            @click="showCloudSettingsModal = true"
-          >
-            {{ t("settings.cloudSettings") }}
-          </n-button>
-        </div>
-      </n-form-item>
-
-      <n-form-item :label="t('settings.avatar')">
-        <n-space align="center">
-          <div class="avatar-clickable" @click="handleAvatarClick">
-            <AvatarWithFrame
-              :src="formValue?.avatar"
-              :name="formValue?.playerName || ''"
-              :size="40"
-              hoverable
-              :frame-file-name="settingsFrameFileName"
-            />
-          </div>
-          <n-button @click="handleUploadAvatar">{{
-            t("settings.uploadAvatar")
-          }}</n-button>
-        </n-space>
-      </n-form-item>
-
-      <n-form-item :label="t('settings.roomPort')" path="defaultRoomPort">
-        <n-input-number
-          v-model:value="formValue.defaultRoomPort"
-          :min="1024"
-          :max="65535"
-          :placeholder="t('settings.defaultPortPlaceholder')"
-          style="width: 100%"
-        />
-      </n-form-item>
-
-      <n-form-item :label="t('settings.theme')" path="theme">
-        <n-select v-model:value="formValue.theme" :options="themeOptions" />
-      </n-form-item>
-
-      <n-form-item :label="t('settings.language')" path="language">
-        <n-select
-          v-model:value="formValue.language"
-          :options="languageOptions"
-        />
-      </n-form-item>
-
-      <n-form-item :label="t('settings.closeBehavior')" path="closeBehavior">
-        <n-radio-group v-model:value="formValue.closeBehavior">
-          <n-radio value="tray">{{ t("settings.closeToTray") }}</n-radio>
-          <n-radio value="exit">{{ t("settings.exitDirectly") }}</n-radio>
-        </n-radio-group>
-      </n-form-item>
-
-      <n-form-item :label="t('settings.autoLaunch')" path="autoLaunch">
-        <n-radio-group v-model:value="formValue.autoLaunch">
-          <n-radio :value="true">{{ t("settings.autoLaunchOn") }}</n-radio>
-          <n-radio :value="false">{{ t("settings.autoLaunchOff") }}</n-radio>
-        </n-radio-group>
-      </n-form-item>
-
-      <n-form-item
-        :label="t('settings.downloadFloatBall')"
-        path="downloadFloatBall"
+  <div class="settings-page">
+    <div class="settings-form-container">
+      <n-page-header :title="t('settings.title')" @back="handleBack" />
+      <n-divider />
+      <n-form
+        ref="formRef"
+        :model="formValue"
+        :rules="rules"
+        v-if="formValue"
+        label-placement="left"
+        label-width="150"
       >
-        <n-radio-group v-model:value="formValue.downloadFloatBall">
-          <n-radio :value="true">{{
-            t("settings.downloadFloatBallOn")
-          }}</n-radio>
-          <n-radio :value="false">{{
-            t("settings.downloadFloatBallOff")
-          }}</n-radio>
-        </n-radio-group>
-      </n-form-item>
-
-      <n-form-item
-        :label="t('settings.sensitiveWordFilter')"
-        path="sensitiveWordFilter"
-      >
-        <div class="github-token-row">
-          <n-radio-group v-model:value="formValue.sensitiveWordFilter">
-            <n-radio :value="true">{{
-              t("settings.sensitiveWordFilterOn")
-            }}</n-radio>
-            <n-radio :value="false">{{
-              t("settings.sensitiveWordFilterOff")
-            }}</n-radio>
-          </n-radio-group>
-          <n-tooltip trigger="hover" placement="top">
-            <template #trigger>
-              <button
-                class="cloud-help-button"
-                type="button"
-                :aria-label="t('settings.sensitiveWordFilterHelpTitle')"
-              >
-                <n-icon :size="18">
-                  <HelpCircleOutline />
-                </n-icon>
-              </button>
-            </template>
-            <div class="cloud-help-content">
-              <div class="cloud-help-title">
-                {{ t("settings.sensitiveWordFilterHelpTitle") }}
-              </div>
-              <div>{{ t("settings.sensitiveWordFilterHelp") }}</div>
-            </div>
-          </n-tooltip>
-        </div>
-      </n-form-item>
-
-      <n-form-item :label="t('settings.githubToken')" path="githubToken">
-        <div class="github-token-row">
+        <n-form-item :label="t('settings.playerName')" path="playerName">
           <n-input
-            v-model:value="formValue.githubToken"
-            type="password"
-            :placeholder="t('settings.githubTokenPlaceholder')"
-            @copy.prevent
-            @cut.prevent
+            v-model:value="formValue.playerName"
+            :placeholder="t('settings.playerNamePlaceholder')"
+            maxlength="16"
+            show-count
           />
-          <n-tooltip trigger="hover" placement="top">
-            <template #trigger>
-              <button
-                class="cloud-help-button"
-                type="button"
-                :aria-label="t('settings.githubTokenHelpTitle')"
-              >
-                <n-icon :size="18">
-                  <HelpCircleOutline />
-                </n-icon>
-              </button>
-            </template>
-            <div class="cloud-help-content">
-              <div class="cloud-help-title">
-                {{ t("settings.githubTokenHelpTitle") }}
-              </div>
-              <div>{{ t("settings.githubTokenHelp") }}</div>
-            </div>
-          </n-tooltip>
-        </div>
-      </n-form-item>
+        </n-form-item>
 
-      <n-form-item :label="t('settings.storagePathList')">
-        <n-space vertical style="width: 100%">
-          <n-empty
-            v-if="allStoragePaths.length === 0"
-            :description="t('settings.storagePathEmpty')"
-          />
-          <div
-            v-for="item in allStoragePaths"
-            :key="item"
-            class="storage-path-item"
-          >
+        <n-form-item :label="t('settings.login')">
+          <div class="login-setting-row">
             <n-button
-              quaternary
-              style="justify-content: flex-start; flex: 1"
-              @click="handleOpenPath(item)"
+              v-if="!accountStatus.authenticated"
+              class="github-login-button"
+              :disabled="logoutBusy"
+              @click="handleGitHubLogin"
             >
-              {{ item }}
+              <template #icon>
+                <n-icon :size="18">
+                  <LogoGithub />
+                </n-icon>
+              </template>
+              {{ t("settings.githubLogin") }}
             </n-button>
-            <n-tag
-              v-if="isDefaultStoragePath(item)"
-              type="success"
-              size="small"
-              class="storage-path-default-tag"
-            >
-              {{ t("settings.defaultStoragePath") }}
-            </n-tag>
             <n-button
               v-else
-              tertiary
-              size="small"
-              @click="handleSetDefaultStoragePath(item)"
+              class="github-logout-button"
+              :disabled="logoutBusy"
+              @click="handleLogout"
             >
-              {{ t("settings.setDefaultStoragePath") }}
+              <template #icon>
+                <n-icon :size="18">
+                  <LogOutOutline />
+                </n-icon>
+              </template>
+              {{ t("settings.logout") }}
             </n-button>
-            <n-button
-              tertiary
-              type="error"
-              size="small"
-              :loading="removingPath === item"
-              @click="handleRemovePath(item)"
+            <button
+              v-if="accountStatus.authenticated && accountLabel"
+              class="github-account-link"
+              type="button"
+              :disabled="!accountStatus.userProfileUrl"
+              @click="handleOpenGitHubProfile"
             >
-              ×
+              {{ accountLabel }}
+            </button>
+            <n-button
+              v-if="accountStatus.authenticated"
+              type="primary"
+              secondary
+              @click="showAccountSettingsModal = true"
+            >
+              {{ t("settings.accountSettings") }}
             </n-button>
           </div>
-          <n-button dashed block @click="handleAddGameStoragePath">
-            {{ t("settings.addStoragePath") }}
-          </n-button>
-        </n-space>
-      </n-form-item>
+        </n-form-item>
 
-      <n-form-item :label="t('settings.dataHealth')">
-        <n-space vertical style="width: 100%">
-          <n-space>
-            <n-button
-              :loading="isCheckingHealth"
-              @click="handleDataHealthCheck"
-            >
-              {{ t("settings.runDataHealthCheck") }}
-            </n-button>
-            <n-text v-if="dataHealthReport" depth="3">
-              {{ t("settings.dataHealthSummary", dataHealthSummaryText) }}
-            </n-text>
+        <n-form-item :label="t('settings.avatar')">
+          <n-space align="center">
+            <div class="avatar-clickable" @click="handleAvatarClick">
+              <AvatarWithFrame
+                :src="formValue?.avatar"
+                :name="formValue?.playerName || ''"
+                :size="40"
+                hoverable
+                :frame-file-name="settingsFrameFileName"
+              />
+            </div>
+            <n-button @click="handleUploadAvatar">{{
+              t("settings.uploadAvatar")
+            }}</n-button>
           </n-space>
-          <n-alert
-            v-if="dataHealthReport"
-            :type="dataHealthReport.ok ? 'success' : 'warning'"
-          >
-            {{
-              dataHealthReport.ok
-                ? t("settings.dataHealthOk")
-                : t("settings.dataHealthIssuesFound")
-            }}
-          </n-alert>
-          <n-list v-if="dataHealthReport?.issues.length">
-            <n-list-item
-              v-for="issue in dataHealthReport.issues"
-              :key="`${issue.code}-${issue.target || issue.message}`"
-            >
-              <n-space vertical size="small">
-                <n-tag
-                  :type="issue.level === 'error' ? 'error' : 'warning'"
-                  size="small"
-                >
-                  {{
-                    issue.level === "error"
-                      ? t("settings.healthError")
-                      : t("settings.healthWarning")
-                  }}
-                </n-tag>
-                <n-text>{{ formatHealthIssue(issue) }}</n-text>
-                <n-text v-if="issue.target" depth="3">{{
-                  issue.target
-                }}</n-text>
-              </n-space>
-            </n-list-item>
-          </n-list>
-        </n-space>
-      </n-form-item>
+        </n-form-item>
 
-      <n-form-item :label="t('settings.update')">
-        <n-space>
-          <n-button @click="showMigrationNotice">
-            {{ t("settings.updateNotice") }}
-          </n-button>
-          <n-text depth="3">{{
-            t("settings.currentVersion", {
-              version: appVersion,
-            })
-          }}</n-text>
-        </n-space>
-      </n-form-item>
+        <n-form-item :label="t('settings.roomPort')" path="defaultRoomPort">
+          <n-input-number
+            v-model:value="formValue.defaultRoomPort"
+            :min="1024"
+            :max="65535"
+            :placeholder="t('settings.defaultPortPlaceholder')"
+            style="width: 100%"
+          />
+        </n-form-item>
 
-      <n-form-item :label="t('settings.officialWebsite')">
-        <n-a href="http://www.bzgames.top/" @click.prevent="handleOpenWebsite">
-          http://www.bzgames.top/
-        </n-a>
-      </n-form-item>
+        <n-form-item :label="t('settings.theme')" path="theme">
+          <n-select v-model:value="formValue.theme" :options="themeOptions" />
+        </n-form-item>
 
-      <n-form-item label="Player ID">
-        <n-text depth="3"
-          >{{ formValue.playerId }} {{ t("settings.idHint") }}</n-text
+        <n-form-item :label="t('settings.language')" path="language">
+          <n-select
+            v-model:value="formValue.language"
+            :options="languageOptions"
+          />
+        </n-form-item>
+
+        <n-form-item :label="t('settings.closeBehavior')" path="closeBehavior">
+          <n-radio-group v-model:value="formValue.closeBehavior">
+            <n-radio value="tray">{{ t("settings.closeToTray") }}</n-radio>
+            <n-radio value="exit">{{ t("settings.exitDirectly") }}</n-radio>
+          </n-radio-group>
+        </n-form-item>
+
+        <n-form-item :label="t('settings.autoLaunch')" path="autoLaunch">
+          <n-radio-group v-model:value="formValue.autoLaunch">
+            <n-radio :value="true">{{ t("settings.autoLaunchOn") }}</n-radio>
+            <n-radio :value="false">{{ t("settings.autoLaunchOff") }}</n-radio>
+          </n-radio-group>
+        </n-form-item>
+
+        <n-form-item
+          :label="t('settings.downloadFloatBall')"
+          path="downloadFloatBall"
         >
-      </n-form-item>
+          <n-radio-group v-model:value="formValue.downloadFloatBall">
+            <n-radio :value="true">{{
+              t("settings.downloadFloatBallOn")
+            }}</n-radio>
+            <n-radio :value="false">{{
+              t("settings.downloadFloatBallOff")
+            }}</n-radio>
+          </n-radio-group>
+        </n-form-item>
 
-      <div
-        style="
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-        "
-      >
-        <n-space>
-          <n-button
-            v-if="cloudStatus.authenticated"
-            type="primary"
-            secondary
-            @click="showFeedbackModal = true"
+        <n-form-item
+          :label="t('settings.sensitiveWordFilter')"
+          path="sensitiveWordFilter"
+        >
+          <div class="github-token-row">
+            <n-radio-group v-model:value="formValue.sensitiveWordFilter">
+              <n-radio :value="true">{{
+                t("settings.sensitiveWordFilterOn")
+              }}</n-radio>
+              <n-radio :value="false">{{
+                t("settings.sensitiveWordFilterOff")
+              }}</n-radio>
+            </n-radio-group>
+            <n-tooltip trigger="hover" placement="top">
+              <template #trigger>
+                <button
+                  class="settings-help-button"
+                  type="button"
+                  :aria-label="t('settings.sensitiveWordFilterHelpTitle')"
+                >
+                  <n-icon :size="18">
+                    <HelpCircleOutline />
+                  </n-icon>
+                </button>
+              </template>
+              <div class="settings-help-content">
+                <div class="settings-help-title">
+                  {{ t("settings.sensitiveWordFilterHelpTitle") }}
+                </div>
+                <div>{{ t("settings.sensitiveWordFilterHelp") }}</div>
+              </div>
+            </n-tooltip>
+          </div>
+        </n-form-item>
+
+        <n-form-item :label="t('settings.githubToken')" path="githubToken">
+          <div class="github-token-row">
+            <n-input
+              v-model:value="formValue.githubToken"
+              type="password"
+              :placeholder="t('settings.githubTokenPlaceholder')"
+              @copy.prevent
+              @cut.prevent
+            />
+            <n-tooltip trigger="hover" placement="top">
+              <template #trigger>
+                <button
+                  class="settings-help-button"
+                  type="button"
+                  :aria-label="t('settings.githubTokenHelpTitle')"
+                >
+                  <n-icon :size="18">
+                    <HelpCircleOutline />
+                  </n-icon>
+                </button>
+              </template>
+              <div class="settings-help-content">
+                <div class="settings-help-title">
+                  {{ t("settings.githubTokenHelpTitle") }}
+                </div>
+                <div>{{ t("settings.githubTokenHelp") }}</div>
+              </div>
+            </n-tooltip>
+          </div>
+        </n-form-item>
+
+        <n-form-item :label="t('settings.storagePathList')">
+          <n-space vertical style="width: 100%">
+            <n-empty
+              v-if="allStoragePaths.length === 0"
+              :description="t('settings.storagePathEmpty')"
+            />
+            <div
+              v-for="item in allStoragePaths"
+              :key="item"
+              class="storage-path-item"
+            >
+              <n-button
+                quaternary
+                style="justify-content: flex-start; flex: 1"
+                @click="handleOpenPath(item)"
+              >
+                {{ item }}
+              </n-button>
+              <n-tag
+                v-if="isDefaultStoragePath(item)"
+                type="success"
+                size="small"
+                class="storage-path-default-tag"
+              >
+                {{ t("settings.defaultStoragePath") }}
+              </n-tag>
+              <n-button
+                v-else
+                tertiary
+                size="small"
+                @click="handleSetDefaultStoragePath(item)"
+              >
+                {{ t("settings.setDefaultStoragePath") }}
+              </n-button>
+              <n-button
+                tertiary
+                type="error"
+                size="small"
+                :loading="removingPath === item"
+                @click="handleRemovePath(item)"
+              >
+                ×
+              </n-button>
+            </div>
+            <n-button dashed block @click="handleAddGameStoragePath">
+              {{ t("settings.addStoragePath") }}
+            </n-button>
+          </n-space>
+        </n-form-item>
+
+        <n-form-item :label="t('settings.dataHealth')">
+          <n-space vertical style="width: 100%">
+            <n-space>
+              <n-button
+                :loading="isCheckingHealth"
+                @click="handleDataHealthCheck"
+              >
+                {{ t("settings.runDataHealthCheck") }}
+              </n-button>
+              <n-text v-if="dataHealthReport" depth="3">
+                {{ t("settings.dataHealthSummary", dataHealthSummaryText) }}
+              </n-text>
+            </n-space>
+            <n-alert
+              v-if="dataHealthReport"
+              :type="dataHealthReport.ok ? 'success' : 'warning'"
+            >
+              {{
+                dataHealthReport.ok
+                  ? t("settings.dataHealthOk")
+                  : t("settings.dataHealthIssuesFound")
+              }}
+            </n-alert>
+            <n-list v-if="dataHealthReport?.issues.length">
+              <n-list-item
+                v-for="issue in dataHealthReport.issues"
+                :key="`${issue.code}-${issue.target || issue.message}`"
+              >
+                <n-space vertical size="small">
+                  <n-tag
+                    :type="issue.level === 'error' ? 'error' : 'warning'"
+                    size="small"
+                  >
+                    {{
+                      issue.level === "error"
+                        ? t("settings.healthError")
+                        : t("settings.healthWarning")
+                    }}
+                  </n-tag>
+                  <n-text>{{ formatHealthIssue(issue) }}</n-text>
+                  <n-text v-if="issue.target" depth="3">{{
+                    issue.target
+                  }}</n-text>
+                </n-space>
+              </n-list-item>
+            </n-list>
+          </n-space>
+        </n-form-item>
+
+        <n-form-item :label="t('settings.versionControl')">
+          <n-space vertical>
+            <n-space>
+              <n-button
+                :loading="checkingUpdate"
+                @click="handleManualUpdateCheck"
+              >
+                {{ t("settings.checkUpdate") }}
+              </n-button>
+              <n-text depth="3">{{
+                t("settings.currentVersion", {
+                  version: appVersion,
+                })
+              }}</n-text>
+            </n-space>
+          </n-space>
+        </n-form-item>
+
+        <n-form-item :label="t('settings.officialWebsite')">
+          <n-a
+            href="http://www.bzgames.top/"
+            @click.prevent="handleOpenWebsite"
           >
-            {{ t("feedback.button") }}
-          </n-button>
-          <n-button type="error" secondary @click="showUninstallModal = true">
-            {{ t("settings.uninstallClient") }}
-          </n-button>
-          <n-button secondary @click="handleClearCache">
-            {{ t("settings.clearCache") }}
-          </n-button>
-          <n-button
-            type="warning"
-            secondary
-            @click="handleOpenMigrateStorageModal"
+            http://www.bzgames.top/
+          </n-a>
+        </n-form-item>
+
+        <n-form-item label="Player ID">
+          <n-text depth="3"
+            >{{ formValue.playerId }} {{ t("settings.idHint") }}</n-text
           >
-            {{ t("settings.migrateStorage") }}
-          </n-button>
-        </n-space>
-        <n-button type="primary" :disabled="!canSave" @click="handleSave">{{
-          t("settings.save")
-        }}</n-button>
+        </n-form-item>
+      </n-form>
+    </div>
+
+    <div v-if="formValue" class="settings-action-scroll">
+      <div class="settings-action-bar">
+        <n-button type="success" secondary @click="showBackupManager">
+          {{ t("backup.openManager") }}
+        </n-button>
+        <n-button
+          v-if="accountStatus.authenticated"
+          type="primary"
+          secondary
+          @click="showFeedbackModal = true"
+        >
+          {{ t("feedback.button") }}
+        </n-button>
+        <n-button type="error" secondary @click="showUninstallModal = true">
+          {{ t("settings.uninstallClient") }}
+        </n-button>
+        <n-button secondary @click="handleClearCache">
+          {{ t("settings.clearCache") }}
+        </n-button>
+        <n-button
+          type="warning"
+          secondary
+          @click="handleOpenMigrateStorageModal"
+        >
+          {{ t("settings.migrateStorage") }}
+        </n-button>
+        <n-button type="primary" :disabled="!canSave" @click="handleSave">
+          {{ t("settings.save") }}
+        </n-button>
       </div>
-    </n-form>
+    </div>
 
     <n-modal
-      v-model:show="showCloudSettingsModal"
+      v-model:show="showAccountSettingsModal"
       preset="card"
-      :title="t('settings.cloudSettings')"
+      :title="t('settings.accountSettings')"
       style="
         width: 60vw;
         height: 70vh;
         max-width: calc(100vw - 32px);
         max-height: calc(100vh - 32px);
       "
-      :closable="!cloudBusy"
-      :mask-closable="!cloudBusy"
     >
       <n-space vertical :size="18" style="width: 100%">
-        <div class="cloud-setting-item cloud-presence-setting-item">
-          <div class="cloud-presence-copy">
+        <div class="account-setting-item account-presence-setting-item">
+          <div class="account-presence-copy">
             <n-text strong>{{ t("settings.onlineStatus") }}</n-text>
             <n-text depth="3">{{ t("settings.onlineStatusHint") }}</n-text>
           </div>
@@ -372,51 +390,10 @@
             <n-switch
               :value="presenceEnabled"
               :loading="presenceBusy"
-              :disabled="!cloudStatus.authenticated || cloudBusy"
+              :disabled="!accountStatus.authenticated"
               @update:value="handlePresenceToggle"
             />
           </n-space>
-        </div>
-        <div class="cloud-setting-item">
-          <n-text strong>{{ t("settings.cloudData") }}</n-text>
-          <n-text depth="3">{{ cloudTimeText }}</n-text>
-        </div>
-        <div class="cloud-action-line">
-          <n-button
-            type="primary"
-            secondary
-            :disabled="!cloudStatus.authenticated || cloudBusy"
-            @click="handleCloudUpload"
-          >
-            {{ t("settings.cloudUpload") }}
-          </n-button>
-          <n-button
-            type="primary"
-            secondary
-            :disabled="!cloudStatus.authenticated || cloudBusy"
-            @click="handleCloudDownload"
-          >
-            {{ t("settings.cloudDownload") }}
-          </n-button>
-          <n-tooltip trigger="hover" placement="top">
-            <template #trigger>
-              <button
-                class="cloud-help-button"
-                type="button"
-                :aria-label="t('settings.cloudSyncHelpTitle')"
-              >
-                <n-icon :size="18">
-                  <HelpCircleOutline />
-                </n-icon>
-              </button>
-            </template>
-            <div class="cloud-help-content">
-              <div class="cloud-help-title">
-                {{ t("settings.cloudSyncHelpTitle") }}
-              </div>
-              <div>{{ t("settings.cloudSyncHelp") }}</div>
-            </div>
-          </n-tooltip>
         </div>
       </n-space>
     </n-modal>
@@ -432,11 +409,20 @@
     >
       <n-space vertical :size="16" style="width: 100%">
         <n-text>{{ t("settings.uninstallClientDescription") }}</n-text>
+        <n-alert v-if="uninstallAccepted" type="warning" :bordered="false">
+          {{ t("settings.uninstallAccepted") }}
+        </n-alert>
         <n-checkbox
           v-model:checked="uninstallDeleteGames"
           :disabled="isUninstalling"
         >
           {{ t("settings.uninstallDeleteGames") }}
+        </n-checkbox>
+        <n-checkbox
+          v-model:checked="uninstallDeleteUserData"
+          :disabled="isUninstalling"
+        >
+          {{ t("settings.uninstallDeleteUserData") }}
         </n-checkbox>
         <n-list
           v-if="uninstallDeleteGames && allStoragePaths.length > 0"
@@ -504,32 +490,6 @@
             @click="confirmClearCache"
             >{{ t("settings.clearCache") }}</n-button
           >
-        </n-space>
-      </template>
-    </n-modal>
-
-    <n-modal
-      v-model:show="showCloudProgressModal"
-      preset="card"
-      :title="cloudProgressTitle"
-      style="width: 400px"
-      :closable="!cloudBusy"
-      :mask-closable="!cloudBusy"
-    >
-      <n-space vertical :size="16" style="width: 100%">
-        <n-progress
-          type="line"
-          :percentage="cloudProgress"
-          :indicator-placement="'inside'"
-          :processing="cloudBusy"
-        />
-        <n-text depth="3">{{ cloudProgressText }}</n-text>
-      </n-space>
-      <template #action>
-        <n-space v-if="!cloudBusy" justify="end">
-          <n-button @click="showCloudProgressModal = false">{{
-            t("common.confirm")
-          }}</n-button>
         </n-space>
       </template>
     </n-modal>
@@ -667,14 +627,16 @@ import { useSettingsStore } from "../stores/useSettingsStore";
 import { useGameStore } from "../stores/useGameStore";
 import AvatarWithFrame from "../components/AvatarWithFrame.vue";
 import FeedbackModal from "../components/settings/FeedbackModal.vue";
-import {
-  MIGRATION_NOTICE_VERSION,
-  type AppSettings,
-} from "../../../shared/types";
+import type { AppSettings } from "../../../shared/types";
 import { getFrameImageFileName } from "../../../shared/avatar-frames";
 import { formatBytes } from "../utils/format";
-import { HelpCircleOutline, LogoGithub } from "@vicons/ionicons5";
-import { showMigrationNotice } from "../composables/useMigrationNotice";
+import {
+  HelpCircleOutline,
+  LogOutOutline,
+  LogoGithub,
+} from "@vicons/ionicons5";
+import { showBackupManager } from "../composables/useBackupManager";
+import { showUpdatePrompt } from "../composables/useUpdatePrompt";
 
 const { t, te } = useI18n();
 const router = useRouter();
@@ -689,6 +651,7 @@ const formValue = ref<AppSettings | null>(null);
 const originalSettings = ref<string>("");
 const showUninstallModal = ref(false);
 const isUninstalling = ref(false);
+const uninstallAccepted = ref(false);
 const showFeedbackModal = ref(false);
 const showAvatarPreview = ref(false);
 const showCropModal = ref(false);
@@ -711,37 +674,27 @@ const clearCacheResult = ref<{ totalSize: number; clearedSize: number } | null>(
   null,
 );
 const uninstallDeleteGames = ref(false);
+const uninstallDeleteUserData = ref(false);
 const selectedMigrationSourcePath = ref("");
 const selectedMigrationTargetPath = ref("");
 const registeredStoragePaths = ref<Array<{ path: string; isDefault: boolean }>>(
   [],
 );
-const appVersion = ref<string>(MIGRATION_NOTICE_VERSION);
+const appVersion = ref<string>("4.0.0");
 const dataHealthReport = computed(() => settingsStore.dataHealthReport);
 const isCheckingHealth = ref(false);
 const removingPath = ref("");
-const cloudBusy = ref(false);
+const logoutBusy = ref(false);
+const checkingUpdate = ref(false);
 const presenceEnabled = ref(false);
 const presenceBusy = ref(false);
-const showCloudSettingsModal = ref(false);
-const showCloudProgressModal = ref(false);
-const cloudProgress = ref(0);
-const cloudProgressStage = ref("checking");
-const cloudProgressMode = ref<"upload" | "download">("upload");
-const cloudStatus = ref({
+const showAccountSettingsModal = ref(false);
+const accountStatus = ref({
   configured: false,
   authenticated: false,
   userLogin: "",
   userName: "",
   userProfileUrl: "",
-  lastUploadedAt: "",
-  snapshot: null as null | {
-    version: number;
-    size: number;
-    sha256: string;
-    contentType: string;
-    updatedAt: string;
-  },
 });
 const allStoragePaths = computed(() => {
   const set = new Set<string>();
@@ -750,6 +703,22 @@ const allStoragePaths = computed(() => {
   });
   return Array.from(set);
 });
+
+const handleManualUpdateCheck = async () => {
+  if (checkingUpdate.value) return;
+  checkingUpdate.value = true;
+  try {
+    const state = await window.electronAPI.update.check();
+    if (state.status === "available") showUpdatePrompt(state);
+    else if (state.status === "up_to_date")
+      message.success(t("settings.updateUpToDate"));
+    else if (state.status === "unsupported")
+      message.info(t("settings.updateUnsupported"));
+    // UpdatePrompt owns update error notifications via SYSTEM_UPDATE_EVENT.
+  } finally {
+    checkingUpdate.value = false;
+  }
+};
 
 const migrationStorageOptions = computed(() =>
   allStoragePaths.value.map((path) => ({ label: path, value: path })),
@@ -840,31 +809,11 @@ const formatHealthIssue = (issue: {
   return te(key) ? t(key, issue.params || {}) : issue.message;
 };
 
-const cloudTimeText = computed(() => {
-  if (!cloudStatus.value.lastUploadedAt)
-    return t("settings.cloudNeverUploaded");
-  return t("settings.cloudLastUploadedAt", {
-    time: new Date(cloudStatus.value.lastUploadedAt).toLocaleString(),
-  });
-});
-
-const cloudAccountLabel = computed(() => {
-  const login = cloudStatus.value.userLogin?.trim() || "";
-  const name = cloudStatus.value.userName?.trim() || "";
+const accountLabel = computed(() => {
+  const login = accountStatus.value.userLogin?.trim() || "";
+  const name = accountStatus.value.userName?.trim() || "";
   if (login && name && login !== name) return `${login}（${name}）`;
   return login || name;
-});
-
-const cloudProgressTitle = computed(() =>
-  cloudProgressMode.value === "upload"
-    ? t("settings.cloudUpload")
-    : t("settings.cloudDownload"),
-);
-
-const cloudProgressText = computed(() => {
-  const key = `settings.cloudProgress.${cloudProgressStage.value}`;
-  const text = t(key);
-  return text === key ? t("settings.cloudProgress.checking") : text;
 });
 
 const storageErrorText = (error: any) => {
@@ -883,10 +832,10 @@ const refreshStoragePaths = async () => {
     await window.electronAPI.settings.getGameStoragePaths();
 };
 
-const refreshLocalCloudStatus = async () => {
-  const status = await window.electronAPI.settings.getLocalCloudStatus();
-  cloudStatus.value = {
-    ...cloudStatus.value,
+const refreshLocalAccountStatus = async () => {
+  const status = await window.electronAPI.settings.getLocalAccountStatus();
+  accountStatus.value = {
+    ...accountStatus.value,
     ...status,
   };
 };
@@ -897,7 +846,7 @@ const refreshPresenceStatus = async () => {
 };
 
 const handlePresenceToggle = async (enabled: boolean) => {
-  if (presenceBusy.value || !cloudStatus.value.authenticated) return;
+  if (presenceBusy.value || !accountStatus.value.authenticated) return;
   presenceBusy.value = true;
   try {
     const status =
@@ -915,17 +864,6 @@ const handlePresenceToggle = async (enabled: boolean) => {
   }
 };
 
-const refreshCloudSnapshotMeta = async () => {
-  try {
-    const result = await window.electronAPI.settings.getCloudSnapshotMeta();
-    if (result.success) {
-      cloudStatus.value.snapshot = result.snapshot;
-    }
-  } catch {
-    // Snapshot metadata is supplementary after a successful sync.
-  }
-};
-
 const isDefaultStoragePath = (targetPath: string) => {
   return registeredStoragePaths.value.some(
     (item) => item.path === targetPath && item.isDefault,
@@ -935,7 +873,7 @@ const isDefaultStoragePath = (targetPath: string) => {
 onMounted(async () => {
   await settingsStore.loadSettings();
   await refreshStoragePaths();
-  await refreshLocalCloudStatus();
+  await refreshLocalAccountStatus();
   await refreshPresenceStatus();
   appVersion.value = await window.electronAPI.settings.getAppVersion();
   if (settingsStore.settings) {
@@ -944,36 +882,23 @@ onMounted(async () => {
   }
 });
 
-const removeCloudSyncListener = window.electronAPI.settings.onCloudSyncEvent(
-  (payload) => {
-    cloudProgress.value = payload.percentage;
-    cloudProgressStage.value = payload.stage;
-    if (cloudBusy.value && payload.stage !== "checking") {
-      showCloudProgressModal.value = true;
-    }
-  },
-);
-
-const removeCloudAuthListener = window.electronAPI.settings.onCloudAuthChanged(
-  (payload) => {
-    cloudStatus.value = {
-      ...cloudStatus.value,
+const removeAccountAuthListener =
+  window.electronAPI.settings.onAccountAuthChanged((payload) => {
+    accountStatus.value = {
+      ...accountStatus.value,
       ...payload.status,
-      snapshot: null,
     };
     void settingsStore.loadSettings();
     if (payload.reason === "session_expired") {
-      message.error(t("settings.cloudErrors.session_expired"));
+      message.error(t("settings.accountErrors.session_expired"));
     } else if (payload.reason === "session_invalid") {
-      message.error(t("settings.cloudErrors.session_invalid"));
+      message.error(t("settings.accountErrors.session_invalid"));
     }
     void refreshPresenceStatus();
-  },
-);
+  });
 
 onUnmounted(() => {
-  removeCloudSyncListener();
-  removeCloudAuthListener();
+  removeAccountAuthListener();
 });
 
 const confirmLeave = () => {
@@ -1052,76 +977,53 @@ const handleUploadAvatar = async () => {
   img.src = dataUrl;
 };
 
-const cloudErrorText = (error?: string, fallbackMessage?: string) => {
+const accountErrorText = (error?: string) => {
   const key = error
-    ? `settings.cloudErrors.${error}`
-    : "settings.cloudErrors.unknown";
+    ? `settings.accountErrors.${error}`
+    : "settings.accountErrors.unknown";
   const translated = t(key);
   return translated === key
-    ? fallbackMessage || error || t("settings.cloudErrors.unknown")
+    ? error || t("settings.accountErrors.unknown")
     : translated;
 };
 
 const handleGitHubLogin = async () => {
   const result = await window.electronAPI.settings.loginWithGitHub();
   if (!result.success) {
-    message.error(cloudErrorText(result.error));
+    message.error(accountErrorText(result.error));
     return;
   }
   message.success(t("settings.githubLoginOpened"));
 };
 
+const handleLogout = () => {
+  if (logoutBusy.value) return;
+  dialog.warning({
+    title: t("settings.logoutConfirmTitle"),
+    content: t("settings.logoutConfirmContent"),
+    positiveText: t("settings.logoutConfirmAction"),
+    negativeText: t("common.cancel"),
+    onPositiveClick: async () => {
+      logoutBusy.value = true;
+      try {
+        const result = await window.electronAPI.settings.logoutAccount();
+        if (!result.success) {
+          message.error(accountErrorText(result.error));
+          return;
+        }
+        message.success(t("settings.logoutSuccess"));
+      } finally {
+        logoutBusy.value = false;
+      }
+    },
+  });
+};
+
 const handleOpenGitHubProfile = () => {
-  const profileUrl = cloudStatus.value.userProfileUrl?.trim();
+  const profileUrl = accountStatus.value.userProfileUrl?.trim();
   if (!profileUrl) return;
   window.electronAPI.settings.openUrl(profileUrl);
 };
-
-const runCloudAction = async (mode: "upload" | "download") => {
-  if (cloudBusy.value) return;
-  cloudBusy.value = true;
-  cloudProgressMode.value = mode;
-  cloudProgressStage.value = "checking";
-  cloudProgress.value = 0;
-  try {
-    const result =
-      mode === "upload"
-        ? await window.electronAPI.settings.uploadCloudData()
-        : await window.electronAPI.settings.downloadCloudData();
-    if (!result.success) {
-      showCloudProgressModal.value = false;
-      if (
-        result.error !== "session_expired" &&
-        result.error !== "session_invalid"
-      ) {
-        message.error(cloudErrorText(result.error, result.message));
-      }
-      return;
-    }
-    showCloudProgressModal.value = true;
-    await settingsStore.loadSettings();
-    await refreshLocalCloudStatus();
-    await refreshCloudSnapshotMeta();
-    if (settingsStore.settings) {
-      formValue.value = JSON.parse(JSON.stringify(settingsStore.settings));
-      originalSettings.value = JSON.stringify(formValue.value);
-    }
-    message.success(
-      mode === "upload"
-        ? t("settings.cloudUploadSuccess")
-        : t("settings.cloudDownloadSuccess"),
-    );
-  } catch (error: any) {
-    showCloudProgressModal.value = false;
-    message.error(cloudErrorText(error?.message || String(error || "")));
-  } finally {
-    cloudBusy.value = false;
-  }
-};
-
-const handleCloudUpload = () => runCloudAction("upload");
-
-const handleCloudDownload = () => runCloudAction("download");
 
 const calcFitZoom = () => {
   if (!cropImage.value || !cropContainerRef.value) return 100;
@@ -1201,11 +1103,11 @@ watch(cropZoom, () => {
 });
 
 watch(
-  () => cloudStatus.value.authenticated,
+  () => accountStatus.value.authenticated,
   (authenticated) => {
     if (!authenticated) {
       showFeedbackModal.value = false;
-      showCloudSettingsModal.value = false;
+      showAccountSettingsModal.value = false;
       presenceEnabled.value = false;
       presenceBusy.value = false;
     }
@@ -1375,28 +1277,47 @@ const handleOpenWebsite = () => {
 const confirmUninstall = async () => {
   if (isUninstalling.value) return;
   isUninstalling.value = true;
+  let accepted = false;
   try {
     const result = await window.electronAPI.settings.uninstall({
       deleteGames: uninstallDeleteGames.value,
+      deleteUserData: uninstallDeleteUserData.value,
     });
-    if (result.success) return;
+    if (result.accepted) {
+      accepted = true;
+      uninstallAccepted.value = true;
+      return;
+    }
     if (result.error === "uninstaller_not_found") {
       message.warning(t("settings.uninstallNotAvailable"));
-    } else if (result.error === "uninstall_market_tasks_active") {
-      message.warning(t("settings.uninstallMarketTasksActive"));
-    } else if (result.error === "uninstall_game_library_delete_failed") {
-      message.error(
-        t("settings.uninstallGameLibraryDeleteFailed", {
-          paths: (result.paths || []).join("\n"),
-        }),
+    } else if (result.error === "uninstall_tasks_active") {
+      const blockerKeys: Record<string, string> = {
+        game: "settings.uninstallBlockerGame",
+        market: "settings.uninstallBlockerMarket",
+        game_import: "settings.uninstallBlockerGameImport",
+        storage_migration: "settings.uninstallBlockerStorageMigration",
+        backup: "settings.uninstallBlockerBackup",
+        update: "settings.uninstallBlockerUpdate",
+        room: "settings.uninstallBlockerRoom",
+      };
+      const blockers = (result.blockers || []).map((blocker) =>
+        t(blockerKeys[blocker] || blocker),
+      );
+      message.warning(
+        `${t("settings.uninstallTasksActive")} ${blockers.join(", ")}`,
       );
     } else if (result.error === "unsafe_game_storage_path") {
       message.error(t("settings.uninstallUnsafeStoragePath"));
+    } else if (result.error === "uninstall_handoff_failed") {
+      message.error(t("settings.uninstallHandoffFailed"));
     } else {
       message.error(t("settings.uninstallFailed"));
     }
   } finally {
-    isUninstalling.value = false;
+    if (!accepted) {
+      isUninstalling.value = false;
+      uninstallAccepted.value = false;
+    }
   }
 };
 
@@ -1421,7 +1342,7 @@ const handleOpenMigrateStorageModal = () => {
 function consumeForumAction(): void {
   const action =
     typeof route.query.forumAction === "string" ? route.query.forumAction : "";
-  if (action === "cloud") showCloudSettingsModal.value = true;
+  if (action === "account") showAccountSettingsModal.value = true;
   else if (action === "feedback") showFeedbackModal.value = true;
   else if (action === "clear-cache") handleClearCache();
   else if (action === "migrate-library") handleOpenMigrateStorageModal();
@@ -1521,6 +1442,39 @@ const confirmClearCache = async () => {
 </script>
 
 <style scoped>
+.settings-page {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 24px;
+}
+
+.settings-form-container {
+  max-width: 620px;
+  margin: 0 auto;
+}
+
+.settings-action-scroll {
+  width: 100%;
+  margin-top: 24px;
+  padding-bottom: 8px;
+  overflow-x: auto;
+}
+
+.settings-action-bar {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: max-content;
+  min-width: 100%;
+  gap: 12px;
+  white-space: nowrap;
+}
+
+.settings-action-bar :deep(.n-button) {
+  flex-shrink: 0;
+}
+
 .storage-path-item {
   display: flex;
   align-items: center;
@@ -1537,24 +1491,18 @@ const confirmClearCache = async () => {
   gap: 10px;
   width: 100%;
 }
-.cloud-action-line {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-}
-.cloud-setting-item {
+.account-setting-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
 }
-.cloud-presence-copy {
+.account-presence-copy {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
-.cloud-presence-setting-item {
+.account-presence-setting-item {
   align-items: flex-start;
 }
 .github-token-row {
@@ -1566,7 +1514,7 @@ const confirmClearCache = async () => {
 .github-token-row .n-input {
   flex: 1;
 }
-.cloud-help-button {
+.settings-help-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1579,16 +1527,16 @@ const confirmClearCache = async () => {
   color: var(--n-text-color-3);
   cursor: help;
 }
-.cloud-help-button:hover {
+.settings-help-button:hover {
   color: var(--n-primary-color);
   background: var(--n-action-color);
 }
-.cloud-help-content {
+.settings-help-content {
   max-width: 320px;
   white-space: pre-line;
   line-height: 1.6;
 }
-.cloud-help-title {
+.settings-help-title {
   margin-bottom: 6px;
   font-weight: 600;
 }
@@ -1605,6 +1553,16 @@ const confirmClearCache = async () => {
   --n-border-hover: 1px solid #32383f !important;
   --n-border-pressed: 1px solid #1f2328 !important;
   --n-border-focus: 1px solid #24292f !important;
+}
+.github-logout-button {
+  --n-color: rgba(255, 255, 255, 0.08) !important;
+  --n-color-hover: rgba(255, 255, 255, 0.14) !important;
+  --n-color-pressed: rgba(255, 255, 255, 0.05) !important;
+  --n-color-focus: rgba(255, 255, 255, 0.08) !important;
+  --n-border: 1px solid var(--bz-border) !important;
+  --n-border-hover: 1px solid var(--bz-border-hover) !important;
+  --n-border-pressed: 1px solid var(--bz-border-hover) !important;
+  --n-border-focus: 1px solid var(--bz-border-hover) !important;
 }
 .github-account-link {
   border: 0;

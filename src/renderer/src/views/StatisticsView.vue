@@ -276,7 +276,7 @@ async function handleShare() {
     const settings = settingsStore.settings;
     const playerName = settings?.playerName || t("statistics.shareNotLoggedIn");
     const avatar = settings?.avatar || "";
-    const githubLogin = settings?.cloudUserLogin || "";
+    const githubLogin = settings?.accountUserLogin || "";
 
     // 构建分享容器
     container = document.createElement("div");

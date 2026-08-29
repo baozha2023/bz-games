@@ -4,7 +4,6 @@ import { config } from "./config.js";
 import { createHttpServer } from "./http-server.js";
 import { createAuthService } from "./services/auth-service.js";
 import { createAccessControlService } from "./services/access-control-service.js";
-import { createCloudDataService } from "./services/cloud-data-service.js";
 import { createRoomService } from "./services/room-service.js";
 import { createMessageRouter } from "./services/message-router.js";
 import { createAdminStaticService } from "./services/admin-static-service.js";
@@ -36,13 +35,6 @@ const accessControlService = createAccessControlService({
 const rateLimitService = createRateLimitService({
   mySqlService,
   reservationTtlMs: config.RATE_LIMIT_RESERVATION_TTL_MS,
-});
-const cloudDataService = createCloudDataService({
-  config,
-  authService,
-  mongoService,
-  mySqlService,
-  rateLimitService,
 });
 const feedbackService = createFeedbackService({
   config,
@@ -106,7 +98,6 @@ const server = createHttpServer({
   state,
   roomService,
   authService,
-  cloudDataService,
   gameHostingService,
   releaseDownloadService,
   feedbackService,
@@ -133,7 +124,9 @@ forumService.startSearchWorker();
 presenceService.start();
 
 server.listen(config.PORT, config.HOST, () => {
-  console.log(`BZ-Games relay server listening on ${config.HOST}:${config.PORT}`);
+  console.log(
+    `BZ-Games relay server listening on ${config.HOST}:${config.PORT}`,
+  );
 });
 
 setInterval(() => {

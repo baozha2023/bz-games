@@ -34,12 +34,12 @@ vi.mock("../../utils/logger", () => ({
 
 vi.mock("../storage/StoreService", () => ({
   storeService: {
-    getSettings: () => ({ cloudSessionToken: "session-token" }),
+    getSettings: () => ({ accountSessionToken: "session-token" }),
   },
 }));
 
-vi.mock("./CloudSyncService", () => ({
-  cloudSyncService: { handleAuthFailure: vi.fn() },
+vi.mock("./AccountService", () => ({
+  accountService: { handleAuthFailure: vi.fn() },
 }));
 
 import { ForumService } from "./ForumService";

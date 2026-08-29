@@ -7,21 +7,21 @@
 
 [简体中文](./README.md) | English | [日本語](./README.ja.md) | [Deutsch](./README.de.md) | [繁體中文](./README.zh-TW.md)
 
-**BZ-Games** is a **local-first Windows game platform** designed for Windows. It allows users to import local games and play multiplayer with friends through the built-in P2P room system. It supports LAN discovery, user-provided frp direct connections, and official relay short addresses as connectivity options, with optional GitHub OAuth login and cloud data sync.
+**BZ-Games** is a **local-first Windows game platform** designed for Windows. It allows users to import local games and play multiplayer with friends through the built-in P2P room system. It supports LAN discovery, user-provided frp direct connections, and official relay short addresses, with optional GitHub OAuth login.
 
 ## ✨ Core Features
 
 - **📂 Open Game Library**: Import any spec-compliant local games with automatic multi-version management.
-- **🔌 Local-First Data**: Configs are encrypted and stored locally — no cloud account required. Optional GitHub OAuth login for cloud sync.
+- **🔌 Local-First Data**: Configuration and SQLite data are encrypted and stored locally; no account is required.
 - **🎮 Unified Online Lobby**: Built-in room system (create/join/ready/chat/kick/reconnect). Games only need to integrate with the local Game API for full multiplayer capability.
 - **🌐 Multi-Entry Connectivity**: LAN auto-discovery, user-provided frp direct connection, and official Relay Server short addresses. Room discovery page organized by physical LAN / virtual LAN (EasyTier) / server.
-- **☁️ GitHub Login & Cloud Sync**: GitHub OAuth authentication, with cloud upload/download for `config.json` and `bz_games.db`, including progress bars and integrity verification.
+- **👤 GitHub Account**: Optional OAuth login provides community identity, feedback, nickname synchronization, and online presence without uploading platform configuration or the local database.
 - **🏪 Game Market**: Built-in two-tier market for browsing and installing community games from multiple sources. Download tasks support progress tracking, pause, resume, cancel, and floating ball notifications.
 - **🏆 Achievements & Statistics**: Games define achievement lists and statistics — automatically tracked by the platform. Calendar heatmap with daily/cumulative/consecutive stats, one-click share as image.
 - **🪙 Economy System**: Daily check-in for BZ Coins, automatic rewards for cumulative playtime. Avatar frame unlocks, nickname color/font/effect personalization.
 - **🚀 Process Management**: Auto start/stop game processes with crash and abnormal exit handling.
 - **🎨 Game API**: Local Game API service (V1/V2 protocols) for games to read saves, report stats, and unlock achievements via HTTP.
-- **🌍 Internationalization**: Supports Simplified Chinese, Traditional Chinese, English, Japanese, and German.
+- **🌍 Internationalization**: The platform, Game Manifest V2, and Market Schema 2 support Simplified Chinese, Traditional Chinese, English, Japanese, and German, with whole-locale fallback for game metadata, tags, achievements, statistics, and release text.
 
 ## 📸 Screenshots
 
@@ -55,13 +55,15 @@
 ### Requirements
 
 - Node.js 20+
-- pnpm 9+
+- npm 10+
+- Rust stable (including the MSVC toolchain)
+- .NET 10 Runtime and Velopack CLI 1.2.0
 - Windows 10/11 x64
 
 ### Install Dependencies
 
 ```bash
-pnpm install
+npm install
 ```
 
 ### Development Mode
@@ -69,15 +71,15 @@ pnpm install
 Start the dev server (with hot reload for main and renderer processes):
 
 ```bash
-pnpm dev
+npm run dev
 ```
 
 ### Build for Production
 
-Build the Windows installer and portable package:
+Build the Windows installer and Velopack update package:
 
 ```bash
-pnpm build:win
+npm run build:win
 ```
 
 Build artifacts will be located in the `dist` directory.
@@ -85,7 +87,7 @@ Build artifacts will be located in the `dist` directory.
 ## 📁 Project Structure
 
 ```
-bz-launcher/
+bz-games/
 ├── resources/             # App icons, placeholder images, and static resources
 ├── src/
 │   ├── main/              # Electron main process
@@ -98,7 +100,7 @@ bz-launcher/
 │   │   │   ├── room/            # RoomServer, RoomClient, LAN/UDP/relay discovery
 │   │   │   ├── market/          # Market download & install task management
 │   │   │   ├── storage/         # Encrypted SQLite (games, versions, sessions, achievements, statistics)
-│   │   │   └── system/          # CloudSync, Update, Notification
+│   │   │   └── system/          # Account, Update, Health, Notification
 │   │   └── utils/            # Logging, file utils, path handling
 │   ├── preload/           # Preload scripts (game.ts / index.ts + API bridge)
 │   ├── renderer/          # Renderer process (Vue 3)
@@ -107,12 +109,12 @@ bz-launcher/
 │   │   │   ├── components/    # Shared components (game / room / settings / heatmap)
 │   │   │   ├── stores/        # Pinia stores (game / room / settings)
 │   │   │   ├── composables/   # Composables
-│   │   │   ├── locales/       # 6-language i18n
+│   │   │   ├── locales/       # 5-language i18n
 │   │   │   └── router/        # Vue Router
 │   │   └── index.html
 │   └── shared/            # Shared between main & renderer (types, constants, IPC channels, protocols)
 ├── relay-server/          # Official relay server (standalone deployment)
-├── bz-games-admin/        # Admin panel (feedback review)
+├── bz-games-admin/        # Admin panel (feedback, forum, hosting, users and operations)
 └── electron.vite.config.ts
 ```
 

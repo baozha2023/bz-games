@@ -1,8 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  settings: { cloudSessionToken: "session-token" },
-  clearLegacyFeedbackHistory: vi.fn(),
+  settings: { accountSessionToken: "session-token" },
   addFeedbackHistory: vi.fn(),
   buildHeaders: vi.fn(
     (_url: string, authorization?: Record<string, string>) => ({
@@ -35,21 +34,19 @@ vi.mock("../../utils/logger", () => ({
 vi.mock("../storage/StoreService", () => ({
   storeService: {
     getSettings: () => mocks.settings,
-    clearLegacyFeedbackHistory: mocks.clearLegacyFeedbackHistory,
     addFeedbackHistory: mocks.addFeedbackHistory,
   },
 }));
 
-vi.mock("./CloudSyncService", () => ({
-  cloudSyncService: { handleAuthFailure: mocks.handleAuthFailure },
+vi.mock("./AccountService", () => ({
+  accountService: { handleAuthFailure: mocks.handleAuthFailure },
 }));
 
 import { FeedbackService } from "./FeedbackService";
 
 describe("FeedbackService remote history", () => {
   beforeEach(() => {
-    mocks.settings.cloudSessionToken = "session-token";
-    mocks.clearLegacyFeedbackHistory.mockClear();
+    mocks.settings.accountSessionToken = "session-token";
     mocks.addFeedbackHistory.mockClear();
     mocks.buildHeaders.mockClear();
     mocks.handleAuthFailure.mockClear();
@@ -61,7 +58,7 @@ describe("FeedbackService remote history", () => {
     vi.unstubAllGlobals();
   });
 
-  it("clears legacy local history before loading the remote list", async () => {
+  it("loads remote history with cursor pagination", async () => {
     mocks.fetch.mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -90,11 +87,7 @@ describe("FeedbackService remote history", () => {
       hasMore: true,
     });
 
-    expect(mocks.clearLegacyFeedbackHistory).toHaveBeenCalledOnce();
     expect(mocks.fetch).toHaveBeenCalledOnce();
-    expect(
-      mocks.clearLegacyFeedbackHistory.mock.invocationCallOrder[0],
-    ).toBeLessThan(mocks.fetch.mock.invocationCallOrder[0]);
     expect(mocks.fetch.mock.calls[0][0]).toBe(
       "https://relay.example.com/api/v1/feedback?limit=10",
     );
@@ -118,11 +111,10 @@ describe("FeedbackService remote history", () => {
     expect(mocks.fetch.mock.calls[0][0]).toBe(
       "https://relay.example.com/api/v1/feedback?limit=10&cursor=cursor%2B%2F%3D",
     );
-    expect(mocks.clearLegacyFeedbackHistory).not.toHaveBeenCalled();
   });
 
-  it("clears legacy local history even when the account is not logged in", async () => {
-    mocks.settings.cloudSessionToken = "";
+  it("does not request history when the account is not logged in", async () => {
+    mocks.settings.accountSessionToken = "";
 
     const service = new FeedbackService();
     await expect(service.getHistory()).resolves.toEqual({
@@ -131,11 +123,10 @@ describe("FeedbackService remote history", () => {
       hasMore: false,
     });
 
-    expect(mocks.clearLegacyFeedbackHistory).toHaveBeenCalledOnce();
     expect(mocks.fetch).not.toHaveBeenCalled();
   });
 
-  it("rejects malformed remote history without restoring local data", async () => {
+  it("rejects malformed remote history", async () => {
     mocks.fetch.mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -156,7 +147,6 @@ describe("FeedbackService remote history", () => {
     await expect(service.getHistory()).rejects.toThrow(
       "feedback_invalid_response",
     );
-    expect(mocks.clearLegacyFeedbackHistory).toHaveBeenCalledOnce();
   });
 
   it("does not write feedback history after a successful submission", async () => {

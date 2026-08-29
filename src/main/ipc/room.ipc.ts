@@ -22,6 +22,7 @@ import { relayRoomService } from "../services/room/RelayRoomService";
 import { roomPasswordProbeService } from "../services/room/RoomPasswordProbeService";
 import { GameLoader } from "../services/game/GameLoader";
 import { GameType } from "../../shared/types";
+import { lifecycleOperationGuard } from "../services/system/LifecycleOperationGuard";
 
 async function validateLocalRoomManifest(gameId: string, version?: string) {
   const manifest = await GameLoader.getManifest(gameId, version);
@@ -49,6 +50,9 @@ export function registerRoomIpc() {
   ipcMain.handle(
     IPC.ROOM_CREATE,
     async (_, gameId: string, version?: string) => {
+      if (lifecycleOperationGuard.blocksNewActivity()) {
+        return { success: false, error: "task_active" };
+      }
       try {
         const port = await roomServer.start(gameId, version);
         const connected = await roomClient.connect(
@@ -84,6 +88,9 @@ export function registerRoomIpc() {
       version?: string,
       password?: string,
     ) => {
+      if (lifecycleOperationGuard.blocksNewActivity()) {
+        return { success: false, error: "task_active" };
+      }
       try {
         const manifest = await validateLocalRoomManifest(gameId, version);
         version = manifest.version;
@@ -93,6 +100,9 @@ export function registerRoomIpc() {
           error: error?.code || "manifestInvalid",
           params: error?.params,
         };
+      }
+      if (lifecycleOperationGuard.blocksNewActivity()) {
+        return { success: false, error: "task_active" };
       }
       const localPlayerId = storeService.getSettings().playerId;
       if (roomServer.room?.hostId === localPlayerId) {

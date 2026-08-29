@@ -5,3 +5,5 @@ export * from "./room.types";
 export * from "./store.types";
 export * from "./forum.types";
 export * from "./migration.types";
+export * from "./update.types";
+export * from "./uninstall.types";

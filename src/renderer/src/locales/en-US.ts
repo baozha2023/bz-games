@@ -227,8 +227,8 @@ export default {
       unknown: "Import failed: {message}",
       interrupted: "Import was interrupted. Please retry",
       taskNotRetryable: "This task cannot be retried right now",
-      migrationExportInProgress:
-        "Migration data is being exported. Finish or cancel it first",
+      backupTaskInProgress:
+        "A backup or restore is in progress. Finish or cancel it first",
     },
     importDraftTitle: "Complete Game Information",
     importDraftDesc:
@@ -311,6 +311,8 @@ export default {
     taskAlreadyDone: "Task already finished",
     loadFailed: "Failed to load market",
     downloadFailed: "Download or install failed",
+    insufficientDiskSpace:
+      "There is not enough free disk space to download this game package",
     networkError:
       "Network connection failed, please check your network and try again",
     downloadError: "Download failed",
@@ -600,38 +602,44 @@ export default {
     playtimeDescription:
       "Earn 10 BZ Coins automatically for every 10 minutes of recorded game time. No manual claim is required.",
   },
-  migration: {
-    title: "BZ-Games Update and Data Migration",
-    finalVersionTitle: "Automatic updates are ending",
-    finalVersionBody:
-      "v{version} is the final release installable through the legacy NSIS updater. This version cannot check for, download, or install later releases.",
-    downloadBody: "Download future releases from the BZ-Games website.",
-    exportBody:
-      "Before installing a new release, export your migration data and keep this installation until the import succeeds. In the new release, choose the file under Settings — Import Data.",
-    afterImport:
-      "Exporting does not delete any source data. After confirming that the new version imported successfully, you may uninstall this client yourself; it will not uninstall automatically.",
-    localGamesOnly:
-      "The export includes only config.json, games, and db under the current application directory. External game libraries are not copied.",
-    securityNotice:
-      "The .bzgames file contains personal settings, database records, and game files. It has no additional password protection, so keep it secure.",
-    openWebsite: "Open Website",
-    exportData: "Export Data",
-    exportSuccess: "Migration data exported successfully",
+  backup: {
+    title: "Data Backup and Import",
+    openManager: "Back Up or Import Data",
+    versionPolicyTitle: "Long-term backup formats",
+    versionPolicyBody:
+      "V1 files created by v3.4.2 remain importable permanently. Versions 4.0 and later export and import V2. V2 includes the built-in library; external libraries are references only.",
+    replaceTitle: "Import completely replaces current data",
+    replaceBody:
+      "Import replaces the current configuration, database, and built-in game library. It does not merge data. Export the current data first and stop games and downloads.",
+    sourcePreserved: "Import and export never delete the source .bzgames file.",
+    formatVersion: "Backup Format",
+    sourceVersion: "Source Version",
+    fileCount: "Files",
+    dataSize: "Data Size",
+    externalLibraries: "External Library References",
+    importData: "Import .bzgames",
+    exportData: "Export V2 Backup",
+    confirmReplace: "Confirm Full Replacement",
+    exportSuccess: "V2 backup exported successfully",
+    importSuccessRestarting:
+      "Import completed. The app will restart and run a health check.",
     progressDetail: "Processed {processed} / {total} across {files} files",
     status: {
-      idle: "Export has not started",
+      idle: "No operation started",
       preparing: "Checking and preparing data…",
       archiving: "Creating the .bzgames file…",
-      verifying: "Verifying the exported file…",
-      completed: "Export and integrity verification completed",
-      canceled: "Export canceled; source data was not changed",
-      error: "Export failed",
+      verifying: "Verifying the .bzgames file…",
+      awaiting_confirmation: "Verification passed; confirm full replacement",
+      importing: "Replacing data atomically and creating a rollback point…",
+      completed: "Operation and integrity verification completed",
+      canceled: "Operation canceled; source data was not changed",
+      error: "Operation failed",
     },
     errors: {
       game_running: "Close all running games before exporting",
       market_task_active: "Finish or cancel active marketplace tasks first",
       import_task_active: "Finish or cancel active game imports first",
-      export_in_progress: "Another export is already in progress",
+      backup_task_active: "Another backup or import is already in progress",
       source_missing: "config.json or database data is missing",
       unsafe_source_entry:
         "The data contains an unsupported link or special file",
@@ -641,7 +649,13 @@ export default {
       archive_failed: "The .bzgames file could not be created or verified",
       database_snapshot_failed:
         "A consistent database snapshot could not be created",
-      unknown: "Export failed. Check the logs and try again",
+      unsupported_backup:
+        "Only v3.4.2 V1 and data-model-v4 V2 backups are supported",
+      backup_validation_failed:
+        "The backup failed format, path, or integrity validation",
+      replacement_failed:
+        "Replacement failed and the previous data was restored",
+      unknown: "Operation failed. Check the logs and try again",
     },
   },
   settings: {
@@ -681,8 +695,8 @@ export default {
     uploadAvatar: "Upload Avatar",
     login: "Login",
     githubLogin: "Continue with GitHub",
-    cloudSettings: "Cloud Settings",
-    cloudData: "Cloud Data",
+    logout: "Log Out",
+    accountSettings: "Account Settings",
     onlineStatus: "Online Status",
     onlineStatusHint:
       "Sends an online heartbeat to the server every minute when enabled",
@@ -692,41 +706,20 @@ export default {
       "Failed to enable online status. Check your network or login.",
     githubLoginOpened:
       "GitHub authorization page opened. The session will be saved after login.",
-    cloudUpload: "Cloud Upload",
-    cloudDownload: "Cloud Download",
-    cloudSyncHelpTitle: "Cloud Sync Details",
-    cloudSyncHelp:
-      "Cloud Upload: Uploads settings, user data, play sessions, achievements, and statistics, overwriting the existing cloud objects. Game entities and version lists are not uploaded, nor are GitHub tokens or login session fields.\nCloud Download: Only fields present in config.json are updated; sessions, achievements, and statistics are merged by unique key without creating game entities.",
-    cloudNeverUploaded: "Cloud time: never uploaded",
-    cloudLastUploadedAt: "Cloud time: {time}",
-    cloudUploadSuccess: "Cloud upload completed",
-    cloudDownloadSuccess:
-      "Cloud download completed. Local data has been overwritten.",
-    cloudProgress: {
-      checking: "Checking cloud status...",
-      uploading: "Uploading and overwriting cloud data...",
-      downloading: "Downloading cloud data...",
-      applying: "Overwriting local data...",
-      completed: "Sync completed",
-    },
-    cloudErrors: {
-      cloud_not_configured: "Cloud sync is not configured",
+    logoutConfirmTitle: "Log Out?",
+    logoutConfirmContent: "This will disconnect your GitHub account.",
+    logoutConfirmAction: "Log Out",
+    logoutSuccess: "Signed out",
+    accountErrors: {
+      account_not_configured: "Account service is not configured",
       unauthorized: "Please complete GitHub authorization first",
       session_expired: "Your GitHub login has expired. Please sign in again.",
       session_invalid: "Your GitHub login is invalid. Please sign in again.",
-      snapshot_not_found: "No platform snapshot exists. Upload one first.",
-      snapshot_too_large: "Platform snapshot exceeds the cloud sync limit",
-      cloud_upload_failed: "Cloud upload failed. Please try again later.",
-      internal_error:
-        "The cloud sync service encountered an error. Please try again later.",
-      cloud_snapshot_invalid: "Platform snapshot format is invalid",
-      cloud_hash_mismatch:
-        "Platform snapshot verification failed. Please try again.",
-      cloud_sync_busy: "Another cloud sync is already in progress",
-      app_shutting_down: "The app is shutting down and cannot start cloud sync",
-      cloud_sync_rate_limited:
-        "Cloud sync is too frequent. Upload and download are each limited to once per 24 hours per account.",
-      unknown: "Cloud sync failed",
+      app_shutting_down: "The app is shutting down and cannot manage accounts",
+      logout_failed: "Log out failed. Please try again later.",
+      logout_network_error:
+        "Cannot reach the server. Check your network and try again.",
+      unknown: "Account operation failed",
     },
     closeBehavior: "Main Window Close",
     closeToTray: "Minimize to tray",
@@ -754,14 +747,6 @@ export default {
     defaultStoragePath: "Default",
     setDefaultStoragePath: "Set Default",
     addStoragePath: "Add Game Library Path",
-    defaultGamesMigrationTitle: "Move Default Game Library",
-    defaultGamesMigrationContent:
-      "For a better experience, we recommend moving the default game library next to the executable to another location. Migration moves all files in this library and deletes the original directory after everything succeeds. Current library: {path}",
-    migrateNow: "Move Now",
-    doNotRemind: "Don't Remind",
-    defaultGamesMigrationSuccess:
-      "Game library moved. {gameCount} games and {versionCount} versions migrated",
-    defaultGamesMigrationFailed: "Failed to move game library",
     openPathFailed: "Failed to open path",
     storagePathNotEmptyTitle: "Directory Not Empty",
     storagePathNotEmptyContent:
@@ -789,6 +774,8 @@ export default {
         "The target path cannot be inside the source library.",
       source_inside_target_path:
         "The source library cannot be inside the target path.",
+      target_storage_path_already_registered:
+        "The target path is already registered as another game library.",
       target_is_default_games_path:
         "The target path cannot still be the default games directory next to the executable.",
       game_storage_path_not_configured:
@@ -799,6 +786,19 @@ export default {
         "The source game library is not a valid folder. Refresh and try again.",
       storage_migration_file_busy:
         "A file is currently open, so the library cannot be moved. Changes have been rolled back.",
+      storage_migration_active: "A game library migration is already running.",
+      storage_migration_copy_failed:
+        "The library could not be copied after several attempts. The target directory was cleared.",
+      storage_migration_database_verification_failed:
+        "Database game-version references do not match the selected library. Migration was stopped.",
+      storage_migration_database_failed:
+        "The library database could not be updated after several attempts. The original library was restored.",
+      storage_migration_source_delete_failed:
+        "The source library could not be removed after several attempts. The original library was restored and migration was canceled.",
+      storage_migration_rollback_failed:
+        "Migration failed and automatic rollback did not fully complete. Do not delete either directory manually; check the logs.",
+      storage_library_database_failed:
+        "Failed to update the game library database; file changes were rolled back",
       unknown: "Unknown game library error",
     },
     dataHealth: "Data Health",
@@ -846,20 +846,61 @@ export default {
         "The latest version record is invalid for {gameId}: {version}",
       storage_root_missing: "A game library storage path does not exist",
     },
-    update: "Version Migration",
+    update: "Software Update",
+    versionControl: "Version Control",
     updateNotice: "Update Information",
+    checkUpdate: "Check for Updates",
+    updatePromptTitle: "New Version Available",
+    updatePromptMessage:
+      "BZ-Games v{version} is available. Automatic checks do not download updates; downloading starts only after confirmation.",
+    updateViewReleaseNotes: "View Release Notes",
+    updateLater: "Remind Me Later",
+    updateNow: "Update Now",
+    updateReady:
+      "The update package was downloaded and verified. Confirm to restart and install.",
+    updateRestartInstall: "Restart and Install",
+    updateReleaseOpenFailed: "Could not open the release notes",
+    updateUpToDate: "You are using the latest version",
+    updateUnsupported: "Software updates are disabled in development mode",
+    updateErrors: {
+      network_error: "Update check failed. Check your network connection.",
+      feed_missing:
+        "The Velopack update source is missing releases.stable.json or the corresponding nupkg file.",
+      feed_invalid: "The update source returned invalid data.",
+      download_failed:
+        "The update package could not be downloaded. You can retry later.",
+      verify_failed: "Update package integrity verification failed.",
+      permission_denied: "The update directory is in use or cannot be written.",
+      task_active: "Finish games, downloads, imports, or backups first.",
+      unsupported_dev_mode:
+        "Software updates are disabled in development mode.",
+      unknown: "The update failed. Check the logs and try again.",
+    },
     currentVersion: "Current version: {version}",
     officialWebsite: "Official Website",
     uninstallClient: "Uninstall Client",
     uninstallClientDescription:
-      "This cannot be undone. BZ-Games will be completely removed.",
+      "This removes the BZ-Games application. Unselected libraries, settings, and data are preserved; selected data cannot be recovered.",
     uninstallDeleteGames: "Also delete all game library directories",
+    uninstallDeleteUserData:
+      "Also delete settings and data (config.json and db)",
     uninstallNotAvailable:
       "Uninstaller is not available, only supported in installed version.",
     uninstallMarketTasksActive:
       "Finish or cancel active game downloads and installations first.",
-    uninstallGameLibraryDeleteFailed:
-      "Some game libraries are still in use. The client was not uninstalled. Close the programs using these paths and try again:\n{paths}",
+    uninstallTasksActive:
+      "A game, room, or background task is active. Finish it before uninstalling. Blockers:",
+    uninstallAccepted:
+      "The uninstall worker has taken over safely and the client is exiting. This cannot be canceled.",
+    uninstallBlockerGame: "running game",
+    uninstallBlockerMarket: "market download or installation",
+    uninstallBlockerGameImport: "game import",
+    uninstallBlockerStorageMigration: "storage migration",
+    uninstallBlockerBackup: "backup or restore",
+    uninstallBlockerUpdate: "update or rollback",
+    uninstallBlockerRoom: "multiplayer room",
+    uninstallHandoffFailed:
+      "The uninstall worker could not take over safely. Keep the client open and try again.",
     uninstallUnsafeStoragePath:
       "Uninstallation was stopped because a game library path is unsafe. Check your library settings first.",
     uninstallFailed: "Could not start the uninstaller. Please try again.",

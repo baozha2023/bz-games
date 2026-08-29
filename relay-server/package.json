@@ -7,7 +7,6 @@
     "start": "node src/index.js",
     "test": "node --test scripts/*.test.js",
     "test:admin-static": "node --test scripts/admin-static-service.test.js",
-    "test:cloud": "node --test scripts/cloud-data-service.test.js",
     "test:e2e": "node scripts/relay-e2e-test.js",
     "rebuild:forum-search": "node scripts/rebuild-forum-search.js",
     "test:auth": "node --test scripts/auth-service.test.js",
@@ -20,7 +19,6 @@
     "mongodb": "^6.21.0",
     "mysql2": "^3.22.5",
     "semver": "^7.8.5",
-    "stream-json": "^2.1.0",
     "ws": "^8.18.0"
   },
   "engines": {

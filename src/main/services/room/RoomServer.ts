@@ -39,6 +39,7 @@ export class RoomServer {
   private kickedPlayers: Set<string> = new Set();
   private heartbeatInterval: NodeJS.Timeout | null = null;
   private stopPromise: Promise<void> | null = null;
+  private starting = false;
   private localRelayHandler:
     | ((gameId: string, msg: RoomMessage) => void)
     | null = null;
@@ -48,39 +49,48 @@ export class RoomServer {
   private orderedSeqBySenderChannel: Map<string, number> = new Map();
 
   async start(gameId: string, version?: string): Promise<number> {
-    const port = storeService.getSettings().defaultRoomPort;
-    const manifest = await GameLoader.getManifest(gameId, version);
-    if (!manifest || manifest.id !== gameId) {
-      throw new Error("room_game_manifest_invalid");
-    }
-    if (
-      manifest.type !== GameType.Multiplayer &&
-      manifest.type !== GameType.SingleMultiple
-    ) {
-      throw new Error("room_game_type_not_multiplayer");
-    }
-    if (!manifest.multiplayer) {
-      throw new Error("room_multiplayer_config_missing");
-    }
-    GameLoader.assertPlatformCompatible(manifest);
-    const maxPlayers = manifest.multiplayer.maxPlayers;
-    const gameVersion = manifest.version;
-
-    this.initializeRoom(gameId, gameVersion, maxPlayers);
-    this.roomPassword = "";
-    this.kickedPlayers.clear();
-    this.resetRelayState();
-
-    let startedPort: number;
+    this.starting = true;
     try {
-      startedPort = await this.startWebSocketServer(port);
-    } catch (error: any) {
-      if (error?.code !== "roomPortInUse") throw error;
-      startedPort = await this.startWebSocketServer(0);
+      const port = storeService.getSettings().defaultRoomPort;
+      const manifest = await GameLoader.getManifest(gameId, version);
+      if (!manifest || manifest.id !== gameId) {
+        throw new Error("room_game_manifest_invalid");
+      }
+      if (
+        manifest.type !== GameType.Multiplayer &&
+        manifest.type !== GameType.SingleMultiple
+      ) {
+        throw new Error("room_game_type_not_multiplayer");
+      }
+      if (!manifest.multiplayer) {
+        throw new Error("room_multiplayer_config_missing");
+      }
+      GameLoader.assertPlatformCompatible(manifest);
+      const maxPlayers = manifest.multiplayer.maxPlayers;
+      const gameVersion = manifest.version;
+
+      this.initializeRoom(gameId, gameVersion, maxPlayers);
+      this.roomPassword = "";
+      this.kickedPlayers.clear();
+      this.resetRelayState();
+
+      let startedPort: number;
+      try {
+        startedPort = await this.startWebSocketServer(port);
+      } catch (error: any) {
+        if (error?.code !== "roomPortInUse") throw error;
+        startedPort = await this.startWebSocketServer(0);
+      }
+      this.boundPort = startedPort;
+      this.startHeartbeat();
+      return startedPort;
+    } finally {
+      this.starting = false;
     }
-    this.boundPort = startedPort;
-    this.startHeartbeat();
-    return startedPort;
+  }
+
+  hasActiveOperation(): boolean {
+    return this.starting || this.stopPromise !== null || this.room !== null;
   }
 
   get listeningPort(): number | null {

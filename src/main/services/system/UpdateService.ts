@@ -15,7 +15,6 @@ import { gameManager } from "../game/GameManager";
 import { marketService } from "../market/MarketService";
 import { bzGamesDatabase } from "../storage/database/BzGamesDatabase";
 import { storeService } from "../storage/StoreService";
-import { cloudSyncService } from "./CloudSyncService";
 import { lifecycleOperationGuard } from "./LifecycleOperationGuard";
 import { roomClient } from "../room/RoomClient";
 import { roomServer } from "../room/RoomServer";
@@ -262,7 +261,6 @@ export class UpdateService {
       gameManager.hasActiveOrLaunchingGames() ||
       gameImportTaskService.hasActiveTasks() ||
       marketService.computeTotalProgress().activeTaskCount > 0 ||
-      cloudSyncService.hasActiveOperation() ||
       storeService.hasActiveStorageMigration() ||
       roomServer.hasActiveOperation() ||
       roomClient.hasActiveOperation() ||

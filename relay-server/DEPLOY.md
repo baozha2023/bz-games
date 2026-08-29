@@ -1,17 +1,16 @@
-# BZ-Games 中继 / 登录 / 云同步服务部署手册
+# BZ-Games 中继 / 登录服务部署手册
 
 ## 服务说明
 
-BZ-Games 官方服务是独立 Node.js 服务，提供 HTTP 房间查询、GitHub OAuth 登录、用户云数据存储和 WebSocket 透明转发能力。
+BZ-Games 官方服务是独立 Node.js 服务，提供 HTTP 房间查询、GitHub OAuth 登录、社区与分发接口和 WebSocket 透明转发能力。
 
-- HTTP：`/health`、`/rooms`、`/auth/github/start`、`/auth/github/callback`、`/api/portal/v1/session`、`/api/auth/logout`、`/api/v2/cloud/platform-snapshot`。
+- HTTP：`/health`、`/rooms`、`/auth/github/start`、`/auth/github/callback`、`/api/portal/v1/session`、`/api/auth/logout`。
 - WebSocket：`relay:host`、`relay:join`、`relay:leave`、`relay:heartbeat`。
 - 转发内容：RoomMessage、Game API v1 JSON 消息、Game API v2 binary frame。
 - 房间码：中继服务器生成、发送和识别 `roomCode`。
 - 短地址：平台侧使用 `DEFAULT_RELAY_PUBLIC_HOST` 与 `roomCode` 拼接。
-- 云数据：脱敏加密配置与三张业务表 SQL dump 组成单一平台快照；GridFS 写入完成后通过 MySQL 唯一指针原子发布。
 - 用户基础数据：使用 MySQL 保存账号、OAuth state、登录会话、文件元数据。
-- 云端对象内容：使用 MongoDB GridFS 保存，避免配置文件或 SQL dump 增长后触发 16MB BSON 限制。
+- 图片对象：使用 MongoDB GridFS 保存反馈与论坛图片，避免触发 16MB BSON 限制。
 
 接口细节见 [API.md](./API.md)。
 
@@ -40,8 +39,8 @@ relay-server/
 - Linux 服务器。
 - Relay 本机监听地址默认 `127.0.0.1:38091`，Nginx 公网入口统一使用 `38090` 端口。
 - npm。
-- MySQL 8+（保存用户基础数据和文件元数据）。
-- MongoDB 6+（保存完整平台快照与反馈图片）。
+- MySQL 8+（保存用户基础数据和业务元数据）。
+- MongoDB 6+（保存反馈与论坛图片）。
 
 ## 环境变量
 
@@ -53,9 +52,6 @@ relay-server/
 | `HEARTBEAT_INTERVAL_MS`              | `30000`                | WebSocket ping 与清理间隔                                                   |
 | `MAX_TEXT_BYTES`                     | `1048576`              | 单条文本消息最大字节数                                                      |
 | `MAX_BINARY_BYTES`                   | `12582912`             | 单条二进制消息最大字节数                                                    |
-| `MAX_PLATFORM_CLOUD_SNAPSHOT_BYTES`  | `134217728`            | 单次上传完整平台快照的大小上限                                              |
-| `CLOUD_V2_MAINTENANCE`               | `false`                | v4 清场期间设为 true，使新接口返回 503；旧接口始终返回 410                  |
-| `PLATFORM_SNAPSHOT_GC_GRACE_MS`      | `300000`               | 指针切换成功后旧平台快照的清理宽限期                                        |
 | `RELAY_TOKEN`                        | 空字符串               | 全接口鉴权 token；必须通过 systemd 环境变量配置，平台侧通过构建配置注入同值 |
 | `MAX_ROOMS`                          | `80`                   | 最大同时房间数                                                              |
 | `MAX_CLIENTS`                        | `400`                  | 最大已登记客户端数                                                          |
@@ -65,10 +61,10 @@ relay-server/
 | `RATE_LIMIT_RESERVATION_TTL_MS`      | `300000`               | 通用限流 reservation 租约时间，默认 5 分钟                                  |
 | `MYSQL_HOST`                         | `127.0.0.1`            | MySQL 主机                                                                  |
 | `MYSQL_PORT`                         | `3306`                 | MySQL 端口                                                                  |
-| `MYSQL_USER`                         | 空字符串               | MySQL 用户名；为空时登录和云同步接口不可用                                  |
+| `MYSQL_USER`                         | 空字符串               | MySQL 用户名；为空时依赖 MySQL 的接口不可用                                 |
 | `MYSQL_PASSWORD`                     | 空字符串               | MySQL 密码                                                                  |
 | `MYSQL_DATABASE`                     | `bz_games`             | MySQL 数据库名                                                              |
-| `MONGODB_URI`                        | 空字符串               | MongoDB 连接串；为空时登录和云同步接口不可用                                |
+| `MONGODB_URI`                        | 空字符串               | MongoDB 连接串；为空时图片接口不可用                                        |
 | `MONGODB_DB_NAME`                    | `bz_games`             | MongoDB 数据库名                                                            |
 | `MONGODB_BUCKET_NAME`                | `userFiles`            | GridFS bucket 名                                                            |
 | `GITHUB_CLIENT_ID`                   | 空字符串               | GitHub OAuth App Client ID                                                  |
@@ -89,18 +85,6 @@ relay-server/
 
 公网部署必须配置 `RELAY_TOKEN`，并与平台侧构建注入的 `relayToken` 保持一致。服务端不会兼容未携带 token 的旧版平台。
 如需启用 GitHub 登录，必须额外配置 `MYSQL_USER`、`MYSQL_PASSWORD`、`MYSQL_DATABASE`、`GITHUB_CLIENT_ID`、`GITHUB_CLIENT_SECRET`、`GITHUB_CALLBACK_URL`。
-如需启用云文件同步，还必须额外配置 `MONGODB_URI`。
-
-Cloud v1 到 v2 的一次性生产清场必须先安装
-`cloud-v2-maintenance.conf.example` 对应的 systemd drop-in，再使用
-`scripts/cloud-v2-production-ops.js` 按 `backup`、`verify-backup`、`purge`、
-重启服务、`verify-clean` 的顺序执行。`purge` 会在备份目录中原子维护
-`purge-state.json`，中断后使用同一命令和备份目录即可继续。清场完成后旧
-`cloud_sync_limits` 表不会重建，云同步限流统一写入 `rate_limit_records`。
-解除维护后先运行一次 `ensure-smoke-user` 创建固定的隔离测试账号，再运行
-`production-test`；后者只允许使用该账号，并在 HTTP 上传、meta、下载和 SHA-256
-校验完成后清理该账号的测试快照、云端限流与临时会话。该脚本只允许在
-已核对的生产主机上由运维人员手动运行，不属于服务启动流程。
 
 ## 快速启动
 
@@ -518,16 +502,6 @@ ufw status
 - 是否需要重启客户端，使 `app.setAsDefaultProtocolClient("bzgames")` 生效。
 - 开发模式必须按当前 Electron 启动入口注册协议，即 `electron.exe <path.resolve(process.argv[1])> "%1"`；不要把协议指向 `out/main/index.js`。
 - 授权返回地址是否被浏览器当作普通网页链接处理。
-
-### 云数据上传 / 下载失败
-
-检查项：
-
-- `MYSQL_HOST` / `MYSQL_USER` / `MYSQL_PASSWORD` / `MYSQL_DATABASE` 是否可用。
-- `MONGODB_URI` 是否可用。
-- `MAX_PLATFORM_CLOUD_SNAPSHOT_BYTES` 是否过小。
-- 上传时是否携带有效的 Bearer Session；客户端云同步接口不接受 Cookie，也不按角色或 capability 授权。
-- 客户端下载 `bz_games.db` 对应 SQL dump 后，是否能按会话 ID、成就业务键和统计 `event_id` 幂等合并，且不会创建游戏实体。
 
 ## 上线验证流程
 

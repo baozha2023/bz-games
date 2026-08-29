@@ -21,7 +21,7 @@
 - **🪙 経済システム**：毎日チェックインで BZ コイン、累計プレイ時間で自動報酬。アバターフレーム解除・装備、ニックネームの色／フォント／エフェクトのパーソナライズ。
 - **🚀 プロセス管理**：ゲームプロセスの自動起動／終了、クラッシュや異常終了にも対応。
 - **🎨 ゲーム API**：ローカル Game API サービス（V1/V2 プロトコル）。ゲームは HTTP 経由でセーブデータの読み取り、統計や実績を報告可能。
-- **🌍 国際化**：簡体中国語、繁体中国語、英語、日本語、ドイツ語、漢文に対応。
+- **🌍 国際化**：プラットフォーム、Game Manifest V2、Market Schema 2 は簡体中国語、繁体中国語、英語、日本語、ドイツ語に対応し、ゲーム情報・タグ・実績・統計・リリース文を言語単位でフォールバックします。
 
 ## 📸 スクリーンショット
 
@@ -55,13 +55,15 @@
 ### 環境要件
 
 - Node.js 20+
-- pnpm 9+
+- npm 10+
+- Rust stable（MSVC ツールチェーンを含む）
+- .NET 10 Runtime と Velopack CLI 1.2.0
 - Windows 10/11 x64
 
 ### 依存関係のインストール
 
 ```bash
-pnpm install
+npm install
 ```
 
 ### 開発モード
@@ -69,15 +71,15 @@ pnpm install
 開発サーバーを起動（メインプロセスとレンダラープロセスのホットリロード付き）：
 
 ```bash
-pnpm dev
+npm run dev
 ```
 
 ### プロダクションビルド
 
-Windows 用インストーラーとポータブルパッケージをビルド：
+Windows 用インストーラーと Velopack 更新パッケージをビルド：
 
 ```bash
-pnpm build:win
+npm run build:win
 ```
 
 ビルド成果物は `dist` ディレクトリに生成されます。
@@ -85,7 +87,7 @@ pnpm build:win
 ## 📁 プロジェクト構成
 
 ```
-bz-launcher/
+bz-games/
 ├── resources/             # アプリアイコン、プレースホルダー画像等
 ├── src/
 │   ├── main/              # Electron メインプロセス
@@ -98,7 +100,7 @@ bz-launcher/
 │   │   │   ├── room/            # RoomServer、RoomClient、LAN/UDP/リレー発見
 │   │   │   ├── market/          # マーケットダウンロード・インストールタスク管理
 │   │   │   ├── storage/         # 暗号化 SQLite（ゲーム、バージョン、セッション、実績、統計）
-│   │   │   └── system/          # CloudSync、Update、Notification
+│   │   │   └── system/          # Account、Update、Health、Notification
 │   │   └── utils/            # ロギング、ファイルユーティリティ、パス処理
 │   ├── preload/           # Preload スクリプト（game.ts / index.ts + API ブリッジ）
 │   ├── renderer/          # レンダラープロセス（Vue 3）
@@ -107,12 +109,12 @@ bz-launcher/
 │   │   │   ├── components/    # 共通コンポーネント（game / room / settings / heatmap）
 │   │   │   ├── stores/        # Pinia ストア（game / room / settings）
 │   │   │   ├── composables/   # コンポーザブル
-│   │   │   ├── locales/       # 6 言語 i18n
+│   │   │   ├── locales/       # 5 言語 i18n
 │   │   │   └── router/        # Vue Router
 │   │   └── index.html
 │   └── shared/            # メイン・レンダラー共有（型、定数、IPC チャンネル、プロトコル）
 ├── relay-server/          # 公式リレーサーバー（独立デプロイ）
-├── bz-games-admin/        # 管理パネル（フィードバック審査）
+├── bz-games-admin/        # 管理パネル（フィードバック・フォーラム・ホスティング・ユーザー・運用）
 └── electron.vite.config.ts
 ```
 

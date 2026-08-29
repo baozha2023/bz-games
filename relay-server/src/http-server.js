@@ -8,7 +8,6 @@ export function createHttpServer({
   state,
   roomService,
   authService,
-  cloudDataService,
   gameHostingService,
   releaseDownloadService,
   feedbackService,
@@ -60,9 +59,6 @@ export function createHttpServer({
         return;
       }
       if (!requireHttpRelayToken(config, req, res, url)) {
-        return;
-      }
-      if (await cloudDataService.handleRequest(req, res, url)) {
         return;
       }
       if (req.method === "GET" && url.pathname === "/health") {

@@ -24,7 +24,6 @@ import { roomServer } from "../room/RoomServer";
 import { storeService } from "../storage/StoreService";
 import { getAppRoot } from "../../utils/appPath";
 import { logger } from "../../utils/logger";
-import { cloudSyncService } from "./CloudSyncService";
 import { lifecycleOperationGuard } from "./LifecycleOperationGuard";
 import { normalizeUninstallStorageRoots } from "./UninstallPathSafety";
 import { updateService } from "./UpdateService";
@@ -65,7 +64,6 @@ class UninstallService {
       blockers.push("storage_migration");
     if (backupActivityGuard.isActive() || backupImportService.isActive())
       blockers.push("backup");
-    if (cloudSyncService.hasActiveOperation()) blockers.push("cloud_sync");
     if (updateService.hasActiveOperation()) blockers.push("update");
     if (roomServer.hasActiveOperation() || roomClient.hasActiveOperation())
       blockers.push("room");
