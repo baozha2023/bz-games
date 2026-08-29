@@ -1,0 +1,37 @@
+[package]
+name = "bz-games-bootstrap"
+version = "4.0.0"
+edition = "2021"
+build = "build.rs"
+
+[build-dependencies]
+winres = "0.1.12"
+
+[dependencies]
+anyhow = "1.0"
+chrono = "0.4"
+dirs = "6.0"
+rfd = "0.15"
+mslnk = "0.1"
+tiny-skia = "0.11"
+native-windows-gui = { version = "1.0.13", default-features = false, features = ["file-dialog", "frame", "image-decoder", "animation-timer", "extern-canvas", "progress-bar"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+semver = "1.0"
+sha2 = "0.10"
+uuid = { version = "1.11", features = ["v4", "serde"] }
+windows = { version = "0.61", features = ["Win32_Foundation", "Win32_Globalization", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_Threading", "Win32_System_WindowsProgramming"] }
+winapi = { version = "0.3.9", features = ["winuser", "wingdi"] }
+winreg = "0.55"
+
+[[bin]]
+name = "bz-games-launcher"
+path = "src/bin/launcher.rs"
+
+[[bin]]
+name = "bz-games-installer"
+path = "src/bin/installer.rs"
+
+[[bin]]
+name = "bz-games-uninstaller"
+path = "src/bin/uninstaller.rs"
