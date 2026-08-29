@@ -3,13 +3,19 @@ import fs from "fs";
 import fsPromises from "fs/promises";
 import path from "path";
 import Database from "better-sqlite3-multiple-ciphers";
+import { z } from "zod";
 import {
   BZ_GAMES_DB_FILE_NAME,
   CONFIG_ENCRYPTION_SEED,
   DATABASE_ENCRYPTION_SEED,
 } from "../../../../shared/AppConstants";
 import { GameManifestV1Schema } from "../../../../shared/game-manifest";
-import type { AppSettings, AppStore, UserData } from "../../../../shared/types";
+import {
+  NICKNAME_EFFECTS,
+  type AppSettings,
+  type AppStore,
+  type UserData,
+} from "../../../../shared/types";
 import type { BackupImportPreview } from "../../../../shared/types";
 import { copyFolderRecursive } from "../../../utils/fileUtils";
 import {
@@ -19,6 +25,8 @@ import {
 } from "../../game/GameManifestFileService";
 import {
   BUILTIN_LIBRARY_ID,
+  assertCanonicalGameVersionRelativePath,
+  normalizeGameLibraryRoot,
   V4_SCHEMA_SQL,
 } from "../../storage/database/BzGamesDatabase";
 import {
@@ -35,6 +43,26 @@ export interface V1ManifestInput {
   sourceAppVersion: string;
   sourceGamesRoot: string;
 }
+
+const v1ArchiveManifestSchema = z
+  .object({
+    format: z.literal("bzgames-migration"),
+    formatVersion: z.literal(1),
+    exportedAt: z.string().datetime(),
+    sourceAppVersion: z.literal("3.4.2"),
+    sourcePlatform: z.literal("win32"),
+    sourceArch: z.literal("x64"),
+    sourceAppRoot: z.string().min(1),
+    sourceGamesRoot: z.string().min(1),
+    entries: z.tuple([
+      z.literal("config.json"),
+      z.literal("games"),
+      z.literal("db"),
+    ]),
+    totalFiles: z.number().int().nonnegative(),
+    totalBytes: z.number().int().nonnegative(),
+  })
+  .strict();
 
 export interface V1ConversionSummary {
   games: number;
@@ -148,7 +176,7 @@ function isWithin(parent: string, candidate: string): boolean {
 }
 
 function normalizeRoot(root: string): string {
-  return path.resolve(root).toLocaleLowerCase("en-US");
+  return normalizeGameLibraryRoot(root);
 }
 
 function assertSafeLibraryRoot(root: string): string {
@@ -185,6 +213,41 @@ function stringArray(value: unknown): string[] {
         ),
       )
     : [];
+}
+
+function finitePositiveNumber(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? value
+    : fallback;
+}
+
+function convertNicknameStyle(
+  value: unknown,
+  fallback: AppSettings["nicknameStyle"],
+): AppSettings["nicknameStyle"] {
+  const source = asRecord(value);
+  return {
+    color: stringValue(source.color, fallback.color),
+    ...(typeof source.gradientStart === "string"
+      ? { gradientStart: source.gradientStart }
+      : {}),
+    ...(typeof source.gradientEnd === "string"
+      ? { gradientEnd: source.gradientEnd }
+      : {}),
+    font: ["system", "rounded", "serif", "mono", "fantasy"].includes(
+      String(source.font),
+    )
+      ? (source.font as AppSettings["nicknameStyle"]["font"])
+      : fallback.font,
+    effect: NICKNAME_EFFECTS.includes(
+      source.effect as (typeof NICKNAME_EFFECTS)[number],
+    )
+      ? (source.effect as AppSettings["nicknameStyle"]["effect"])
+      : "none",
+    weight: ["normal", "semibold", "bold"].includes(String(source.weight))
+      ? (source.weight as AppSettings["nicknameStyle"]["weight"])
+      : fallback.weight,
+  };
 }
 
 function convertV1Config(raw: unknown): {
@@ -232,45 +295,45 @@ function convertV1Config(raw: unknown): {
           sourceSettings.libraryLayoutMode) as AppSettings["libraryLayout"])
       : "card",
   };
-  for (const key of [
-    "avatar",
-    "cloudSessionToken",
-    "cloudSessionExpiresAt",
-    "cloudUserLogin",
-    "cloudUserName",
-    "cloudUserProfileUrl",
-    "cloudLastUploadedAt",
-    "lastJoinRoomAddress",
-    "githubToken",
-  ] as const) {
+  for (const key of ["avatar", "lastJoinRoomAddress"] as const) {
     if (typeof sourceSettings[key] === "string") {
       settings[key] = sourceSettings[key] as never;
     }
   }
+  settings.nicknameStyle = convertNicknameStyle(
+    sourceSettings.nicknameStyle,
+    defaults.settings.nicknameStyle,
+  );
+  const chatBounds = asRecord(sourceSettings.chatWindowBounds);
   if (
-    sourceSettings.nicknameStyle &&
-    typeof sourceSettings.nicknameStyle === "object"
+    [chatBounds.x, chatBounds.y, chatBounds.width, chatBounds.height].every(
+      (item) => typeof item === "number" && Number.isFinite(item),
+    ) &&
+    Number(chatBounds.width) > 0 &&
+    Number(chatBounds.height) > 0
   ) {
-    settings.nicknameStyle =
-      sourceSettings.nicknameStyle as AppSettings["nicknameStyle"];
+    settings.chatWindowBounds = {
+      x: Number(chatBounds.x),
+      y: Number(chatBounds.y),
+      width: Number(chatBounds.width),
+      height: Number(chatBounds.height),
+    };
   }
+  const floatPosition = asRecord(sourceSettings.floatBallPosition);
   if (
-    sourceSettings.chatWindowBounds &&
-    typeof sourceSettings.chatWindowBounds === "object"
+    [floatPosition.x, floatPosition.y].every(
+      (item) => typeof item === "number" && Number.isFinite(item),
+    )
   ) {
-    settings.chatWindowBounds =
-      sourceSettings.chatWindowBounds as AppSettings["chatWindowBounds"];
+    settings.floatBallPosition = {
+      x: Number(floatPosition.x),
+      y: Number(floatPosition.y),
+    };
   }
-  if (
-    sourceSettings.floatBallPosition &&
-    typeof sourceSettings.floatBallPosition === "object"
-  ) {
-    settings.floatBallPosition =
-      sourceSettings.floatBallPosition as AppSettings["floatBallPosition"];
-  }
-  if (typeof sourceSettings.chatInputHeight === "number") {
-    settings.chatInputHeight = sourceSettings.chatInputHeight;
-  }
+  settings.chatInputHeight = finitePositiveNumber(
+    sourceSettings.chatInputHeight,
+    defaults.settings.chatInputHeight,
+  );
   if (typeof sourceSettings.downloadFloatBall === "boolean") {
     settings.downloadFloatBall = sourceSettings.downloadFloatBall;
   }
@@ -316,38 +379,68 @@ function convertV1Config(raw: unknown): {
 }
 
 function validateV1Schema(database: Database.Database): void {
-  const required: Record<string, string[]> = {
-    games: ["id", "added_at", "is_favorite", "sort_order", "is_present"],
-    game_versions: ["game_id", "version", "path", "added_at", "is_present"],
-    play_sessions: ["id", "game_id", "game_name", "version", "start_time"],
-    achievement_unlocks: [
-      "game_id",
-      "game_name",
-      "version",
-      "achievement_id",
-      "achievement_name",
-      "unlocked_at",
-    ],
-    stats_reports: [
-      "event_id",
-      "game_id",
-      "game_name",
-      "version",
-      "stat_id",
-      "stat_name",
-      "reported_value",
-      "report_mode",
-      "reported_at",
-    ],
+  const schemas: Record<string, { required: string[]; optional?: string[] }> = {
+    games: {
+      required: ["id", "added_at", "is_favorite", "sort_order", "is_present"],
+    },
+    game_versions: {
+      required: [
+        "game_id",
+        "version",
+        "path",
+        "added_at",
+        "install_source",
+        "market_id",
+        "is_present",
+      ],
+    },
+    play_sessions: {
+      required: [
+        "id",
+        "game_id",
+        "game_name",
+        "version",
+        "start_time",
+        "end_time",
+        "duration_ms",
+      ],
+    },
+    achievement_unlocks: {
+      required: [
+        "game_id",
+        "game_name",
+        "version",
+        "achievement_id",
+        "achievement_name",
+        "unlocked_at",
+      ],
+    },
+    stats_reports: {
+      required: [
+        "event_id",
+        "game_id",
+        "game_name",
+        "version",
+        "stat_id",
+        "stat_name",
+        "reported_value",
+        "report_mode",
+        "reported_at",
+      ],
+      optional: ["event_sequence"],
+    },
   };
-  for (const [table, expectedColumns] of Object.entries(required)) {
-    const columns = new Set(
-      database
-        .prepare(`PRAGMA table_info("${table}")`)
-        .all()
-        .map((row) => String((row as { name: unknown }).name)),
-    );
-    if (expectedColumns.some((column) => !columns.has(column))) {
+  for (const [table, schema] of Object.entries(schemas)) {
+    const columns = database
+      .prepare(`PRAGMA table_info("${table}")`)
+      .all()
+      .map((row) => String((row as { name: unknown }).name));
+    const actual = new Set(columns);
+    const allowed = new Set([...schema.required, ...(schema.optional || [])]);
+    if (
+      schema.required.some((column) => !actual.has(column)) ||
+      columns.some((column) => !allowed.has(column))
+    ) {
       throw new Error(`v1_database_schema_invalid:${table}`);
     }
   }
@@ -544,10 +637,12 @@ export async function convertExtractedV1ToV4(
           }
         }
         const normalizedRelative = relativePath.split(path.sep).join("/");
-        if (
-          !normalizedRelative ||
-          normalizedRelative.split("/").includes("..")
-        ) {
+        try {
+          assertCanonicalGameVersionRelativePath(normalizedRelative, {
+            gameId: version.game_id,
+            version: version.version,
+          });
+        } catch {
           throw new Error(
             `v1_game_path_invalid:${version.game_id}:${version.version}`,
           );
@@ -717,21 +812,13 @@ export async function tryPrepareV1Import(
 ): Promise<V1PreparedImport | null> {
   const manifestPath = path.join(extractedRoot, V1_ARCHIVE_MANIFEST);
   if (!(await fsPromises.stat(manifestPath).catch(() => null))) return null;
-  const manifest = JSON.parse(
-    await fsPromises.readFile(manifestPath, "utf8"),
-  ) as Partial<V1ManifestInput> & {
-    exportedAt?: unknown;
-    totalFiles?: unknown;
-    totalBytes?: unknown;
-  };
-  if (
-    manifest.format !== "bzgames-migration" ||
-    manifest.formatVersion !== 1 ||
-    manifest.sourceAppVersion !== "3.4.2" ||
-    typeof manifest.sourceGamesRoot !== "string"
-  ) {
+  const parsedManifest = v1ArchiveManifestSchema.safeParse(
+    JSON.parse(await fsPromises.readFile(manifestPath, "utf8")),
+  );
+  if (!parsedManifest.success) {
     throw new Error("backup_v1_manifest_invalid");
   }
+  const manifest = parsedManifest.data;
 
   await fsPromises.mkdir(convertedRoot, { recursive: true });
   const sourceGames = path.join(extractedRoot, "games");
@@ -747,7 +834,7 @@ export async function tryPrepareV1Import(
   const summary = await convertExtractedV1ToV4(
     extractedRoot,
     convertedRoot,
-    manifest as V1ManifestInput,
+    manifest,
   );
   return {
     preview: {
@@ -755,9 +842,9 @@ export async function tryPrepareV1Import(
       formatVersion: 1,
       dataModelVersion: 1,
       sourceAppVersion: manifest.sourceAppVersion,
-      exportedAt: String(manifest.exportedAt || ""),
-      totalFiles: Number(manifest.totalFiles || fallback.totalFiles),
-      totalBytes: Number(manifest.totalBytes || fallback.totalBytes),
+      exportedAt: manifest.exportedAt,
+      totalFiles: manifest.totalFiles || fallback.totalFiles,
+      totalBytes: manifest.totalBytes || fallback.totalBytes,
       externalLibraryCount: summary.externalLibraryCount,
     },
     externalManifestPaths: summary.externalManifestPaths,

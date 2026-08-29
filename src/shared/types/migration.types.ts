@@ -1,54 +1,76 @@
-export const MIGRATION_NOTICE_VERSION = "3.4.2" as const;
+export type BackupOperation = "export" | "import";
 
-export type MigrationExportStatus =
+export type BackupStatus =
   | "idle"
   | "preparing"
   | "archiving"
   | "verifying"
+  | "awaiting_confirmation"
+  | "importing"
   | "completed"
   | "canceled"
   | "error";
 
-export type MigrationExportErrorCode =
+export type BackupErrorCode =
   | "game_running"
   | "market_task_active"
   | "import_task_active"
-  | "export_in_progress"
+  | "backup_task_active"
   | "source_missing"
   | "unsafe_source_entry"
   | "unsafe_destination"
   | "insufficient_space"
   | "archive_failed"
   | "database_snapshot_failed"
+  | "unsupported_backup"
+  | "backup_validation_failed"
+  | "replacement_failed"
   | "unknown";
 
-export interface MigrationExportState {
-  status: MigrationExportStatus;
+export interface BackupState {
+  operation?: BackupOperation;
+  status: BackupStatus;
   progress: number;
   processedBytes: number;
   totalBytes: number;
   processedFiles: number;
   totalFiles: number;
   outputPath?: string;
-  errorCode?: MigrationExportErrorCode;
+  errorCode?: BackupErrorCode;
 }
 
-export interface MigrationExportResult {
+export interface BackupResult {
   success: boolean;
   canceled?: boolean;
-  state: MigrationExportState;
+  restartRequired?: boolean;
+  state: BackupState;
 }
 
-export interface MigrationManifestV1 {
-  format: "bzgames-migration";
-  formatVersion: 1;
+export interface BackupImportPreview {
+  token: string;
+  formatVersion: 1 | 2;
+  dataModelVersion: 1 | 4;
+  sourceAppVersion: string;
+  exportedAt: string;
+  totalFiles: number;
+  totalBytes: number;
+  externalLibraryCount: number;
+}
+
+export interface BackupImportSelectionResult extends BackupResult {
+  preview?: BackupImportPreview;
+}
+
+export interface BackupManifestV2 {
+  format: "bzgames-backup";
+  formatVersion: 2;
+  dataModelVersion: 4;
   exportedAt: string;
   sourceAppVersion: string;
   sourcePlatform: "win32";
-  sourceArch: string;
-  sourceAppRoot: string;
-  sourceGamesRoot: string;
+  sourceArch: "x64";
   entries: ["config.json", "games", "db"];
   totalFiles: number;
   totalBytes: number;
+  externalLibraryCount: number;
 }

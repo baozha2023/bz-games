@@ -82,6 +82,14 @@ try {
   );
   assert.equal(convertedConfig.settings.sensitiveWordFilter, false);
   assert.equal(convertedConfig.settings.libraryLayout, "steam");
+  assert.deepEqual(convertedConfig.settings.nicknameStyle, {
+    color: "#123456",
+    font: "rounded",
+    effect: "none",
+    weight: "bold",
+  });
+  assert.equal(convertedConfig.settings.chatInputHeight, 204);
+  assert.equal(convertedConfig.settings.downloadFloatBall, true);
   for (const legacyField of [
     "feedbackHistory",
     "ignoredUpdateVersion",
@@ -89,9 +97,21 @@ try {
     "migrationNoticeAcknowledgedVersion",
     "gameStoragePath",
     "gameStorageHistory",
+    "cloudSessionToken",
+    "cloudSessionExpiresAt",
+    "cloudUserLogin",
+    "cloudUserName",
+    "cloudUserProfileUrl",
+    "cloudLastUploadedAt",
   ]) {
     assert.equal(legacyField in convertedConfig.settings, false);
   }
+  assert.equal(convertedConfig.settings.accountSessionToken, "");
+  assert.equal(convertedConfig.settings.accountSessionExpiresAt, "");
+  assert.equal(convertedConfig.settings.accountUserLogin, "");
+  assert.equal(convertedConfig.settings.accountUserName, "");
+  assert.equal(convertedConfig.settings.accountUserProfileUrl, "");
+  assert.equal(convertedConfig.settings.githubToken, "");
 
   const encryptedManifest = JSON.parse(
     await fs.readFile(

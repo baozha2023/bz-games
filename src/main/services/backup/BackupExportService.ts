@@ -7,20 +7,21 @@ import path from "path";
 import { path7za } from "7zip-bin";
 import { IPC } from "../../../shared/ipc-channels";
 import type {
-  MigrationExportErrorCode,
-  MigrationExportResult,
-  MigrationExportState,
-  MigrationManifestV1,
+  BackupErrorCode,
+  BackupResult,
+  BackupState,
+  BackupManifestV2,
 } from "../../../shared/types";
 import { gameManager } from "../game/GameManager";
 import { gameImportTaskService } from "../game/GameImportTaskService";
 import { marketService } from "../market/MarketService";
+import { deserializeV4Config, serializeV4Config } from "../storage/ConfigCodec";
 import { bzGamesDatabase } from "../storage/database/BzGamesDatabase";
-import { copyFolderRecursive } from "../../utils/fileUtils";
 import { getAppRoot } from "../../utils/appPath";
 import { logger } from "../../utils/logger";
 import { mainWindow } from "../../window";
-import { migrationActivityGuard } from "./MigrationActivityGuard";
+import { backupActivityGuard } from "./BackupActivityGuard";
+import { lifecycleOperationGuard } from "../system/LifecycleOperationGuard";
 
 const DESTINATION_RESERVE_BYTES = 256 * 1024 * 1024;
 const TEMP_RESERVE_BYTES = 64 * 1024 * 1024;
@@ -30,17 +31,28 @@ interface TreeStats {
   bytes: number;
 }
 
-class MigrationExportError extends Error {
+class BackupExportError extends Error {
   constructor(
-    readonly code: MigrationExportErrorCode,
+    readonly code: BackupErrorCode,
     message: string,
   ) {
     super(message);
   }
 }
 
+function createPortableConfig(content: string): string {
+  const data = deserializeV4Config(content);
+  data.settings.accountSessionToken = "";
+  data.settings.accountSessionExpiresAt = "";
+  data.settings.accountUserLogin = "";
+  data.settings.accountUserName = "";
+  data.settings.accountUserProfileUrl = "";
+  data.settings.githubToken = "";
+  return serializeV4Config(data);
+}
+
 function abortError(): Error {
-  return Object.assign(new Error("migration_export_canceled"), {
+  return Object.assign(new Error("backup_export_canceled"), {
     name: "AbortError",
   });
 }
@@ -49,7 +61,7 @@ function throwIfAborted(signal: AbortSignal): void {
   if (signal.aborted) throw abortError();
 }
 
-export function isMigrationDestinationUnsafe(
+export function isBackupDestinationUnsafe(
   parent: string,
   candidate: string,
 ): boolean {
@@ -60,17 +72,17 @@ export function isMigrationDestinationUnsafe(
   );
 }
 
-export async function isMigrationDestinationUnsafeOnDisk(
+export async function isBackupDestinationUnsafeOnDisk(
   parent: string,
   candidate: string,
 ): Promise<boolean> {
-  if (isMigrationDestinationUnsafe(parent, candidate)) return true;
+  if (isBackupDestinationUnsafe(parent, candidate)) return true;
   try {
     const [realParent, realCandidateDirectory] = await Promise.all([
       fs.realpath(parent),
       fs.realpath(path.dirname(candidate)),
     ]);
-    return isMigrationDestinationUnsafe(
+    return isBackupDestinationUnsafe(
       realParent,
       path.join(realCandidateDirectory, path.basename(candidate)),
     );
@@ -81,21 +93,21 @@ export async function isMigrationDestinationUnsafeOnDisk(
   }
 }
 
-export async function scanMigrationTree(
+export async function scanBackupTree(
   root: string,
   signal: AbortSignal,
 ): Promise<TreeStats> {
   const rootStat = await fs.lstat(root);
   if (rootStat.isSymbolicLink()) {
-    throw new MigrationExportError(
+    throw new BackupExportError(
       "unsafe_source_entry",
-      `migration_source_link_unsupported:${root}`,
+      `backup_source_link_unsupported:${root}`,
     );
   }
   if (!rootStat.isDirectory()) {
-    throw new MigrationExportError(
+    throw new BackupExportError(
       "unsafe_source_entry",
-      `migration_source_not_directory:${root}`,
+      `backup_source_not_directory:${root}`,
     );
   }
 
@@ -111,9 +123,9 @@ export async function scanMigrationTree(
       const entryPath = path.join(directory, entry.name);
       const stat = await fs.lstat(entryPath);
       if (stat.isSymbolicLink()) {
-        throw new MigrationExportError(
+        throw new BackupExportError(
           "unsafe_source_entry",
-          `migration_source_link_unsupported:${entryPath}`,
+          `backup_source_link_unsupported:${entryPath}`,
         );
       }
       if (stat.isDirectory()) {
@@ -122,9 +134,9 @@ export async function scanMigrationTree(
         files += 1;
         bytes += stat.size;
       } else {
-        throw new MigrationExportError(
+        throw new BackupExportError(
           "unsafe_source_entry",
-          `migration_source_entry_unsupported:${entryPath}`,
+          `backup_source_entry_unsupported:${entryPath}`,
         );
       }
     }
@@ -149,9 +161,9 @@ async function ensureFreeSpace(
 ): Promise<void> {
   const freeBytes = await getFreeBytes(directory);
   if (freeBytes < requiredBytes) {
-    throw new MigrationExportError(
+    throw new BackupExportError(
       "insufficient_space",
-      `migration_insufficient_space:${requiredBytes}:${freeBytes}`,
+      `backup_insufficient_space:${requiredBytes}:${freeBytes}`,
     );
   }
 }
@@ -165,8 +177,8 @@ async function replaceVerifiedFile(
   await fs.rename(partialPath, outputPath);
 }
 
-export class MigrationExportService {
-  private state: MigrationExportState = {
+export class BackupExportService {
+  private state: BackupState = {
     status: "idle",
     progress: 0,
     processedBytes: 0,
@@ -176,21 +188,21 @@ export class MigrationExportService {
   };
   private controller: AbortController | null = null;
   private activeProcess: ChildProcessWithoutNullStreams | null = null;
-  private activeExport: Promise<MigrationExportResult> | null = null;
+  private activeExport: Promise<BackupResult> | null = null;
   private exportRequestActive = false;
 
-  getState(): MigrationExportState {
+  getState(): BackupState {
     return { ...this.state };
   }
 
-  async exportBundle(): Promise<MigrationExportResult> {
+  async exportBundle(): Promise<BackupResult> {
     if (this.exportRequestActive) {
       return {
         success: false,
         state: {
           ...this.getState(),
           status: "error",
-          errorCode: "export_in_progress",
+          errorCode: "backup_task_active",
         },
       };
     }
@@ -198,14 +210,14 @@ export class MigrationExportService {
     try {
       return await this.handleExportRequest();
     } catch (error) {
-      logger.error("[MigrationExport] Export request failed", error);
+      logger.error("[BackupExport] Export request failed", error);
       return this.failure("unknown");
     } finally {
       this.exportRequestActive = false;
     }
   }
 
-  private async handleExportRequest(): Promise<MigrationExportResult> {
+  private async handleExportRequest(): Promise<BackupResult> {
     const busy = this.getBusyError();
     if (busy) return this.failure(busy.code);
 
@@ -215,12 +227,12 @@ export class MigrationExportService {
       .replace("T", "-")
       .slice(0, 15);
     const options = {
-      title: "Export BZ-Games Migration Data",
+      title: "Export BZ-Games Backup",
       defaultPath: path.join(
         app.getPath("documents"),
-        `BZ-Games-Migration-v${app.getVersion()}-${timestamp}.bzgames`,
+        `BZ-Games-Backup-v${app.getVersion()}-${timestamp}.bzgames`,
       ),
-      filters: [{ name: "BZ-Games Migration", extensions: ["bzgames"] }],
+      filters: [{ name: "BZ-Games Backup", extensions: ["bzgames"] }],
     };
     const selection = mainWindow
       ? await dialog.showSaveDialog(mainWindow, options)
@@ -245,7 +257,7 @@ export class MigrationExportService {
     const outputPath = selection.filePath.toLowerCase().endsWith(".bzgames")
       ? selection.filePath
       : `${selection.filePath}.bzgames`;
-    if (await isMigrationDestinationUnsafeOnDisk(getAppRoot(), outputPath)) {
+    if (await isBackupDestinationUnsafeOnDisk(getAppRoot(), outputPath)) {
       return this.failure("unsafe_destination");
     }
     const existingOutputStat = await fs.lstat(outputPath).catch(() => null);
@@ -255,13 +267,16 @@ export class MigrationExportService {
     ) {
       return this.failure("unsafe_destination");
     }
-    if (!migrationActivityGuard.tryBeginExport()) {
-      return this.failure("export_in_progress");
+    if (
+      lifecycleOperationGuard.blocksNewActivity() ||
+      !backupActivityGuard.tryBegin()
+    ) {
+      return this.failure("backup_task_active");
     }
 
     const busyAfterLock = this.getBusyError();
     if (busyAfterLock) {
-      migrationActivityGuard.endExport();
+      backupActivityGuard.end();
       return this.failure(busyAfterLock.code);
     }
 
@@ -273,7 +288,7 @@ export class MigrationExportService {
       this.activeExport = null;
       this.controller = null;
       this.activeProcess = null;
-      migrationActivityGuard.endExport();
+      backupActivityGuard.end();
     }
   }
 
@@ -292,7 +307,7 @@ export class MigrationExportService {
   private async performExport(
     outputPath: string,
     signal: AbortSignal,
-  ): Promise<MigrationExportResult> {
+  ): Promise<BackupResult> {
     const appRoot = getAppRoot();
     const configPath = path.join(appRoot, "config.json");
     const gamesPath = path.join(appRoot, "games");
@@ -322,9 +337,9 @@ export class MigrationExportService {
           fs.lstat(gamesPath).catch(() => null),
         ]);
       if (!configStat || !dbStat || !databaseFileStat) {
-        throw new MigrationExportError(
+        throw new BackupExportError(
           "source_missing",
-          "migration_required_source_missing",
+          "backup_required_source_missing",
         );
       }
       if (
@@ -337,22 +352,19 @@ export class MigrationExportService {
         !databaseFileStat.isFile() ||
         (gamesStat !== null && !gamesStat.isDirectory())
       ) {
-        throw new MigrationExportError(
+        throw new BackupExportError(
           "unsafe_source_entry",
-          "migration_database_source_invalid",
+          "backup_database_source_invalid",
         );
       }
 
       const gamesExists = gamesStat !== null;
-      const [dbEstimate, gamesStats] = await Promise.all([
-        scanMigrationTree(dbPath, signal),
-        gamesExists
-          ? scanMigrationTree(gamesPath, signal)
-          : Promise.resolve({ files: 0, bytes: 0 }),
-      ]);
+      const gamesStats = await (gamesExists
+        ? scanBackupTree(gamesPath, signal)
+        : Promise.resolve({ files: 0, bytes: 0 }));
       const estimatedBytes =
-        configStat.size + dbEstimate.bytes + gamesStats.bytes;
-      const snapshotEstimateBytes = configStat.size + dbEstimate.bytes;
+        configStat.size + databaseFileStat.size + gamesStats.bytes;
+      const snapshotEstimateBytes = configStat.size + databaseFileStat.size;
       const outputDirectory = path.dirname(outputPath);
       const tempDirectory = os.tmpdir();
       const outputVolume = path.parse(path.resolve(outputDirectory)).root;
@@ -379,15 +391,25 @@ export class MigrationExportService {
 
       stagingRoot = await fs.mkdtemp(path.join(os.tmpdir(), "bzgames-export-"));
       await fs.mkdir(path.join(stagingRoot, "games"), { recursive: true });
+      await fs.mkdir(path.join(stagingRoot, "db"), { recursive: true });
       await bzGamesDatabase.suspendForSnapshot();
       try {
-        await fs.copyFile(configPath, path.join(stagingRoot, "config.json"));
-        await copyFolderRecursive(dbPath, path.join(stagingRoot, "db"), {
-          signal,
-        });
+        const portableConfig = createPortableConfig(
+          await fs.readFile(configPath, "utf8"),
+        );
+        await fs.writeFile(
+          path.join(stagingRoot, "config.json"),
+          portableConfig,
+          { encoding: "utf8", mode: 0o600 },
+        );
+        throwIfAborted(signal);
+        await fs.copyFile(
+          databaseFilePath,
+          path.join(stagingRoot, "db", path.basename(databaseFilePath)),
+        );
       } catch (error) {
         if ((error as Error)?.name === "AbortError") throw error;
-        throw new MigrationExportError(
+        throw new BackupExportError(
           "database_snapshot_failed",
           error instanceof Error ? error.message : String(error),
         );
@@ -398,28 +420,31 @@ export class MigrationExportService {
       const snapshotConfigStat = await fs.stat(
         path.join(stagingRoot, "config.json"),
       );
-      const snapshotDbStats = await scanMigrationTree(
+      const snapshotDbStats = await scanBackupTree(
         path.join(stagingRoot, "db"),
         signal,
       );
       const totalFiles = 1 + snapshotDbStats.files + gamesStats.files;
       const totalBytes =
         snapshotConfigStat.size + snapshotDbStats.bytes + gamesStats.bytes;
-      const manifest: MigrationManifestV1 = {
-        format: "bzgames-migration",
-        formatVersion: 1,
+      const externalLibraryCount = (
+        await bzGamesDatabase.getGameLibraries()
+      ).filter((library) => library.kind === "external").length;
+      const manifest: BackupManifestV2 = {
+        format: "bzgames-backup",
+        formatVersion: 2,
+        dataModelVersion: 4,
         exportedAt: new Date().toISOString(),
         sourceAppVersion: app.getVersion(),
         sourcePlatform: "win32",
-        sourceArch: process.arch,
-        sourceAppRoot: appRoot,
-        sourceGamesRoot: gamesPath,
+        sourceArch: "x64",
         entries: ["config.json", "games", "db"],
         totalFiles,
         totalBytes,
+        externalLibraryCount,
       };
       await fs.writeFile(
-        path.join(stagingRoot, "migration-manifest.json"),
+        path.join(stagingRoot, "backup-manifest.json"),
         `${JSON.stringify(manifest, null, 2)}\n`,
         "utf8",
       );
@@ -441,7 +466,7 @@ export class MigrationExportService {
           "-bb0",
           "-y",
           partialPath,
-          "migration-manifest.json",
+          "backup-manifest.json",
           "config.json",
           "db",
           "games",
@@ -499,9 +524,8 @@ export class MigrationExportService {
         });
         return { success: false, canceled: true, state };
       }
-      const code =
-        error instanceof MigrationExportError ? error.code : "unknown";
-      logger.error("[MigrationExport] Export failed", error);
+      const code = error instanceof BackupExportError ? error.code : "unknown";
+      logger.error("[BackupExport] Export failed", error);
       return this.failure(code, true);
     } finally {
       await fs.rm(partialPath, { force: true }).catch(() => undefined);
@@ -509,29 +533,26 @@ export class MigrationExportService {
         await fs
           .rm(stagingRoot, { recursive: true, force: true, maxRetries: 3 })
           .catch((error) =>
-            logger.warn(
-              "[MigrationExport] Failed to remove staging data",
-              error,
-            ),
+            logger.warn("[BackupExport] Failed to remove staging data", error),
           );
       }
     }
   }
 
-  private getBusyError(): MigrationExportError | null {
+  private getBusyError(): BackupExportError | null {
     if (gameManager.hasActiveOrLaunchingGames()) {
-      return new MigrationExportError("game_running", "migration_game_running");
+      return new BackupExportError("game_running", "backup_game_running");
     }
     if (marketService.computeTotalProgress().activeTaskCount > 0) {
-      return new MigrationExportError(
+      return new BackupExportError(
         "market_task_active",
-        "migration_market_task_active",
+        "backup_market_task_active",
       );
     }
     if (gameImportTaskService.hasActiveTasks()) {
-      return new MigrationExportError(
+      return new BackupExportError(
         "import_task_active",
-        "migration_import_task_active",
+        "backup_import_task_active",
       );
     }
     return null;
@@ -593,9 +614,9 @@ export class MigrationExportService {
         finish(
           abortRequested
             ? abortError()
-            : new MigrationExportError(
+            : new BackupExportError(
                 "archive_failed",
-                `migration_7za_start_failed:${error.message}`,
+                `backup_7za_start_failed:${error.message}`,
               ),
         ),
       );
@@ -606,9 +627,9 @@ export class MigrationExportService {
           finish();
         } else {
           finish(
-            new MigrationExportError(
+            new BackupExportError(
               "archive_failed",
-              `migration_7za_failed:${code}`,
+              `backup_7za_failed:${code}`,
             ),
           );
         }
@@ -619,9 +640,9 @@ export class MigrationExportService {
   }
 
   private failure(
-    errorCode: MigrationExportErrorCode,
+    errorCode: BackupErrorCode,
     preserveProgress = false,
-  ): MigrationExportResult {
+  ): BackupResult {
     return {
       success: false,
       state: this.setState({
@@ -641,13 +662,13 @@ export class MigrationExportService {
     };
   }
 
-  private setState(patch: Partial<MigrationExportState>): MigrationExportState {
+  private setState(patch: Partial<BackupState>): BackupState {
     this.state = { ...this.state, ...patch };
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send(IPC.MIGRATION_EVENT, this.state);
+      mainWindow.webContents.send(IPC.BACKUP_EVENT, this.state);
     }
     return this.getState();
   }
 }
 
-export const migrationExportService = new MigrationExportService();
+export const backupExportService = new BackupExportService();

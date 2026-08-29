@@ -1,11 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import fs from "fs/promises";
-import crypto from "crypto";
 import os from "os";
 import path from "path";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { path7za } from "7zip-bin";
+import {
+  createDefaultV4Store,
+  deserializeV4Config,
+  serializeV4Config,
+} from "../storage/ConfigCodec";
 
 const mocks = vi.hoisted(() => ({
   showSaveDialog: vi.fn(),
@@ -14,6 +18,10 @@ const mocks = vi.hoisted(() => ({
   gameActive: false,
   importActive: false,
   marketActive: false,
+}));
+
+vi.mock("../../../shared/AppConstants", () => ({
+  CONFIG_ENCRYPTION_SEED: "backup-test-encryption-seed",
 }));
 
 vi.mock("electron", () => ({
@@ -40,6 +48,7 @@ vi.mock("../market/MarketService", () => ({
 vi.mock("../storage/database/BzGamesDatabase", () => ({
   bzGamesDatabase: {
     getDatabasePath: () => `${process.cwd()}/db/bz_games.db`,
+    getGameLibraries: async () => [],
     suspendForSnapshot: mocks.suspendForSnapshot,
     resumeAfterSnapshot: mocks.resumeAfterSnapshot,
   },
@@ -50,21 +59,33 @@ vi.mock("../../utils/logger", () => ({
 }));
 
 import {
-  isMigrationDestinationUnsafe,
-  isMigrationDestinationUnsafeOnDisk,
-  MigrationExportService,
-  scanMigrationTree,
-} from "./MigrationExportService";
+  isBackupDestinationUnsafe,
+  isBackupDestinationUnsafeOnDisk,
+  BackupExportService,
+  scanBackupTree,
+} from "./BackupExportService";
 
 const tempDirectories: string[] = [];
 const execFileAsync = promisify(execFile);
 
 async function makeTempDirectory(): Promise<string> {
-  const directory = await fs.mkdtemp(
-    path.join(os.tmpdir(), "bz-migration-test-"),
-  );
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "bz-backup-test-"));
   tempDirectories.push(directory);
   return directory;
+}
+
+function createTestConfig(): string {
+  const data = createDefaultV4Store();
+  Object.assign(data.settings, {
+    playerId: "player-id",
+    accountSessionToken: "account-session",
+    accountSessionExpiresAt: "2030-01-01T00:00:00.000Z",
+    accountUserLogin: "tester",
+    accountUserName: "Test User",
+    accountUserProfileUrl: "https://github.com/tester",
+    githubToken: "github-token",
+  });
+  return serializeV4Config(data);
 }
 
 afterEach(async () => {
@@ -81,66 +102,7 @@ afterEach(async () => {
   );
 });
 
-describe("migration export filesystem contract", () => {
-  it("keeps the deterministic v1 importer fixture valid", async () => {
-    const fixturePath = path.resolve(
-      "docs/fixtures/BZ-Games-Migration-v1-sample.bzgames",
-    );
-    const checksumLine = await fs.readFile(`${fixturePath}.sha256`, "utf8");
-    const expectedChecksum = checksumLine.trim().split(/\s+/)[0];
-    const actualChecksum = crypto
-      .createHash("sha256")
-      .update(await fs.readFile(fixturePath))
-      .digest("hex");
-
-    expect(actualChecksum).toBe(expectedChecksum);
-    await expect(
-      execFileAsync(path7za, ["t", fixturePath]),
-    ).resolves.toBeDefined();
-    const extractedRoot = await makeTempDirectory();
-    await execFileAsync(path7za, [
-      "x",
-      "-y",
-      `-o${extractedRoot}`,
-      fixturePath,
-    ]);
-    expect((await fs.readdir(extractedRoot)).sort()).toEqual([
-      "config.json",
-      "db",
-      "games",
-      "migration-manifest.json",
-    ]);
-    const manifest = JSON.parse(
-      await fs.readFile(
-        path.join(extractedRoot, "migration-manifest.json"),
-        "utf8",
-      ),
-    );
-    const configStat = await fs.stat(path.join(extractedRoot, "config.json"));
-    const [dbStats, gamesStats] = await Promise.all([
-      scanMigrationTree(
-        path.join(extractedRoot, "db"),
-        new AbortController().signal,
-      ),
-      scanMigrationTree(
-        path.join(extractedRoot, "games"),
-        new AbortController().signal,
-      ),
-    ]);
-    expect(manifest).toMatchObject({
-      format: "bzgames-migration",
-      formatVersion: 1,
-      sourceAppVersion: "3.4.2",
-      sourcePlatform: "win32",
-      sourceArch: "x64",
-      sourceAppRoot: "C:\\BZ-Games",
-      sourceGamesRoot: "C:\\BZ-Games\\games",
-      entries: ["config.json", "games", "db"],
-      totalFiles: 1 + dbStats.files + gamesStats.files,
-      totalBytes: configStat.size + dbStats.bytes + gamesStats.bytes,
-    });
-  });
-
+describe("v2 backup export filesystem contract", () => {
   it("counts nested files and bytes while accepting empty directories", async () => {
     const root = await makeTempDirectory();
     await fs.mkdir(path.join(root, "中文目录", "empty"), { recursive: true });
@@ -151,11 +113,11 @@ describe("migration export filesystem contract", () => {
     );
 
     await expect(
-      scanMigrationTree(root, new AbortController().signal),
+      scanBackupTree(root, new AbortController().signal),
     ).resolves.toEqual({ files: 2, bytes: 18 });
   });
 
-  it("rejects links instead of following data outside the migration root", async () => {
+  it("rejects links instead of following data outside the backup root", async () => {
     const root = await makeTempDirectory();
     const outside = await makeTempDirectory();
     await fs.symlink(
@@ -165,7 +127,7 @@ describe("migration export filesystem contract", () => {
     );
 
     await expect(
-      scanMigrationTree(root, new AbortController().signal),
+      scanBackupTree(root, new AbortController().signal),
     ).rejects.toMatchObject({ code: "unsafe_source_entry" });
   });
 
@@ -174,23 +136,23 @@ describe("migration export filesystem contract", () => {
     const controller = new AbortController();
     controller.abort();
 
-    await expect(
-      scanMigrationTree(root, controller.signal),
-    ).rejects.toMatchObject({
-      name: "AbortError",
-    });
+    await expect(scanBackupTree(root, controller.signal)).rejects.toMatchObject(
+      {
+        name: "AbortError",
+      },
+    );
   });
 
   it("rejects destinations anywhere under the application root", () => {
     const appRoot = path.resolve("D:/BZ-Games");
     expect(
-      isMigrationDestinationUnsafe(
+      isBackupDestinationUnsafe(
         appRoot,
         path.join(appRoot, "backup", "data.bzgames"),
       ),
     ).toBe(true);
     expect(
-      isMigrationDestinationUnsafe(
+      isBackupDestinationUnsafe(
         appRoot,
         path.resolve("E:/Backup/data.bzgames"),
       ),
@@ -208,13 +170,13 @@ describe("migration export filesystem contract", () => {
     );
 
     await expect(
-      isMigrationDestinationUnsafeOnDisk(
+      isBackupDestinationUnsafeOnDisk(
         appRoot,
         path.join(linkedRoot, "backup.bzgames"),
       ),
     ).resolves.toBe(true);
     await expect(
-      isMigrationDestinationUnsafeOnDisk(
+      isBackupDestinationUnsafeOnDisk(
         appRoot,
         path.join(outside, "backup.bzgames"),
       ),
@@ -228,13 +190,13 @@ describe("migration export filesystem contract", () => {
         resolveDialog = resolve;
       }),
     );
-    const service = new MigrationExportService();
+    const service = new BackupExportService();
     const first = service.exportBundle();
 
     const duplicate = await service.exportBundle();
     expect(duplicate).toMatchObject({
       success: false,
-      state: { errorCode: "export_in_progress" },
+      state: { errorCode: "backup_task_active" },
     });
     expect(service.getState().status).toBe("idle");
 
@@ -255,7 +217,7 @@ describe("migration export filesystem contract", () => {
       mocks[activeFlag] = true;
 
       await expect(
-        new MigrationExportService().exportBundle(),
+        new BackupExportService().exportBundle(),
       ).resolves.toMatchObject({
         success: false,
         state: { errorCode },
@@ -274,7 +236,7 @@ describe("migration export filesystem contract", () => {
     });
 
     await expect(
-      new MigrationExportService().exportBundle(),
+      new BackupExportService().exportBundle(),
     ).resolves.toMatchObject({
       success: false,
       state: { errorCode: "unsafe_destination" },
@@ -292,10 +254,11 @@ describe("migration export filesystem contract", () => {
     await fs.writeFile(path.join(payload, "games", "demo", "game.bin"), "game");
     await fs.writeFile(path.join(payload, "db", "bz_games.db"), "database");
     await fs.writeFile(
-      path.join(payload, "migration-manifest.json"),
+      path.join(payload, "backup-manifest.json"),
       JSON.stringify({
-        format: "bzgames-migration",
-        formatVersion: 1,
+        format: "bzgames-backup",
+        formatVersion: 2,
+        dataModelVersion: 4,
         entries: ["config.json", "games", "db"],
       }),
     );
@@ -307,7 +270,7 @@ describe("migration export filesystem contract", () => {
         "-t7z",
         "-mx=0",
         archive,
-        "migration-manifest.json",
+        "backup-manifest.json",
         "config.json",
         "games",
         "db",
@@ -316,7 +279,7 @@ describe("migration export filesystem contract", () => {
     );
     await expect(execFileAsync(path7za, ["t", archive])).resolves.toBeDefined();
     const listing = await execFileAsync(path7za, ["l", "-slt", archive]);
-    expect(listing.stdout).toContain("Path = migration-manifest.json");
+    expect(listing.stdout).toContain("Path = backup-manifest.json");
     expect(listing.stdout).toContain("Path = config.json");
     expect(listing.stdout).toContain(
       `Path = games${path.sep}demo${path.sep}game.bin`,
@@ -340,7 +303,7 @@ describe("migration export filesystem contract", () => {
       });
 
       await expect(
-        new MigrationExportService().exportBundle(),
+        new BackupExportService().exportBundle(),
       ).resolves.toMatchObject({
         success: false,
         state: { errorCode: "unsafe_source_entry" },
@@ -363,7 +326,7 @@ describe("migration export filesystem contract", () => {
       });
       await fs.mkdir(path.join(sourceRoot, "db"), { recursive: true });
       const sourceFiles = {
-        config: Buffer.from("encrypted-config"),
+        config: Buffer.from(createTestConfig()),
         game: Buffer.from("game-payload"),
         database: Buffer.from("encrypted-database"),
       };
@@ -379,13 +342,17 @@ describe("migration export filesystem contract", () => {
         path.join(sourceRoot, "db", "bz_games.db"),
         sourceFiles.database,
       );
+      await fs.writeFile(
+        path.join(sourceRoot, "db", "legacy-residue.db"),
+        "must-not-be-exported",
+      );
       await fs.writeFile(outputPath, "previous-valid-backup-placeholder");
       mocks.showSaveDialog.mockResolvedValue({
         canceled: false,
         filePath: outputPath,
       });
 
-      const result = await new MigrationExportService().exportBundle();
+      const result = await new BackupExportService().exportBundle();
 
       expect(result.success).toBe(true);
       expect(await fs.readFile(path.join(sourceRoot, "config.json"))).toEqual(
@@ -408,12 +375,30 @@ describe("migration export filesystem contract", () => {
         ),
       ).toBe(false);
       const listing = await execFileAsync(path7za, ["l", "-slt", outputPath]);
-      expect(listing.stdout).toContain("Path = migration-manifest.json");
+      expect(listing.stdout).toContain("Path = backup-manifest.json");
       expect(listing.stdout).toContain("Path = config.json");
       expect(listing.stdout).toContain(
         `Path = games${path.sep}demo${path.sep}game.bin`,
       );
       expect(listing.stdout).toContain(`Path = db${path.sep}bz_games.db`);
+      expect(listing.stdout).not.toContain("legacy-residue.db");
+      const extracted = await makeTempDirectory();
+      await execFileAsync(
+        path7za,
+        ["x", `-o${extracted}`, outputPath, "config.json", "-y"],
+        { cwd: extracted },
+      );
+      const exportedConfig = deserializeV4Config(
+        await fs.readFile(path.join(extracted, "config.json"), "utf8"),
+      );
+      expect(exportedConfig.settings).toMatchObject({
+        accountSessionToken: "",
+        accountSessionExpiresAt: "",
+        accountUserLogin: "",
+        accountUserName: "",
+        accountUserProfileUrl: "",
+        githubToken: "",
+      });
     } finally {
       process.chdir(originalCwd);
     }
@@ -427,7 +412,10 @@ describe("migration export filesystem contract", () => {
     try {
       process.chdir(sourceRoot);
       await fs.mkdir(path.join(sourceRoot, "db"), { recursive: true });
-      await fs.writeFile(path.join(sourceRoot, "config.json"), "config");
+      await fs.writeFile(
+        path.join(sourceRoot, "config.json"),
+        createTestConfig(),
+      );
       await fs.writeFile(
         path.join(sourceRoot, "db", "bz_games.db"),
         "database",
@@ -437,7 +425,7 @@ describe("migration export filesystem contract", () => {
         filePath: outputPath,
       });
 
-      const result = await new MigrationExportService().exportBundle();
+      const result = await new BackupExportService().exportBundle();
 
       expect(result.success).toBe(true);
       await expect(
@@ -463,7 +451,10 @@ describe("migration export filesystem contract", () => {
       process.chdir(sourceRoot);
       await fs.mkdir(path.join(sourceRoot, "games"), { recursive: true });
       await fs.mkdir(path.join(sourceRoot, "db"), { recursive: true });
-      await fs.writeFile(path.join(sourceRoot, "config.json"), "config");
+      await fs.writeFile(
+        path.join(sourceRoot, "config.json"),
+        createTestConfig(),
+      );
       await fs.writeFile(
         path.join(sourceRoot, "db", "bz_games.db"),
         "database",
@@ -475,7 +466,7 @@ describe("migration export filesystem contract", () => {
         canceled: false,
         filePath: outputPath,
       });
-      const service = new MigrationExportService();
+      const service = new BackupExportService();
       const exportPromise = service.exportBundle();
       const deadline = Date.now() + 5_000;
       while (
