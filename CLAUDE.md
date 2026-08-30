@@ -1104,12 +1104,12 @@ interface AppSettings {
   - **服务端并联（v3.1.3 用户详情接口）**：`POST /api/v1/feedback`、`GET /api/v1/feedback`、`GET /api/v1/feedback/:id` 和图片读取接口均要求发行版 relayToken、有效 GitHub Bearer Token，并对历史、详情和图片校验反馈所有者。历史接口只返回当前账号的 `id/submittedAt` 及 `hasMore/nextCursor` 分页元数据；详情返回 `id/content/status/reply/imageCount/createdAt/updatedAt/images`，不含 `adminNote`；图片接口返回单张图片原始流。管理 API 详情额外包含 `adminNote`，更新接口接受 `status/adminNote/reply`，备注与回复均不超过 5000 字符。提交采用 busboy 流式 multipart、魔法字节校验、GitHub ID 进程内冷却、MySQL 事务 + GridFS。
   - **Portal 前端**：`bz-games-admin/` 为独立 Vue 3 + Vite + Pinia 项目，构建为 `/admin/` 同源静态站点。生产环境由 Nginx 直接从 `/var/www/campusmate/admin` 托管页面，Relay 的 `ADMIN_STATIC_DIR` 保留为本机直连或开发回退；Nginx 与 Relay 静态服务都必须提供 SPA fallback、路径穿越防护和 CSP/`nosniff`/`DENY` iframe 等安全响应头。服务端会话接口返回唯一 capability 集合，前端 `rbac.ts` 只校验能力契约，不维护角色到能力的映射；菜单、路由、按钮和提交前置检查均调用 `auth.can(capability)`。玩家进入欢迎页并管理自己的反馈，创作者仅管理自己的游戏托管，管理员无用户角色调整、托管容量查看、系统监控和桌面客户端版本上传能力，超级管理员拥有全部界面与操作。服务端仍是唯一授权决策源，并独立执行 capability、资源所有权、状态机和精确 Origin 校验。
 - **卸载系统设计（UninstallService）**：
-  - **唯一入口**：安装根固定包含 `BZ-Games-Uninstall.exe`，Windows `UninstallString` 固定为 `"<root>\BZ-Games-Uninstall.exe" --system`；根启动器只负责启动、健康检查和自动回退。系统入口始终保留全部游戏库、配置和数据库。
+  - **唯一入口**：安装根固定包含 `BZ-Games-Uninstall.exe`，Windows `UninstallString` 固定为 `"<root>\BZ-Games-Uninstall.exe" --system`；根启动器只负责启动、健康检查和自动回退。系统入口的原生选择页允许用户决定是否删除 `config.json` 与 `db/`，游戏库选项只读并明确引导到客户端内卸载。
   - **安全交接**：游戏内入口原子写入 `UninstallPlanV1`，将卸载器复制到 `%LOCALAPPDATA%\BZ-Games\UninstallWork\<operationId>\uninstall-worker.exe`，并等待 worker 完成计划、根标记、journal 和资源预检后写入 `ready.json`。`accepted: true` 只表示 worker 已安全接管。
   - **任务互斥**：统一 `LifecycleOperationGuard` 只管理卸载与更新两个客户端操作；游戏、市场、导入、存储迁移、备份、更新与房间任务会阻止卸载，卸载不取消、不等待且不强制结束活动任务。自动回退由应用进程外的根启动器执行，不存在客户端回退操作类型。
   - **可恢复状态机**：journal 按 `prepared → waiting_for_processes → preflight_complete → recovery_registered → launcher_quarantined → runtime_removed → shell_integration_removed → optional_data_cleanup → root_binaries_removed → finalized` 逐阶段原子提交。提交前把卸载注册表临时切到 worker 的 `--resume`；同一安装根优先恢复未完成 journal。
   - **提交顺序**：worker 等待 Electron 退出后再次验证绝对路径、`.bz-games-root`、普通文件、重解析点、卷根、保护目录和危险嵌套；先隔离根启动器，再调用 Velopack 删除 `.runtime`。卸载是单向提交，失败时保留已完成阶段并由工作目录 worker 或根卸载器继续，不恢复启动器、运行时或用户数据；核心完成后才逐路径清理用户勾选的数据。
-  - **结果语义**：游戏内“删除所有游戏库”和“删除配置与数据”相互独立；单个可选数据路径失败不改变核心卸载结果，只生成残留报告。完全成功静默清理工作目录；核心失败或存在残留时在 `%LOCALAPPDATA%\BZ-Games\UninstallReports` 写日志并显示原生窗口。全程普通用户权限，不使用重启后删除。
+  - **结果语义**：游戏内“删除所有游戏库”和“删除配置与数据”相互独立；系统入口只能修改“删除配置与数据”，不能扩大游戏库删除范围。原生选择页确认后在同一窗口切换为进度页，不创建尺寸不同的第二个窗口。单个可选数据路径失败不改变核心卸载结果，只生成残留报告。完全成功静默清理工作目录；核心失败或存在残留时在 `%LOCALAPPDATA%\BZ-Games\UninstallReports` 写日志并显示原生窗口。全程普通用户权限，不使用重启后删除。
 - **默认封面/图标回退**：
   - `GameCover.vue` 在无自定义 cover 且无 video 时，使用构建期 `import defaultCoverUrl from "resources/default_cover.png"` 提供的静态回退图片（16:9）。
   - `GameIcon.vue` 在无自定义 icon 时，使用构建期 `import defaultIconUrl from "resources/default_icon.png"` 提供的静态回退图片（1:1），不再渲染文本首字符。
@@ -1199,9 +1199,11 @@ interface AppSettings {
 
 - **目录边界**：根目录稳定保存 `BZ-Games.exe`、`BZ-Games-Uninstall.exe`、`.bz-games-root`、`config.json`、`games/`、`db/`；Velopack 只管理 `.runtime/`，不得覆盖或卸载同级用户数据。
 - **安装路径**：Rust 安装器使用两页原生 Windows 向导，先展示产品介绍，再让用户选择父目录并自动创建 `BZ-Games` 子目录；禁止系统目录、磁盘根、用户主目录根、网络路径、重解析点和不支持可靠原子重命名的位置；目标安装目录非空时不得覆盖。`--install-dir` 仅供自动化调用，表示明确的最终安装根目录。
+- **安装动画**：动画窗口使用逐像素 alpha 合成，不使用色键；1024×1024 原图按窗口与 DPI 等比缩放，四个碎片的尺寸与最大 X/Y 分离距离（各 100 逻辑像素）同步按 DPI 缩放。单次动作由分离、两圈旋转（两圈间隔 50ms）和归位组成，不绑定固定总时长；安装未完成时每轮动作间隔 1 秒重播。安装即使先完成，也必须等待首轮动作结束；之后若正处于动作中则等待当前动作结束，若处于轮间静止状态则可立即收口。
 - **稳定入口**：快捷方式、协议和自启动指向根目录启动器，卸载入口独立指向根目录卸载器；Velopack 使用 `--shortcuts None`。
-- **卸载语义**：Windows 系统入口只移除客户端并保留 `config.json`、`games/`、`db/`；游戏内入口才允许分别选择删除全部游戏库或删除 `config.json`、`db/`，删除动作在 Electron 退出且核心预检通过后执行。
+- **卸载语义**：Windows 系统入口显示原生选择页，其中游戏库删除项保持禁用，用户只能选择是否删除 `config.json` 与 `db/`；游戏内入口允许分别选择删除全部游戏库或删除 `config.json`、`db/`，并把已确定的游戏库删除决策交给原生 worker，不允许系统选择页改写。删除动作在 Electron 退出且核心预检通过后执行。
 - **构建链**：`npm run build:win` 依次生成 Rust 根启动器与卸载器、Electron 目录包、Velopack 资产，以及同时嵌入 Setup、启动器和卸载器的最终 `BZ-Games-Setup-<version>.exe`。4.0.0 或显式 `-FullOnly` 只生成 full；后续常规构建必须先从 GitHub 下载上一稳定版 full/feed，并同时生成当前 full、delta 和 feed，下载或 delta 缺失时构建失败。
+- **发布资产闭包**：正式 GitHub Release 必须同时包含唯一的 `releases.stable.json`、清单引用的全部 full/delta 包和唯一的 `BZ-Games-Setup-<version>.exe`。部署工作流拒绝草稿、预发布、重复文件名、不安全文件名、非法类型/大小/哈希及与 Release 元数据不一致的资产，只有完整更新资产闭包通过校验后才把安装器原子发布到下载服务器。
 
 ### 6.1.2 游戏库列表管理
 

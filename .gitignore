@@ -4,6 +4,16 @@ node_modules/
 # 构建输出
 out/
 dist/
+native/bootstrap/target/
+/.tmp-packaged-smoke/
+/.runtime/
+/.backup-work-*/
+/.backup-rollback/
+/.dev-v4-import-staging/
+/.dev-v1-data-rollback-*/
+/.bz-games-root
+/.atomic-probe-*
+/.initial-language
 
 # IDE / 编辑器配置
 .idea/
@@ -74,11 +84,8 @@ games/
 # TypeScript 构建缓存
 *.tsbuildinfo
 
-# SQLite 数据库文件
-db/*.db
-db/*.db-shm
-db/*.db-wal
-db/*.backup
+# SQLite 数据目录（数据库、WAL、SHM、初始化临时文件与本地备份）
+/db/
 
 # 示例游戏目录
 井字棋/

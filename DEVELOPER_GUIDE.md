@@ -13,9 +13,9 @@ BZ-Games 是一个**无服务器的本地联机游戏平台**。它采用"房主
 
 ### 核心架构
 
-* **平台 (Launcher)**: 负责启动游戏进程，并运行一个本地 WebSocket 服务器 (Game API Server)。
-* **游戏 (Game)**: 作为 WebSocket 客户端连接平台，通过 JSON 消息调用平台能力。
-* **联机**: 平台之间通过 P2P 或中继方式同步状态，游戏进程只需关心与本地平台的通信。
+- **平台 (Launcher)**: 负责启动游戏进程，并运行一个本地 WebSocket 服务器 (Game API Server)。
+- **游戏 (Game)**: 作为 WebSocket 客户端连接平台，通过 JSON 消息调用平台能力。
+- **联机**: 平台之间通过 P2P 或中继方式同步状态，游戏进程只需关心与本地平台的通信。
 
 ---
 
@@ -36,7 +36,7 @@ my-game/
         └── first-win.png # [可选] 成就自定义图标
 ```
 
-### 2.1 游戏清单 (game.json)
+### 2.1 Game Manifest V1（长期支持）
 
 `game.json` 必须位于游戏根目录下，是平台识别游戏的唯一凭证。
 
@@ -82,38 +82,38 @@ my-game/
 
 **字段详解：**
 
-| 字段 | 类型 | 必填 | 说明 |
-| :--- | :--- | :--- | :--- |
-| `$schema` | string | 否 | JSON Schema 地址或清单格式标识，平台不依赖该字段启动游戏 |
-| `id` | string | 是 | 长度 3–200 的全局唯一标识，必须使用小写反向域名格式，如 `com.studio.game` |
-| `name` | string | 是 | 游戏显示名称，长度 1–100 |
-| `version` | string | 是 | 最长 100 字符的完整 SemVer，如 `1.0.0`。`networkgame` 仍需合法版本号，但安装去重仅以 `id` 判断唯一性 |
-| `description` | string | 否 | 游戏描述，最长 500 字符 |
-| `author` | string | 是 | 作者名称，长度 1–100 |
-| `author_url` | string | 否 | 最长 2048 字符的 HTTP(S) 作者主页链接，游戏详情页与市场页将在作者名称旁显示跳转图标 |
-| `platformVersion`| string/array | 是 | 最长 200 字符的有效 SemVer 兼容范围（如 `">=1.0.0"`）或闭区间（如 `["1.0.0", "2.0.0"]`）；闭区间最小值不得大于最大值，导入和每次启动都会校验 |
-| `entry` | string | 是 | 最长 500 字符的启动入口。支持游戏目录内的安全相对路径（如 `index.html`、`play.htm`、`game.exe`）、`serve` 或 `url`；`serve` 要求根目录存在 `index.html` |
-| `web_url` | string | `entry=url` 时必填 | 最长 2048 字符的远程网页地址，必须为合法 HTTP(S) URL |
-| `type` | string | 是 | `"singleplayer"` (单机) / `"multiplayer"` (仅从匹配房间启动) / `"singlemultiple"` (可单人或联机) / `"networkgame"` (远程网页游戏，必须使用 `entry=url`，安装仅以 ID 去重) |
-| `multiplayer` | object | 联机必填 | 包含 `minPlayers` 和 `maxPlayers`（正整数且 `minPlayers <= maxPlayers`），`type` 为 `multiplayer` 或 `singlemultiple` 时必填；主进程会据此限制开局人数与房间容量，使用官方中继时 `maxPlayers` 不得超过 10 |
-| `icon` | string | 否 | 最长 500 字符的游戏图标安全相对路径 |
-| `cover` | string | 否 | 最长 500 字符的游戏封面安全相对路径 |
-| `video` | string | 否 | 最长 500 字符的预览视频安全相对路径，支持 `mp4/webm/ogv/mov/m4v` |
-| `encryptLocalStorage` | boolean | 否 | 是否启用 `gamedata.json` 加密持久化，仅对 Web 游戏 `localStorage` 生效，默认 `false` |
-| `windowedFullscreen` | boolean | 否 | 仅 Web 入口可用；是否在启动时自动最大化窗口，默认 `false`；用户仍可手动最大化和还原 |
-| `achievements` | array | 否 | 成就列表，最多 1000 项；字段见下方“成就定义” |
-| `statistics` | array | 否 | 统计指标列表，支持字符串、显示名称和带更新模式的对象格式；字段见下方“统计定义” |
-| `args` | string[] | 否 | 仅 Native 入口可用；最多 256 项，每项最长 8192 字符，按数组顺序原样传给目标进程 |
-| `env` | object | 否 | 仅 Native 入口可用；变量名最长 255 字符且需匹配 `[A-Za-z_][A-Za-z0-9_]*`，值最长 32768 字符，禁止使用 `BZ_` 前缀以及 `__proto__`、`prototype`、`constructor` |
+| 字段                  | 类型         | 必填               | 说明                                                                                                                                                                                                      |
+| :-------------------- | :----------- | :----------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `$schema`             | string       | 否                 | JSON Schema 地址或清单格式标识，平台不依赖该字段启动游戏                                                                                                                                                  |
+| `id`                  | string       | 是                 | 长度 3–200 的全局唯一标识，必须使用小写反向域名格式，如 `com.studio.game`                                                                                                                                 |
+| `name`                | string       | 是                 | 游戏显示名称，长度 1–100                                                                                                                                                                                  |
+| `version`             | string       | 是                 | 最长 100 字符的完整 SemVer，如 `1.0.0`。`networkgame` 仍需合法版本号，但安装去重仅以 `id` 判断唯一性                                                                                                      |
+| `description`         | string       | 否                 | 游戏描述，最长 500 字符                                                                                                                                                                                   |
+| `author`              | string       | 是                 | 作者名称，长度 1–100                                                                                                                                                                                      |
+| `author_url`          | string       | 否                 | 最长 2048 字符的 HTTP(S) 作者主页链接，游戏详情页与市场页将在作者名称旁显示跳转图标                                                                                                                       |
+| `platformVersion`     | string/array | 是                 | 最长 200 字符的有效 SemVer 兼容范围（如 `">=1.0.0"`）或闭区间（如 `["1.0.0", "2.0.0"]`）；闭区间最小值不得大于最大值，导入和每次启动都会校验                                                              |
+| `entry`               | string       | 是                 | 最长 500 字符的启动入口。支持游戏目录内的安全相对路径（如 `index.html`、`play.htm`、`game.exe`）、`serve` 或 `url`；`serve` 要求根目录存在 `index.html`                                                   |
+| `web_url`             | string       | `entry=url` 时必填 | 最长 2048 字符的远程网页地址，必须为合法 HTTP(S) URL                                                                                                                                                      |
+| `type`                | string       | 是                 | `"singleplayer"` (单机) / `"multiplayer"` (仅从匹配房间启动) / `"singlemultiple"` (可单人或联机) / `"networkgame"` (远程网页游戏，必须使用 `entry=url`，安装仅以 ID 去重)                                 |
+| `multiplayer`         | object       | 联机必填           | 包含 `minPlayers` 和 `maxPlayers`（正整数且 `minPlayers <= maxPlayers`），`type` 为 `multiplayer` 或 `singlemultiple` 时必填；主进程会据此限制开局人数与房间容量，使用官方中继时 `maxPlayers` 不得超过 10 |
+| `icon`                | string       | 否                 | 最长 500 字符的游戏图标安全相对路径                                                                                                                                                                       |
+| `cover`               | string       | 否                 | 最长 500 字符的游戏封面安全相对路径                                                                                                                                                                       |
+| `video`               | string       | 否                 | 最长 500 字符的预览视频安全相对路径，支持 `mp4/webm/ogv/mov/m4v`                                                                                                                                          |
+| `encryptLocalStorage` | boolean      | 否                 | 是否启用 `gamedata.json` 加密持久化，仅对 Web 游戏 `localStorage` 生效，默认 `false`                                                                                                                      |
+| `windowedFullscreen`  | boolean      | 否                 | 仅 Web 入口可用；是否在启动时自动最大化窗口，默认 `false`；用户仍可手动最大化和还原                                                                                                                       |
+| `achievements`        | array        | 否                 | 成就列表，最多 1000 项；字段见下方“成就定义”                                                                                                                                                              |
+| `statistics`          | array        | 否                 | 统计指标列表，支持字符串、显示名称和带更新模式的对象格式；字段见下方“统计定义”                                                                                                                            |
+| `args`                | string[]     | 否                 | 仅 Native 入口可用；最多 256 项，每项最长 8192 字符，按数组顺序原样传给目标进程                                                                                                                           |
+| `env`                 | object       | 否                 | 仅 Native 入口可用；变量名最长 255 字符且需匹配 `[A-Za-z_][A-Za-z0-9_]*`，值最长 32768 字符，禁止使用 `BZ_` 前缀以及 `__proto__`、`prototype`、`constructor`                                              |
 
 #### Multiplayer 定义
 
 `type` 为 `multiplayer` 或 `singlemultiple` 时必须声明；其他游戏类型不得声明。
 
-| 字段 | 类型 | 必填 | 说明 |
-| :--- | :--- | :--- | :--- |
-| `minPlayers` | integer | 是 | 最少开局人数，必须大于等于 1；允许设为 `1` 以支持通过房间启动的单人玩法 |
-| `maxPlayers` | integer | 是 | 房间最大人数，必须大于等于 `minPlayers`；官方中继单房最多 10 人，需使用官方中继的游戏不得配置超过 10 |
+| 字段         | 类型    | 必填 | 说明                                                                                                 |
+| :----------- | :------ | :--- | :--------------------------------------------------------------------------------------------------- |
+| `minPlayers` | integer | 是   | 最少开局人数，必须大于等于 1；允许设为 `1` 以支持通过房间启动的单人玩法                              |
+| `maxPlayers` | integer | 是   | 房间最大人数，必须大于等于 `minPlayers`；官方中继单房最多 10 人，需使用官方中继的游戏不得配置超过 10 |
 
 > 官方中继服务对每个房间强制执行 10 个客户端的总上限，房主也计入人数。即使 Manifest 声明了更大的 `maxPlayers`，第 11 个客户端仍会被中继拒绝；需要超过 10 人的游戏应使用自行部署的联机基础设施。
 
@@ -128,12 +128,12 @@ my-game/
 }
 ```
 
-| 字段 | 类型 | 必填 | 说明 |
-| :--- | :--- | :--- | :--- |
-| `id` | string | 是 | 当前游戏内唯一的成就 ID，长度 1–200；同一 Manifest 中不得重复 |
-| `title` | string | 是 | 成就标题，长度 1–200 |
-| `description` | string | 是 | 成就描述，最长 1000 字符 |
-| `icon` | string | 否 | 游戏目录内的安全相对路径，最长 500 字符；推荐 PNG、WebP 或 JPEG |
+| 字段          | 类型   | 必填 | 说明                                                            |
+| :------------ | :----- | :--- | :-------------------------------------------------------------- |
+| `id`          | string | 是   | 当前游戏内唯一的成就 ID，长度 1–200；同一 Manifest 中不得重复   |
+| `title`       | string | 是   | 成就标题，长度 1–200                                            |
+| `description` | string | 是   | 成就描述，最长 1000 字符                                        |
+| `icon`        | string | 否   | 游戏目录内的安全相对路径，最长 500 字符；推荐 PNG、WebP 或 JPEG |
 
 平台导入和设置页数据自检都会验证已声明的成就图标是否为实际文件。安装到游戏库后，即使 `game.json` 已加密，平台仍会在内存中透明解密并解析图标路径。
 
@@ -152,11 +152,11 @@ my-game/
 ]
 ```
 
-| 写法 | 说明 |
-| :--- | :--- |
-| `"kills"` | 使用统计 ID 作为平台显示名称，默认采用 `increment` |
-| `{ "score": "得分" }` | 为统计项指定显示名称，默认采用 `increment` |
-| `{ "key": { "label": "名称", "mode": "increment" \| "full" } }` | 同时指定显示名称和更新模式 |
+| 写法                                                            | 说明                                               |
+| :-------------------------------------------------------------- | :------------------------------------------------- |
+| `"kills"`                                                       | 使用统计 ID 作为平台显示名称，默认采用 `increment` |
+| `{ "score": "得分" }`                                           | 为统计项指定显示名称，默认采用 `increment`         |
+| `{ "key": { "label": "名称", "mode": "increment" \| "full" } }` | 同时指定显示名称和更新模式                         |
 
 统计 ID 长度为 1–200，不能使用 `__proto__`、`prototype` 或 `constructor`；显示名称长度为 1–200。`increment` 表示把本次值累加到已有值，`full` 表示使用本次值覆盖已有值。
 
@@ -175,6 +175,55 @@ my-game/
 >
 > `game.json` 与 `bz-config.js` 是游戏根目录中的平台保留文件名，接入游戏不得将其用于游戏自身的同名内容。
 
+### 2.2 Game Manifest V2（国际化）
+
+只有精确数值 `"manifestVersion": 2` 才按 V2 解析；未声明、`1`、`3` 或字符串 `"2"` 均按 V1 解析。V1/V2 长期并存，已安装的 V1 游戏不需要转换。
+
+```json
+{
+  "manifestVersion": 2,
+  "id": "com.developer.mygame",
+  "version": "1.0.0",
+  "defaultLocale": "zh-CN",
+  "localizations": {
+    "zh-CN": {
+      "name": "我的游戏",
+      "description": "游戏简介",
+      "achievements": {
+        "first_win": { "title": "初次胜利", "description": "赢得第一局" }
+      },
+      "statistics": { "score": "得分" }
+    },
+    "en-US": {
+      "name": "My Game",
+      "description": "Game description",
+      "achievements": {
+        "first_win": {
+          "title": "First Win",
+          "description": "Win the first game"
+        }
+      },
+      "statistics": { "score": "Score" }
+    }
+  },
+  "author": "Developer",
+  "platformVersion": ">=4.0.0",
+  "entry": "game.exe",
+  "type": "singleplayer",
+  "achievements": [
+    { "id": "first_win", "icon": "assets/achievements/first-win.png" }
+  ],
+  "statistics": [{ "id": "score", "mode": "full" }]
+}
+```
+
+- 支持语言固定为 `zh-CN`、`zh-TW`、`en-US`、`ja-JP`、`de-DE`。
+- `defaultLocale` 必须存在；当前客户端语言不存在时，游戏名、简介、成就和统计会整体回退到默认语言，禁止逐字段混合。
+- 每个已声明语言必须完整提供 `name`、`description`，并精确覆盖全部成就和统计 ID。
+- V2 的 `achievements` 只保存稳定 `id` 和可选 `icon`；`statistics` 只保存稳定 `id` 与 `mode`。显示文字全部放在语言包中。
+- 成就/统计 ID 只能使用字母、数字、点、下划线和连字符，必须唯一，禁止危险对象键。
+- 其他运行参数、入口、路径、安全和多人约束与 V1 相同。
+
 ---
 
 ## 三、 游戏启动与环境配置
@@ -186,7 +235,6 @@ my-game/
 对于 `entry` 为 `.html`、`.htm` 和 `serve` 的游戏，平台会在游戏根目录生成临时配置文件。游戏需要使用 Game API 时，应在 HTML 中引入：
 
 ```html
-
 <script src="bz-config.js"></script>
 ```
 
@@ -194,17 +242,18 @@ my-game/
 
 ```javascript
 window.BZ_CONFIG = {
-    apiPort: "12345",         // 本地 WebSocket 端口 (string)
-    token: "auth-token-...",  // 认证 Token
-    playerId: "uuid-...",     // 当前玩家 ID
-    playerName: "PlayerName", // 当前玩家昵称
-    playerAvatar: "data:image/png;base64,...", // 玩家头像 (Base64)
-    gameId: "com.developer.mygame",
-    gameVersion: "1.0.0",
-    platformVersion: "3.1.0",
-    roomId: "room-uuid",      // 当前房间 ID，单机为空字符串
-    isHost: true,             // 当前玩家是否为房主
-    isMultiple: true          // 当前是否为联机模式
+  locale: "zh-CN", // 启动瞬间的客户端语言
+  apiPort: "12345", // 本地 WebSocket 端口 (string)
+  token: "auth-token-...", // 认证 Token
+  playerId: "uuid-...", // 当前玩家 ID
+  playerName: "PlayerName", // 当前玩家昵称
+  playerAvatar: "data:image/png;base64,...", // 玩家头像 (Base64)
+  gameId: "com.developer.mygame",
+  gameVersion: "1.0.0",
+  platformVersion: "4.0.0",
+  roomId: "room-uuid", // 当前房间 ID，单机为空字符串
+  isHost: true, // 当前玩家是否为房主
+  isMultiple: true, // 当前是否为联机模式
 };
 ```
 
@@ -222,6 +271,7 @@ Web 游戏可以通过 Manifest 的 `windowedFullscreen` 控制启动时的默�
 未配置或设置为 `false` 时，游戏以 `1280×720` 普通窗口启动；设置为 `true` 时，游戏仍以 `1280×720` 的还原尺寸创建窗口，但加载完成后自动最大化。窗口保留标题栏、边框和最大化/还原按钮，用户可以还原回 `1280×720`。该字段只控制启动时的默认窗口状态，不会传给网页脚本，也不会启用原生全屏。
 
 **注意**：
+
 - `entry=serve` 时，平台仅在 `127.0.0.1` 提供静态服务，并将根路径 `/` 解析为 `index.html`。
 - `entry=url` 时，游戏平台会直接打开 `web_url` 指向的网站，不会生成/注入 `bz-config.js`，也不会注入 `window.BZ_CONFIG`。
 - `bz-config.js` 只在本地 Web 游戏运行期间存在，游戏退出或启动失败后由平台删除。
@@ -240,20 +290,21 @@ Web 游戏可以通过 Manifest 的 `windowedFullscreen` 控制启动时的默�
 }
 ```
 
-| 环境变量名 | 说明 |
-| :--- | :--- |
-| `BZ_PLATFORM` | 是否由 BZ-Games 平台启动，固定为 `"1"` |
-| `BZ_PLATFORM_VERSION` | 当前 BZ-Games 客户端版本 |
-| `BZ_API_PORT` | 本地 WebSocket 端口 |
-| `BZ_API_TOKEN` | 认证 Token |
-| `BZ_PLAYER_ID` | 当前玩家 ID |
-| `BZ_PLAYER_NAME` | 当前玩家昵称 |
-| `BZ_PLAYER_AVATAR` | 当前玩家头像 (Base64) |
-| `BZ_GAME_ID` | 当前游戏 ID |
-| `BZ_GAME_VERSION` | 当前游戏版本 |
-| `BZ_ROOM_ID` | 当前房间 ID (仅联机模式) |
-| `BZ_IS_HOST` | 是否为房主 (`"1"` 或 `"0"`) |
-| `BZ_IS_MULTIPLE` | 当前是否处于联机房间 (`"1"` 或 `"0"`) |
+| 环境变量名            | 说明                                      |
+| :-------------------- | :---------------------------------------- |
+| `BZ_PLATFORM`         | 是否由 BZ-Games 平台启动，固定为 `"1"`    |
+| `BZ_PLATFORM_VERSION` | 当前 BZ-Games 客户端版本                  |
+| `BZ_LOCALE`           | 启动瞬间的客户端语言，如 `zh-CN`、`en-US` |
+| `BZ_API_PORT`         | 本地 WebSocket 端口                       |
+| `BZ_API_TOKEN`        | 认证 Token                                |
+| `BZ_PLAYER_ID`        | 当前玩家 ID                               |
+| `BZ_PLAYER_NAME`      | 当前玩家昵称                              |
+| `BZ_PLAYER_AVATAR`    | 当前玩家头像 (Base64)                     |
+| `BZ_GAME_ID`          | 当前游戏 ID                               |
+| `BZ_GAME_VERSION`     | 当前游戏版本                              |
+| `BZ_ROOM_ID`          | 当前房间 ID (仅联机模式)                  |
+| `BZ_IS_HOST`          | 是否为房主 (`"1"` 或 `"0"`)               |
+| `BZ_IS_MULTIPLE`      | 当前是否处于联机房间 (`"1"` 或 `"0"`)     |
 
 平台会先移除继承环境中的 `ELECTRON_`、`NODE_`、`NPM_`、`VSCODE_` 前缀变量，再合并 Manifest 的 `env`，最后注入上述 `BZ_` 保留变量。`args` 会按 `game.json` 中的数组顺序原样传入 Native 进程。
 
@@ -261,13 +312,13 @@ Web 游戏可以通过 Manifest 的 `windowedFullscreen` 控制启动时的默�
 
 Web 游戏通常使用 `localStorage` 或 `IndexedDB` 存储本地数据（如存档、设置）。
 
-* **平台接管机制**：平台通过预加载脚本 (`preload/game.js`) 自动接管并覆盖了游戏的 `localStorage` 接口。
-* **统一存储路径**：所有 `localStorage` 数据会被重定向存储到 `games/<id>/<version>/gamedata.json` 文件中。
-* **版本隔离**：每个已安装的 `id/version` 使用各自目录中的 `gamedata.json`。`networkgame` 同一 ID 只保留一个已安装版本，因此不会同时存在多版本存档。
-* **可选加密**：当 Manifest 配置 `"encryptLocalStorage": true` 时，平台会对 `gamedata.json` 进行加密存储；不配置时默认明文。
-* **启动模式互通**：无论使用 `index.html` 还是 `serve` 模式启动，只要是同一游戏同一版本，都将读取同一个 `gamedata.json`
+- **平台接管机制**：平台通过预加载脚本 (`preload/game.js`) 自动接管并覆盖了游戏的 `localStorage` 接口。
+- **统一存储路径**：所有 `localStorage` 数据会被重定向存储到 `games/<id>/<version>/gamedata.json` 文件中。
+- **版本隔离**：每个已安装的 `id/version` 使用各自目录中的 `gamedata.json`。`networkgame` 同一 ID 只保留一个已安装版本，因此不会同时存在多版本存档。
+- **可选加密**：当 Manifest 配置 `"encryptLocalStorage": true` 时，平台会对 `gamedata.json` 进行加密存储；不配置时默认明文。
+- **启动模式互通**：无论使用 `index.html` 还是 `serve` 模式启动，只要是同一游戏同一版本，都将读取同一个 `gamedata.json`
   ，彻底解决了浏览器同源策略导致的存档隔离问题。
-    * **开发者提示**：你无需修改游戏代码，只需像往常一样使用 `localStorage.getItem()` 和 `setItem()` 即可。
+  - **开发者提示**：你无需修改游戏代码，只需像往常一样使用 `localStorage.getItem()` 和 `setItem()` 即可。
 
 ---
 
@@ -283,10 +334,10 @@ ws://127.0.0.1:{apiPort}
 
 `apiPort` 通过以下方式获取：
 
-| 平台 | 获取方式 |
-| :--- | :--- |
-| Web 游戏 | `window.BZ_CONFIG.apiPort` |
-| Native 游戏 | 环境变量 `BZ_API_PORT` |
+| 平台        | 获取方式                   |
+| :---------- | :------------------------- |
+| Web 游戏    | `window.BZ_CONFIG.apiPort` |
+| Native 游戏 | 环境变量 `BZ_API_PORT`     |
 
 ### 4.2 认证超时
 
@@ -294,10 +345,10 @@ ws://127.0.0.1:{apiPort}
 
 ### 4.3 协议版本
 
-| 版本 | 激活方式 | 可用接口 | 帧类型 |
-| :--- | :--- | :--- | :--- |
-| **v1**（默认） | 不传 `protocolVersion` 或传非 `2` 的值 | `message.send`、`message.broadcast` | 仅 JSON text frame |
-| **v2** | `auth` 时传入 `"protocolVersion": 2` | `message.send`、`message.broadcast`、`message.publish`、`message.batch`、`message.subscribe`、`message.unsubscribe` | JSON text frame + WebSocket binary frame |
+| 版本           | 激活方式                               | 可用接口                                                                                                            | 帧类型                                   |
+| :------------- | :------------------------------------- | :------------------------------------------------------------------------------------------------------------------ | :--------------------------------------- |
+| **v1**（默认） | 不传 `protocolVersion` 或传非 `2` 的值 | `message.send`、`message.broadcast`                                                                                 | 仅 JSON text frame                       |
+| **v2**         | `auth` 时传入 `"protocolVersion": 2`   | `message.send`、`message.broadcast`、`message.publish`、`message.batch`、`message.subscribe`、`message.unsubscribe` | JSON text frame + WebSocket binary frame |
 
 > 连接认证后协议版本**固定不可切换**。
 
@@ -307,12 +358,12 @@ ws://127.0.0.1:{apiPort}
 
 所有消息均为 JSON。一条消息包含以下字段：
 
-| 字段 | 类型 | 说明 |
-| :--- | :--- | :--- |
-| `id` | `string` | 消息唯一标识，建议使用 UUID |
-| `type` | `"request"` \| `"response"` \| `"event"` | 消息类型 |
-| `action` | `string` | 接口名称（如 `"auth"`、`"message.send"`） |
-| `payload` | `object` | 消息内容，具体结构由各接口定义 |
+| 字段      | 类型                                     | 说明                                      |
+| :-------- | :--------------------------------------- | :---------------------------------------- |
+| `id`      | `string`                                 | 消息唯一标识，建议使用 UUID               |
+| `type`    | `"request"` \| `"response"` \| `"event"` | 消息类型                                  |
+| `action`  | `string`                                 | 接口名称（如 `"auth"`、`"message.send"`） |
+| `payload` | `object`                                 | 消息内容，具体结构由各接口定义            |
 
 #### 请求（Game → Platform）
 
@@ -393,11 +444,11 @@ v2 协议支持通过 WebSocket binary frame 发送原始二进制数据，避�
 └──────────────────┴──────────────────────┴─────────────────┘
 ```
 
-| 区段 | 长度 | 编码 | 说明 |
-| :--- | :--- | :--- | :--- |
-| `headerLength` | 4 字节 | `UInt32BE` | JSON header 的字节长度，不含自身 |
-| `header` | 变长 | UTF-8 | 普通 JSON 请求头，`payload.data` 不携带二进制主体 |
-| `body` | 变长 | 原始字节 | 二进制负载 |
+| 区段           | 长度   | 编码       | 说明                                              |
+| :------------- | :----- | :--------- | :------------------------------------------------ |
+| `headerLength` | 4 字节 | `UInt32BE` | JSON header 的字节长度，不含自身                  |
+| `header`       | 变长   | UTF-8      | 普通 JSON 请求头，`payload.data` 不携带二进制主体 |
+| `body`         | 变长   | 原始字节   | 二进制负载                                        |
 
 **Header 示例**：
 
@@ -422,19 +473,29 @@ function encodeBinaryFrame(header, body) {
   const headerBytes = new TextEncoder().encode(JSON.stringify(header));
   const buf = new ArrayBuffer(4 + headerBytes.byteLength + body.byteLength);
   const view = new DataView(buf);
-  view.setUint32(0, headerBytes.byteLength, false);          // big-endian
+  view.setUint32(0, headerBytes.byteLength, false); // big-endian
   new Uint8Array(buf, 4, headerBytes.byteLength).set(headerBytes);
   new Uint8Array(buf, 4 + headerBytes.byteLength).set(new Uint8Array(body));
   return buf;
 }
 
 const positionData = new Float32Array([10.0, 20.0, 0.5]).buffer;
-ws.send(encodeBinaryFrame({
-  id: crypto.randomUUID(),
-  type: "request",
-  action: "message.publish",
-  payload: { channel: "state", seq: 1024, delivery: "latest", contentType: "binary" }
-}, positionData));
+ws.send(
+  encodeBinaryFrame(
+    {
+      id: crypto.randomUUID(),
+      type: "request",
+      action: "message.publish",
+      payload: {
+        channel: "state",
+        seq: 1024,
+        delivery: "latest",
+        contentType: "binary",
+      },
+    },
+    positionData,
+  ),
+);
 ```
 
 #### 接收（平台 → 游戏）
@@ -479,10 +540,10 @@ ws.onmessage = (event) => {
 
 **Request**
 
-| 字段 | 类型 | 必填 | 说明 |
-| :--- | :--- | :--- | :--- |
-| `token` | `string` | 是 | 平台生成的认证 Token |
-| `protocolVersion` | `2` | 否 | 显式声明使用 v2 协议。不传或非 `2` 时使用 v1 |
+| 字段              | 类型     | 必填 | 说明                                         |
+| :---------------- | :------- | :--- | :------------------------------------------- |
+| `token`           | `string` | 是   | 平台生成的认证 Token                         |
+| `protocolVersion` | `2`      | 否   | 显式声明使用 v2 协议。不传或非 `2` 时使用 v1 |
 
 ```json
 { "token": "<BZ_CONFIG.token 或 BZ_API_TOKEN>", "protocolVersion": 2 }
@@ -531,14 +592,14 @@ ws.onmessage = (event) => {
 
 **`capabilities` 字段**：描述当前连接的能力上限，见 [5.5.1](#551-capabilities-能力声明)。
 
-| 响应字段 | 类型 | 说明 |
-| :--- | :--- | :--- |
-| `success` | `boolean` | 认证是否成功 |
-| `protocolVersion` | `1` \| `2` | 当前连接的协议版本 |
-| `player.id` | `string` | 当前玩家 ID |
-| `player.name` | `string` | 当前玩家昵称 |
-| `player.isHost` | `boolean` | 是否为房主（联机模式有效） |
-| `capabilities` | `object` | v2 能力声明（仅 v2 返回） |
+| 响应字段          | 类型       | 说明                       |
+| :---------------- | :--------- | :------------------------- |
+| `success`         | `boolean`  | 认证是否成功               |
+| `protocolVersion` | `1` \| `2` | 当前连接的协议版本         |
+| `player.id`       | `string`   | 当前玩家 ID                |
+| `player.name`     | `string`   | 当前玩家昵称               |
+| `player.isHost`   | `boolean`  | 是否为房主（联机模式有效） |
+| `capabilities`    | `object`   | v2 能力声明（仅 v2 返回）  |
 
 **错误**：Token 不匹配时平台直接关闭连接，不返回错误消息。
 
@@ -563,9 +624,9 @@ ws.onmessage = (event) => {
 }
 ```
 
-| 字段 | 类型 | 说明 |
-| :--- | :--- | :--- |
-| `id` | `string` | 当前玩家 ID |
+| 字段   | 类型     | 说明         |
+| :----- | :------- | :----------- |
+| `id`   | `string` | 当前玩家 ID  |
 | `name` | `string` | 当前玩家昵称 |
 
 ---
@@ -618,21 +679,32 @@ ws.onmessage = (event) => {
   "data": {
     "layout": "scoreboard",
     "rows": [
-      { "playerId": "p-1", "kills": 12, "deaths": 3, "score": 1500, "won": true },
-      { "playerId": "p-2", "kills":  8, "deaths": 5, "score":  900 },
-      { "playerId": "p-3", "kills":  4, "deaths": 7, "score":  450 }
+      {
+        "playerId": "p-1",
+        "kills": 12,
+        "deaths": 3,
+        "score": 1500,
+        "won": true
+      },
+      { "playerId": "p-2", "kills": 8, "deaths": 5, "score": 900 },
+      { "playerId": "p-3", "kills": 4, "deaths": 7, "score": 450 }
     ],
     "stats": [
       { "label": "击杀", "values": { "p-1": 12, "p-2": 8, "p-3": 4 } },
-      { "label": "死亡", "values": { "p-1":  3, "p-2": 5, "p-3": 7 } }
+      { "label": "死亡", "values": { "p-1": 3, "p-2": 5, "p-3": 7 } }
     ],
     "duration": 1205
   },
   "config": {
     "columns": [
-      { "key": "playerId", "label": "玩家", "render": "playerName", "width": "2fr" },
-      { "key": "kills",    "label": "击杀", "align": "center" },
-      { "key": "score",    "label": "分数", "render": "score", "align": "right" }
+      {
+        "key": "playerId",
+        "label": "玩家",
+        "render": "playerName",
+        "width": "2fr"
+      },
+      { "key": "kills", "label": "击杀", "align": "center" },
+      { "key": "score", "label": "分数", "render": "score", "align": "right" }
     ],
     "highlightTop": 3,
     "compact": false
@@ -642,54 +714,54 @@ ws.onmessage = (event) => {
 
 **scoreboard 顶层字段**：
 
-| 字段 | 类型 | 必填 | 说明 |
-| :--- | :--- | :--- | :--- |
-| `mode` | `"structured"` | 是 | 结构化模式 |
-| `title` | `string` | 否 | 卡片顶部标题 |
-| `style` | `string` | 否 | 注入到卡片根元素的 CSS（覆盖颜色、边框等） |
-| `data` | `object` | 是 | 战绩数据（见下方） |
-| `config` | `object` | 否 | 布局配置（见下方） |
+| 字段     | 类型           | 必填 | 说明                                       |
+| :------- | :------------- | :--- | :----------------------------------------- |
+| `mode`   | `"structured"` | 是   | 结构化模式                                 |
+| `title`  | `string`       | 否   | 卡片顶部标题                               |
+| `style`  | `string`       | 否   | 注入到卡片根元素的 CSS（覆盖颜色、边框等） |
+| `data`   | `object`       | 是   | 战绩数据（见下方）                         |
+| `config` | `object`       | 否   | 布局配置（见下方）                         |
 
 **`data` 字段**：
 
-| 字段 | 类型 | 必填 | 说明 |
-| :--- | :--- | :--- | :--- |
-| `data.layout` | `"scoreboard"` \| `"versus"` | 是 | 布局类型 |
-| `data.rows` | `object[]` | scoreboard 必填 | 数据行，每行 key 与 `config.columns[].key` 对应 |
-| `data.stats` | `object[]` | 否 | 汇总统计，每项含 `label: string` 和 `values: Record<string, number>` |
-| `data.duration` | `number` | 否 | 游戏时长（秒），显示为 `mm:ss` 格式 |
-| `data.left` | `{ label, avatar?, score, won? }` | versus 必填 | 对决左方 |
-| `data.right` | `{ label, avatar?, score, won? }` | versus 必填 | 对决右方 |
+| 字段            | 类型                              | 必填            | 说明                                                                 |
+| :-------------- | :-------------------------------- | :-------------- | :------------------------------------------------------------------- |
+| `data.layout`   | `"scoreboard"` \| `"versus"`      | 是              | 布局类型                                                             |
+| `data.rows`     | `object[]`                        | scoreboard 必填 | 数据行，每行 key 与 `config.columns[].key` 对应                      |
+| `data.stats`    | `object[]`                        | 否              | 汇总统计，每项含 `label: string` 和 `values: Record<string, number>` |
+| `data.duration` | `number`                          | 否              | 游戏时长（秒），显示为 `mm:ss` 格式                                  |
+| `data.left`     | `{ label, avatar?, score, won? }` | versus 必填     | 对决左方                                                             |
+| `data.right`    | `{ label, avatar?, score, won? }` | versus 必填     | 对决右方                                                             |
 
 **`config` 字段**：
 
-| 字段 | 类型 | 默认值 | 说明 |
-| :--- | :--- | :--- | :--- |
-| `columns` | `object[]` | — | 列定义，每列含见下表 |
-| `columns[].key` | `string` | — | 对应 `data.rows` 中的字段名 |
-| `columns[].label` | `string` | `key` 值 | 列头显示文字 |
-| `columns[].align` | `"left"` \| `"center"` \| `"right"` | `"left"` | 水平对齐 |
-| `columns[].width` | `string` | `"1fr"` | 列宽（如 `"60px"`、`"2fr"`） |
-| `columns[].render` | `"text"` \| `"badge"` \| `"score"` \| `"avatar"` \| `"playerName"` | `"text"` | 渲染模式 |
-| `columns[].badgeColors` | `Record<number, string>` | — | badge 渲染时数值到颜色的映射 |
-| `highlightTop` | `number` | `3` | 高亮前 N 名（金→银→铜渐变背景） |
-| `compact` | `boolean` | `false` | 紧凑模式，缩小间距和字号 |
-| `showRank` | `boolean` | `true` | 是否显示排名序号列 |
-| `rankLabel` | `string` | — | 排名标签，`{n}` 替换为序号 |
-| `rowStyle` | `string` | — | 注入每行的 CSS，`{rowIndex}` 替换为行号 |
-| `separator` | `string` | `" : "` | versus 比分分隔符 |
-| `scoreFontSize` | `number` | `32` | versus 比分字号（px） |
-| `leftStyle` / `rightStyle` | `string` | — | versus 左右两侧注入的 CSS |
+| 字段                       | 类型                                                               | 默认值   | 说明                                    |
+| :------------------------- | :----------------------------------------------------------------- | :------- | :-------------------------------------- |
+| `columns`                  | `object[]`                                                         | —        | 列定义，每列含见下表                    |
+| `columns[].key`            | `string`                                                           | —        | 对应 `data.rows` 中的字段名             |
+| `columns[].label`          | `string`                                                           | `key` 值 | 列头显示文字                            |
+| `columns[].align`          | `"left"` \| `"center"` \| `"right"`                                | `"left"` | 水平对齐                                |
+| `columns[].width`          | `string`                                                           | `"1fr"`  | 列宽（如 `"60px"`、`"2fr"`）            |
+| `columns[].render`         | `"text"` \| `"badge"` \| `"score"` \| `"avatar"` \| `"playerName"` | `"text"` | 渲染模式                                |
+| `columns[].badgeColors`    | `Record<number, string>`                                           | —        | badge 渲染时数值到颜色的映射            |
+| `highlightTop`             | `number`                                                           | `3`      | 高亮前 N 名（金→银→铜渐变背景）         |
+| `compact`                  | `boolean`                                                          | `false`  | 紧凑模式，缩小间距和字号                |
+| `showRank`                 | `boolean`                                                          | `true`   | 是否显示排名序号列                      |
+| `rankLabel`                | `string`                                                           | —        | 排名标签，`{n}` 替换为序号              |
+| `rowStyle`                 | `string`                                                           | —        | 注入每行的 CSS，`{rowIndex}` 替换为行号 |
+| `separator`                | `string`                                                           | `" : "`  | versus 比分分隔符                       |
+| `scoreFontSize`            | `number`                                                           | `32`     | versus 比分字号（px）                   |
+| `leftStyle` / `rightStyle` | `string`                                                           | —        | versus 左右两侧注入的 CSS               |
 
 **`render` 模式**：
 
-| 值 | 效果 |
-| :--- | :--- |
-| `"text"` | 纯文本 |
-| `"badge"` | 彩色圆角徽章，颜色由 `badgeColors` 按数值映射 |
-| `"score"` | 大号加粗分数 |
-| `"avatar"` | 玩家头像，平台自动从房间玩家列表反查 |
-| `"playerName"` | 玩家昵称（含昵称样式），平台自动反查 |
+| 值             | 效果                                          |
+| :------------- | :-------------------------------------------- |
+| `"text"`       | 纯文本                                        |
+| `"badge"`      | 彩色圆角徽章，颜色由 `badgeColors` 按数值映射 |
+| `"score"`      | 大号加粗分数                                  |
+| `"avatar"`     | 玩家头像，平台自动从房间玩家列表反查          |
+| `"playerName"` | 玩家昵称（含昵称样式），平台自动反查          |
 
 **模式三：自定义 HTML/CSS**
 
@@ -702,12 +774,12 @@ ws.onmessage = (event) => {
 }
 ```
 
-| 字段 | 类型 | 必填 | 说明 |
-| :--- | :--- | :--- | :--- |
-| `mode` | `"custom"` | 是 | 自定义模式 |
-| `html` | `string` | 是 | HTML 片段（不含 `<html>`/`<body>` 标签） |
-| `css` | `string` | 否 | 注入到 `<style>` 块的 CSS |
-| `theme` | `"dark"` \| `"light"` \| `"auto"` | 否 | 主题，平台据此注入 `color-scheme` 和基础背景色 |
+| 字段    | 类型                              | 必填 | 说明                                           |
+| :------ | :-------------------------------- | :--- | :--------------------------------------------- |
+| `mode`  | `"custom"`                        | 是   | 自定义模式                                     |
+| `html`  | `string`                          | 是   | HTML 片段（不含 `<html>`/`<body>` 标签）       |
+| `css`   | `string`                          | 否   | 注入到 `<style>` 块的 CSS                      |
+| `theme` | `"dark"` \| `"light"` \| `"auto"` | 否   | 主题，平台据此注入 `color-scheme` 和基础背景色 |
 
 **安全说明**：自定义内容在 `sandbox="allow-scripts"` iframe 中渲染，与主页面隔离。可运行 JavaScript（chart.js、canvas 动画等），但 sandbox 限制使其无法访问父页面。`html + css` 总长不超过 128 KB。
 
@@ -745,10 +817,10 @@ ws.onmessage = (event) => {
 
 **游戏判断是否重连**：`auth` 后调用 `room.getInfo()`，检查 `reconnectPlayerIds` 是否包含自己的 `playerId`。
 
-| 游戏类型 | 推荐策略 |
-| :--- | :--- |
-| 消息驱动型（棋牌、回合制） | 直接加入当前对局，继续收发消息 |
-| 实时动作型（飞行、射击） | 新进程无法恢复运行时状态，建议展示"等待下一局"界面 |
+| 游戏类型                   | 推荐策略                                           |
+| :------------------------- | :------------------------------------------------- |
+| 消息驱动型（棋牌、回合制） | 直接加入当前对局，继续收发消息                     |
+| 实时动作型（飞行、射击）   | 新进程无法恢复运行时状态，建议展示"等待下一局"界面 |
 
 > 平台不强制支持重连。未处理时最差体验为"新实例在房间中重启"。
 
@@ -775,8 +847,20 @@ ws.onmessage = (event) => {
   "gameVersion": "1.0.0",
   "hostId": "p-123",
   "players": [
-    { "id": "p-123", "name": "HostPlayer",   "isHost": true,  "isReady": true,  "joinedAt": 1713333333000 },
-    { "id": "p-456", "name": "ClientPlayer", "isHost": false, "isReady": false, "joinedAt": 1713333340000 }
+    {
+      "id": "p-123",
+      "name": "HostPlayer",
+      "isHost": true,
+      "isReady": true,
+      "joinedAt": 1713333333000
+    },
+    {
+      "id": "p-456",
+      "name": "ClientPlayer",
+      "isHost": false,
+      "isReady": false,
+      "joinedAt": 1713333340000
+    }
   ],
   "maxPlayers": 4,
   "state": "waiting",
@@ -785,40 +869,40 @@ ws.onmessage = (event) => {
 }
 ```
 
-| 字段 | 类型 | 说明 |
-| :--- | :--- | :--- |
-| `id` | `string` | 房间 ID |
-| `gameId` | `string` | 游戏 ID |
-| `gameVersion` | `string` | 游戏版本号 |
-| `hostId` | `string` | 房主玩家 ID |
-| `hostPublicAddress` | `string?` | 房主公网地址（仅官方服务器模式） |
-| `players` | `PlayerInRoom[]` | 玩家列表（见下表） |
-| `maxPlayers` | `number` | 最大玩家数 |
-| `state` | `"waiting"` \| `"starting"` \| `"playing"` \| `"ended"` | 房间状态 |
-| `reconnectPlayerIds` | `string[]` | 需要重连游戏进程的玩家 ID 列表 |
-| `createdAt` | `number` | 房间创建时间戳（毫秒） |
+| 字段                 | 类型                                                    | 说明                             |
+| :------------------- | :------------------------------------------------------ | :------------------------------- |
+| `id`                 | `string`                                                | 房间 ID                          |
+| `gameId`             | `string`                                                | 游戏 ID                          |
+| `gameVersion`        | `string`                                                | 游戏版本号                       |
+| `hostId`             | `string`                                                | 房主玩家 ID                      |
+| `hostPublicAddress`  | `string?`                                               | 房主公网地址（仅官方服务器模式） |
+| `players`            | `PlayerInRoom[]`                                        | 玩家列表（见下表）               |
+| `maxPlayers`         | `number`                                                | 最大玩家数                       |
+| `state`              | `"waiting"` \| `"starting"` \| `"playing"` \| `"ended"` | 房间状态                         |
+| `reconnectPlayerIds` | `string[]`                                              | 需要重连游戏进程的玩家 ID 列表   |
+| `createdAt`          | `number`                                                | 房间创建时间戳（毫秒）           |
 
 **`state` 含义**：
 
-| 值 | 含义 |
-| :--- | :--- |
-| `"waiting"` | 等待玩家就绪，尚未开始游戏 |
-| `"starting"` | 正在启动游戏进程（短暂） |
-| `"playing"` | 游戏进行中 |
-| `"ended"` | 游戏已结束 |
+| 值           | 含义                       |
+| :----------- | :------------------------- |
+| `"waiting"`  | 等待玩家就绪，尚未开始游戏 |
+| `"starting"` | 正在启动游戏进程（短暂）   |
+| `"playing"`  | 游戏进行中                 |
+| `"ended"`    | 游戏已结束                 |
 
 **`PlayerInRoom` 字段**：
 
-| 字段 | 类型 | 说明 |
-| :--- | :--- | :--- |
-| `id` | `string` | 玩家 ID |
-| `name` | `string` | 玩家昵称 |
-| `avatar` | `string?` | 玩家头像（Base64 Data URL） |
-| `avatarFrame` | `string?` | 头像框 ID |
-| `nicknameStyle` | `object?` | 昵称样式 |
-| `isHost` | `boolean` | 是否为房主 |
-| `isReady` | `boolean` | 是否已准备（房主默认为 `true`） |
-| `joinedAt` | `number` | 加入时间戳（毫秒） |
+| 字段            | 类型      | 说明                            |
+| :-------------- | :-------- | :------------------------------ |
+| `id`            | `string`  | 玩家 ID                         |
+| `name`          | `string`  | 玩家昵称                        |
+| `avatar`        | `string?` | 玩家头像（Base64 Data URL）     |
+| `avatarFrame`   | `string?` | 头像框 ID                       |
+| `nicknameStyle` | `object?` | 昵称样式                        |
+| `isHost`        | `boolean` | 是否为房主                      |
+| `isReady`       | `boolean` | 是否已准备（房主默认为 `true`） |
+| `joinedAt`      | `number`  | 加入时间戳（毫秒）              |
 
 **`reconnectPlayerIds`**：当非房主玩家在 `"playing"` 状态下断开连接（进程崩溃或网络断开），其 ID 被加入此列表。重连启动时游戏可通过此字段判断重连场景。
 
@@ -834,10 +918,10 @@ v1 提供基础的广播和单播能力。未声明 `protocolVersion: 2` 的游�
 
 **Request**
 
-| 字段 | 类型 | 必填 | 说明 |
-| :--- | :--- | :--- | :--- |
-| `data` | `any` | 是 | 消息内容，任意 JSON 可序列化的值 |
-| `contentType` | `"text"` \| `"audio"` \| `"json"` \| `"binary"` | 否 | 内容类型，默认 `"json"` |
+| 字段          | 类型                                            | 必填 | 说明                             |
+| :------------ | :---------------------------------------------- | :--- | :------------------------------- |
+| `data`        | `any`                                           | 是   | 消息内容，任意 JSON 可序列化的值 |
+| `contentType` | `"text"` \| `"audio"` \| `"json"` \| `"binary"` | 否   | 内容类型，默认 `"json"`          |
 
 ```json
 {
@@ -860,12 +944,12 @@ v1 提供基础的广播和单播能力。未声明 `protocolVersion: 2` 的游�
 
 **Request**
 
-| 字段 | 类型 | 必填 | 说明 |
-| :--- | :--- | :--- | :--- |
-| `to` | `string` | 条件必填 | 目标玩家 ID（与 `targetPlayerId` 二选一，优先 `to`） |
-| `targetPlayerId` | `string` | 条件必填 | 目标玩家 ID（与 `to` 二选一） |
-| `data` | `any` | 是 | 消息内容 |
-| `contentType` | `"text"` \| `"audio"` \| `"json"` \| `"binary"` | 否 | 内容类型，默认 `"json"` |
+| 字段             | 类型                                            | 必填     | 说明                                                 |
+| :--------------- | :---------------------------------------------- | :------- | :--------------------------------------------------- |
+| `to`             | `string`                                        | 条件必填 | 目标玩家 ID（与 `targetPlayerId` 二选一，优先 `to`） |
+| `targetPlayerId` | `string`                                        | 条件必填 | 目标玩家 ID（与 `to` 二选一）                        |
+| `data`           | `any`                                           | 是       | 消息内容                                             |
+| `contentType`    | `"text"` \| `"audio"` \| `"json"` \| `"binary"` | 否       | 内容类型，默认 `"json"`                              |
 
 ```json
 {
@@ -898,19 +982,19 @@ v2 在 v1 基础上增加频道发布、批量消息、频道订阅、二进制�
 
 v2 认证成功后返回的能力上限：
 
-| 字段 | 值 | 说明 |
-| :--- | :--- | :--- |
-| `protocolVersion` | `2` | 协议版本 |
-| `maxMessageBytes` | `131072` | JSON text frame 最大字节数 |
-| `maxBinaryBytes` | `1048576` | Binary frame 最大总字节数（含 header + body） |
-| `maxBatchMessages` | `64` | `message.batch` 单批最大消息数 |
-| `supportsPublish` | `true` | 支持 `message.publish` |
-| `supportsBatch` | `true` | 支持 `message.batch` |
-| `supportsAck` | `true` | 支持 `event.messageAck` |
-| `supportsSubscribe` | `true` | 支持 `message.subscribe` / `message.unsubscribe` |
-| `supportsDelivery` | `true` | 支持 `delivery` 元数据 |
-| `supportsBinaryContentType` | `true` | 支持 `contentType: "binary"` |
-| `supportsBinaryFrames` | `true` | 支持 WebSocket binary frame |
+| 字段                        | 值        | 说明                                             |
+| :-------------------------- | :-------- | :----------------------------------------------- |
+| `protocolVersion`           | `2`       | 协议版本                                         |
+| `maxMessageBytes`           | `131072`  | JSON text frame 最大字节数                       |
+| `maxBinaryBytes`            | `1048576` | Binary frame 最大总字节数（含 header + body）    |
+| `maxBatchMessages`          | `64`      | `message.batch` 单批最大消息数                   |
+| `supportsPublish`           | `true`    | 支持 `message.publish`                           |
+| `supportsBatch`             | `true`    | 支持 `message.batch`                             |
+| `supportsAck`               | `true`    | 支持 `event.messageAck`                          |
+| `supportsSubscribe`         | `true`    | 支持 `message.subscribe` / `message.unsubscribe` |
+| `supportsDelivery`          | `true`    | 支持 `delivery` 元数据                           |
+| `supportsBinaryContentType` | `true`    | 支持 `contentType: "binary"`                     |
+| `supportsBinaryFrames`      | `true`    | 支持 WebSocket binary frame                      |
 
 ---
 
@@ -920,13 +1004,13 @@ v2 认证成功后返回的能力上限：
 
 **Request**
 
-| 字段 | 类型 | 必填 | 说明 |
-| :--- | :--- | :--- | :--- |
-| `channel` | `string` | 否 | 频道名，默认 `"default"` |
-| `seq` | `number` | 否 | 消息序号，用于判断乱序或跳帧 |
-| `delivery` | `"reliable"` \| `"ordered"` \| `"latest"` \| `"unreliable"` | 否 | 投递语义，默认 `"reliable"` |
-| `data` | `any` | 否 | 消息内容（二进制帧时在 body 中，此处不传） |
-| `contentType` | `string` | 否 | 内容类型，默认 `"json"` |
+| 字段          | 类型                                                        | 必填 | 说明                                       |
+| :------------ | :---------------------------------------------------------- | :--- | :----------------------------------------- |
+| `channel`     | `string`                                                    | 否   | 频道名，默认 `"default"`                   |
+| `seq`         | `number`                                                    | 否   | 消息序号，用于判断乱序或跳帧               |
+| `delivery`    | `"reliable"` \| `"ordered"` \| `"latest"` \| `"unreliable"` | 否   | 投递语义，默认 `"reliable"`                |
+| `data`        | `any`                                                       | 否   | 消息内容（二进制帧时在 body 中，此处不传） |
+| `contentType` | `string`                                                    | 否   | 内容类型，默认 `"json"`                    |
 
 ```json
 {
@@ -940,12 +1024,12 @@ v2 认证成功后返回的能力上限：
 
 **`delivery` 说明**：
 
-| 值 | 用途 |
-| :--- | :--- |
-| `"reliable"` | 可靠投递，中继成功后推送 `event.messageAck` |
-| `"ordered"` | 有序投递，平台按 `seq` 去重和排序 |
-| `"latest"` | 仅保留最新消息，旧消息可能被丢弃 |
-| `"unreliable"` | 尽力投递，可能丢失 |
+| 值             | 用途                                        |
+| :------------- | :------------------------------------------ |
+| `"reliable"`   | 可靠投递，中继成功后推送 `event.messageAck` |
+| `"ordered"`    | 有序投递，平台按 `seq` 去重和排序           |
+| `"latest"`     | 仅保留最新消息，旧消息可能被丢弃            |
+| `"unreliable"` | 尽力投递，可能丢失                          |
 
 平台自动补齐 `senderId`、`messageId`、`sentAt`、`mode: "publish"`。
 
@@ -963,10 +1047,10 @@ v2 认证成功后返回的能力上限：
 
 **Request**
 
-| 字段 | 类型 | 必填 | 说明 |
-| :--- | :--- | :--- | :--- |
-| `channel` | `string` | 否 | 频道名，子消息继承此频道 |
-| `messages` | `object[]` | 是 | 消息数组，每条格式同 `message.publish` |
+| 字段       | 类型       | 必填 | 说明                                   |
+| :--------- | :--------- | :--- | :------------------------------------- |
+| `channel`  | `string`   | 否   | 频道名，子消息继承此频道               |
+| `messages` | `object[]` | 是   | 消息数组，每条格式同 `message.publish` |
 
 ```json
 {
@@ -994,9 +1078,9 @@ v2 认证成功后返回的能力上限：
 
 **Request**
 
-| 字段 | 类型 | 必填 | 说明 |
-| :--- | :--- | :--- | :--- |
-| `channels` | `string[]` | 是 | 要订阅/取消订阅的频道列表 |
+| 字段       | 类型       | 必填 | 说明                      |
+| :--------- | :--------- | :--- | :------------------------ |
+| `channels` | `string[]` | 是   | 要订阅/取消订阅的频道列表 |
 
 ```json
 { "channels": ["state", "input"] }
@@ -1029,25 +1113,25 @@ v2 通信接口失败时返回结构化错误对象：
 }
 ```
 
-| `error` 字段 | 类型 | 说明 |
-| :--- | :--- | :--- |
-| `code` | `string` | 错误码 |
-| `message` | `string` | 人类可读的错误描述 |
-| `detail` | `object?` | 附加详情，视错误类型而定 |
+| `error` 字段 | 类型      | 说明                     |
+| :----------- | :-------- | :----------------------- |
+| `code`       | `string`  | 错误码                   |
+| `message`    | `string`  | 人类可读的错误描述       |
+| `detail`     | `object?` | 附加详情，视错误类型而定 |
 
 **错误码列表**：
 
-| 错误码 | 含义 |
-| :--- | :--- |
-| `UNKNOWN_ACTION` | 未知的 action |
-| `INVALID_PAYLOAD` | payload 格式无效 |
-| `NOT_IN_ROOM` | 当前不在房间中 |
-| `MISSING_TARGET` | 缺少目标玩家 ID |
-| `TARGET_SELF` | 不允许发送给自己 |
-| `TARGET_NOT_FOUND` | 目标玩家不在房间中 |
-| `MESSAGE_TOO_LARGE` | 消息体积超限 |
-| `BATCH_TOO_LARGE` | 批量消息条数超限 |
-| `EMPTY_BATCH` | 批量消息为空 |
+| 错误码              | 含义               |
+| :------------------ | :----------------- |
+| `UNKNOWN_ACTION`    | 未知的 action      |
+| `INVALID_PAYLOAD`   | payload 格式无效   |
+| `NOT_IN_ROOM`       | 当前不在房间中     |
+| `MISSING_TARGET`    | 缺少目标玩家 ID    |
+| `TARGET_SELF`       | 不允许发送给自己   |
+| `TARGET_NOT_FOUND`  | 目标玩家不在房间中 |
+| `MESSAGE_TOO_LARGE` | 消息体积超限       |
+| `BATCH_TOO_LARGE`   | 批量消息条数超限   |
+| `EMPTY_BATCH`       | 批量消息为空       |
 
 ---
 
@@ -1077,14 +1161,14 @@ v2 通信接口失败时返回结构化错误对象：
 ]
 ```
 
-| 字段 | 类型 | 说明 |
-| :--- | :--- | :--- |
-| `id` | `string` | 成就 ID，对应 `game.json` |
-| `title` | `string` | 成就标题 |
-| `description` | `string` | 成就描述 |
-| `icon` | `string?` | 成就自定义图标在游戏目录内的相对路径；未声明时省略 |
-| `unlocked` | `boolean` | 是否已解锁 |
-| `unlockedAt` | `number?` | 首次解锁时间戳（毫秒），未解锁时省略 |
+| 字段          | 类型      | 说明                                               |
+| :------------ | :-------- | :------------------------------------------------- |
+| `id`          | `string`  | 成就 ID，对应 `game.json`                          |
+| `title`       | `string`  | 成就标题                                           |
+| `description` | `string`  | 成就描述                                           |
+| `icon`        | `string?` | 成就自定义图标在游戏目录内的相对路径；未声明时省略 |
+| `unlocked`    | `boolean` | 是否已解锁                                         |
+| `unlockedAt`  | `number?` | 首次解锁时间戳（毫秒），未解锁时省略               |
 
 ---
 
@@ -1094,10 +1178,10 @@ v2 通信接口失败时返回结构化错误对象：
 
 **Request**
 
-| 字段 | 类型 | 必填 | 说明 |
-| :--- | :--- | :--- | :--- |
-| `achievementId` | `string` | 是 | 成就 ID，对应 `game.json` |
-| `playerId` | `string` | 否 | 玩家 ID。不填则自动使用当前玩家；填写但与当前玩家不匹配则返回失败 |
+| 字段            | 类型     | 必填 | 说明                                                              |
+| :-------------- | :------- | :--- | :---------------------------------------------------------------- |
+| `achievementId` | `string` | 是   | 成就 ID，对应 `game.json`                                         |
+| `playerId`      | `string` | 否   | 玩家 ID。不填则自动使用当前玩家；填写但与当前玩家不匹配则返回失败 |
 
 ```json
 {
@@ -1115,10 +1199,10 @@ v2 通信接口失败时返回结构化错误对象：
 }
 ```
 
-| 字段 | 类型 | 说明 |
-| :--- | :--- | :--- |
-| `success` | `boolean` | 是否成功 |
-| `new` | `boolean` | 是否首次解锁 |
+| 字段      | 类型      | 说明         |
+| :-------- | :-------- | :----------- |
+| `success` | `boolean` | 是否成功     |
+| `new`     | `boolean` | 是否首次解锁 |
 
 **Response（失败）**
 
@@ -1148,10 +1232,10 @@ v2 通信接口失败时返回结构化错误对象：
 ]
 ```
 
-| `mode` 值 | 含义 |
-| :--- | :--- |
+| `mode` 值             | 含义                         |
+| :-------------------- | :--------------------------- |
 | `"increment"`（默认） | 增量：每次上报值累加到已有值 |
-| `"full"` | 全量：直接用上报值覆盖已有值 |
+| `"full"`              | 全量：直接用上报值覆盖已有值 |
 
 **Request**
 
@@ -1199,19 +1283,19 @@ payload 必须是非空对象。每个 key 必须与 `game.json` 中定义的统
 }
 ```
 
-| 字段 | 类型 | 说明 |
-| :--- | :--- | :--- |
-| `senderId` | `string` | 发送者玩家 ID（平台补齐） |
-| `messageId` | `string` | 消息唯一 ID（平台补齐，建议用于去重） |
-| `sentAt` | `number` | 发送时间戳毫秒（平台补齐） |
-| `channel` | `string` | 频道名 |
-| `mode` | `"direct"` \| `"broadcast"` \| `"publish"` \| `"batch"` | 发送模式 |
-| `delivery` | `"reliable"` \| `"ordered"` \| `"latest"` \| `"unreliable"` | 投递语义 |
-| `contentType` | `"json"` \| `"text"` \| `"audio"` \| `"binary"` | 内容类型 |
-| `seq` | `number?` | 消息序号 |
-| `data` | `any` | 对方发送的数据 |
-| `binary` | `boolean?` | 二进制帧时为 `true` |
-| `byteLength` | `number?` | 二进制帧时的 body 字节数 |
+| 字段          | 类型                                                        | 说明                                  |
+| :------------ | :---------------------------------------------------------- | :------------------------------------ |
+| `senderId`    | `string`                                                    | 发送者玩家 ID（平台补齐）             |
+| `messageId`   | `string`                                                    | 消息唯一 ID（平台补齐，建议用于去重） |
+| `sentAt`      | `number`                                                    | 发送时间戳毫秒（平台补齐）            |
+| `channel`     | `string`                                                    | 频道名                                |
+| `mode`        | `"direct"` \| `"broadcast"` \| `"publish"` \| `"batch"`     | 发送模式                              |
+| `delivery`    | `"reliable"` \| `"ordered"` \| `"latest"` \| `"unreliable"` | 投递语义                              |
+| `contentType` | `"json"` \| `"text"` \| `"audio"` \| `"binary"`             | 内容类型                              |
+| `seq`         | `number?`                                                   | 消息序号                              |
+| `data`        | `any`                                                       | 对方发送的数据                        |
+| `binary`      | `boolean?`                                                  | 二进制帧时为 `true`                   |
+| `byteLength`  | `number?`                                                   | 二进制帧时的 body 字节数              |
 
 **去重建议**：使用 `messageId` 做幂等判断。
 
@@ -1242,11 +1326,11 @@ payload 必须是非空对象。每个 key 必须与 `game.json` 中定义的统
 
 以下事件已在类型定义中存在，**当前版本尚未实际推送**。开发者无需编写处理逻辑。
 
-| 事件 | Payload | 说明 |
-| :--- | :--- | :--- |
+| 事件                 | Payload                                        | 说明           |
+| :------------------- | :--------------------------------------------- | :------------- |
 | `event.playerJoined` | `{ "player": { "id": "...", "name": "..." } }` | 新玩家加入通知 |
-| `event.playerLeft` | `{ "playerId": "..." }` | 玩家离开通知 |
-| `event.gameEnd` | `{ "reason": "..." }` | 游戏结束通知 |
+| `event.playerLeft`   | `{ "playerId": "..." }`                        | 玩家离开通知   |
+| `event.gameEnd`      | `{ "reason": "..." }`                          | 游戏结束通知   |
 
 > **替代方案**：调用 `room.getInfo()` 获取最新玩家列表和房间状态。
 
@@ -1261,7 +1345,7 @@ payload 必须是非空对象。每个 key 必须与 `game.json` 中定义的统
 function getConfig() {
   if (!window.BZ_CONFIG) {
     throw new Error(
-      'BZ_CONFIG 不可用：请使用本地 HTML/Serve 入口并在游戏脚本前加载 bz-config.js'
+      "BZ_CONFIG 不可用：请使用本地 HTML/Serve 入口并在游戏脚本前加载 bz-config.js",
     );
   }
   return window.BZ_CONFIG;
@@ -1269,15 +1353,20 @@ function getConfig() {
 
 const config = getConfig();
 let ws = null;
-const pending = new Map();  // 请求 ID → { resolve, reject }
+const pending = new Map(); // 请求 ID → { resolve, reject }
 
 // ── 2. 连接 ──
 function connect() {
-  if (!config.apiPort) return console.error('未找到 BZ-Games 配置');
+  if (!config.apiPort) return console.error("未找到 BZ-Games 配置");
   ws = new WebSocket(`ws://127.0.0.1:${config.apiPort}`);
-  ws.onopen = () => {
-    console.log('已连接');
-    sendRequest('auth', { token: config.token });
+  ws.onopen = async () => {
+    console.log("已连接");
+    try {
+      await initGame();
+    } catch (error) {
+      console.error("初始化失败", error);
+      ws.close();
+    }
   };
   ws.onmessage = (event) => {
     if (event.data instanceof ArrayBuffer) {
@@ -1285,10 +1374,10 @@ function connect() {
       return;
     }
     const msg = JSON.parse(event.data);
-    if (msg.type === 'response') handleResponse(msg);
-    if (msg.type === 'event')   handleEvent(msg);
+    if (msg.type === "response") handleResponse(msg);
+    if (msg.type === "event") handleEvent(msg);
   };
-  ws.onclose = () => console.log('连接断开');
+  ws.onclose = () => console.log("连接断开");
 }
 
 // ── 3. 请求封装（返回 Promise） ──
@@ -1296,7 +1385,7 @@ function sendRequest(action, payload) {
   return new Promise((resolve, reject) => {
     const id = crypto.randomUUID();
     pending.set(id, { resolve, reject });
-    ws.send(JSON.stringify({ id, type: 'request', action, payload }));
+    ws.send(JSON.stringify({ id, type: "request", action, payload }));
   });
 }
 
@@ -1306,7 +1395,9 @@ function handleResponse(msg) {
   if (!p) return;
   pending.delete(msg.id);
   if (msg.error) {
-    p.reject(new Error(typeof msg.error === 'string' ? msg.error : msg.error.message));
+    p.reject(
+      new Error(typeof msg.error === "string" ? msg.error : msg.error.message),
+    );
     return;
   }
   p.resolve(msg.payload);
@@ -1314,56 +1405,56 @@ function handleResponse(msg) {
 
 // ── 5. 游戏初始化 ──
 async function initGame() {
-  const auth = await sendRequest('auth', { token: config.token });
-  console.log('我是:', auth.player.name, auth.player.isHost ? '(房主)' : '');
+  const auth = await sendRequest("auth", { token: config.token });
+  console.log("我是:", auth.player.name, auth.player.isHost ? "(房主)" : "");
 
-  const room = await sendRequest('room.getInfo', {});
+  const room = await sendRequest("room.getInfo", {});
   if (room) {
-    console.log('联机模式, 状态:', room.state);
+    console.log("联机模式, 状态:", room.state);
     if (room.reconnectPlayerIds.includes(config.playerId)) {
-      console.log('这是重连启动');
+      console.log("这是重连启动");
     }
   }
 
-  await sendRequest('game.ready', {});
-  console.log('就绪');
+  await sendRequest("game.ready", {});
+  console.log("就绪");
 }
 
 // ── 6. 事件处理 ──
 function handleEvent(evt) {
   switch (evt.action) {
-    case 'event.message': {
+    case "event.message": {
       const { senderId, data } = evt.payload;
       console.log(`收到 ${senderId}:`, data);
       break;
     }
-    case 'event.messageAck':
-      console.log('消息已确认:', evt.payload.messageId);
+    case "event.messageAck":
+      console.log("消息已确认:", evt.payload.messageId);
       break;
   }
 }
 
 // ── 7. 发送消息 ──
 function broadcast(data) {
-  sendRequest('message.broadcast', { data });
+  sendRequest("message.broadcast", { data });
 }
 
 function sendTo(playerId, data) {
-  sendRequest('message.send', { to: playerId, data });
+  sendRequest("message.send", { to: playerId, data });
 }
 
 // ── 8. 上报战绩 ──
 function reportResult(results) {
-  sendRequest('game.report', {
-    mode: 'structured',
-    title: '本局结果',
-    data: { layout: 'scoreboard', rows: results, duration: 1205 },
+  sendRequest("game.report", {
+    mode: "structured",
+    title: "本局结果",
+    data: { layout: "scoreboard", rows: results, duration: 1205 },
     config: {
       columns: [
-        { key: 'playerId', label: '玩家', render: 'playerName', width: '2fr' },
-        { key: 'score',    label: '分数', render: 'score', align: 'right' }
-      ]
-    }
+        { key: "playerId", label: "玩家", render: "playerName", width: "2fr" },
+        { key: "score", label: "分数", render: "score", align: "right" },
+      ],
+    },
   });
 }
 
@@ -1374,7 +1465,10 @@ function handleBinary(data) {
   const headerBytes = new Uint8Array(data, 4, hl);
   const header = JSON.parse(new TextDecoder().decode(headerBytes));
   const body = data.slice(4 + hl);
-  if (header.action === 'event.message' && header.payload.contentType === 'binary') {
+  if (
+    header.action === "event.message" &&
+    header.payload.contentType === "binary"
+  ) {
     const values = new Float32Array(body);
     console.log(`二进制消息:`, header.payload.senderId, values);
   }
@@ -1383,3 +1477,70 @@ function handleBinary(data) {
 // ── 启动 ──
 connect();
 ```
+
+---
+
+## 八、市场 Schema 2
+
+市场只接受严格数值 `"schemaVersion": 2`；Schema 1.x、缺少版本或包含旧字段的市场不会显示。市场名称和作者保持单值，游戏名、摘要、标签、版本描述和更新说明使用完整语言包：
+
+当前三个市场的发布约定如下：
+
+- 官方 `bz-games-market` 只维护完整的默认 `zh-CN`，其他客户端语言整体回退到中文；不要添加空的其他语言占位包。
+- `bz-games-third-party-market` 和 `bz-games-github-release-market` 为每个游戏及其所有版本维护完整的 `zh-CN / zh-TW / en-US / ja-JP / de-DE` 五种语言。
+- `generatedAt` 是市场首次生成时间，后续编辑保持不变；发布内容变化时只把 `updatedAt` 更新为当前 UTC 时间。
+- 官方 `market.json` 同时承载 `sources` 目录和官方 `games` 索引；普通外部市场索引不得增加 `sources`。
+
+```json
+{
+  "schemaVersion": 2,
+  "marketId": "example-market",
+  "marketName": "Example Market",
+  "generatedAt": "2026-08-26T00:00:00.000Z",
+  "updatedAt": "2026-08-26T00:00:00.000Z",
+  "games": [
+    {
+      "id": "com.developer.mygame",
+      "defaultLocale": "zh-CN",
+      "localizations": {
+        "zh-CN": {
+          "name": "我的游戏",
+          "summary": "市场简介",
+          "tags": ["益智"]
+        },
+        "en-US": {
+          "name": "My Game",
+          "summary": "Market summary",
+          "tags": ["Puzzle"]
+        }
+      },
+      "author": "Developer",
+      "type": "singleplayer",
+      "latestVersion": "1.0.0",
+      "versions": [
+        {
+          "version": "1.0.0",
+          "platformVersion": ">=4.0.0",
+          "downloadUrl": "https://example.com/my-game.zip",
+          "size": 123456,
+          "localizations": {
+            "zh-CN": { "description": "首个版本", "releaseNotes": "首次发布" },
+            "en-US": {
+              "description": "Initial version",
+              "releaseNotes": "First release"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
+```
+
+- 游戏与其所有版本必须声明完全相同的语言集合；缺少当前语言时整包回退到游戏的 `defaultLocale`。
+- `tags` 属于语言包，搜索、市场页面和论坛指令候选标签均使用当前语言投影。
+- 市场调用、路由、安装任务和论坛引用全部使用稳定 `marketId`，不使用数组下标。
+- 版本未填写 `gameManifest` 时，平台读取安装包内原有 V1/V2 `game.json`。
+- 填写 `gameManifest` 时，平台会删除解压暂存目录里原有的 `game.json` 并从零生成，不执行字段合并：精确标记 `manifestVersion: 2` 生成 V2，其他配置生成 V1。
+- V2 override 的游戏名和简介来自市场全部语言包；成就/统计的稳定定义及语言文本可在 override 中提供。生成结果始终通过完整 Manifest Schema 后才加密安装。
+- `entry=url` 的网络游戏可只提供 V2 `gameManifest` 而不提供下载包；远程网页不会获得 `window.BZ_CONFIG`。
