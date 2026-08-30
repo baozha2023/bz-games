@@ -35,7 +35,7 @@ jobs:
       SSH_USER: ${{ vars.RELEASE_SERVER_USER }}
       RELEASE_STORAGE_DIR: /var/lib/bz-games-releases
     steps:
-      - name: Validate release and download installer
+      - name: Validate release and Velopack assets
         shell: bash
         run: |
           set -euo pipefail
@@ -45,6 +45,34 @@ jobs:
           release_json="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}")"
           [[ "$(jq -r '.draft' <<<"$release_json")" == "false" ]] || { echo "Draft releases cannot be deployed" >&2; exit 1; }
           [[ "$(jq -r '.prerelease' <<<"$release_json")" == "false" ]] || { echo "Prereleases cannot be deployed" >&2; exit 1; }
+          mapfile -t feed_asset_ids < <(jq -r '.assets[] | select(.name == "releases.stable.json") | .id' <<<"$release_json")
+          [[ "${#feed_asset_ids[@]}" -eq 1 ]] || { echo "Expected exactly one releases.stable.json asset" >&2; exit 1; }
+          gh api "repos/${GITHUB_REPOSITORY}/releases/assets/${feed_asset_ids[0]}" -H "Accept: application/octet-stream" > releases.stable.json
+          jq -e --arg version "$version" '
+            (.Assets | type == "array") and
+            (([.Assets[].FileName] | unique | length) == (.Assets | length)) and
+            ([.Assets[] | select(.Type == "Full" and .Version == $version)] | length == 1) and
+            (all(.Assets[];
+              (.Version | type == "string") and
+              (.Type == "Full" or .Type == "Delta") and
+              (.FileName | type == "string") and
+              (.FileName | length > 0) and
+              (.FileName | test("[/\\\\]") | not) and
+              (.SHA256 | type == "string") and
+              (.SHA256 | test("^[A-Fa-f0-9]{64}$")) and
+              (.Size | type == "number") and
+              (.Size | floor == .) and
+              (.Size > 0) and
+              (.Size <= 536870912)))
+          ' releases.stable.json > /dev/null || { echo "Invalid Velopack stable feed for $version" >&2; exit 1; }
+          while IFS=$'\t' read -r filename expected_size expected_sha256; do
+            asset="$(jq -c --arg name "$filename" '[.assets[] | select(.name == $name)] | if length == 1 then .[0] else null end' <<<"$release_json")"
+            [[ "$asset" != "null" ]] || { echo "Velopack feed asset is missing or duplicated: $filename" >&2; exit 1; }
+            actual_size="$(jq -r '.size' <<<"$asset")"
+            [[ "$actual_size" == "$expected_size" ]] || { echo "Velopack asset size does not match feed: $filename" >&2; exit 1; }
+            digest="$(jq -r '.digest // empty' <<<"$asset")"
+            [[ "${digest,,}" == "sha256:${expected_sha256,,}" ]] || { echo "Velopack asset digest does not match feed: $filename" >&2; exit 1; }
+          done < <(jq -r '.Assets[] | [.FileName, (.Size | tostring), .SHA256] | @tsv' releases.stable.json)
           mapfile -t asset_ids < <(jq -r --arg name "$expected" '.assets[] | select(.name == $name) | .id' <<<"$release_json")
           [[ "${#asset_ids[@]}" -eq 1 ]] || { echo "Expected exactly one asset named $expected" >&2; exit 1; }
           gh api "repos/${GITHUB_REPOSITORY}/releases/assets/${asset_ids[0]}" -H "Accept: application/octet-stream" > installer.exe
@@ -91,4 +119,4 @@ jobs:
       - name: Remove runner credentials
         if: always()
         shell: bash
-        run: rm -f ~/.ssh/release_deploy installer.exe
+        run: rm -f ~/.ssh/release_deploy installer.exe releases.stable.json

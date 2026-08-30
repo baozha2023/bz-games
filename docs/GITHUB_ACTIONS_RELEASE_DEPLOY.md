@@ -1,10 +1,13 @@
 # GitHub Actions 最新安装包部署配置
 
-正式版 GitHub Release 发布后，`.github/workflows/sync-latest-release.yml` 会将唯一匹配的
-`BZ-Games-Setup-X.Y.Z.exe` 上传到服务器，经过版本、大小、PE 文件头和 SHA-256 校验后原子发布。
+正式版 GitHub Release 发布后，`.github/workflows/sync-latest-release.yml` 会先验证
+`releases.stable.json`、其中引用的全部 Velopack full/delta 包以及唯一匹配的
+`BZ-Games-Setup-X.Y.Z.exe` 均已上传。随后安装器会被上传到服务器，经过版本、大小、PE 文件头和 SHA-256 校验后原子发布。
 草稿、预发布版和旧版本会被拒绝。同版本同文件按幂等成功处理；同版本不同文件完成校验后保留服务器当前文件，
 并以成功状态返回 `desktop_release_same_version_different_sha256`。
 工作流在传输安装器前非阻塞获取与管理端共用的发布锁；已有上传时立即失败，不排队也不在 `.incoming` 留下第二份文件。
+
+创建 GitHub Release 时必须上传 `dist/velopack` 中的 `releases.stable.json` 及该文件引用的全部 `.nupkg`。工作流会逐项核对清单 SHA-256、大小与 GitHub Release 资产元数据；只上传自定义安装器会让官网安装仍然可用，但游戏内更新源不完整，因此工作流会拒绝发布。
 
 ## 1. GitHub Environment
 
@@ -12,11 +15,11 @@
 
 添加 Environment variables：
 
-| 名称                  | 值                                                              |
-| --------------------- | --------------------------------------------------------------- |
-| `RELEASE_SERVER_HOST` | `39.106.221.85`                                                 |
-| `RELEASE_SERVER_PORT` | `22`                                                            |
-| `RELEASE_SERVER_USER` | `bz-release-deploy`                                             |
+| 名称                  | 值                                                           |
+| --------------------- | ------------------------------------------------------------ |
+| `RELEASE_SERVER_HOST` | `39.106.221.85`                                              |
+| `RELEASE_SERVER_PORT` | `22`                                                         |
+| `RELEASE_SERVER_USER` | `bz-release-deploy`                                          |
 | `RELEASE_PUBLIC_URL`  | `http://39.106.221.85:38090/api/v1/releases/latest/download` |
 
 添加 Environment secrets：
