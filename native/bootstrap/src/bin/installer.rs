@@ -1,9 +1,15 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+#[path = "../bootstrap_ui.rs"]
+mod bootstrap_ui;
 #[path = "../installer_animation.rs"]
 mod installer_animation;
 
 use anyhow::{bail, Context, Result};
+use bootstrap_ui::{
+    BODY_FONT_SIZE, BUTTON_FONT_SIZE, BUTTON_FONT_WEIGHT, FONT_FAMILY, TITLE_FONT_SIZE,
+    TITLE_FONT_WEIGHT,
+};
 use installer_animation::{AnimationRenderer, InstallPhase};
 use mslnk::ShellLink;
 use native_windows_gui as nwg;
@@ -25,14 +31,18 @@ use std::{
     time::{Duration, Instant},
 };
 use uuid::Uuid;
-use winapi::shared::windef::RECT;
-use winapi::um::wingdi::{SetDIBitsToDevice, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS};
+use winapi::shared::windef::{HBITMAP, HDC, HGDIOBJ, POINT, RECT, SIZE};
+use winapi::um::wingdi::{
+    CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, SelectObject, AC_SRC_ALPHA,
+    AC_SRC_OVER, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, BLENDFUNCTION, DIB_RGB_COLORS, HGDI_ERROR,
+};
 use winapi::um::winuser::{
-    GetWindowLongW, GetWindowRect, SetLayeredWindowAttributes, SetWindowLongW, SetWindowPos,
-    ShowWindow, GWL_EXSTYLE, GWL_STYLE, HWND_BOTTOM, HWND_TOP, LWA_COLORKEY, SWP_FRAMECHANGED,
-    SWP_HIDEWINDOW, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOOWNERZORDER, SWP_NOSIZE, SWP_SHOWWINDOW,
-    SW_HIDE, WS_CAPTION, WS_EX_LAYERED, WS_EX_TOOLWINDOW, WS_MAXIMIZEBOX, WS_MINIMIZEBOX, WS_POPUP,
-    WS_SYSMENU, WS_THICKFRAME, WS_VISIBLE,
+    GetDpiForWindow, GetMonitorInfoW, GetWindowLongW, GetWindowRect, MonitorFromWindow,
+    SetWindowLongW, SetWindowPos, UpdateLayeredWindow, GWL_EXSTYLE, GWL_STYLE, HWND_TOP,
+    MONITORINFO, MONITOR_DEFAULTTONEAREST, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE,
+    SWP_NOOWNERZORDER, SWP_NOSIZE, SWP_SHOWWINDOW, ULW_ALPHA, WS_CAPTION, WS_EX_LAYERED,
+    WS_EX_TOOLWINDOW, WS_MAXIMIZEBOX, WS_MINIMIZEBOX, WS_POPUP, WS_SYSMENU, WS_THICKFRAME,
+    WS_VISIBLE,
 };
 use windows::{
     core::PCWSTR,
@@ -72,9 +82,25 @@ const APP_ICON_Q4: &[u8] = include_bytes!(concat!(
 ));
 const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
 const NORMAL_WINDOW_SIZE: (i32, i32) = (760, 520);
-// 192px per-axis blast displacement plus the 360px logo leaves a safe
-// transparent margin around every rotated quadrant.
-const ANIMATION_WINDOW_SIZE: (i32, i32) = (1080, 1080);
+// Logical size at 96 DPI. The native layered surface scales this square to the
+// current monitor while keeping the entire fragment motion envelope visible.
+const ANIMATION_WINDOW_LOGICAL_SIZE: i32 = 1080;
+
+fn animation_window_size(hwnd: winapi::shared::windef::HWND) -> (i32, i32) {
+    let dpi_scale = unsafe { GetDpiForWindow(hwnd) }.max(96) as f32 / 96.0;
+    let desired = (ANIMATION_WINDOW_LOGICAL_SIZE as f32 * dpi_scale).round() as i32;
+    let monitor = unsafe { MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) };
+    let mut info: MONITORINFO = unsafe { std::mem::zeroed() };
+    info.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
+    if monitor.is_null() || unsafe { GetMonitorInfoW(monitor, &mut info) } == 0 {
+        return (desired, desired);
+    }
+    let work_width = info.rcWork.right - info.rcWork.left;
+    let work_height = info.rcWork.bottom - info.rcWork.top;
+    let limit = ((work_width.min(work_height) as f32) * 0.96).round() as i32;
+    let size = desired.min(limit).max(1);
+    (size, size)
+}
 
 fn app_version() -> &'static str {
     option_env!("BZ_APP_VERSION").unwrap_or(env!("CARGO_PKG_VERSION"))
@@ -238,47 +264,134 @@ enum InstallEvent {
     Canceled,
 }
 
-fn blit_pixmap(paint_data: &nwg::PaintData, pixmap: &tiny_skia::Pixmap) {
-    let paint = paint_data.begin_paint();
-    let width = pixmap.width();
-    let height = pixmap.height();
-    let mut bgra = Vec::with_capacity((width * height * 4) as usize);
-    for rgba in pixmap.data().as_chunks::<4>().0 {
-        // SetDIBitsToDevice expects bottom-up BGR(A) bytes. The negative
-        // height below makes the bitmap top-down; the channel swap is still
-        // required because tiny-skia stores pixels as RGBA.
-        bgra.extend_from_slice(&[rgba[2], rgba[1], rgba[0], 255]);
-    }
-    let mut info: BITMAPINFO = unsafe { std::mem::zeroed() };
-    info.bmiHeader = BITMAPINFOHEADER {
-        biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
-        biWidth: width as i32,
-        biHeight: -(height as i32),
-        biPlanes: 1,
-        biBitCount: 32,
-        biCompression: BI_RGB,
-        ..unsafe { std::mem::zeroed() }
-    };
-    unsafe {
-        SetDIBitsToDevice(
-            paint.hdc,
-            0,
-            0,
-            width,
-            height,
-            0,
-            0,
-            0,
-            height,
-            bgra.as_ptr() as *const _,
-            &info,
-            DIB_RGB_COLORS,
-        );
-    }
-    paint_data.end_paint(&paint);
+struct LayeredSurface {
+    memory_dc: HDC,
+    bitmap: HBITMAP,
+    previous_bitmap: HGDIOBJ,
+    bits: *mut u8,
+    width: u32,
+    height: u32,
 }
 
-const ANIMATION_TRANSPARENT_COLOR: u32 = 3 | (9 << 8) | (24 << 16);
+impl LayeredSurface {
+    fn new(width: u32, height: u32) -> Result<Self> {
+        let mut info: BITMAPINFO = unsafe { std::mem::zeroed() };
+        info.bmiHeader = BITMAPINFOHEADER {
+            biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+            biWidth: width as i32,
+            biHeight: -(height as i32),
+            biPlanes: 1,
+            biBitCount: 32,
+            biCompression: BI_RGB,
+            ..unsafe { std::mem::zeroed() }
+        };
+        let mut bits = std::ptr::null_mut();
+        let memory_dc = unsafe { CreateCompatibleDC(std::ptr::null_mut()) };
+        if memory_dc.is_null() {
+            return Err(std::io::Error::last_os_error()).context("create animation memory DC");
+        }
+        let bitmap = unsafe {
+            CreateDIBSection(
+                memory_dc,
+                &info,
+                DIB_RGB_COLORS,
+                &mut bits,
+                std::ptr::null_mut(),
+                0,
+            )
+        };
+        if bitmap.is_null() || bits.is_null() {
+            unsafe {
+                if !bitmap.is_null() {
+                    DeleteObject(bitmap.cast());
+                }
+                DeleteDC(memory_dc);
+            }
+            return Err(std::io::Error::last_os_error()).context("create animation DIB section");
+        }
+        let previous_bitmap = unsafe { SelectObject(memory_dc, bitmap.cast()) };
+        if previous_bitmap.is_null() || previous_bitmap == HGDI_ERROR {
+            unsafe {
+                DeleteObject(bitmap.cast());
+                DeleteDC(memory_dc);
+            }
+            bail!("select animation DIB section into memory DC");
+        }
+        Ok(Self {
+            memory_dc,
+            bitmap,
+            previous_bitmap,
+            bits: bits.cast(),
+            width,
+            height,
+        })
+    }
+
+    fn matches(&self, width: u32, height: u32) -> bool {
+        self.width == width && self.height == height
+    }
+
+    fn update(
+        &mut self,
+        hwnd: winapi::shared::windef::HWND,
+        pixmap: &tiny_skia::Pixmap,
+        mut destination: POINT,
+    ) -> Result<()> {
+        if !self.matches(pixmap.width(), pixmap.height()) {
+            bail!("animation surface dimensions do not match the rendered frame");
+        }
+        let bgra = unsafe { std::slice::from_raw_parts_mut(self.bits, pixmap.data().len()) };
+        for (rgba, target) in pixmap
+            .data()
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .zip(bgra.as_chunks_mut::<4>().0)
+        {
+            // tiny-skia stores premultiplied RGBA, which is exactly what
+            // UpdateLayeredWindow's AC_SRC_ALPHA mode needs after the BGRA swap.
+            target.copy_from_slice(&[rgba[2], rgba[1], rgba[0], rgba[3]]);
+        }
+        let mut source = POINT { x: 0, y: 0 };
+        let mut size = SIZE {
+            cx: self.width as i32,
+            cy: self.height as i32,
+        };
+        let mut blend = BLENDFUNCTION {
+            BlendOp: AC_SRC_OVER,
+            BlendFlags: 0,
+            SourceConstantAlpha: 255,
+            AlphaFormat: AC_SRC_ALPHA,
+        };
+        let updated = unsafe {
+            UpdateLayeredWindow(
+                hwnd,
+                std::ptr::null_mut(),
+                &mut destination,
+                &mut size,
+                self.memory_dc,
+                &mut source,
+                0,
+                &mut blend,
+                ULW_ALPHA,
+            )
+        };
+        if updated == 0 {
+            return Err(std::io::Error::last_os_error()).context("update layered animation window");
+        }
+        Ok(())
+    }
+}
+
+impl Drop for LayeredSurface {
+    fn drop(&mut self) {
+        unsafe {
+            SelectObject(self.memory_dc, self.previous_bitmap);
+            DeleteObject(self.bitmap.cast());
+            DeleteDC(self.memory_dc);
+        }
+    }
+}
 
 fn set_layered_animation_style(wizard: &InstallWizard, active: bool) {
     let Some(hwnd) = wizard.window.handle.hwnd() else {
@@ -298,9 +411,9 @@ fn set_layered_animation_style(wizard: &InstallWizard, active: bool) {
         (current_rect.top + current_rect.bottom) / 2,
     );
     let (window_width, window_height) = if active {
-        ANIMATION_WINDOW_SIZE
+        animation_window_size(hwnd)
     } else {
-        NORMAL_WINDOW_SIZE
+        wizard.normal_window_size
     };
     let window_left = current_center.0 - window_width / 2;
     let window_top = current_center.1 - window_height / 2;
@@ -317,58 +430,9 @@ fn set_layered_animation_style(wizard: &InstallWizard, active: bool) {
     } else {
         wizard.normal_window_ex_style
     };
-    let canvas_ex_style = if active {
-        wizard.normal_canvas_ex_style | WS_EX_LAYERED
-    } else {
-        wizard.normal_canvas_ex_style
-    };
-    let canvas_visibility = if active {
-        SWP_SHOWWINDOW
-    } else {
-        SWP_HIDEWINDOW
-    };
     unsafe {
         SetWindowLongW(hwnd, GWL_STYLE, style as i32);
         SetWindowLongW(hwnd, GWL_EXSTYLE, ex_style as i32);
-        if let Some(canvas_hwnd) = wizard.animation_canvas.handle.hwnd() {
-            // The full-window animation surface must never participate in the
-            // normal Intro/Location pages. Lower it and hide it explicitly.
-            SetWindowLongW(canvas_hwnd, GWL_EXSTYLE, canvas_ex_style as i32);
-            if active {
-                // Apply the same color key to the animation surface so its
-                // key-colored backing surface cannot cover the transparent
-                // parent while the borderless animation is running.
-                SetLayeredWindowAttributes(
-                    canvas_hwnd,
-                    ANIMATION_TRANSPARENT_COLOR,
-                    0,
-                    LWA_COLORKEY,
-                );
-                SetWindowPos(
-                    canvas_hwnd,
-                    HWND_TOP,
-                    0,
-                    0,
-                    window_width,
-                    window_height,
-                    SWP_NOACTIVATE | SWP_NOOWNERZORDER | canvas_visibility,
-                );
-            } else {
-                SetWindowPos(
-                    canvas_hwnd,
-                    HWND_BOTTOM,
-                    0,
-                    0,
-                    0,
-                    0,
-                    SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_NOMOVE | SWP_NOSIZE | SWP_HIDEWINDOW,
-                );
-                ShowWindow(canvas_hwnd, SW_HIDE);
-            }
-        }
-        if active {
-            SetLayeredWindowAttributes(hwnd, ANIMATION_TRANSPARENT_COLOR, 0, LWA_COLORKEY);
-        }
         SetWindowPos(
             hwnd,
             HWND_TOP,
@@ -378,6 +442,10 @@ fn set_layered_animation_style(wizard: &InstallWizard, active: bool) {
             window_height,
             SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_FRAMECHANGED | SWP_SHOWWINDOW,
         );
+    }
+    if !active {
+        wizard.animation_surface.borrow_mut().take();
+        wizard.window.invalidate();
     }
 }
 
@@ -389,7 +457,6 @@ struct InstallWizard {
     intro_rule: nwg::Frame,
     location_rule: nwg::Frame,
     footer_rule: nwg::Frame,
-    animation_canvas: nwg::ExternCanvas,
     icon_frame: nwg::ImageFrame,
     intro_title: nwg::Label,
     intro_body: nwg::Label,
@@ -411,6 +478,7 @@ struct InstallWizard {
     button_font: nwg::Font,
     animation_timer: nwg::AnimationTimer,
     animation_renderer: RefCell<AnimationRenderer>,
+    animation_surface: RefCell<Option<LayeredSurface>>,
     selected_parent: RefCell<PathBuf>,
     result: RefCell<Option<PathBuf>>,
     install_target: RefCell<Option<PathBuf>>,
@@ -421,7 +489,7 @@ struct InstallWizard {
     completion_deadline: RefCell<Option<Instant>>,
     normal_window_style: u32,
     normal_window_ex_style: u32,
-    normal_canvas_ex_style: u32,
+    normal_window_size: (i32, i32),
     page: Cell<WizardPage>,
     handler: RefCell<Option<nwg::EventHandler>>,
 }
@@ -437,7 +505,6 @@ impl InstallWizard {
         self.intro_page.set_visible(false);
         self.intro_version.set_position(40, 424);
         self.intro_version.set_visible(true);
-        self.animation_canvas.set_visible(false);
         self.location_page.set_visible(true);
         self.footer_rule.set_visible(true);
         self.back_button.set_enabled(true);
@@ -465,7 +532,6 @@ impl InstallWizard {
         self.intro_version.set_position(40, 424);
         self.intro_version.set_visible(true);
         self.location_page.set_visible(false);
-        self.animation_canvas.set_visible(false);
         self.footer_rule.set_visible(true);
         self.back_button.set_enabled(false);
         self.back_button.set_visible(true);
@@ -501,6 +567,43 @@ impl InstallWizard {
         }
     }
 
+    fn render_animation_frame(&self) -> Result<()> {
+        let hwnd = self
+            .window
+            .handle
+            .hwnd()
+            .context("installer window handle is unavailable")?;
+        let mut rect: RECT = unsafe { std::mem::zeroed() };
+        if unsafe { GetWindowRect(hwnd, &mut rect) } == 0 {
+            return Err(std::io::Error::last_os_error()).context("read animation window bounds");
+        }
+        let width = (rect.right - rect.left).max(1) as u32;
+        let height = (rect.bottom - rect.top).max(1) as u32;
+        let dpi_scale = unsafe { GetDpiForWindow(hwnd) }.max(96) as f32 / 96.0;
+        let frame =
+            self.animation_renderer
+                .borrow()
+                .render(width, height, dpi_scale, Instant::now())?;
+        let mut surface = self.animation_surface.borrow_mut();
+        if surface
+            .as_ref()
+            .is_none_or(|surface| !surface.matches(width, height))
+        {
+            *surface = Some(LayeredSurface::new(width, height)?);
+        }
+        surface
+            .as_mut()
+            .context("animation surface is unavailable")?
+            .update(
+                hwnd,
+                &frame,
+                POINT {
+                    x: rect.left,
+                    y: rect.top,
+                },
+            )
+    }
+
     fn finish_completed_install(&self) {
         self.animation_timer.stop();
         self.completion_pending.set(false);
@@ -531,7 +634,7 @@ impl InstallWizard {
                     let deadline = self
                         .animation_renderer
                         .borrow()
-                        .next_cycle_deadline(Instant::now());
+                        .completion_deadline(Instant::now());
                     *self.completion_deadline.borrow_mut() = Some(deadline);
                 }
                 InstallEvent::Failed(message) => {
@@ -563,9 +666,7 @@ impl InstallWizard {
         self.result.borrow_mut().take();
         self.completion_pending.set(false);
         self.completion_deadline.borrow_mut().take();
-        self.animation_renderer
-            .borrow_mut()
-            .restart_cycle(Instant::now());
+        self.animation_renderer.borrow_mut().restart(Instant::now());
         self.set_animation_phase(InstallPhase::Preparing);
 
         thread::Builder::new()
@@ -581,7 +682,6 @@ impl InstallWizard {
         self.intro_page.set_visible(false);
         self.intro_version.set_visible(false);
         self.location_page.set_visible(false);
-        self.animation_canvas.set_visible(true);
         self.footer_rule.set_visible(false);
         self.back_button.set_visible(false);
         self.next_button.set_visible(false);
@@ -590,14 +690,14 @@ impl InstallWizard {
         self.back_button.set_enabled(false);
         self.next_button.set_enabled(false);
         self.animation_timer.start();
-        self.animation_canvas.invalidate();
-        self.animation_canvas.set_focus();
+        self.render_animation_frame()?;
+        self.window.set_focus();
         Ok(())
     }
 
     fn build(default_parent: &Path) -> Result<Rc<Self>> {
         nwg::init().map_err(|error| anyhow::anyhow!("initialize installer UI: {error:?}"))?;
-        nwg::Font::set_global_family("Segoe UI")
+        nwg::Font::set_global_family(FONT_FAMILY)
             .map_err(|error| anyhow::anyhow!("set installer UI font: {error:?}"))?;
 
         // Keep a compact icon for the title bar.  The welcome-page image uses the
@@ -617,30 +717,31 @@ impl InstallWizard {
         let frame = source
             .frame(0)
             .map_err(|error| anyhow::anyhow!("read installer display icon: {error:?}"))?;
+        let display_icon_size = (96.0 * nwg::scale_factor()).round().max(1.0) as u32;
         let resized = decoder
-            .resize_image(&frame, [96, 96])
+            .resize_image(&frame, [display_icon_size, display_icon_size])
             .map_err(|error| anyhow::anyhow!("resize installer display icon: {error:?}"))?;
         let icon_bitmap = resized
             .as_bitmap()
             .map_err(|error| anyhow::anyhow!("create installer display bitmap: {error:?}"))?;
         let mut title_font = nwg::Font::default();
         nwg::Font::builder()
-            .family("Segoe UI")
-            .size(36)
-            .weight(700)
+            .family(FONT_FAMILY)
+            .size(TITLE_FONT_SIZE)
+            .weight(TITLE_FONT_WEIGHT)
             .build(&mut title_font)
             .map_err(|error| anyhow::anyhow!("create installer title font: {error:?}"))?;
         let mut body_font = nwg::Font::default();
         nwg::Font::builder()
-            .family("Segoe UI")
-            .size(24)
+            .family(FONT_FAMILY)
+            .size(BODY_FONT_SIZE)
             .build(&mut body_font)
             .map_err(|error| anyhow::anyhow!("create installer body font: {error:?}"))?;
         let mut button_font = nwg::Font::default();
         nwg::Font::builder()
-            .family("Segoe UI")
-            .size(20)
-            .weight(600)
+            .family(FONT_FAMILY)
+            .size(BUTTON_FONT_SIZE)
+            .weight(BUTTON_FONT_WEIGHT)
             .build(&mut button_font)
             .map_err(|error| anyhow::anyhow!("create installer button font: {error:?}"))?;
 
@@ -673,15 +774,6 @@ impl InstallWizard {
             .parent(&window)
             .build(&mut location_page)
             .map_err(|error| anyhow::anyhow!("create installer location page: {error:?}"))?;
-
-        let mut animation_canvas = nwg::ExternCanvas::default();
-        nwg::ExternCanvas::builder()
-            .flags(nwg::ExternCanvasFlags::VISIBLE)
-            .size(NORMAL_WINDOW_SIZE)
-            .position((0, 0))
-            .parent(Some(&window))
-            .build(&mut animation_canvas)
-            .map_err(|error| anyhow::anyhow!("create installer animation canvas: {error:?}"))?;
 
         let mut intro_rule = nwg::Frame::default();
         nwg::Frame::builder()
@@ -873,20 +965,22 @@ impl InstallWizard {
             .handle
             .hwnd()
             .context("installer window handle is unavailable")?;
-        let animation_canvas_handle = animation_canvas
-            .handle
-            .hwnd()
-            .context("installer animation canvas handle is unavailable")?;
         let (normal_window_style, normal_window_ex_style) = unsafe {
             (
                 GetWindowLongW(window_handle, GWL_STYLE) as u32,
                 GetWindowLongW(window_handle, GWL_EXSTYLE) as u32,
             )
         };
-        let normal_canvas_ex_style =
-            unsafe { GetWindowLongW(animation_canvas_handle, GWL_EXSTYLE) as u32 };
+        let mut normal_window_rect: RECT = unsafe { std::mem::zeroed() };
+        if unsafe { GetWindowRect(window_handle, &mut normal_window_rect) } == 0 {
+            return Err(std::io::Error::last_os_error())
+                .context("read initial installer window bounds");
+        }
+        let normal_window_size = (
+            normal_window_rect.right - normal_window_rect.left,
+            normal_window_rect.bottom - normal_window_rect.top,
+        );
         location_page.set_visible(false);
-        animation_canvas.set_visible(false);
         let wizard = Rc::new(Self {
             window,
             intro_page,
@@ -894,7 +988,6 @@ impl InstallWizard {
             intro_rule,
             location_rule,
             footer_rule,
-            animation_canvas,
             icon_frame,
             intro_title,
             intro_body,
@@ -916,6 +1009,7 @@ impl InstallWizard {
             button_font,
             animation_timer,
             animation_renderer: RefCell::new(animation_renderer),
+            animation_surface: RefCell::new(None),
             selected_parent: RefCell::new(default_parent.to_path_buf()),
             result: RefCell::new(None),
             install_target: RefCell::new(None),
@@ -926,7 +1020,7 @@ impl InstallWizard {
             completion_deadline: RefCell::new(None),
             normal_window_style,
             normal_window_ex_style,
-            normal_canvas_ex_style,
+            normal_window_size,
             page: Cell::new(WizardPage::Intro),
             handler: RefCell::new(None),
         });
@@ -936,21 +1030,10 @@ impl InstallWizard {
         let handler = nwg::full_bind_event_handler(
             &wizard.window.handle,
             move |event, event_data, handle| match event {
-                nwg::Event::OnPaint if handle == events_wizard.animation_canvas.handle => {
-                    let paint_data = event_data.on_paint();
-                    let (width, height) = events_wizard.animation_canvas.physical_size();
-                    if let Ok(frame) = events_wizard.animation_renderer.borrow().render(
-                        width,
-                        height,
-                        Instant::now(),
-                    ) {
-                        blit_pixmap(paint_data, &frame);
-                    }
-                }
                 nwg::Event::OnTimerTick if handle == events_wizard.animation_timer.handle => {
                     events_wizard.poll_install_events();
                     if events_wizard.page.get() == WizardPage::Animation {
-                        events_wizard.animation_canvas.invalidate();
+                        let _ = events_wizard.render_animation_frame();
                     }
                 }
                 nwg::Event::OnKeyPress

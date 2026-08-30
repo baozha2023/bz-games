@@ -14,7 +14,7 @@ dirs = "6.0"
 rfd = "0.15"
 mslnk = "0.1"
 tiny-skia = "0.11"
-native-windows-gui = { version = "1.0.13", default-features = false, features = ["file-dialog", "frame", "image-decoder", "animation-timer", "extern-canvas", "progress-bar"] }
+native-windows-gui = { version = "1.0.13", default-features = false, features = ["file-dialog", "frame", "image-decoder", "animation-timer", "high-dpi", "progress-bar"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 semver = "1.0"

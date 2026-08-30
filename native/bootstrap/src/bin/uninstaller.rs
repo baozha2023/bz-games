@@ -1,9 +1,16 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+#[path = "../bootstrap_ui.rs"]
+mod bootstrap_ui;
+
 use anyhow::{bail, Context, Result};
+use bootstrap_ui::{
+    BODY_FONT_SIZE, BUTTON_FONT_SIZE, BUTTON_FONT_WEIGHT, FONT_FAMILY, TITLE_FONT_SIZE,
+    TITLE_FONT_WEIGHT,
+};
 use chrono::{DateTime, Utc};
 use native_windows_gui as nwg;
-use rfd::{MessageButtons, MessageDialog, MessageDialogResult, MessageLevel};
+use rfd::{MessageDialog, MessageLevel};
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::os::windows::{ffi::OsStrExt, fs::MetadataExt, process::CommandExt};
@@ -15,6 +22,7 @@ use std::{
     sync::{
         atomic::{AtomicBool, Ordering},
         mpsc::{self, Receiver, Sender},
+        OnceLock,
     },
     thread,
     time::{Duration, Instant},
@@ -40,8 +48,14 @@ const WAIT_TIMEOUT_MS: u32 = 60_000;
 const VELOPACK_SELF_DELETE_TIMEOUT: Duration = Duration::from_secs(15);
 const MINIMUM_PROGRESS_WINDOW_DURATION: Duration = Duration::from_millis(900);
 const FINAL_PROGRESS_PAINT_DURATION: Duration = Duration::from_millis(250);
+const UNINSTALL_WINDOW_SIZE: (i32, i32) = (560, 300);
+const UNINSTALL_CONTENT_WIDTH: i32 = 496;
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 static ERROR_REPORTED: AtomicBool = AtomicBool::new(false);
+const APP_ICON: &[u8] = include_bytes!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../resources/icon.ico"
+));
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -195,7 +209,6 @@ struct UninstallJournal {
 
 struct Strings {
     title: &'static str,
-    confirm: &'static str,
     running: &'static str,
     failed: &'static str,
     partial: &'static str,
@@ -207,7 +220,6 @@ fn strings(locale: &str) -> Strings {
     match locale {
         "zh-CN" => Strings {
             title: "BZ-Games 卸载",
-            confirm: "将仅卸载 BZ-Games 客户端。游戏库、配置和数据库都会保留。是否继续？",
             running: "BZ-Games 仍在运行。请关闭客户端后重试。",
             failed: "卸载未完成。为保护数据，后续操作已停止。",
             partial: "客户端已卸载，但部分清理操作未完成。",
@@ -216,7 +228,6 @@ fn strings(locale: &str) -> Strings {
         },
         "zh-TW" => Strings {
             title: "BZ-Games 解除安裝",
-            confirm: "只會解除安裝 BZ-Games 用戶端。遊戲庫、設定和資料庫都會保留。是否繼續？",
             running: "BZ-Games 仍在執行。請關閉用戶端後重試。",
             failed: "解除安裝尚未完成。為保護資料，後續操作已停止。",
             partial: "用戶端已解除安裝，但部分清理操作未完成。",
@@ -225,7 +236,6 @@ fn strings(locale: &str) -> Strings {
         },
         "ja-JP" => Strings {
             title: "BZ-Games アンインストール",
-            confirm: "BZ-Games クライアントのみ削除します。ゲームライブラリ、設定、データベースは保持されます。続行しますか？",
             running: "BZ-Games が実行中です。終了してから再試行してください。",
             failed: "アンインストールは完了していません。データ保護のため処理を停止しました。",
             partial: "クライアントは削除されましたが、一部のクリーンアップに失敗しました。",
@@ -234,7 +244,6 @@ fn strings(locale: &str) -> Strings {
         },
         "de-DE" => Strings {
             title: "BZ-Games deinstallieren",
-            confirm: "Nur der BZ-Games-Client wird entfernt. Spielebibliotheken, Einstellungen und Datenbank bleiben erhalten. Fortfahren?",
             running: "BZ-Games wird noch ausgeführt. Schließe den Client und versuche es erneut.",
             failed: "Die Deinstallation wurde zum Schutz deiner Daten angehalten.",
             partial: "Der Client wurde entfernt, aber einige Bereinigungen sind fehlgeschlagen.",
@@ -243,12 +252,66 @@ fn strings(locale: &str) -> Strings {
         },
         _ => Strings {
             title: "BZ-Games Uninstall",
-            confirm: "Only the BZ-Games client will be removed. Game libraries, settings, and the database will be preserved. Continue?",
             running: "BZ-Games is still running. Close the client and try again.",
-            failed: "Uninstallation did not complete. Further work was stopped to protect your data.",
+            failed:
+                "Uninstallation did not complete. Further work was stopped to protect your data.",
             partial: "The client was removed, but some cleanup operations did not complete.",
             progress_title: "Uninstalling BZ-Games",
             success: "BZ-Games was uninstalled successfully.",
+        },
+    }
+}
+
+struct SelectionStrings {
+    heading: &'static str,
+    detail: &'static str,
+    delete_games: &'static str,
+    delete_user_data: &'static str,
+    cancel: &'static str,
+    uninstall: &'static str,
+}
+
+fn selection_strings(locale: &str) -> SelectionStrings {
+    match locale {
+        "zh-CN" => SelectionStrings {
+            heading: "卸载客户端",
+            detail: "将移除 BZ-Games 程序。未勾选的游戏库、配置和数据会保留。",
+            delete_games: "删除游戏库（如要删除游戏库，请从客户端内卸载）",
+            delete_user_data: "同时删除配置和数据（config.json、db）",
+            cancel: "取消",
+            uninstall: "卸载客户端",
+        },
+        "zh-TW" => SelectionStrings {
+            heading: "解除安裝用戶端",
+            detail: "將移除 BZ-Games 程式。未勾選的遊戲庫、設定和資料會保留。",
+            delete_games: "刪除遊戲庫（如要刪除遊戲庫，請從用戶端內解除安裝）",
+            delete_user_data: "同時刪除設定和資料（config.json、db）",
+            cancel: "取消",
+            uninstall: "解除安裝",
+        },
+        "ja-JP" => SelectionStrings {
+            heading: "クライアントをアンインストール",
+            detail: "BZ-Games を削除します。選択していないゲームライブラリとデータは保持されます。",
+            delete_games: "ゲームライブラリも削除（クライアント内でのみ選択可能）",
+            delete_user_data: "設定とデータも削除する（config.json、db）",
+            cancel: "キャンセル",
+            uninstall: "アンインストール",
+        },
+        "de-DE" => SelectionStrings {
+            heading: "Client deinstallieren",
+            detail: "BZ-Games wird entfernt. Nicht ausgewählte Spielebibliotheken und Daten bleiben erhalten.",
+            delete_games: "Spielebibliotheken löschen (nur im Client auswählbar)",
+            delete_user_data: "Auch Einstellungen und Daten löschen (config.json, db)",
+            cancel: "Abbrechen",
+            uninstall: "Deinstallieren",
+        },
+        _ => SelectionStrings {
+            heading: "Uninstall client",
+            detail: "BZ-Games will be removed. Unselected game libraries, settings, and data will be preserved.",
+            delete_games: "Delete game libraries (selectable only inside the client)",
+            delete_user_data: "Also delete settings and data (config.json, db)",
+            cancel: "Cancel",
+            uninstall: "Uninstall client",
         },
     }
 }
@@ -374,9 +437,9 @@ fn load_plan_internal(path: &Path, allow_expired: bool) -> Result<UninstallPlan>
         bail!("uninstall plan expired");
     }
     if plan.source == UninstallSource::System
-        && (plan.delete_games || plan.delete_user_data || !plan.game_library_roots.is_empty())
+        && (plan.delete_games || !plan.game_library_roots.is_empty())
     {
-        bail!("system uninstall must preserve all user data");
+        bail!("system uninstall cannot delete game libraries");
     }
     Ok(plan)
 }
@@ -821,6 +884,221 @@ fn show_problem(journal: &UninstallJournal, message: &str, report: &Path, partia
         .show();
 }
 
+static UI_INITIALIZATION: OnceLock<Option<String>> = OnceLock::new();
+
+fn initialize_uninstall_ui() -> Result<()> {
+    let error = UI_INITIALIZATION.get_or_init(|| {
+        nwg::init()
+            .map_err(|error| format!("initialize uninstall UI: {error:?}"))
+            .and_then(|_| {
+                nwg::Font::set_global_family(FONT_FAMILY)
+                    .map_err(|error| format!("set uninstall UI font: {error:?}"))
+            })
+            .err()
+    });
+    if let Some(error) = error {
+        bail!(error.clone());
+    }
+    Ok(())
+}
+
+struct SelectionWindow {
+    window: nwg::Window,
+    delete_games: nwg::CheckBox,
+    delete_user_data: nwg::CheckBox,
+    cancel_button: nwg::Button,
+    uninstall_button: nwg::Button,
+    result: RefCell<Option<bool>>,
+    heading: nwg::Label,
+    detail: nwg::Label,
+    _heading_font: nwg::Font,
+    _body_font: nwg::Font,
+    _button_font: nwg::Font,
+    _window_icon: nwg::Icon,
+}
+
+impl SelectionWindow {
+    fn build(plan: &UninstallPlan) -> Result<Rc<Self>> {
+        initialize_uninstall_ui()?;
+        let text = strings(&plan.locale);
+        let selection = selection_strings(&plan.locale);
+        let mut heading_font = nwg::Font::default();
+        nwg::Font::builder()
+            .family(FONT_FAMILY)
+            .size(TITLE_FONT_SIZE)
+            .weight(TITLE_FONT_WEIGHT)
+            .build(&mut heading_font)
+            .map_err(|error| anyhow::anyhow!("create uninstall selection title font: {error:?}"))?;
+        let mut body_font = nwg::Font::default();
+        nwg::Font::builder()
+            .family(FONT_FAMILY)
+            .size(BODY_FONT_SIZE)
+            .build(&mut body_font)
+            .map_err(|error| anyhow::anyhow!("create uninstall selection body font: {error:?}"))?;
+        let mut button_font = nwg::Font::default();
+        nwg::Font::builder()
+            .family(FONT_FAMILY)
+            .size(BUTTON_FONT_SIZE)
+            .weight(BUTTON_FONT_WEIGHT)
+            .build(&mut button_font)
+            .map_err(|error| {
+                anyhow::anyhow!("create uninstall selection button font: {error:?}")
+            })?;
+        let mut window_icon = nwg::Icon::default();
+        nwg::Icon::builder()
+            .source_bin(Some(APP_ICON))
+            .size(Some((32, 32)))
+            .build(&mut window_icon)
+            .map_err(|error| anyhow::anyhow!("load uninstaller window icon: {error:?}"))?;
+
+        let mut window = nwg::Window::default();
+        nwg::Window::builder()
+            .flags(nwg::WindowFlags::WINDOW)
+            .size(UNINSTALL_WINDOW_SIZE)
+            .center(true)
+            .title(text.title)
+            .icon(Some(&window_icon))
+            .build(&mut window)
+            .map_err(|error| anyhow::anyhow!("create uninstall selection window: {error:?}"))?;
+        let mut heading = nwg::Label::default();
+        nwg::Label::builder()
+            .text(selection.heading)
+            .font(Some(&heading_font))
+            .size((UNINSTALL_CONTENT_WIDTH, 48))
+            .position((32, 18))
+            .parent(&window)
+            .build(&mut heading)
+            .map_err(|error| anyhow::anyhow!("create uninstall selection heading: {error:?}"))?;
+        let mut detail = nwg::Label::default();
+        nwg::Label::builder()
+            .text(selection.detail)
+            .font(Some(&body_font))
+            .size((UNINSTALL_CONTENT_WIDTH, 42))
+            .position((32, 72))
+            .parent(&window)
+            .build(&mut detail)
+            .map_err(|error| anyhow::anyhow!("create uninstall selection detail: {error:?}"))?;
+        let checked = nwg::CheckBoxState::Checked;
+        let unchecked = nwg::CheckBoxState::Unchecked;
+        let mut delete_games = nwg::CheckBox::default();
+        nwg::CheckBox::builder()
+            .text(selection.delete_games)
+            .font(Some(&body_font))
+            .size((UNINSTALL_CONTENT_WIDTH, 36))
+            .position((32, 128))
+            .enabled(false)
+            .check_state(if plan.delete_games {
+                checked
+            } else {
+                unchecked
+            })
+            .parent(&window)
+            .build(&mut delete_games)
+            .map_err(|error| anyhow::anyhow!("create game-library uninstall option: {error:?}"))?;
+        let mut delete_user_data = nwg::CheckBox::default();
+        nwg::CheckBox::builder()
+            .text(selection.delete_user_data)
+            .font(Some(&body_font))
+            .size((UNINSTALL_CONTENT_WIDTH, 36))
+            .position((32, 178))
+            .check_state(if plan.delete_user_data {
+                checked
+            } else {
+                unchecked
+            })
+            .parent(&window)
+            .build(&mut delete_user_data)
+            .map_err(|error| anyhow::anyhow!("create user-data uninstall option: {error:?}"))?;
+        let mut cancel_button = nwg::Button::default();
+        nwg::Button::builder()
+            .text(selection.cancel)
+            .font(Some(&button_font))
+            .size((104, 40))
+            .position((296, 238))
+            .parent(&window)
+            .build(&mut cancel_button)
+            .map_err(|error| anyhow::anyhow!("create uninstall cancel button: {error:?}"))?;
+        let mut uninstall_button = nwg::Button::default();
+        nwg::Button::builder()
+            .text(selection.uninstall)
+            .font(Some(&button_font))
+            .size((124, 40))
+            .position((410, 238))
+            .focus(true)
+            .parent(&window)
+            .build(&mut uninstall_button)
+            .map_err(|error| anyhow::anyhow!("create uninstall confirmation button: {error:?}"))?;
+        window.set_visible(true);
+        window.set_focus();
+        Ok(Rc::new(Self {
+            window,
+            delete_games,
+            delete_user_data,
+            cancel_button,
+            uninstall_button,
+            result: RefCell::new(None),
+            heading,
+            detail,
+            _heading_font: heading_font,
+            _body_font: body_font,
+            _button_font: button_font,
+            _window_icon: window_icon,
+        }))
+    }
+
+    fn show_progress_page(&self) {
+        self.heading.set_visible(false);
+        self.detail.set_visible(false);
+        self.delete_games.set_visible(false);
+        self.delete_user_data.set_visible(false);
+        self.cancel_button.set_visible(false);
+        self.uninstall_button.set_visible(false);
+    }
+}
+
+fn select_uninstall_options(plan: &UninstallPlan) -> Result<Option<(bool, Rc<SelectionWindow>)>> {
+    let ui = SelectionWindow::build(plan)?;
+    let events_ui = ui.clone();
+    let handler = nwg::full_bind_event_handler(
+        &ui.window.handle,
+        move |event, event_data, handle| match event {
+            nwg::Event::OnButtonClick if handle == events_ui.uninstall_button.handle => {
+                *events_ui.result.borrow_mut() =
+                    Some(events_ui.delete_user_data.check_state() == nwg::CheckBoxState::Checked);
+                nwg::stop_thread_dispatch();
+            }
+            nwg::Event::OnButtonClick if handle == events_ui.cancel_button.handle => {
+                nwg::stop_thread_dispatch();
+            }
+            nwg::Event::OnWindowClose if handle == events_ui.window.handle => {
+                if let nwg::EventData::OnWindowClose(close_data) = event_data {
+                    close_data.close(false);
+                }
+                nwg::stop_thread_dispatch();
+            }
+            _ => {}
+        },
+    );
+    let work_dir = work_root()?.join(plan.operation_id.to_string());
+    if let Err(error) = atomic_json(
+        &work_dir.join("ready.json"),
+        &serde_json::json!({"operationId": plan.operation_id, "ready": true}),
+    ) {
+        nwg::unbind_event_handler(&handler);
+        return Err(error).context("publish ready uninstall selection window");
+    }
+    nwg::dispatch_thread_events();
+    nwg::unbind_event_handler(&handler);
+    let result = ui.result.borrow_mut().take();
+    Ok(result.map(|delete_user_data| (delete_user_data, ui)))
+}
+
+fn apply_selectable_options(plan: &mut UninstallPlan, delete_user_data: bool) {
+    // Game-library deletion is decided exclusively by the in-client dialog.
+    // The independent selector displays that decision but cannot change it.
+    plan.delete_user_data = delete_user_data;
+}
+
 fn progress_detail(locale: &str) -> &'static str {
     match locale {
         "zh-CN" => "请勿关闭此窗口。卸载过程中会保留未选择删除的游戏和用户数据。",
@@ -831,8 +1109,25 @@ fn progress_detail(locale: &str) -> &'static str {
     }
 }
 
+enum ProgressWindowHost {
+    Standalone {
+        window: nwg::Window,
+        _window_icon: nwg::Icon,
+    },
+    Selection(Rc<SelectionWindow>),
+}
+
+impl ProgressWindowHost {
+    fn window(&self) -> &nwg::Window {
+        match self {
+            Self::Standalone { window, .. } => window,
+            Self::Selection(selection) => &selection.window,
+        }
+    }
+}
+
 struct ProgressWindow {
-    window: nwg::Window,
+    host: ProgressWindowHost,
     status_label: nwg::Label,
     progress_bar: nwg::ProgressBar,
     timer: nwg::AnimationTimer,
@@ -848,47 +1143,65 @@ struct ProgressWindow {
 }
 
 impl ProgressWindow {
+    fn window(&self) -> &nwg::Window {
+        self.host.window()
+    }
+
     fn build(
         locale: String,
         initial_phase: UninstallPhase,
         receiver: Receiver<ProgressEvent>,
+        selection_window: Option<Rc<SelectionWindow>>,
     ) -> Result<Rc<Self>> {
-        nwg::init().map_err(|error| anyhow::anyhow!("initialize uninstall UI: {error:?}"))?;
-        nwg::Font::set_global_family("Segoe UI")
-            .map_err(|error| anyhow::anyhow!("set uninstall UI font: {error:?}"))?;
+        initialize_uninstall_ui()?;
 
         let text = strings(&locale);
         let mut title_font = nwg::Font::default();
         nwg::Font::builder()
-            .family("Segoe UI")
-            .size(26)
-            .weight(600)
+            .family(FONT_FAMILY)
+            .size(TITLE_FONT_SIZE)
+            .weight(TITLE_FONT_WEIGHT)
             .build(&mut title_font)
             .map_err(|error| anyhow::anyhow!("create uninstall title font: {error:?}"))?;
         let mut body_font = nwg::Font::default();
         nwg::Font::builder()
-            .family("Segoe UI")
-            .size(18)
+            .family(FONT_FAMILY)
+            .size(BODY_FONT_SIZE)
             .build(&mut body_font)
             .map_err(|error| anyhow::anyhow!("create uninstall body font: {error:?}"))?;
-
-        let mut window = nwg::Window::default();
-        nwg::Window::builder()
-            .flags(nwg::WindowFlags::WINDOW)
-            .size((560, 240))
-            .center(true)
-            .topmost(true)
-            .title(text.title)
-            .build(&mut window)
-            .map_err(|error| anyhow::anyhow!("create uninstall progress window: {error:?}"))?;
+        let host = if let Some(selection) = selection_window {
+            selection.show_progress_page();
+            ProgressWindowHost::Selection(selection)
+        } else {
+            let mut window_icon = nwg::Icon::default();
+            nwg::Icon::builder()
+                .source_bin(Some(APP_ICON))
+                .size(Some((32, 32)))
+                .build(&mut window_icon)
+                .map_err(|error| anyhow::anyhow!("load uninstall progress icon: {error:?}"))?;
+            let mut window = nwg::Window::default();
+            nwg::Window::builder()
+                .flags(nwg::WindowFlags::WINDOW)
+                .size(UNINSTALL_WINDOW_SIZE)
+                .center(true)
+                .title(text.title)
+                .icon(Some(&window_icon))
+                .build(&mut window)
+                .map_err(|error| anyhow::anyhow!("create uninstall progress window: {error:?}"))?;
+            ProgressWindowHost::Standalone {
+                window,
+                _window_icon: window_icon,
+            }
+        };
+        let window = host.window();
 
         let mut title_label = nwg::Label::default();
         nwg::Label::builder()
             .text(text.progress_title)
             .font(Some(&title_font))
-            .size((500, 38))
-            .position((28, 22))
-            .parent(&window)
+            .size((UNINSTALL_CONTENT_WIDTH, 48))
+            .position((32, 18))
+            .parent(window)
             .build(&mut title_label)
             .map_err(|error| anyhow::anyhow!("create uninstall progress title: {error:?}"))?;
 
@@ -896,9 +1209,9 @@ impl ProgressWindow {
         nwg::Label::builder()
             .text(phase_text(&locale, initial_phase))
             .font(Some(&body_font))
-            .size((500, 28))
-            .position((28, 76))
-            .parent(&window)
+            .size((UNINSTALL_CONTENT_WIDTH, 36))
+            .position((32, 78))
+            .parent(window)
             .build(&mut status_label)
             .map_err(|error| anyhow::anyhow!("create uninstall status text: {error:?}"))?;
 
@@ -906,9 +1219,9 @@ impl ProgressWindow {
         nwg::ProgressBar::builder()
             .range(0..100)
             .pos(phase_progress(initial_phase))
-            .size((500, 24))
-            .position((28, 112))
-            .parent(&window)
+            .size((UNINSTALL_CONTENT_WIDTH, 22))
+            .position((32, 126))
+            .parent(window)
             .build(&mut progress_bar)
             .map_err(|error| anyhow::anyhow!("create uninstall progress bar: {error:?}"))?;
 
@@ -916,15 +1229,15 @@ impl ProgressWindow {
         nwg::Label::builder()
             .text(progress_detail(&locale))
             .font(Some(&body_font))
-            .size((500, 48))
-            .position((28, 154))
-            .parent(&window)
+            .size((UNINSTALL_CONTENT_WIDTH, 60))
+            .position((32, 166))
+            .parent(window)
             .build(&mut detail_label)
             .map_err(|error| anyhow::anyhow!("create uninstall progress detail: {error:?}"))?;
 
         let mut timer = nwg::AnimationTimer::default();
         nwg::AnimationTimer::builder()
-            .parent(&window)
+            .parent(window)
             .interval(Duration::from_millis(50))
             .active(true)
             .build(&mut timer)
@@ -937,7 +1250,7 @@ impl ProgressWindow {
         window.set_focus();
 
         Ok(Rc::new(Self {
-            window,
+            host,
             status_label,
             progress_bar,
             timer,
@@ -988,25 +1301,55 @@ impl ProgressWindow {
     }
 }
 
-fn run_worker_with_progress(plan_path: &Path) -> Result<()> {
-    let plan: UninstallPlan = serde_json::from_slice(
-        &fs::read(plan_path).with_context(|| format!("read {}", plan_path.display()))?,
-    )
-    .context("parse uninstall plan for progress UI")?;
+fn prepare_worker_handoff(plan_path: &Path, plan: &UninstallPlan) -> Result<()> {
+    let work_dir = plan_path.parent().context("uninstall plan has no parent")?;
+    let expected_work_dir = work_root()?.join(plan.operation_id.to_string());
+    if normalized_path(work_dir) != normalized_path(&expected_work_dir) {
+        bail!("uninstall plan is outside its operation work directory");
+    }
+    ensure_no_reparse_ancestor(work_dir)?;
+    validate_plain_directory(work_dir)?;
+    validate_plain_file(&work_dir.join("uninstall-worker.exe"))?;
+    validate_installation(plan)?;
+    let _ = validated_game_libraries(plan)?;
+    Ok(())
+}
+
+fn run_worker_with_progress(plan_path: &Path, show_selection: bool) -> Result<()> {
     let journal_path = plan_path.with_file_name("journal.json");
+    let mut plan = load_plan_internal(plan_path, journal_path.is_file())?;
+    let mut selection_window_for_progress = None;
+    let work_dir = plan_path
+        .parent()
+        .context("uninstall plan has no parent")?
+        .to_path_buf();
+    if show_selection && !journal_path.is_file() {
+        // Validate the full handoff before constructing the independent user
+        // decision window. The selector publishes ready.json only after that
+        // window is visible, so its parent never exits into a UI-less handoff.
+        prepare_worker_handoff(plan_path, &plan)?;
+        let Some((delete_user_data, selection_window)) = select_uninstall_options(&plan)? else {
+            spawn_self_cleanup(&work_dir)?;
+            return Ok(());
+        };
+        apply_selectable_options(&mut plan, delete_user_data);
+        atomic_json(plan_path, &plan)?;
+        selection_window_for_progress = Some(selection_window);
+    }
     let initial_phase = fs::read(&journal_path)
         .ok()
         .and_then(|content| serde_json::from_slice::<UninstallJournal>(&content).ok())
         .filter(|journal| journal.plan.operation_id == plan.operation_id)
         .map(|journal| journal.phase)
         .unwrap_or(UninstallPhase::Prepared);
-    let work_dir = plan_path
-        .parent()
-        .context("uninstall plan has no parent")?
-        .to_path_buf();
     let (progress_sender, progress_receiver) = mpsc::channel();
     let locale = plan.locale.clone();
-    let ui = ProgressWindow::build(plan.locale, initial_phase, progress_receiver)?;
+    let ui = ProgressWindow::build(
+        plan.locale,
+        initial_phase,
+        progress_receiver,
+        selection_window_for_progress,
+    )?;
 
     let worker_plan = plan_path.to_path_buf();
     let worker = thread::Builder::new()
@@ -1022,18 +1365,18 @@ fn run_worker_with_progress(plan_path: &Path) -> Result<()> {
         .context("start uninstall operation thread")?;
 
     let event_ui = ui.clone();
-    let handler = nwg::full_bind_event_handler(
-        &ui.window.handle,
-        move |event, event_data, handle| match event {
-            nwg::Event::OnTimerTick if handle == event_ui.timer.handle => event_ui.poll(),
-            nwg::Event::OnWindowClose if handle == event_ui.window.handle => {
-                if let nwg::EventData::OnWindowClose(close_data) = event_data {
-                    close_data.close(false);
+    let handler =
+        nwg::full_bind_event_handler(&ui.window().handle, move |event, event_data, handle| {
+            match event {
+                nwg::Event::OnTimerTick if handle == event_ui.timer.handle => event_ui.poll(),
+                nwg::Event::OnWindowClose if handle == event_ui.window().handle => {
+                    if let nwg::EventData::OnWindowClose(close_data) = event_data {
+                        close_data.close(false);
+                    }
                 }
+                _ => {}
             }
-            _ => {}
-        },
-    );
+        });
 
     nwg::dispatch_thread_events();
     nwg::unbind_event_handler(&handler);
@@ -1047,7 +1390,7 @@ fn run_worker_with_progress(plan_path: &Path) -> Result<()> {
         .context("uninstall operation ended without a result")?;
     match result {
         Ok(outcome) => {
-            ui.window.set_visible(false);
+            ui.window().set_visible(false);
             if outcome == WorkerOutcome::Completed {
                 let text = strings(&locale);
                 MessageDialog::new()
@@ -1371,16 +1714,6 @@ fn start_system_uninstall() -> Result<()> {
             .show();
         return Ok(());
     }
-    if MessageDialog::new()
-        .set_level(MessageLevel::Warning)
-        .set_title(text.title)
-        .set_description(text.confirm)
-        .set_buttons(MessageButtons::YesNo)
-        .show()
-        != MessageDialogResult::Yes
-    {
-        return Ok(());
-    }
     let current = std::env::current_exe()?;
     let root = current
         .parent()
@@ -1459,7 +1792,7 @@ fn run() -> Result<()> {
     }
     if arguments.iter().any(|argument| argument == "--worker") {
         let plan = argument_value(&arguments, "--plan").context("--plan is required")?;
-        return run_worker_with_progress(Path::new(plan));
+        return run_worker_with_progress(Path::new(plan), true);
     }
     if arguments.iter().any(|argument| argument == "--resume") {
         let journal_path =
@@ -1477,7 +1810,7 @@ fn run() -> Result<()> {
         if !plan_path.is_file() {
             atomic_json(&plan_path, &journal.plan)?;
         }
-        return run_worker_with_progress(&plan_path);
+        return run_worker_with_progress(&plan_path, false);
     }
     start_system_uninstall()
 }
@@ -1532,16 +1865,45 @@ mod tests {
     }
 
     #[test]
-    fn system_plan_rejects_data_deletion() -> Result<()> {
+    fn system_plan_accepts_explicit_data_deletion_choices() -> Result<()> {
         let root = std::env::temp_dir().join(format!("bz-uninstall-plan-{}", Uuid::new_v4()));
         fs::create_dir_all(&root)?;
         let path = root.join("plan.json");
         let mut plan = sample_plan(root.clone(), UninstallSource::System);
         plan.delete_user_data = true;
         atomic_json(&path, &plan)?;
+        assert!(load_plan(&path)?.delete_user_data);
+        fs::remove_dir_all(root)?;
+        Ok(())
+    }
+
+    #[test]
+    fn system_plan_rejects_game_library_deletion() -> Result<()> {
+        let root = std::env::temp_dir().join(format!("bz-uninstall-plan-{}", Uuid::new_v4()));
+        fs::create_dir_all(&root)?;
+        let path = root.join("plan.json");
+        let mut plan = sample_plan(root.clone(), UninstallSource::System);
+        plan.delete_games = true;
+        plan.game_library_roots.push(root.join("games"));
+        atomic_json(&path, &plan)?;
         assert!(load_plan(&path).is_err());
         fs::remove_dir_all(root)?;
         Ok(())
+    }
+
+    #[test]
+    fn standalone_selection_cannot_change_the_client_game_library_choice() {
+        let root = std::env::temp_dir().join(format!("bz-uninstall-plan-{}", Uuid::new_v4()));
+        let mut plan = sample_plan(root, UninstallSource::InApp);
+        plan.delete_games = true;
+
+        apply_selectable_options(&mut plan, true);
+
+        assert!(plan.delete_games);
+        assert!(plan.delete_user_data);
+        assert!(selection_strings("zh-CN")
+            .delete_games
+            .contains("请从客户端内卸载"));
     }
 
     #[test]
