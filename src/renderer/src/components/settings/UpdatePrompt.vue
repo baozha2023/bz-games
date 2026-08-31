@@ -9,14 +9,22 @@
   >
     <n-space vertical :size="14">
       <n-text>
-        {{ t("settings.updatePromptMessage", { version: state?.latestVersion || "" }) }}
+        {{
+          t("settings.updatePromptMessage", {
+            version: state?.latestVersion || "",
+          })
+        }}
       </n-text>
       <n-progress
-        v-if="state?.status === 'downloading' || state?.status === 'verifying'"
+        v-if="state?.status === 'downloading'"
         type="line"
         :percentage="Math.round(state.progress || 0)"
-        :processing="state.status === 'downloading'"
+        processing
       />
+      <n-space v-if="state?.status === 'verifying'" align="center">
+        <n-spin size="small" />
+        <n-text>{{ t("settings.updateVerifying") }}</n-text>
+      </n-space>
       <n-text v-if="state?.status === 'ready'" type="success">
         {{ t("settings.updateReady") }}
       </n-text>
@@ -40,10 +48,18 @@
         </n-button>
         <n-button
           type="primary"
-          :loading="state?.status === 'downloading' || state?.status === 'verifying' || state?.status === 'applying'"
+          :loading="
+            state?.status === 'downloading' ||
+            state?.status === 'verifying' ||
+            state?.status === 'applying'
+          "
           @click="primaryAction"
         >
-          {{ state?.status === "ready" ? t("settings.updateRestartInstall") : t("settings.updateNow") }}
+          {{
+            state?.status === "ready"
+              ? t("settings.updateRestartInstall")
+              : t("settings.updateNow")
+          }}
         </n-button>
       </n-space>
     </template>
@@ -52,9 +68,21 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted } from "vue";
-import { NButton, NModal, NProgress, NSpace, NText, useMessage } from "naive-ui";
+import {
+  NButton,
+  NModal,
+  NProgress,
+  NSpace,
+  NSpin,
+  NText,
+  useMessage,
+} from "naive-ui";
 import { useI18n } from "vue-i18n";
-import { hideUpdatePrompt, setUpdateState, useUpdatePrompt } from "../../composables/useUpdatePrompt";
+import {
+  hideUpdatePrompt,
+  setUpdateState,
+  useUpdatePrompt,
+} from "../../composables/useUpdatePrompt";
 
 const { t } = useI18n();
 const message = useMessage();
@@ -64,13 +92,16 @@ let removeListener: (() => void) | undefined;
 const updateErrorText = computed(() => {
   const key = `settings.updateErrors.${state.value?.errorCode || "unknown"}`;
   const translated = t(key);
-  return translated === key ? state.value?.message || t("settings.updateErrors.unknown") : translated;
+  return translated === key
+    ? state.value?.message || t("settings.updateErrors.unknown")
+    : translated;
 });
 
 onMounted(() => {
   removeListener = window.electronAPI.update.onEvent((next) => {
     setUpdateState(next);
-    if (next.status === "error" && !next.automatic) message.error(updateErrorText.value);
+    if (next.status === "error" && !next.automatic)
+      message.error(updateErrorText.value);
   });
 });
 

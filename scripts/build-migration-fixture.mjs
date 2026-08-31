@@ -12,11 +12,25 @@ const repositoryRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
 );
-const fixtureDirectory = path.join(repositoryRoot, "docs", "fixtures");
-const fixturePath = path.join(
-  fixtureDirectory,
+const defaultFixturePath = path.join(
+  repositoryRoot,
+  "docs",
+  "fixtures",
   "BZ-Games-Migration-v1-sample.bzgames",
 );
+const outputIndex = process.argv.indexOf("--output");
+if (
+  (outputIndex >= 0 && outputIndex !== 2) ||
+  (outputIndex === -1 && process.argv.length > 2) ||
+  (outputIndex === 2 && process.argv.length !== 4)
+) {
+  throw new Error("usage: build-migration-fixture.mjs [--output <archive>]");
+}
+const fixturePath =
+  outputIndex === 2
+    ? path.resolve(process.argv[outputIndex + 1])
+    : defaultFixturePath;
+const fixtureDirectory = path.dirname(fixturePath);
 const checksumPath = `${fixturePath}.sha256`;
 const fixtureDatabasePath = path.join(
   repositoryRoot,

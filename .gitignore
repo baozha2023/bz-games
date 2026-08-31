@@ -15,6 +15,11 @@ native/bootstrap/target/
 /.atomic-probe-*
 /.initial-language
 
+# 私有发布部署说明（仅保留在本地工作区）
+/docs/GITHUB_ACTIONS_RELEASE_DEPLOY.md
+/docs/fixtures/BZ-Games-Migration-v1-sample.bzgames
+/docs/fixtures/BZ-Games-Migration-v1-sample.bzgames.sha256
+
 # IDE / 编辑器配置
 .idea/
 .vscode/
@@ -42,6 +47,7 @@ nbproject/private/
 # 生成的配置与数据
 config.json
 private-build.config.json
+private-build.config.test.json
 relay-server/bz-games-relay.service
 .env
 .env.*

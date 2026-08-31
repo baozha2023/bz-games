@@ -724,6 +724,7 @@ export default {
     updateViewReleaseNotes: "查看更新說明",
     updateLater: "稍後再說",
     updateNow: "立即更新",
+    updateVerifying: "正在驗證並準備更新套件…",
     updateReady: "更新套件已下載並驗證完成，請確認重新啟動安裝。",
     updateRestartInstall: "重新啟動並安裝",
     updateReleaseOpenFailed: "無法開啟更新說明",
@@ -742,6 +743,7 @@ export default {
       unknown: "更新失敗，請檢查記錄後重試",
     },
     currentVersion: "目前版本：{version}",
+    testChannel: "測試版",
     officialWebsite: "官方網站",
     uninstallClient: "解除安裝用戶端",
     uninstallClientDescription:

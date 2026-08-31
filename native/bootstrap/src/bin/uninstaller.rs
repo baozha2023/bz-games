@@ -1,12 +1,15 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+#[path = "../bootstrap_locale.rs"]
+mod bootstrap_locale;
 #[path = "../bootstrap_ui.rs"]
 mod bootstrap_ui;
 
 use anyhow::{bail, Context, Result};
+use bootstrap_locale::detect_user_locale;
 use bootstrap_ui::{
     BODY_FONT_SIZE, BUTTON_FONT_SIZE, BUTTON_FONT_WEIGHT, FONT_FAMILY, TITLE_FONT_SIZE,
-    TITLE_FONT_WEIGHT,
+    TITLE_FONT_WEIGHT, WINDOW_ICON_SIZE,
 };
 use chrono::{DateTime, Utc};
 use native_windows_gui as nwg;
@@ -16,6 +19,7 @@ use std::cell::RefCell;
 use std::os::windows::{ffi::OsStrExt, fs::MetadataExt, process::CommandExt};
 use std::rc::Rc;
 use std::{
+    fmt::Write as _,
     fs,
     path::{Path, PathBuf},
     process::Command,
@@ -31,8 +35,7 @@ use uuid::Uuid;
 use windows::{
     core::{HRESULT, PCWSTR},
     Win32::{
-        Foundation::{CloseHandle, ERROR_INVALID_PARAMETER, WAIT_OBJECT_0, WAIT_TIMEOUT},
-        Globalization::GetUserDefaultLocaleName,
+        Foundation::{CloseHandle, ERROR_INVALID_PARAMETER, HANDLE, WAIT_OBJECT_0, WAIT_TIMEOUT},
         Storage::FileSystem::{MoveFileExW, MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH},
         System::Threading::{OpenProcess, WaitForSingleObject, PROCESS_SYNCHRONIZE},
     },
@@ -107,7 +110,17 @@ enum ProgressEvent {
     Finished(Result<WorkerOutcome, String>),
 }
 
-fn phase_progress(phase: UninstallPhase) -> u32 {
+struct ProcessHandle(HANDLE);
+
+impl Drop for ProcessHandle {
+    fn drop(&mut self) {
+        // SAFETY: this handle was returned by `OpenProcess` and is owned by
+        // this guard until it is dropped.
+        let _ = unsafe { CloseHandle(self.0) };
+    }
+}
+
+const fn phase_progress(phase: UninstallPhase) -> u32 {
     match phase {
         UninstallPhase::Prepared => 5,
         UninstallPhase::WaitingForProcesses => 15,
@@ -321,6 +334,8 @@ fn atomic_json(path: &Path, value: &impl Serialize) -> Result<()> {
     fs::write(&temporary, serde_json::to_vec_pretty(value)?)?;
     let source: Vec<u16> = temporary.as_os_str().encode_wide().chain(Some(0)).collect();
     let target: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+    // SAFETY: both path buffers are live and NUL-terminated for this call.
+    // The temporary file is closed before the atomic replacement begins.
     unsafe {
         MoveFileExW(
             PCWSTR(source.as_ptr()),
@@ -351,24 +366,7 @@ fn report_root() -> Result<PathBuf> {
 }
 
 fn system_locale() -> String {
-    let mut buffer = [0u16; 85];
-    let length = unsafe { GetUserDefaultLocaleName(&mut buffer) };
-    let raw = if length > 1 {
-        String::from_utf16_lossy(&buffer[..length as usize - 1]).to_lowercase()
-    } else {
-        String::new()
-    };
-    if raw.starts_with("zh-tw") || raw.starts_with("zh-hk") || raw.starts_with("zh-mo") {
-        "zh-TW".to_string()
-    } else if raw.starts_with("zh") {
-        "zh-CN".to_string()
-    } else if raw.starts_with("ja") {
-        "ja-JP".to_string()
-    } else if raw.starts_with("de") {
-        "de-DE".to_string()
-    } else {
-        "en-US".to_string()
-    }
+    detect_user_locale().code().to_string()
 }
 
 fn validate_plain_file(path: &Path) -> Result<()> {
@@ -542,8 +540,10 @@ fn write_journal(
 }
 
 fn wait_for_process_exit(process_id: u32, cancel_path: Option<&Path>) -> Result<bool> {
+    // SAFETY: no pointer parameters are involved; a successful call returns
+    // an owned process handle that is immediately wrapped by `ProcessHandle`.
     let process = match unsafe { OpenProcess(PROCESS_SYNCHRONIZE, false, process_id) } {
-        Ok(process) => process,
+        Ok(process) => ProcessHandle(process),
         Err(error) if error.code().0 == HRESULT::from_win32(ERROR_INVALID_PARAMETER.0).0 => {
             return Ok(true);
         }
@@ -552,20 +552,17 @@ fn wait_for_process_exit(process_id: u32, cancel_path: Option<&Path>) -> Result<
     let deadline = Instant::now() + Duration::from_millis(WAIT_TIMEOUT_MS.into());
     loop {
         if cancel_path.is_some_and(Path::exists) {
-            unsafe { CloseHandle(process) }?;
             return Ok(false);
         }
-        let wait_result = unsafe { WaitForSingleObject(process, 250) };
+        // SAFETY: the RAII guard keeps the process handle valid for the call.
+        let wait_result = unsafe { WaitForSingleObject(process.0, 250) };
         if wait_result == WAIT_OBJECT_0 {
-            unsafe { CloseHandle(process) }?;
             return Ok(true);
         }
         if wait_result != WAIT_TIMEOUT {
-            unsafe { CloseHandle(process) }?;
             bail!("failed while waiting for BZ-Games to exit");
         }
         if Instant::now() >= deadline {
-            unsafe { CloseHandle(process) }?;
             bail!("timed out waiting for BZ-Games to exit");
         }
     }
@@ -576,8 +573,7 @@ fn bz_games_process_running() -> bool {
         .args(["/FI", "IMAGENAME eq BZ-Games.exe", "/FO", "CSV", "/NH"])
         .creation_flags(CREATE_NO_WINDOW)
         .output()
-        .ok()
-        .is_some_and(|output| {
+        .is_ok_and(|output| {
             String::from_utf8_lossy(&output.stdout)
                 .to_lowercase()
                 .contains("bz-games.exe")
@@ -828,15 +824,16 @@ fn write_report(journal: &UninstallJournal, error: Option<&anyhow::Error>) -> Re
         journal.plan.install_root.display()
     );
     if let Some(error) = error {
-        body.push_str(&format!("error={error:#}\n"));
+        writeln!(body, "error={error:#}")?;
     }
     for issue in &journal.issues {
-        body.push_str(&format!(
-            "issue={} | {} | {}\n",
+        writeln!(
+            body,
+            "issue={} | {} | {}",
             issue.operation,
             issue.path.display(),
             issue.error
-        ));
+        )?;
     }
     fs::write(&path, body)?;
     Ok(path)
@@ -890,7 +887,7 @@ fn initialize_uninstall_ui() -> Result<()> {
     let error = UI_INITIALIZATION.get_or_init(|| {
         nwg::init()
             .map_err(|error| format!("initialize uninstall UI: {error:?}"))
-            .and_then(|_| {
+            .and_then(|()| {
                 nwg::Font::set_global_family(FONT_FAMILY)
                     .map_err(|error| format!("set uninstall UI font: {error:?}"))
             })
@@ -947,7 +944,8 @@ impl SelectionWindow {
         let mut window_icon = nwg::Icon::default();
         nwg::Icon::builder()
             .source_bin(Some(APP_ICON))
-            .size(Some((32, 32)))
+            .size(Some(WINDOW_ICON_SIZE))
+            .strict(true)
             .build(&mut window_icon)
             .map_err(|error| anyhow::anyhow!("load uninstaller window icon: {error:?}"))?;
 
@@ -973,7 +971,7 @@ impl SelectionWindow {
         nwg::Label::builder()
             .text(selection.detail)
             .font(Some(&body_font))
-            .size((UNINSTALL_CONTENT_WIDTH, 42))
+            .size((UNINSTALL_CONTENT_WIDTH, 64))
             .position((32, 72))
             .parent(&window)
             .build(&mut detail)
@@ -985,7 +983,7 @@ impl SelectionWindow {
             .text(selection.delete_games)
             .font(Some(&body_font))
             .size((UNINSTALL_CONTENT_WIDTH, 36))
-            .position((32, 128))
+            .position((32, 142))
             .enabled(false)
             .check_state(if plan.delete_games {
                 checked
@@ -1000,7 +998,7 @@ impl SelectionWindow {
             .text(selection.delete_user_data)
             .font(Some(&body_font))
             .size((UNINSTALL_CONTENT_WIDTH, 36))
-            .position((32, 178))
+            .position((32, 182))
             .check_state(if plan.delete_user_data {
                 checked
             } else {
@@ -1093,7 +1091,7 @@ fn select_uninstall_options(plan: &UninstallPlan) -> Result<Option<(bool, Rc<Sel
     Ok(result.map(|delete_user_data| (delete_user_data, ui)))
 }
 
-fn apply_selectable_options(plan: &mut UninstallPlan, delete_user_data: bool) {
+const fn apply_selectable_options(plan: &mut UninstallPlan, delete_user_data: bool) {
     // Game-library deletion is decided exclusively by the in-client dialog.
     // The independent selector displays that decision but cannot change it.
     plan.delete_user_data = delete_user_data;
@@ -1176,7 +1174,8 @@ impl ProgressWindow {
             let mut window_icon = nwg::Icon::default();
             nwg::Icon::builder()
                 .source_bin(Some(APP_ICON))
-                .size(Some((32, 32)))
+                .size(Some(WINDOW_ICON_SIZE))
+                .strict(true)
                 .build(&mut window_icon)
                 .map_err(|error| anyhow::anyhow!("load uninstall progress icon: {error:?}"))?;
             let mut window = nwg::Window::default();
@@ -1340,8 +1339,7 @@ fn run_worker_with_progress(plan_path: &Path, show_selection: bool) -> Result<()
         .ok()
         .and_then(|content| serde_json::from_slice::<UninstallJournal>(&content).ok())
         .filter(|journal| journal.plan.operation_id == plan.operation_id)
-        .map(|journal| journal.phase)
-        .unwrap_or(UninstallPhase::Prepared);
+        .map_or(UninstallPhase::Prepared, |journal| journal.phase);
     let (progress_sender, progress_receiver) = mpsc::channel();
     let locale = plan.locale.clone();
     let ui = ProgressWindow::build(
@@ -1651,7 +1649,7 @@ fn wait_for_ready(
             let value: serde_json::Value = serde_json::from_slice(&fs::read(&ready)?)?;
             if value.get("operationId").and_then(|item| item.as_str())
                 == Some(expected_operation_id.as_str())
-                && value.get("ready").and_then(|item| item.as_bool()) == Some(true)
+                && value.get("ready").and_then(serde_json::Value::as_bool) == Some(true)
             {
                 return Ok(());
             }
@@ -1684,10 +1682,13 @@ fn find_incomplete_journal(install_root: &Path) -> Result<Option<(PathBuf, Unins
             && normalized_path(&journal.plan.install_root) == normalized_path(install_root)
             && entry.path().join("uninstall-worker.exe").is_file()
         {
-            matches.push((journal.updated_at.clone(), journal_path, journal));
+            let Ok(updated_at) = DateTime::parse_from_rfc3339(&journal.updated_at) else {
+                continue;
+            };
+            matches.push((updated_at, journal_path, journal));
         }
     }
-    matches.sort_by(|left, right| right.0.cmp(&left.0));
+    matches.sort_by_key(|candidate| std::cmp::Reverse(candidate.0));
     Ok(matches
         .into_iter()
         .next()

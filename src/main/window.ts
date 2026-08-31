@@ -18,7 +18,9 @@ export function markAppQuitting(): void {
 }
 
 async function buildTrayMenu(): Promise<Menu> {
-  const recentGames = await playSessionDatabaseService.getRecentGames(5).catch(() => []);
+  const recentGames = await playSessionDatabaseService
+    .getRecentGames(5)
+    .catch(() => []);
   const template: Electron.MenuItemConstructorOptions[] = [
     {
       label: "显示主窗口",
@@ -72,7 +74,7 @@ function ensureTray(): void {
     updateTrayMenu();
     return;
   }
-  tray = new Tray(join(app.getAppPath(), "resources", "icon.png"));
+  tray = new Tray(join(app.getAppPath(), "resources", "icon.ico"));
   tray.setToolTip("BZ-Games");
   void buildTrayMenu().then((menu) => tray?.setContextMenu(menu));
   tray.on("double-click", () => {
@@ -89,7 +91,7 @@ export function createWindow(): void {
     minHeight: 768,
     show: false,
     autoHideMenuBar: true,
-    icon: join(app.getAppPath(), "resources", "icon.png"),
+    icon: join(app.getAppPath(), "resources", "icon.ico"),
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),
       sandbox: false,
@@ -202,7 +204,13 @@ export function createFloatBallWindow(): void {
   const flooredX = savedPos?.x ?? defaultX;
   const flooredY = savedPos?.y ?? defaultY;
 
-  const { x, y } = clampFloatBallToScreen(flooredX, flooredY, ballSize, defaultX, defaultY);
+  const { x, y } = clampFloatBallToScreen(
+    flooredX,
+    flooredY,
+    ballSize,
+    defaultX,
+    defaultY,
+  );
 
   floatBallWindow = new BrowserWindow({
     width: ballSize,

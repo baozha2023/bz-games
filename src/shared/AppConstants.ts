@@ -9,6 +9,8 @@ declare const __BZ_CONFIG_ENCRYPTION_SEED__: string;
 declare const __BZ_DATABASE_ENCRYPTION_SEED__: string;
 declare const __BZ_GAME_MANIFEST_ENCRYPTION_SEED__: string;
 declare const __BZ_OAUTH_RETURN_URL__: string;
+declare const __BZ_UPDATE_FEED_URL__: string;
+declare const __BZ_TEST_CHANNEL__: boolean;
 
 export const CDN_BASE = __BZ_CDN_BASE__;
 
@@ -38,6 +40,12 @@ export const GAME_MANIFEST_ENCRYPTION_SEED =
   __BZ_GAME_MANIFEST_ENCRYPTION_SEED__;
 
 export const OAUTH_RETURN_URL = __BZ_OAUTH_RETURN_URL__;
+
+export const UPDATE_FEED_URL =
+  typeof __BZ_UPDATE_FEED_URL__ === "undefined" ? "" : __BZ_UPDATE_FEED_URL__;
+
+export const IS_TEST_CHANNEL =
+  typeof __BZ_TEST_CHANNEL__ === "undefined" ? false : __BZ_TEST_CHANNEL__;
 
 export const LAN_DISCOVERY_PORT = 38081;
 

@@ -1,11 +1,71 @@
 param(
-  [switch]$FullOnly
+  [switch]$FullOnly,
+  [switch]$Test,
+  [ValidatePattern('^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$')]
+  [string]$TestVersion
 )
 
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$version = (Get-Content -LiteralPath (Join-Path $repoRoot "package.json") -Raw | ConvertFrom-Json).version
+$packageVersion = (Get-Content -LiteralPath (Join-Path $repoRoot "package.json") -Raw | ConvertFrom-Json).version
+if ($Test -and [string]::IsNullOrWhiteSpace($TestVersion)) {
+  throw "Test builds require -TestVersion <stable-semver>"
+}
+if (-not $Test -and -not [string]::IsNullOrWhiteSpace($TestVersion)) {
+  throw "-TestVersion is only valid with -Test"
+}
+$version = if ($Test) { $TestVersion } else { $packageVersion }
+if ($version -notmatch '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$') {
+  throw "Build version must be a stable SemVer"
+}
+$versionParts = $version.Split('.')
+foreach ($versionPart in $versionParts) {
+  $parsedVersionPart = 0L
+  if (-not [Int64]::TryParse($versionPart, [ref]$parsedVersionPart) -or $parsedVersionPart -lt 0 -or $parsedVersionPart -gt 9007199254740991L) {
+    throw "Version components must be safe non-negative integers"
+  }
+}
+$privateConfigFile = if ($Test) { "private-build.config.test.json" } else { "private-build.config.json" }
+$privateConfigPath = Join-Path $repoRoot $privateConfigFile
+if (-not (Test-Path -LiteralPath $privateConfigPath -PathType Leaf)) {
+  throw "Private build config is missing: $privateConfigPath"
+}
+$privateConfig = Get-Content -LiteralPath $privateConfigPath -Raw | ConvertFrom-Json
+$updateFeedUrl = [string]$privateConfig.updateFeedUrl
+$previousReleaseFeedUrl = [string]$privateConfig.previousReleaseFeedUrl
+foreach ($feedEntry in @(@("updateFeedUrl", $updateFeedUrl), @("previousReleaseFeedUrl", $previousReleaseFeedUrl))) {
+  $parsedFeedUri = $null
+  if (-not [Uri]::TryCreate($feedEntry[1], [UriKind]::Absolute, [ref]$parsedFeedUri) -or $parsedFeedUri.Scheme -notin @("http", "https")) {
+    throw "$privateConfigFile must define $($feedEntry[0]) as an absolute HTTP(S) URL"
+  }
+  if (-not [string]::IsNullOrEmpty($parsedFeedUri.UserInfo) -or -not [string]::IsNullOrEmpty($parsedFeedUri.Query) -or -not [string]::IsNullOrEmpty($parsedFeedUri.Fragment)) {
+    throw "$privateConfigFile $($feedEntry[0]) must not contain user info, a query, or a fragment"
+  }
+}
+$updateFeedUri = [Uri]$updateFeedUrl
+$previousReleaseFeedUri = [Uri]$previousReleaseFeedUrl
+if ($Test) {
+  $normalizedUpdateFeedUrl = $updateFeedUri.AbsoluteUri.TrimEnd('/')
+  $normalizedPreviousReleaseFeedUrl = $previousReleaseFeedUri.AbsoluteUri.TrimEnd('/')
+  if (
+    $updateFeedUri.Scheme -ne 'http' -or
+    $updateFeedUri.AbsolutePath -notmatch '^/api/v1/desktop-updates/test/[A-Za-z0-9_-]{43}/?$' -or
+    $normalizedUpdateFeedUrl -cne $normalizedPreviousReleaseFeedUrl
+  ) {
+    throw "Test builds must use the same private HTTP test feed for runtime updates and the previous-test delta baseline"
+  }
+} else {
+  $isGitHubFeed = {
+    param([Uri]$Uri)
+    $Uri.Scheme -eq 'https' -and
+    $Uri.Host -eq 'github.com' -and
+    $Uri.AbsolutePath.TrimEnd('/') -eq '/baozha2023/bz-games/releases/latest/download'
+  }
+  if (-not (& $isGitHubFeed $updateFeedUri) -or -not (& $isGitHubFeed $previousReleaseFeedUri)) {
+    throw "Production builds must use the official GitHub latest-release URL for updates and the delta baseline"
+  }
+}
 $cargo = Join-Path $env:USERPROFILE ".cargo\bin\cargo.exe"
 $vpk = Join-Path $env:USERPROFILE ".dotnet\tools\vpk.exe"
 $nativeManifest = Join-Path $repoRoot "native\bootstrap\Cargo.toml"
@@ -17,10 +77,13 @@ $installerLogoLayers = @(
   (Join-Path $repoRoot "resources\installer-logo-q4.png")
 )
 $electronDir = Join-Path $repoRoot "dist\win-unpacked"
-$releaseDir = Join-Path $repoRoot "dist\velopack"
+$releaseDir = if ($Test) {
+  Join-Path $repoRoot "dist\velopack-test\$version"
+} else {
+  Join-Path $repoRoot "dist\velopack"
+}
 $launcher = Join-Path $repoRoot "native\bootstrap\target\release\bz-games-launcher.exe"
 $uninstaller = Join-Path $repoRoot "native\bootstrap\target\release\bz-games-uninstaller.exe"
-$repoUrl = "https://github.com/baozha2023/bz-games"
 $fullOnlyBuild = $FullOnly.IsPresent -or $version -eq "4.0.0"
 
 if (-not (Test-Path -LiteralPath $cargo -PathType Leaf)) {
@@ -40,12 +103,27 @@ foreach ($logoLayer in $installerLogoLayers) {
 
 Set-Location -LiteralPath $repoRoot
 $env:BZ_APP_VERSION = $version
+$env:BZ_PRIVATE_BUILD_CONFIG = $privateConfigFile
+
+# GitHub Release downloads are frequently unreachable from the development
+# network. Keep caller-provided mirrors authoritative, but provide reliable
+# defaults for both Electron and electron-builder toolsets. Both download
+# paths retain their upstream checksum verification.
+if ([string]::IsNullOrWhiteSpace($env:ELECTRON_MIRROR)) {
+  $env:ELECTRON_MIRROR = "https://npmmirror.com/mirrors/electron/"
+}
+if ([string]::IsNullOrWhiteSpace($env:ELECTRON_BUILDER_BINARIES_MIRROR)) {
+  $env:ELECTRON_BUILDER_BINARIES_MIRROR = "https://npmmirror.com/mirrors/electron-builder-binaries/"
+}
+
 & $cargo build --release --manifest-path $nativeManifest --bin bz-games-launcher
 if ($LASTEXITCODE -ne 0) { throw "Root launcher build failed" }
 & $cargo build --release --manifest-path $nativeManifest --bin bz-games-uninstaller
 if ($LASTEXITCODE -ne 0) { throw "Root uninstaller build failed" }
-npm run build:electron-win
+npm run build
 if ($LASTEXITCODE -ne 0) { throw "Electron Windows package build failed" }
+npx electron-builder --win --dir "--config.extraMetadata.version=$version"
+if ($LASTEXITCODE -ne 0) { throw "Electron Windows package packaging failed" }
 
 if (Test-Path -LiteralPath $releaseDir) {
   Remove-Item -LiteralPath $releaseDir -Recurse -Force
@@ -54,17 +132,15 @@ New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
 
 if (-not $fullOnlyBuild) {
   $downloadArgs = @(
-    "download", "github",
-    "--repoUrl", $repoUrl,
+    "download", "http",
+    "--url", $previousReleaseFeedUrl,
     "--channel", "stable",
     "--outputDir", $releaseDir
   )
-  if ($env:GITHUB_TOKEN) {
-    $downloadArgs += @("--token", $env:GITHUB_TOKEN)
-  }
   & $vpk @downloadArgs
   if ($LASTEXITCODE -ne 0) {
-    throw "Unable to download the previous stable Velopack full package; use -FullOnly only for an intentional full-only release"
+    $baselineChannel = if ($Test) { "test" } else { "production" }
+    throw "Unable to download the previous $baselineChannel Velopack release from $previousReleaseFeedUrl"
   }
 }
 
@@ -138,5 +214,32 @@ if (-not $fullOnlyBuild) {
   if ($currentDelta.Count -ne 1) {
     throw "Expected exactly one current delta package, found $($currentDelta.Count)"
   }
+}
+
+# Keep the output directory identical to the server's atomic release bundle.
+# Velopack also emits legacy feeds and its generic setup executable; the custom
+# BZ-Games installer supersedes those files and they must not be uploaded.
+$bundleFiles = [Collections.Generic.HashSet[string]]::new(
+  [StringComparer]::Ordinal
+)
+[void]$bundleFiles.Add((Split-Path -Leaf $finalInstaller))
+[void]$bundleFiles.Add((Split-Path -Leaf $stableFeedPath))
+foreach ($asset in $feedAssets) {
+  [void]$bundleFiles.Add([string]$asset.FileName)
+}
+foreach ($generatedFile in Get-ChildItem -LiteralPath $releaseDir -File) {
+  if (-not $bundleFiles.Contains($generatedFile.Name)) {
+    Remove-Item -LiteralPath $generatedFile.FullName -Force
+  }
+}
+$remainingFiles = @(Get-ChildItem -LiteralPath $releaseDir -File)
+$unexpectedFiles = @(
+  $remainingFiles | Where-Object { -not $bundleFiles.Contains($_.Name) }
+)
+if (
+  $remainingFiles.Count -ne $bundleFiles.Count -or
+  $unexpectedFiles.Count -ne 0
+) {
+  throw "Release output does not match the validated atomic bundle"
 }
 Write-Host "BZ-Games Velopack release created at $releaseDir"

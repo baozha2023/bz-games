@@ -46,6 +46,7 @@
     "build:unpack": "npm run build && electron-builder --dir",
     "build:electron-win": "npm run build && electron-builder --win --dir",
     "build:win": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-velopack.ps1",
+    "build:win:test": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-velopack.ps1 -Test",
     "build:mac": "electron-builder --mac",
     "build:linux": "electron-builder --linux"
   },
@@ -99,7 +100,7 @@
     },
     "files": [
       "out/**/*",
-      "resources/icon.png",
+      "resources/icon.ico",
       "resources/default_icon.png",
       "resources/default_cover.png",
       "resources/elevate.exe",

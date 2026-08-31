@@ -45,7 +45,7 @@
 - 客户端卸载系统（根目录独立 Rust 卸载器、崩溃恢复、任务阻塞、可选数据清理与路径安全防护）
 - 默认封面/图标静态回退（`GameCover.vue` / `GameIcon.vue` 在无自定义资源时使用内置静态图片）
 - 官网最新安装包下载（正式 GitHub Release 原子同步到官方服务器，固定接口支持断点续传并对全部并发下载合计限速 100 Mbps）
-- 平台版本管理（管理员可查看当前版本，仅超级管理员可在管理端上传稳定版 EXE，手动上传允许升版或降版；Actions 仍只允许升版；两条链路统一经过暂存、SHA-256/PE/semver 校验、发布锁和 latest 原子切换，并把发布文件归一到发布目录属主、属组与 `0640` 权限）
+- 平台版本管理（正式/测试双通道；管理员可查看正式版，仅超级管理员可上传完整闭包和管理测试版；Actions 仍只允许正式升版；全部链路统一经过 feed、Full/Delta、NuGet、SHA-256、发布锁和 `current.json` 原子切换）
 
 ---
 
@@ -124,7 +124,8 @@ bz-games/
 │       │   ├── mongo-service.js           # MongoDB GridFS 连接管理
 │       │   ├── mysql-service.js           # MySQL 连接池与最新完整建表结构
 │       │   ├── portal-user-service.js     # Portal 创作者激活与管理员用户查询
-│       │   ├── release-download-service.js # 桌面发行版校验、原子发布与限速下载
+│       │   ├── release-bundle-service.js  # 正式/测试更新闭包、NuGet 与原子发布核心
+│       │   ├── release-download-service.js # 正式/测试管理 API、Token 下载、Range 与限速
 │       │   ├── room-service.js            # 房间创建、加入、密码、清理
 │       │   ├── system-monitor-service.js  # CPU、内存、磁盘、网络和连接状态监控
 │       │   └── sensitive-word-service.js  # 中继侧敏感词过滤服务（词库加载 + Unicode 安全字符级掩码）
@@ -136,19 +137,20 @@ bz-games/
 │           └── ws.js                      # WebSocket 消息序列化与广播发送
 ├── native/bootstrap/                     # Rust 稳定启动器、独立卸载器、安装向导与健康回滚
 ├── package.json                          # 依赖、脚本与打包发布配置
-├── private-build.config.example.json      # 私有构建配置模板（CDN/OSS/中继/加密种子等环境变量）
+├── private-build.config.example.json      # 正式/测试私有构建配置的统一字段模板
 ├── scripts/
 │   ├── check-config-examples.mjs          # 客户端/服务端配置示例字段及敏感路径忽略规则检查
 │   ├── run-database-test.mjs              # 隔离目录内构建并运行数据库服务测试
 │   ├── test-database-service.ts           # v4 最终 Schema、旧库拒绝、路径规则与仓储行为测试
 │   ├── run-v1-conversion.mjs              # 独立执行 v3.4.2 V1 转换器
-│   └── build-velopack.ps1                 # Electron、Velopack 与 Rust 安装器构建链
+│   ├── configure-test-channel.ps1         # 生成私有测试版配置与 32 字节 Token
+│   └── build-velopack.ps1                 # 正式/测试 Electron、Velopack 与 Rust 构建链
 ├── package-lock.json                     # npm 依赖锁定文件
 ├── tsconfig.json                         # TypeScript 根配置
 ├── tsconfig.node.json                    # 主进程/预加载/共享代码 TS 配置
 ├── tsconfig.web.json                     # 渲染进程 TS 配置
 ├── vitest.config.ts                      # Vue 论坛组件与 composable 的 jsdom 测试配置
-├── electron.vite.config.ts               # Electron-Vite 构建配置（读取 private-build.config.json 注入构建期常量）
+├── electron.vite.config.ts               # 仅从两个白名单私有配置之一注入构建期常量
 ├── config.json                           # 本地持久化配置（运行生成）
 ├── db/                                   # SQLite 数据库目录（运行生成）
 │   └── bz_games.db                       # 游戏/版本实体、游玩会话、成就解锁与统计上报统一加密数据库
@@ -779,7 +781,8 @@ interface FloatBallProgress {
 数据根目录固定保存 `config.json`、`games/` 和 `db/bz_games.db`，程序运行区只存在于 `.runtime/`：
 
 - **配置加密存储**：`ConfigCodec` 只接受严格的 `{ format:"bz-games-config", formatVersion:4, algorithm:"aes-256-gcm", iv, tag, payload }` 信封；`iv` 必须是 12 字节规范 Base64，认证标签必须是 16 字节规范 Base64，载荷和整个配置文件有大小上限。解密后的 `settings`、`userData` 使用严格白名单，未知字段、错误类型和错误版本直接拒绝。
-- **运行时只接受最终结构**：配置不存在才创建默认值；运行时不得清理、重命名或补齐任何旧字段。`feedbackHistory`、NSIS 迁移字段、旧更新忽略字段和旧游戏库路径只由正式 V1 导入转换器读取并一次性转换或丢弃。
+- **运行时只接受最终结构**：配置不存在才创建完整默认值；除下述同一格式版本内的简单新增字段由 Schema 默认值补齐外，运行时不得通过散落的业务分支清理、重命名或补齐旧字段。`feedbackHistory`、NSIS 迁移字段、旧更新忽略字段和旧游戏库路径只由正式 V1 导入转换器读取并一次性转换或丢弃。
+- **配置字段演进**：同一 `formatVersion` 内只允许增加不改变既有语义的简单字段。新增字段必须同时写入 TypeScript 类型、默认配置工厂和严格 Zod Schema，并在 Schema 上通过 `.default(...)` 为已安装用户的旧配置补齐值；不能只依赖 `electron-store` 的 `defaults`，因为解密后的载荷会先经过严格解析。`""` 可以作为默认值，但仅限空字符串明确表示“未设置”且全部消费方都能安全处理的字段；必填标识、URL、令牌或其他空值无效的字段不得用 `""` 伪造有效值。布尔值、数组、对象和数值同样必须按业务语义选择明确默认值。新增字段若属于备份或 V1 导入的数据契约，必须同步更新备份校验、V1 自动转换和测试。字段删除、重命名、类型变化或语义变化不属于简单新增，必须升级 `formatVersion` 并提供版本边界上的显式转换，禁止在正常运行路径堆叠兼容判断。
 
 ```typescript
 // src/shared/types/store.types.ts
@@ -1199,10 +1202,12 @@ interface AppSettings {
 
 - **目录边界**：根目录稳定保存 `BZ-Games.exe`、`BZ-Games-Uninstall.exe`、`.bz-games-root`、`config.json`、`games/`、`db/`；Velopack 只管理 `.runtime/`，不得覆盖或卸载同级用户数据。
 - **安装路径**：Rust 安装器使用两页原生 Windows 向导，先展示产品介绍，再让用户选择父目录并自动创建 `BZ-Games` 子目录；禁止系统目录、磁盘根、用户主目录根、网络路径、重解析点和不支持可靠原子重命名的位置；目标安装目录非空时不得覆盖。`--install-dir` 仅供自动化调用，表示明确的最终安装根目录。
-- **安装动画**：动画窗口使用逐像素 alpha 合成，不使用色键；1024×1024 原图按窗口与 DPI 等比缩放，四个碎片的尺寸与最大 X/Y 分离距离（各 100 逻辑像素）同步按 DPI 缩放。单次动作由分离、两圈旋转（两圈间隔 50ms）和归位组成，不绑定固定总时长；安装未完成时每轮动作间隔 1 秒重播。安装即使先完成，也必须等待首轮动作结束；之后若正处于动作中则等待当前动作结束，若处于轮间静止状态则可立即收口。
+- **引导层国际化**：Rust 安装器与卸载器共用 Windows 当前用户区域语言映射，支持简体中文、繁体中文、英语、日语和德语，其他语言回退英语。首次安装时安装器把规范语言代码写入根目录一次性 `.initial-language` 标记；客户端首次创建玩家配置时读取并删除该标记，使初始语言与安装器一致，后续由用户设置和配置文件决定，不再受系统语言变化影响。
+- **Windows 图标资源**：`resources/icon.ico` 是提交到仓库的永久构建资源，由 1024×1024 `icon.png` 母版人工更新，固定包含 Windows ICO 支持的 16、24、32、48、64、128、256 像素图层；Rust 安装器/卸载器加载 256 像素图层并交给 Windows 按 DPI 缩放，Electron 主窗口、聊天窗口、托盘、客户端 EXE、根启动器、卸载器和安装包统一引用该 ICO。正常打包和构建不得临时重新生成 ICO；`icon.png` 仅作为人工更新母版及安装介绍/动画位图使用，不随 Electron 客户端打包。
+- **安装动画**：动画窗口使用逐像素 alpha 合成，不使用色键；1024×1024 原图按窗口与 DPI 等比缩放，四个碎片的尺寸与最大 X/Y 分离距离（各 100 逻辑像素）同步按 DPI 缩放。进入动画页时，必须忽略普通安装窗口被拖动后的位置，并以该窗口所在显示器的可用工作区（排除任务栏）为基准重新居中；多显示器坐标允许为负值。动画页是不可交互的纯展示层，整个分层窗口必须使用 `WS_EX_TRANSPARENT` 实现系统级鼠标穿透，并使用 `WS_EX_NOACTIVATE` 禁止激活；画面只由 `UpdateLayeredWindow` 的逐像素 alpha 表面提供，不得叠加普通窗口绘制。返回普通向导页后必须完整恢复标准窗口样式与绘制。单次动作由分离、两圈旋转（两圈间隔 50ms）和归位组成，不绑定固定总时长；安装未完成时每轮动作间隔 1 秒重播。安装即使先完成，也必须等待首轮动作结束；之后若正处于动作中则等待当前动作结束，若处于轮间静止状态则可立即收口。
 - **稳定入口**：快捷方式、协议和自启动指向根目录启动器，卸载入口独立指向根目录卸载器；Velopack 使用 `--shortcuts None`。
 - **卸载语义**：Windows 系统入口显示原生选择页，其中游戏库删除项保持禁用，用户只能选择是否删除 `config.json` 与 `db/`；游戏内入口允许分别选择删除全部游戏库或删除 `config.json`、`db/`，并把已确定的游戏库删除决策交给原生 worker，不允许系统选择页改写。删除动作在 Electron 退出且核心预检通过后执行。
-- **构建链**：`npm run build:win` 依次生成 Rust 根启动器与卸载器、Electron 目录包、Velopack 资产，以及同时嵌入 Setup、启动器和卸载器的最终 `BZ-Games-Setup-<version>.exe`。4.0.0 或显式 `-FullOnly` 只生成 full；后续常规构建必须先从 GitHub 下载上一稳定版 full/feed，并同时生成当前 full、delta 和 feed，下载或 delta 缺失时构建失败。
+- **构建链**：`npm run build:win` 依次生成 Rust 根启动器与卸载器、Electron 目录包、Velopack 资产，以及同时嵌入 Setup、启动器和卸载器的最终 `BZ-Games-Setup-<version>.exe`。Electron 与 electron-builder 的平台二进制不属于业务 `node_modules` 内容，构建脚本在调用方未显式配置时使用可达镜像，仍执行上游 SHA-256 完整性校验并复用本机缓存；显式 `ELECTRON_MIRROR` 和 `ELECTRON_BUILDER_BINARIES_MIRROR` 始终优先。全新正式版 4.0.0 或显式 `-FullOnly` 只生成 Full；后续正式构建从 GitHub 正式 feed 下载上一正式版 Full，后续测试构建从 Relay 私有测试 feed 下载上一测试版 Full，再生成当前 Full、Delta 和 feed；基线下载或应生成的 Delta 缺失时构建失败。
 - **发布资产闭包**：正式 GitHub Release 必须同时包含唯一的 `releases.stable.json`、清单引用的全部 full/delta 包和唯一的 `BZ-Games-Setup-<version>.exe`。部署工作流拒绝草稿、预发布、重复文件名、不安全文件名、非法类型/大小/哈希及与 Release 元数据不一致的资产，只有完整更新资产闭包通过校验后才把安装器原子发布到下载服务器。
 
 ### 6.1.2 游戏库列表管理
@@ -1467,6 +1472,8 @@ interface AppSettings {
 
 ### 6.5 v4 更新、V1 转换与 V2 备份规范
 
+- **构建通道固定**：`private-build.config.json` 与 `private-build.config.test.json` 必须和示例拥有完全相同的字符串字段并同时被 Git 忽略。正式 `npm run build:win` 固定读取前者，运行时更新与 Delta 基线都只能查询官方 GitHub Release feed；`npm run build:win:test -- -TestVersion X.Y.Z` 固定读取后者，运行时更新与 Delta 基线都只能查询同一个 HTTP Relay 私有测试 feed，路径包含 32 字节私有 Base64URL Token，严禁从服务端正式 feed 取测试基线。当前服务器没有域名与证书，所有 Relay 公网请求固定使用 `http://<server-ip>:38090`，不得把配置或文档擅自改成 HTTPS。构建脚本必须验证两个测试 URL 完全相同及正式 GitHub URL，禁止仅靠人工配置约定。配置通过编译期常量固化，正式客户端不得提供运行时切换入口。测试版本覆盖 Electron、Rust 与 Velopack 版本但不得改写 `package.json`、lock 或 Cargo 版本；4.0.0 是无 Delta 的全新正式版并固定 Full-only，后续版本必须具备对应通道的上个版本 Full 基线，Delta 可选且仅在 feed 引用时生成和发布。测试版是可直接分发给社区内测用户的完整产品，产物固定输出到 `dist/velopack-test/<version>`。
+- **发布闭包**：正式和测试闭包都包含唯一同版本 `BZ-Games-Setup-X.Y.Z.exe`、`releases.stable.json` 和 feed 引用的全部 Full/Delta；Delta 不在 feed 中时无需上传。两个通道复用 Relay 唯一发布核心但保持独立版本历史，固定 `PackageId=com.bzgames.desktop`，校验稳定 SemVer、闭包集合、大小/SHA-256、nupkg ZIP/NuGet 与 `.nuspec` 身份。管理端人工维护并选择 feed 引用的每个文件，Relay 不从正式闭包或上一测试闭包后台备份、复用或复制 Full；任一引用资产缺失即拒绝发布。管理端允许任意稳定 SemVer，同版本同闭包幂等、同版本不同闭包原子覆盖，升版和降版均可；GitHub Action 在上传前读取正式当前版本并只允许严格更高版本，随后把正式安装器、feed 及 feed 引用的全部 Full/Delta 直接上传服务器，服务端仍以非前向发布拒绝作为竞态保护。测试安装器固化测试更新源，可分发给社区内测用户。
 - **更新检查**：更新与健康 IPC 只接受主窗口 sender；同一次运行的健康提交必须幂等。仅在一次健康启动完成 30 秒后检查一次；`updatePromptSuppressedForAppVersion` 与当前安装版本相同时自动检查完全跳过。可选的回滚抑制标记损坏时丢弃并记录，不能阻断核心健康提交。设置页手动检查不受抑制字段影响。禁止恢复 `electron-updater` 或周期检查定时器。
 - **更新提交**：自动检查不下载。用户分别确认下载和安装；下载前必须从 Velopack 当前包缓存将唯一匹配的当前版本 full 包保存到 `.runtime/rollback-package`，下载完成后不允许回退到旧回滚点或再次猜测包来源。应用前阻止新任务、等待已有任务结束、刷新配置并关闭 SQLite，仅从这份已验证暂存包以临时目录事务式生成 `.runtime/rollback`。最终回滚点固定包含当前 full 包、SHA-256、`config.json`、完整 `db/` 和 `rollback-state.json`；完整落盘后才原子替换旧点，游戏文件不进入快照。
 - **健康与自动回滚**：同一安装根同时只允许一个根启动器执行健康守护；并发启动仅转交参数，不得重复累计更新失败。根启动器以随机令牌等待配置解密、SQLite、游戏索引、IPC、本地 API 和渲染首屏全部健康，健康记录的进程 ID 必须与受守护子进程一致；同一待更新版本连续失败两次后才自动回滚。客户端不提供手动回退入口。健康升级成功后立即清理已消费的回滚点；自动回滚使用固定路径、严格清单、版本关系、full 包 SHA-256、数据恢复和恢复后健康检查，成功后消费回滚点并抑制回退版本的自动更新检查，手动检查更新不受影响。
@@ -1476,7 +1483,7 @@ interface AppSettings {
 - **V2 长期契约**：根目录严格且仅包含 `backup-manifest.json`、`config.json`、`games/`、`db/`，其中 `db/` 只能有 `bz_games.db`；`formatVersion=2` 且独立声明 `dataModelVersion`。只复制内置游戏库，外部库只保存数据库引用；归档中的配置必须清空账号会话、账号身份与 `githubToken`。完整格式见 `docs/BACKUP_BUNDLE_V2.md`。
 - **完整替换与回滚**：导入前执行 CRC、严格 Manifest Schema、根白名单、路径穿越、ADS、硬/符号链接、目录联接/重解析点、特殊文件、归档炸弹和空间检查，并展示预览后二次确认。当前数据逐项移入回滚目录并分别记录“已备份旧项”和“已安装新项”；失败时只撤销实际安装的新项并原样恢复已备份旧项，回滚本身失败必须保留现场。新数据健康启动后才删除回滚目录，源 `.bzgames` 永不删除。
 - **最终数据结构**：v4 运行时只接受最终配置、数据库与 Manifest 结构，不提供启动迁移、旧字段回退或双读分支。开发阶段每次结构定稿后必须用一次性维护程序手工调整当前 dev 数据并通过严格 Schema、数据库指纹、完整性和外键检查；该维护程序不得进入正式运行路径。
-- **回归样本**：V1、V2 样本和 SHA-256 必须使用测试密钥和合成数据；V1 导入能力长期保留，4.x 不反向导出 V1。修改 V1 转换器、Schema、配置或 Manifest 契约后必须执行 `npm run test:v1-fixture`；该测试需同时覆盖旧独立数据库/WAL/SHM/`.imports` 丢弃、路径相对化、配置字段映射和明文 Manifest 加密。
+- **回归样本**：V1、V2 样本和 SHA-256 必须使用测试密钥和合成数据；V1 导入能力长期保留，4.x 不反向导出 V1。V1 二进制回归包不提交仓库，`npm run test:v1-fixture` 必须在隔离临时目录中从 `scripts/fixtures/` 的固定合成输入生成归档和校验值后再执行转换；`npm run fixture:migration` 仅供本地人工检查。修改 V1 转换器、Schema、配置或 Manifest 契约后必须执行 `npm run test:v1-fixture`；该测试需同时覆盖旧独立数据库/WAL/SHM/`.imports` 丢弃、路径相对化、配置字段映射和明文 Manifest 加密。
 
 ### 6.6 建言献策、管理后台与配置安全
 
@@ -1492,7 +1499,7 @@ interface AppSettings {
 - **令牌注入边界**：客户端附加 GitHub Token、Relay Token 或专用 Referer 前，必须使用 `URL` 解析并精确校验协议、`origin` 与允许的路径边界；禁止使用字符串 `startsWith` 判断可信主机，禁止向相似前缀域名、用户信息段、重定向后的第三方地址或任意市场 URL 发送凭据。
   - **配置唯一来源**：客户端真实关键配置只允许出现在被 Git 忽略的 `private-build.config.json`；服务端真实关键配置只允许存在于服务器的 systemd 主单元及 drop-in 配置，权限必须为 `root:root 0600`；管理端生产环境使用同源 `/api` 与 `/auth`，当前无环境字段。生产管理端构建产物只部署到 Nginx 的 `/var/www/campusmate/admin`，不把服务器真实配置回写仓库。
   - **生产公网入口唯一化**：Nginx 只监听公网 `:38090`，Relay 只监听本机 `127.0.0.1:38091`；Nginx 直接托管 `/admin/` 静态页面，并将当前 `/api/...`、`/auth/...`、房间 HTTP 接口和 `/ws/` WebSocket 转发到本机 Relay。不得保留旧服务前缀或 Relay `:38091` 的公网兼容入口。官网和客户端发行版下载统一使用 `/api/v1/releases/latest/download`；GitHub Actions 发布通过 SSH 调用服务器发布脚本，超级管理员桌面版本上传使用 `/api/admin/v1/desktop-release`，客户端托管游戏下载使用 `/api/v1/game-hosting/assets/*`，创作者上传使用 `/api/portal/v1/game-hosting/*`。
-  - **桌面版本发布语义**：GitHub Actions 与管理端上传复用同一原子发布器和发布锁。Actions 对同版本同文件返回 `already_current`，对同版本不同 SHA-256 返回 `current_retained` 并保留当前文件，两者都按幂等成功结束；管理 API 必须把 `current_retained` 映射为 `409 desktop_release_version_conflict`，不得让页面把未发生的替换提示为发布成功。
+  - **桌面版本发布语义**：GitHub Actions 与管理端上传复用同一原子发布器和发布锁。GitHub Actions 在远端读取正式当前版本，只允许严格更高版本并通过 `--allow-downgrade false` 保留竞态保护；管理 API 使用允许非前向发布的模式，支持任意版本和同版本不同闭包覆盖，同版本同闭包仍返回 `already_current`。页面必须把实际覆盖或幂等结果如实提示。
 - **示例同步**：`private-build.config.example.json` 与 `relay-server/bz-games-relay.service.example` 分别对应客户端和服务端。新增或删除配置字段后必须运行 `npm run check:config`（对应 `scripts/check-config-examples.mjs`，自动校验两端配置字段一致性、`.gitignore` 敏感路径覆盖及 SERVICE 示例完整性）。`bz-games-admin/` 是被父仓库忽略的独立仓库，其环境示例与测试由该仓库自行维护；禁止在任一源码或文档写入真实公网地址、管理员 ID、令牌、数据库连接串或 OAuth Secret。
 
 ---

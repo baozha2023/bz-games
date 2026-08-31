@@ -3,6 +3,8 @@ use std::time::{Duration, Instant};
 use tiny_skia::{Color, FilterQuality, Pixmap, PixmapPaint, Rect, Transform};
 
 const BASE_ICON_SIZE: f32 = 360.0;
+const SOURCE_IMAGE_SIZE: u32 = 1024;
+const SOURCE_IMAGE_SIZE_F32: f32 = 1024.0;
 const FRAGMENT_SPREAD: f32 = 100.0;
 const INITIAL_LOGO_HOLD_MS: u64 = 350;
 const SEPARATION_DURATION_MS: u64 = 275;
@@ -51,7 +53,7 @@ impl AnimationRenderer {
             Pixmap::decode_png(pieces[2]).context("decode installer logo quadrant 3")?,
             Pixmap::decode_png(pieces[3]).context("decode installer logo quadrant 4")?,
         ];
-        if complete.width() != 1024 || complete.height() != 1024 {
+        if complete.width() != SOURCE_IMAGE_SIZE || complete.height() != SOURCE_IMAGE_SIZE {
             anyhow::bail!(
                 "complete installer logo must be 1024x1024, got {}x{}",
                 complete.width(),
@@ -60,7 +62,7 @@ impl AnimationRenderer {
         }
         if pieces
             .iter()
-            .any(|piece| piece.width() != 1024 || piece.height() != 1024)
+            .any(|piece| piece.width() != SOURCE_IMAGE_SIZE || piece.height() != SOURCE_IMAGE_SIZE)
         {
             anyhow::bail!("installer logo quadrants must all be 1024x1024");
         }
@@ -72,11 +74,11 @@ impl AnimationRenderer {
         })
     }
 
-    pub fn set_phase(&mut self, phase: InstallPhase) {
+    pub const fn set_phase(&mut self, phase: InstallPhase) {
         self.phase = phase;
     }
 
-    pub fn restart(&mut self, now: Instant) {
+    pub const fn restart(&mut self, now: Instant) {
         self.started_at = now;
     }
 
@@ -113,9 +115,9 @@ impl AnimationRenderer {
         let available_scale = width.min(height) * 0.90 / motion_envelope;
         let display_scale = dpi_scale
             .min(available_scale)
-            .clamp(1.0 / BASE_ICON_SIZE, 1024.0 / BASE_ICON_SIZE);
+            .clamp(1.0 / BASE_ICON_SIZE, SOURCE_IMAGE_SIZE_F32 / BASE_ICON_SIZE);
         let icon_size = BASE_ICON_SIZE * display_scale;
-        let scale = icon_size / 1024.0;
+        let scale = icon_size / SOURCE_IMAGE_SIZE_F32;
         let elapsed_ms = elapsed_millis(self.elapsed(now));
         let motion = motion_at(animation_time_at(elapsed_ms));
 
@@ -179,10 +181,10 @@ impl AnimationRenderer {
 }
 
 fn elapsed_millis(elapsed: Duration) -> u64 {
-    elapsed.as_millis().min(u64::MAX as u128) as u64
+    u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX)
 }
 
-fn animation_time_at(elapsed_ms: u64) -> u64 {
+const fn animation_time_at(elapsed_ms: u64) -> u64 {
     if elapsed_ms < ACTION_END_MS {
         return elapsed_ms;
     }
@@ -213,7 +215,7 @@ fn piece_transform(
         .pre_translate(offset_x, offset_y)
         .pre_rotate(tilt)
         .pre_scale(scale, scale)
-        .pre_translate(-512.0, -512.0)
+        .pre_translate(-SOURCE_IMAGE_SIZE_F32 / 2.0, -SOURCE_IMAGE_SIZE_F32 / 2.0)
 }
 
 fn motion_at(action_ms: u64) -> Motion {
@@ -281,7 +283,7 @@ fn two_turn_angle(rotation_ms: u64) -> f32 {
     360.0 + 360.0 * ease_in_out(second_turn_ms as f32 / TURN_DURATION_MS as f32)
 }
 
-pub fn progress_percent(phase: InstallPhase) -> u8 {
+pub const fn progress_percent(phase: InstallPhase) -> u8 {
     match phase {
         InstallPhase::Preparing => 8,
         InstallPhase::Installing => 28,
@@ -323,17 +325,17 @@ fn draw_progress_bar(
     paint.set_color(Color::from_rgba8(25, 43, 70, 230));
     canvas.fill_rect(track, &paint, Transform::identity(), None);
 
-    let progress_width = bar_width * (percent.min(100) as f32 / 100.0);
+    let progress_width = bar_width * (f32::from(percent.min(100)) / 100.0);
     if progress_width <= 0.0 {
         return;
     }
     let Some(progress) = Rect::from_xywh(left, top, progress_width, bar_height) else {
         return;
     };
-    paint.set_color(match percent {
-        100 => Color::from_rgba8(70, 214, 147, 255),
-        0 => Color::from_rgba8(255, 102, 122, 255),
-        _ => Color::from_rgba8(102, 166, 255, 255),
+    paint.set_color(if percent == 100 {
+        Color::from_rgba8(70, 214, 147, 255)
+    } else {
+        Color::from_rgba8(102, 166, 255, 255)
     });
     canvas.fill_rect(progress, &paint, Transform::identity(), None);
 }
@@ -344,7 +346,7 @@ mod tests {
         animation_time_at, motion_at, piece_transform, two_turn_angle, AnimationRenderer,
         ACTION_DURATION, ACTION_END_MS, BETWEEN_TURNS_PAUSE_MS, FRAGMENT_SPREAD,
         INITIAL_LOGO_HOLD_MS, REPLAY_ACTION_DURATION_MS, REPLAY_CYCLE_MS, REPLAY_PAUSE_MS,
-        TURN_DURATION_MS,
+        ROTATION_END_MS, ROTATION_START_MS, SOURCE_IMAGE_SIZE_F32, TURN_DURATION_MS,
     };
     use std::time::{Duration, Instant};
     use tiny_skia::Point;
@@ -373,8 +375,8 @@ mod tests {
     #[test]
     fn animation_has_exact_two_clockwise_turns() {
         assert_eq!(BETWEEN_TURNS_PAUSE_MS, 50);
-        assert_eq!(motion_at(625).angle, 0.0);
-        assert_eq!(motion_at(625).spread, FRAGMENT_SPREAD);
+        assert_eq!(motion_at(ROTATION_START_MS).angle, 0.0);
+        assert_eq!(motion_at(ROTATION_START_MS).spread, FRAGMENT_SPREAD);
         assert_eq!(FRAGMENT_SPREAD, 100.0);
         assert_eq!(two_turn_angle(TURN_DURATION_MS), 360.0);
         assert_eq!(
@@ -382,7 +384,7 @@ mod tests {
             360.0
         );
         assert!(two_turn_angle(TURN_DURATION_MS + BETWEEN_TURNS_PAUSE_MS + 50) > 360.0);
-        assert_eq!(motion_at(2_675).angle, 720.0);
+        assert_eq!(motion_at(ROTATION_END_MS).angle, 720.0);
     }
 
     #[test]
@@ -479,12 +481,12 @@ mod tests {
 
     #[test]
     fn complete_logo_waits_until_fragments_finish_returning() {
-        let just_before_swap = motion_at(3_299);
+        let just_before_swap = motion_at(ACTION_END_MS - 1);
         assert_eq!(just_before_swap.full_opacity, 0.0);
         assert_eq!(just_before_swap.piece_opacity, 1.0);
         assert!(just_before_swap.spread < 0.01);
 
-        let after_swap = motion_at(3_300);
+        let after_swap = motion_at(ACTION_END_MS);
         assert_eq!(after_swap.full_opacity, 1.0);
         assert_eq!(after_swap.piece_opacity, 0.0);
         assert_eq!(after_swap.spread, 0.0);
@@ -493,8 +495,9 @@ mod tests {
     #[test]
     fn pieces_orbit_the_shared_logo_center() {
         let center = (300.0, 300.0);
-        let mut upper_left = Point::from_xy(512.0, 512.0);
-        let mut upper_right = Point::from_xy(512.0, 512.0);
+        let source_center = SOURCE_IMAGE_SIZE_F32 / 2.0;
+        let mut upper_left = Point::from_xy(source_center, source_center);
+        let mut upper_right = Point::from_xy(source_center, source_center);
         piece_transform(
             center.0,
             center.1,

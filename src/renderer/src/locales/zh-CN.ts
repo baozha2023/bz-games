@@ -785,6 +785,7 @@ export default {
     updateViewReleaseNotes: "查看更新说明",
     updateLater: "稍后再说",
     updateNow: "立即更新",
+    updateVerifying: "正在校验并准备更新包…",
     updateReady: "更新包已下载并校验完成，请确认重启安装。",
     updateRestartInstall: "重启并安装",
     updateReleaseOpenFailed: "无法打开更新说明",
@@ -803,6 +804,7 @@ export default {
       unknown: "更新失败，请检查日志后重试",
     },
     currentVersion: "当前版本：{version}",
+    testChannel: "测试版",
     officialWebsite: "官方网站",
     uninstallClient: "卸载客户端",
     uninstallClientDescription:

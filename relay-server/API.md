@@ -248,7 +248,7 @@ Cookie: bz_games_session=<session_token>
 ```http
 POST /api/auth/logout HTTP/1.1
 Cookie: bz_games_session=<session_token>
-Origin: https://relay.example.com
+Origin: http://relay.example.com:38090
 ```
 
 响应：`200`
@@ -934,21 +934,29 @@ sequenceDiagram
 
 ### `GET|HEAD /api/v1/releases/latest/download`
 
-公开下载当前正式版 Windows NSIS 安装器，不要求登录或 `X-Relay-Token`。接口使用固定地址，实际文件名由服务端
-`latest.json` 决定，支持单段 `Range`、`206 Partial Content`、`416 Range Not Satisfiable`、`ETag`、
+公开下载当前正式版 Windows 安装器，不要求登录或 `X-Relay-Token`。接口使用固定地址，实际文件名由正式 bundle 的
+`current.json` 决定，支持单段 `Range`、`206 Partial Content`、`416 Range Not Satisfiable`、`ETag`、
 `If-None-Match`、`If-Range`、`Accept-Ranges` 和 `X-File-Sha256`。
 
 所有该接口的并发响应共享 `DESKTOP_RELEASE_BANDWIDTH_BPS` 总带宽，生产值固定为 `100000000` bit/s，即
 `12500000` byte/s。该限流不作用于其他 HTTP 或 WebSocket 接口。Manifest、文件大小或 PE 文件头异常时返回
 `503 { "error": "release_unavailable" }`；除 `GET/HEAD` 外的方法返回 `405`。
 
+### `GET|HEAD /api/v1/desktop-updates/stable/{filename}`
+
+公开提供正式 `releases.stable.json` 及其引用的全部 Full/Delta，下载语义、Range、ETag 和总带宽限制与安装器接口一致。
+
+### `GET|HEAD /api/v1/desktop-updates/test/{token}/{filename}`
+
+提供测试版安装器、feed 与完整 Full/Delta 资产闭包。`token` 是服务端私有 32 字节 Base64URL 值；缺失或错误统一返回 `404`，Nginx 必须关闭该路径 access log，避免 Token 落日志。测试安装器已固化该 Token 对应的测试 feed，可直接分发给社区内测用户。
+
 ### `GET|POST /api/admin/v1/desktop-release`
 
-`GET` 要求 `release.view`，`POST` 要求 `release.upload` 并通过 `PORTAL_PUBLIC_URL` 精确 Origin 校验。因此管理员可查看，只有超级管理员可上传。`POST` 接受 `multipart/form-data`，字段固定为稳定 semver `version` 和唯一 `.exe`
-文件 `installer`。文件流式写入 `.incoming`，随后复用同一发布锁和原子发布程序；成功后立即成为 latest 并删除旧安装器。
-超级管理员手动上传允许版本号高于或低于当前版本；同版本不同文件返回 `409 desktop_release_version_conflict`，任何上传或
-校验失败都不会覆盖当前版本。管理端和 GitHub Actions 均在读取上传内容前以非阻塞方式获取同一发布锁；已有上传时立即返回
-`409 desktop_release_upload_busy`，不会排队或接收第二份安装器。
+`GET` 要求 `release.view`，`POST` 要求 `release.upload` 和精确 Origin。`POST` 的 multipart 只允许重复 `files` 字段，集合必须恰好包含唯一同版本安装器、feed 和 feed 引用的全部更新资产；Delta 不在 feed 中时无需上传。超级管理员可上传任意稳定 SemVer；同版本同闭包幂等，同版本不同闭包覆盖当前闭包，升版和降版均允许。
+
+### `GET|POST|DELETE /api/admin/v1/desktop-release/test`
+
+全部方法要求 `release.upload`，`POST/DELETE` 额外要求精确 Origin。`POST` 接受任意稳定版本的安装器、feed 与其引用的完整 Full/Delta 闭包；Delta 不在 feed 中时无需上传。管理端必须显式上传 feed 引用的每个资产，服务端不从正式闭包或当前测试闭包后台备份、复用或复制 Full，任一引用资产缺失都会拒绝发布。同版本重新上传会覆盖当前闭包；`DELETE` 原子清空当前测试闭包。正式和测试使用独立目录、版本历史与发布锁，任一校验失败都不改变当前指针。
 
 # 游戏托管 API
 

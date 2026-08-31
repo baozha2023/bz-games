@@ -33,6 +33,8 @@ struct LauncherMutex(HANDLE);
 
 impl Drop for LauncherMutex {
     fn drop(&mut self) {
+        // SAFETY: this handle was returned by `CreateMutexW` and ownership is
+        // held exclusively by this RAII guard.
         let _ = unsafe { CloseHandle(self.0) };
     }
 }
@@ -44,8 +46,13 @@ fn acquire_launcher_mutex(root: &Path) -> Result<Option<LauncherMutex>> {
         .encode_utf16()
         .chain(Some(0))
         .collect();
+    // SAFETY: `name` is a live, NUL-terminated UTF-16 buffer for the duration
+    // of the call; the returned handle is owned by this function.
     let handle = unsafe { CreateMutexW(None, false, PCWSTR(name.as_ptr())) }?;
+    // SAFETY: Win32 requires `GetLastError` to be read immediately after the
+    // successful `CreateMutexW` call to detect an existing named mutex.
     if unsafe { GetLastError() } == ERROR_ALREADY_EXISTS {
+        // SAFETY: ownership has not yet moved into `LauncherMutex`.
         unsafe { CloseHandle(handle) }?;
         return Ok(None);
     }
@@ -104,9 +111,15 @@ fn classify_update_health(update: &PendingUpdate, health: &HealthRecord) -> Upda
 struct PendingImportRollback {
     format: String,
     created_at: String,
-    source_backup: PathBuf,
-    #[serde(default)]
+    #[serde(rename = "sourceBackup")]
+    _source_backup: PathBuf,
     external_manifest_paths: Vec<PathBuf>,
+}
+
+#[derive(Serialize)]
+struct RollbackSuppression<'a> {
+    format: &'a str,
+    version: &'a str,
 }
 
 fn atomic_json(path: &Path, value: &impl Serialize) -> Result<()> {
@@ -114,6 +127,8 @@ fn atomic_json(path: &Path, value: &impl Serialize) -> Result<()> {
     fs::write(&temporary, serde_json::to_vec(value)?)?;
     let source: Vec<u16> = temporary.as_os_str().encode_wide().chain(Some(0)).collect();
     let target: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+    // SAFETY: both path buffers are live and NUL-terminated for this call.
+    // The temporary file is closed before the atomic replacement begins.
     unsafe {
         MoveFileExW(
             PCWSTR(source.as_ptr()),
@@ -470,14 +485,9 @@ fn update_display_version(version: &str) -> Result<()> {
 
 fn write_rollback_suppression(state: &Path, version: &str) -> Result<()> {
     Version::parse(version)?;
-    #[derive(Serialize)]
-    struct Suppression<'a> {
-        format: &'a str,
-        version: &'a str,
-    }
     atomic_json(
         &state.join("rollback-suppression.json"),
-        &Suppression {
+        &RollbackSuppression {
             format: "bz-games-rollback-suppression",
             version,
         },
@@ -511,7 +521,7 @@ fn apply_rollback(root: &Path, state: &Path, expected_current: &str) -> Result<R
 fn sha256_file(path: &Path) -> Result<String> {
     let mut file = fs::File::open(path)?;
     let mut digest = Sha256::new();
-    let mut buffer = [0u8; 1024 * 1024];
+    let mut buffer = vec![0u8; 1024 * 1024];
     loop {
         let read = file.read(&mut buffer)?;
         if read == 0 {
@@ -772,7 +782,7 @@ mod tests {
         let pending = PendingImportRollback {
             format: "bzgames-import-rollback".to_string(),
             created_at: Utc::now().to_rfc3339(),
-            source_backup: root.join("backup.bzbackup"),
+            _source_backup: root.join("backup.bzbackup"),
             external_manifest_paths: vec![PathBuf::from("relative-game.json")],
         };
 

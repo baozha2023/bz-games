@@ -4,6 +4,12 @@ version = "4.0.0"
 edition = "2021"
 build = "build.rs"
 
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[lints.clippy]
+undocumented_unsafe_blocks = "deny"
+
 [build-dependencies]
 winres = "0.1.12"
 

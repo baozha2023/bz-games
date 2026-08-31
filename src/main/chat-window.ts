@@ -17,7 +17,12 @@ function saveBoundsThrottled() {
     if (chatWindow && !chatWindow.isDestroyed()) {
       const bounds = chatWindow.getBounds();
       storeService.saveSettings({
-        chatWindowBounds: { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height },
+        chatWindowBounds: {
+          x: bounds.x,
+          y: bounds.y,
+          width: bounds.width,
+          height: bounds.height,
+        },
       });
     }
   }, 300);
@@ -48,7 +53,7 @@ export function createChatWindow(chatHistory: ChatPayload[]): void {
     autoHideMenuBar: true,
     title: "BZ-Games Chat",
     show: false,
-    icon: join(app.getAppPath(), "resources", "icon.png"),
+    icon: join(app.getAppPath(), "resources", "icon.ico"),
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),
       sandbox: false,
@@ -73,7 +78,12 @@ export function createChatWindow(chatHistory: ChatPayload[]): void {
     if (chatWindow && !chatWindow.isDestroyed()) {
       const bounds = chatWindow.getBounds();
       storeService.saveSettings({
-        chatWindowBounds: { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height },
+        chatWindowBounds: {
+          x: bounds.x,
+          y: bounds.y,
+          width: bounds.width,
+          height: bounds.height,
+        },
       });
     }
     chatWindow = null;

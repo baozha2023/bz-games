@@ -6,6 +6,7 @@ import path from "path";
 import { UpdateManager, type UpdateInfo } from "velopack";
 import { IPC } from "../../../shared/ipc-channels";
 import type { UpdateErrorCode, UpdateState } from "../../../shared/types";
+import { UPDATE_FEED_URL } from "../../../shared/AppConstants";
 import { getAppRoot } from "../../utils/appPath";
 import { logger } from "../../utils/logger";
 import { mainWindow } from "../../window";
@@ -23,8 +24,6 @@ import {
   preserveRollbackPackage,
 } from "./UpdateRollbackService";
 
-const UPDATE_FEED_URL =
-  "https://github.com/baozha2023/bz-games/releases/latest/download";
 const AUTOMATIC_CHECK_DELAY_MS = 30_000;
 
 type WorkerMessage =
@@ -242,6 +241,9 @@ export class UpdateService {
   }
 
   private getManager(): UpdateManager {
+    if (!UPDATE_FEED_URL) {
+      throw new Error("update_feed_url_missing");
+    }
     this.manager ??= new UpdateManager(UPDATE_FEED_URL);
     return this.manager;
   }

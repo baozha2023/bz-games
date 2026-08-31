@@ -6,13 +6,13 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Stable release tag, for example v3.2.0
+        description: Stable release tag, for example v4.0.0
         required: true
         type: string
   workflow_call:
     inputs:
       tag:
-        description: Stable release tag, for example v3.2.0
+        description: Stable release tag, for example v4.0.0
         required: true
         type: string
 
@@ -35,58 +35,73 @@ jobs:
       SSH_USER: ${{ vars.RELEASE_SERVER_USER }}
       RELEASE_STORAGE_DIR: /var/lib/bz-games-releases
     steps:
-      - name: Validate release and Velopack assets
+      - name: Assemble and verify complete release bundle
         shell: bash
         run: |
           set -euo pipefail
           [[ "$RELEASE_TAG" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]] || { echo "Tag must be a stable vX.Y.Z version" >&2; exit 1; }
           version="${RELEASE_TAG#v}"
-          expected="BZ-Games-Setup-${version}.exe"
+          installer="BZ-Games-Setup-${version}.exe"
+          mkdir -m 0700 bundle
           release_json="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}")"
           [[ "$(jq -r '.draft' <<<"$release_json")" == "false" ]] || { echo "Draft releases cannot be deployed" >&2; exit 1; }
           [[ "$(jq -r '.prerelease' <<<"$release_json")" == "false" ]] || { echo "Prereleases cannot be deployed" >&2; exit 1; }
-          mapfile -t feed_asset_ids < <(jq -r '.assets[] | select(.name == "releases.stable.json") | .id' <<<"$release_json")
-          [[ "${#feed_asset_ids[@]}" -eq 1 ]] || { echo "Expected exactly one releases.stable.json asset" >&2; exit 1; }
-          gh api "repos/${GITHUB_REPOSITORY}/releases/assets/${feed_asset_ids[0]}" -H "Accept: application/octet-stream" > releases.stable.json
+
+          download_unique_asset() {
+            local name="$1"
+            mapfile -t matches < <(jq -r --arg name "$name" '.assets[] | select(.name == $name) | .id' <<<"$release_json")
+            [[ "${#matches[@]}" -eq 1 ]] || { echo "Expected exactly one GitHub asset: $name" >&2; exit 1; }
+            gh api "repos/${GITHUB_REPOSITORY}/releases/assets/${matches[0]}" \
+              -H "Accept: application/octet-stream" > "bundle/$name"
+            local metadata actual_size actual_sha256 github_size github_digest
+            metadata="$(jq -c --arg name "$name" '[.assets[] | select(.name == $name)] | if length == 1 then .[0] else null end' <<<"$release_json")"
+            actual_size="$(stat -c %s "bundle/$name")"
+            actual_sha256="$(sha256sum "bundle/$name" | cut -d' ' -f1)"
+            github_size="$(jq -r '.size' <<<"$metadata")"
+            github_digest="$(jq -r '.digest // ""' <<<"$metadata")"
+            [[ "$actual_size" == "$github_size" ]] || { echo "GitHub asset size mismatch: $name" >&2; exit 1; }
+            [[ "${github_digest,,}" == "sha256:${actual_sha256,,}" ]] || { echo "GitHub asset digest mismatch: $name" >&2; exit 1; }
+          }
+
+          download_unique_asset releases.stable.json
+          [[ "$(stat -c %s bundle/releases.stable.json)" -le 1048576 ]] || { echo "Feed exceeds 1 MiB" >&2; exit 1; }
           jq -e --arg version "$version" '
-            (.Assets | type == "array") and
+            (keys == ["Assets"]) and
+            (.Assets | type == "array" and length > 0 and length <= 16) and
             (([.Assets[].FileName] | unique | length) == (.Assets | length)) and
+            (([.Assets[].Version] | max_by(split(".") | map(tonumber))) == $version) and
             ([.Assets[] | select(.Type == "Full" and .Version == $version)] | length == 1) and
             (all(.Assets[];
-              (.Version | type == "string") and
+              .PackageId == "com.bzgames.desktop" and
+              (.Version | test("^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$")) and
+              (.Version | split(".") | all(.[]; tonumber <= 9007199254740991)) and
               (.Type == "Full" or .Type == "Delta") and
-              (.FileName | type == "string") and
-              (.FileName | length > 0) and
-              (.FileName | test("[/\\\\]") | not) and
-              (.SHA256 | type == "string") and
+              (.FileName | test("^[A-Za-z0-9][A-Za-z0-9._-]*\\.nupkg$")) and
               (.SHA256 | test("^[A-Fa-f0-9]{64}$")) and
-              (.Size | type == "number") and
-              (.Size | floor == .) and
-              (.Size > 0) and
-              (.Size <= 536870912)))
-          ' releases.stable.json > /dev/null || { echo "Invalid Velopack stable feed for $version" >&2; exit 1; }
+              (.Size | type == "number" and floor == . and . > 0 and . <= 536870912))) and
+            (([.Assets[] | select(.Type == "Delta") | .Version] -
+              [.Assets[] | select(.Type == "Full") | .Version]) | length == 0)
+          ' bundle/releases.stable.json >/dev/null || { echo "Invalid Velopack stable feed" >&2; exit 1; }
+
+          total_size="$(stat -c %s bundle/releases.stable.json)"
           while IFS=$'\t' read -r filename expected_size expected_sha256; do
-            asset="$(jq -c --arg name "$filename" '[.assets[] | select(.name == $name)] | if length == 1 then .[0] else null end' <<<"$release_json")"
-            [[ "$asset" != "null" ]] || { echo "Velopack feed asset is missing or duplicated: $filename" >&2; exit 1; }
-            actual_size="$(jq -r '.size' <<<"$asset")"
-            [[ "$actual_size" == "$expected_size" ]] || { echo "Velopack asset size does not match feed: $filename" >&2; exit 1; }
-            digest="$(jq -r '.digest // empty' <<<"$asset")"
-            [[ "${digest,,}" == "sha256:${expected_sha256,,}" ]] || { echo "Velopack asset digest does not match feed: $filename" >&2; exit 1; }
-          done < <(jq -r '.Assets[] | [.FileName, (.Size | tostring), .SHA256] | @tsv' releases.stable.json)
-          mapfile -t asset_ids < <(jq -r --arg name "$expected" '.assets[] | select(.name == $name) | .id' <<<"$release_json")
-          [[ "${#asset_ids[@]}" -eq 1 ]] || { echo "Expected exactly one asset named $expected" >&2; exit 1; }
-          gh api "repos/${GITHUB_REPOSITORY}/releases/assets/${asset_ids[0]}" -H "Accept: application/octet-stream" > installer.exe
-          [[ "$(head -c 2 installer.exe)" == "MZ" ]] || { echo "Release asset is not a Windows executable" >&2; exit 1; }
-          size="$(stat -c %s installer.exe)"
-          [[ "$size" -gt 0 && "$size" -le 536870912 ]] || { echo "Release asset size is outside the allowed range" >&2; exit 1; }
-          sha256="$(sha256sum installer.exe | cut -d' ' -f1)"
-          staged="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.exe"
-          {
-            echo "version=$version"
-            echo "size=$size"
-            echo "sha256=$sha256"
-            echo "staged=$staged"
-          } >> "$GITHUB_ENV"
+            download_unique_asset "$filename"
+            actual_size="$(stat -c %s "bundle/$filename")"
+            actual_sha256="$(sha256sum "bundle/$filename" | cut -d' ' -f1)"
+            [[ "$actual_size" == "$expected_size" ]] || { echo "Size mismatch: $filename" >&2; exit 1; }
+            [[ "${actual_sha256,,}" == "${expected_sha256,,}" ]] || { echo "SHA-256 mismatch: $filename" >&2; exit 1; }
+            github_digest="$(jq -r --arg name "$filename" '[.assets[] | select(.name == $name)] | if length == 1 then .[0].digest // "" else "" end' <<<"$release_json")"
+            [[ "${github_digest,,}" == "sha256:${expected_sha256,,}" ]] || { echo "GitHub digest mismatch: $filename" >&2; exit 1; }
+            total_size=$((total_size + actual_size))
+          done < <(jq -r '.Assets[] | [.FileName, (.Size | tostring), .SHA256] | @tsv' bundle/releases.stable.json)
+
+          download_unique_asset "$installer"
+          [[ "$(head -c 2 "bundle/$installer")" == "MZ" ]] || { echo "Installer is not a Windows executable" >&2; exit 1; }
+          installer_size="$(stat -c %s "bundle/$installer")"
+          [[ "$installer_size" -gt 0 && "$installer_size" -le 536870912 ]] || { echo "Installer size is invalid" >&2; exit 1; }
+          total_size=$((total_size + installer_size))
+          [[ "$total_size" -le 2147483648 ]] || { echo "Bundle exceeds 2 GiB" >&2; exit 1; }
+          { echo "version=$version"; echo "staged=action-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"; } >> "$GITHUB_ENV"
 
       - name: Configure pinned SSH identity
         shell: bash
@@ -99,24 +114,46 @@ jobs:
           chmod 0644 ~/.ssh/known_hosts
           [[ -n "$SSH_HOST" && -n "$SSH_PORT" && -n "$SSH_USER" ]] || { echo "Release server variables are incomplete" >&2; exit 1; }
 
-      - name: Lock, upload and atomically publish
+      - name: Require a strictly newer production version
         shell: bash
         run: |
           set -euo pipefail
           ssh_args=(-i ~/.ssh/release_deploy -p "$SSH_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
-          staged_path="$RELEASE_STORAGE_DIR/.incoming/$staged"
-          remote_command="flock -n -E 75 '$RELEASE_STORAGE_DIR/.publish.lock' /bin/bash -c 'set -euo pipefail; staged_path=\"$staged_path\"; trap \"rm -f -- \\\"\$staged_path\\\"\" EXIT; umask 077; cat > \"\$staged_path\"; /usr/bin/node /opt/bz-games-relay/scripts/publish-desktop-release.js --staged \"\$staged_path\" --version \"$version\" --sha256 \"$sha256\" --size \"$size\" --allow-downgrade false'"
+          current_version="$(ssh "${ssh_args[@]}" "$SSH_USER@$SSH_HOST" "if [ -s '$RELEASE_STORAGE_DIR/current.json' ]; then jq -r .version '$RELEASE_STORAGE_DIR/current.json'; else echo 0.0.0; fi")"
+          [[ "$current_version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || {
+            echo "Production release has an invalid version: $current_version" >&2
+            exit 1
+          }
+          IFS=. read -r current_major current_minor current_patch <<< "$current_version"
+          IFS=. read -r next_major next_minor next_patch <<< "$version"
+          for component in "$current_major" "$current_minor" "$current_patch" "$next_major" "$next_minor" "$next_patch"; do
+            (( component <= 9007199254740991 )) || { echo "Version component exceeds the supported SemVer range" >&2; exit 1; }
+          done
+          if (( next_major < current_major ||
+                (next_major == current_major && next_minor < current_minor) ||
+                (next_major == current_major && next_minor == current_minor && next_patch <= current_patch) )); then
+            echo "GitHub Action releases must be strictly newer than production ($current_version); received $version" >&2
+            exit 1
+          fi
+          echo "Production version $current_version -> publishing $version"
+
+      - name: Lock, upload and atomically publish complete bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh_args=(-i ~/.ssh/release_deploy -p "$SSH_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
+          remote_command="flock -n -E 75 '$RELEASE_STORAGE_DIR/.publish.lock' /opt/bz-games-relay/scripts/publish-uploaded-release.sh '$staged'"
           set +e
-          ssh "${ssh_args[@]}" "$SSH_USER@$SSH_HOST" "$remote_command" < installer.exe
+          tar -c -C bundle . | ssh "${ssh_args[@]}" "$SSH_USER@$SSH_HOST" "$remote_command"
           publish_status=$?
           set -e
           if [[ "$publish_status" -eq 75 ]]; then
-            echo "Another desktop release upload is already running" >&2
+            echo "Another desktop release publish is already running" >&2
             exit 1
           fi
           [[ "$publish_status" -eq 0 ]] || exit "$publish_status"
 
-      - name: Remove runner credentials
+      - name: Remove runner credentials and artifacts
         if: always()
         shell: bash
-        run: rm -f ~/.ssh/release_deploy installer.exe releases.stable.json
+        run: rm -rf ~/.ssh/release_deploy bundle

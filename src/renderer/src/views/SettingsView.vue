@@ -313,6 +313,9 @@
                   version: appVersion,
                 })
               }}</n-text>
+              <n-tag v-if="IS_TEST_CHANNEL" type="warning" size="small">
+                {{ t("settings.testChannel") }}
+              </n-tag>
             </n-space>
           </n-space>
         </n-form-item>
@@ -637,6 +640,7 @@ import {
 } from "@vicons/ionicons5";
 import { showBackupManager } from "../composables/useBackupManager";
 import { showUpdatePrompt } from "../composables/useUpdatePrompt";
+import { IS_TEST_CHANNEL } from "../../../shared/AppConstants";
 
 const { t, te } = useI18n();
 const router = useRouter();

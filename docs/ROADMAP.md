@@ -429,5 +429,4 @@ Game API 是平台长期差异化能力。未来演进重点是稳定契约和�
 - [Relay API](../relay-server/API.md)
 - [Relay 数据模型](../relay-server/DATA_MODEL.md)
 - [Relay 部署说明](../relay-server/DEPLOY.md)
-- [GitHub Actions 发布部署](./GITHUB_ACTIONS_RELEASE_DEPLOY.md)
 - [Game API V1/V2 参考](./GAME_API_V1_V2_REFERENCE.md)

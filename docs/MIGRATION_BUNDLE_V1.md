@@ -52,7 +52,7 @@ The isolated `backup/v1/V1ImportAdapter.ts` opens the old database read-only, cr
 
 ## Deterministic importer fixture
 
-[`fixtures/BZ-Games-Migration-v1-sample.bzgames`](fixtures/BZ-Games-Migration-v1-sample.bzgames) is the fixed v1 archive for the future Velopack importer's allowlist, CRC, extraction, and different-install-path remapping tests. Its adjacent `.sha256` file records the expected digest. Regenerate both files with `npm run fixture:migration`; identical inputs produce an identical archive.
+The V1 regression archive is generated from the fixed synthetic inputs in `scripts/fixtures/` for the future Velopack importer's allowlist, CRC, extraction, and different-install-path remapping tests. `npm run test:v1-fixture` builds the archive and its checksum inside an isolated temporary directory before conversion, so binary outputs are not committed. Use `npm run fixture:migration` only when a local archive under `docs/fixtures/` is needed for manual inspection; identical inputs produce an identical archive.
 
 The sample contains synthetic data only. Its v1 configuration, SQLite database, and converted game manifest use the test-only encryption seed `bzgames-migration-v1-fixture`, which importer tests inject with `node scripts/run-v1-conversion.mjs --fixture <archive> <output>`. It is not a production backup and does not contain the production key or any user data.
 

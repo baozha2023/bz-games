@@ -30,6 +30,19 @@ function jsonKeys(relativePath) {
   return Object.keys(JSON.parse(read(relativePath)));
 }
 
+function readJson(relativePath) {
+  return JSON.parse(read(relativePath));
+}
+
+function assertStringValues(label, value) {
+  const invalid = Object.entries(value)
+    .filter(([, fieldValue]) => typeof fieldValue !== "string")
+    .map(([key]) => key);
+  if (invalid.length) {
+    throw new Error(`${label} fields must be strings: [${invalid.join(",")}]`);
+  }
+}
+
 function privateConfigTypeKeys() {
   const source = read("electron.vite.config.ts");
   const block = source.match(
@@ -75,21 +88,42 @@ function assertGitIgnored(relativePaths) {
 }
 
 const clientExampleKeys = jsonKeys("private-build.config.example.json");
+assertStringValues(
+  "client example",
+  readJson("private-build.config.example.json"),
+);
 assertSameKeys(
   "client example/type",
   clientExampleKeys,
   privateConfigTypeKeys(),
 );
 
-const privateConfigPath = path.join(root, "private-build.config.json");
-if (fs.existsSync(privateConfigPath)) {
-  assertSameKeys(
-    "client example/actual",
-    clientExampleKeys,
-    Object.keys(JSON.parse(fs.readFileSync(privateConfigPath, "utf8"))),
+const privateConfigFiles = [
+  "private-build.config.json",
+  "private-build.config.test.json",
+];
+const presentPrivateConfigs = privateConfigFiles.filter((relativePath) =>
+  fs.existsSync(path.join(root, relativePath)),
+);
+if (
+  presentPrivateConfigs.length > 0 &&
+  presentPrivateConfigs.length !== privateConfigFiles.length
+) {
+  throw new Error(
+    `private build configs must be present as a pair: [${privateConfigFiles.join(",")}]`,
   );
-} else {
-  console.log("client actual config: skipped (private file is absent)");
+}
+for (const relativePath of presentPrivateConfigs) {
+  const actual = readJson(relativePath);
+  assertSameKeys(
+    `client example/${relativePath}`,
+    clientExampleKeys,
+    Object.keys(actual),
+  );
+  assertStringValues(relativePath, actual);
+}
+if (presentPrivateConfigs.length === 0) {
+  console.log("client actual configs: skipped (private files are absent)");
 }
 
 assertSameKeys(
@@ -100,6 +134,7 @@ assertSameKeys(
 
 assertGitIgnored([
   "private-build.config.json",
+  "private-build.config.test.json",
   "config.json",
   "relay-server/bz-games-relay.service",
   ".env",

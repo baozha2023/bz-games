@@ -20,7 +20,12 @@ Environment=MAX_GAME_HOSTING_FILE_BYTES=209715200
 Environment=MAX_GAME_HOSTING_IMAGE_BYTES=5242880
 Environment=MAX_GAME_HOSTING_TOTAL_BYTES=5368709120
 Environment=DESKTOP_RELEASE_STORAGE_DIR=/var/lib/bz-games-releases
+Environment=TEST_DESKTOP_RELEASE_STORAGE_DIR=/var/lib/bz-games-test-updates
+Environment=DESKTOP_UPDATE_TEST_TOKEN=replace-with-32-random-bytes-as-base64url
 Environment=MAX_DESKTOP_RELEASE_FILE_BYTES=536870912
+Environment=MAX_DESKTOP_RELEASE_BUNDLE_BYTES=2147483648
+Environment=MAX_DESKTOP_RELEASE_FEED_BYTES=1048576
+Environment=MAX_DESKTOP_RELEASE_ASSETS=16
 Environment=DESKTOP_RELEASE_BANDWIDTH_BPS=100000000
 Environment=FEEDBACK_AUTHENTICATED_COOLDOWN_MS=43200000
 Environment=RATE_LIMIT_RESERVATION_TTL_MS=300000
@@ -41,7 +46,7 @@ Environment=ELASTICSEARCH_PASSWORD=YOUR_ELASTICSEARCH_PASSWORD
 Environment=ELASTICSEARCH_INDEX_ALIAS=bz_forum_posts
 Environment=ELASTICSEARCH_REQUEST_TIMEOUT_MS=5000
 Environment=FORUM_SEARCH_WORKER_INTERVAL_MS=5000
-Environment=PORTAL_PUBLIC_URL=https://relay.example.com/admin/
+Environment=PORTAL_PUBLIC_URL=http://relay.example.com:38090/admin/
 Environment=ADMIN_STATIC_DIR=/var/www/campusmate/admin
 Environment=RELAY_TOKEN=YOUR_RELAY_TOKEN
 Environment=MAX_ROOMS=80
@@ -58,7 +63,7 @@ Environment=MYSQL_PASSWORD=YOUR_MYSQL_PASSWORD
 Environment=MYSQL_DATABASE=bz_games
 Environment=GITHUB_CLIENT_ID=YOUR_GITHUB_CLIENT_ID
 Environment=GITHUB_CLIENT_SECRET=YOUR_GITHUB_CLIENT_SECRET
-Environment=GITHUB_CALLBACK_URL=https://relay.example.com/auth/github/callback
+Environment=GITHUB_CALLBACK_URL=http://relay.example.com:38090/auth/github/callback
 Environment="GITHUB_OAUTH_SCOPE=read:user user:email"
 Environment=SESSION_COOKIE_NAME=bz_games_session
 Environment=OAUTH_SESSION_TTL_MS=2592000000

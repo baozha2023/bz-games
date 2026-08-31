@@ -585,7 +585,12 @@ npm run rebuild:forum-search
 
 ```ini
 Environment=DESKTOP_RELEASE_STORAGE_DIR=/var/lib/bz-games-releases
+Environment=TEST_DESKTOP_RELEASE_STORAGE_DIR=/var/lib/bz-games-test-updates
+Environment=DESKTOP_UPDATE_TEST_TOKEN=replace-with-32-random-bytes-as-base64url
 Environment=MAX_DESKTOP_RELEASE_FILE_BYTES=536870912
+Environment=MAX_DESKTOP_RELEASE_BUNDLE_BYTES=2147483648
+Environment=MAX_DESKTOP_RELEASE_FEED_BYTES=1048576
+Environment=MAX_DESKTOP_RELEASE_ASSETS=16
 Environment=DESKTOP_RELEASE_BANDWIDTH_BPS=100000000
 ```
 
@@ -595,25 +600,22 @@ Environment=DESKTOP_RELEASE_BANDWIDTH_BPS=100000000
 useradd --create-home --shell /bin/bash bz-release-deploy
 install -d -o bz-release-deploy -g bz-release-deploy -m 2750 /var/lib/bz-games-releases
 install -d -o bz-release-deploy -g bz-release-deploy -m 2750 /var/lib/bz-games-releases/.incoming
+install -d -o bz-release-deploy -g bz-release-deploy -m 2750 /var/lib/bz-games-releases/bundles
+install -d -o bz-release-deploy -g bz-release-deploy -m 2750 /var/lib/bz-games-test-updates
+install -d -o bz-release-deploy -g bz-release-deploy -m 2750 /var/lib/bz-games-test-updates/.incoming
+install -d -o bz-release-deploy -g bz-release-deploy -m 2750 /var/lib/bz-games-test-updates/bundles
 ```
 
-发布目录必须保留 setgid，确保 Relay 服务以 root 执行管理端手动上传时，新文件仍继承
-`bz-release-deploy` 组。共享发布程序会在原子切换前把安装包和 `latest.json` 的属主、属组统一为发布目录属主、属组，并显式设置为 `0640`；GitHub Actions 与管理端不得各自维护文件权限逻辑。
+发布目录必须保留 setgid。共享发布程序严格校验安装器、feed、全部 Full/Delta、SHA-256、nupkg ZIP/NuGet 和 `.nuspec` 身份后，将不可变 bundle 归一为目录 `0750`、文件 `0640`，再原子切换 `current.json`；GitHub Actions 与管理端不得各自维护第二套发布或权限逻辑。
 `bz-release-deploy` 还必须能够遍历 `/opt/bz-games-relay` 并读取
 `scripts/publish-desktop-release.js`，但不得拥有服务端代码目录的写权限。
 
-GitHub Environment、SSH 专用密钥和主机指纹配置见
-[`docs/GITHUB_ACTIONS_RELEASE_DEPLOY.md`](../docs/GITHUB_ACTIONS_RELEASE_DEPLOY.md)。发布工作流先以非阻塞方式获取
-`flock /var/lib/bz-games-releases/.publish.lock`，持锁完成流式上传并调用 `scripts/publish-desktop-release.js`。发布程序校验稳定
-semver、规范文件名、大小、PE 文件头和 SHA-256，原子切换 `latest.json` 后删除旧安装器和备份。
+GitHub Environment、SSH 专用密钥和主机指纹由不入库的私有部署手册维护。发布工作流先以非阻塞方式获取
+`flock /var/lib/bz-games-releases/.publish.lock`，持锁把完整 tar 流交给 `scripts/publish-uploaded-release.sh`，后者调用统一 bundle 发布器。Action 必须上传安装器、feed 及 feed 引用的全部 Full/Delta，不得只验证更新资产后丢弃。
 
-管理端超级管理员可通过“平台版本”页面上传 EXE，允许将正式版切换到高于或低于当前版本的稳定版本；普通管理员只能查看当前版本。该入口调用 `/api/admin/v1/desktop-release`，使用相同发布目录、
-`flock` 和发布程序，不维护第二套版本切换逻辑。上传最大请求体由 Node 接口按
-`MAX_DESKTOP_RELEASE_FILE_BYTES + 1 MiB` 流式限制；若管理端经 Nginx 代理，精确路由还必须把 `client_max_body_size`
-设置为不小于 513 MiB。管理端同样在读取请求体前非阻塞取锁；已有上传时立即返回
-`409 desktop_release_upload_busy`，不会等待或暂存第二个文件。
+管理端正式和测试 Tab 都手动上传同版本安装器、feed 及 feed 引用的全部 Full/Delta；feed 不引用 Delta 时无需上传。Relay 不从正式闭包或当前测试闭包后台备份、复用或复制 Full，引用资产缺失即拒绝发布。测试通道可整体清空。管理端超级管理员可上传任意稳定 SemVer，同版本重新上传会原子覆盖当前闭包；GitHub Actions 发布前置检查只允许严格高于正式当前版本，并把正式安装器、feed 及 feed 引用的全部资产直接上传服务器。测试 Tab 和全部测试管理 API 仅允许 `release.upload`；正式 GET 仍允许 `release.view`。两个 POST 及测试 DELETE 都执行精确 Origin 校验。Nginx 的两个精确管理路由必须设置 `client_max_body_size 2050m`、关闭请求缓冲并使用长超时。
 
-生产环境只保留 Nginx 这一套公网入口。Nginx 监听公网 `38090`，直接托管 `/admin/` 静态页面，并将当前 `/api/...`、`/auth/...`、房间 HTTP 接口和 `/ws/` WebSocket 请求转发到本机 Relay `127.0.0.1:38091`；不再保留旧服务前缀或 Relay `38091` 的公网兼容转发。外部客户端统一使用 `http://39.106.221.85:38090`（正式环境应替换为域名），官网和客户端发行版下载统一使用 `/api/v1/releases/latest/download`。GitHub Actions 发布仍通过 SSH 将安装包交给服务器上的发布脚本，不新增 HTTP 上传兼容入口。
+生产环境只保留 Nginx 这一套公网入口。Nginx 监听公网 `38090`，直接托管 `/admin/` 静态页面，并将当前 `/api/...`、`/auth/...`、房间 HTTP 接口和 `/ws/` WebSocket 请求转发到本机 Relay `127.0.0.1:38091`；不再保留旧服务前缀或 Relay `38091` 的公网兼容转发。外部客户端统一使用部署方配置的 `http://<server-ip>:38090` 入口，官网和客户端发行版下载统一使用 `/api/v1/releases/latest/download`。GitHub Actions 发布仍通过 SSH 将安装包交给服务器上的发布脚本，不新增 HTTP 上传兼容入口。
 
 现有 IP 站点使用以下统一路由：
 
@@ -644,8 +646,38 @@ location = /api/admin/v1/desktop-release {
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
-    client_max_body_size 513m;
+    client_max_body_size 2050m;
     proxy_request_buffering off;
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
+}
+
+location = /api/admin/v1/desktop-release/test {
+    proxy_pass http://127.0.0.1:38091;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    client_max_body_size 2050m;
+    proxy_request_buffering off;
+    proxy_read_timeout 7200s;
+    proxy_send_timeout 7200s;
+}
+
+location ^~ /api/v1/desktop-updates/stable/ {
+    proxy_pass http://127.0.0.1:38091;
+    proxy_http_version 1.1;
+    proxy_buffering off;
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
+}
+
+location ^~ /api/v1/desktop-updates/test/ {
+    access_log off;
+    proxy_pass http://127.0.0.1:38091;
+    proxy_http_version 1.1;
+    proxy_buffering off;
     proxy_read_timeout 3600s;
     proxy_send_timeout 3600s;
 }
@@ -740,8 +772,9 @@ location /ws/ {
 
 特殊接口的边界保持明确：
 
-- GitHub Actions：SSH 到服务器后写入发布暂存目录，再调用 `publish-desktop-release.js`，不经过 Nginx。
-- 超级管理员上传桌面版本：`POST /api/admin/v1/desktop-release`，经 Nginx 精确转发，最大请求体 513 MiB。
+- GitHub Actions：SSH tar 流经 `publish-uploaded-release.sh` 写入正式暂存目录并调用统一发布器，不经过 Nginx。
+- 超级管理员上传正式/测试版本：两个精确管理路由最大请求体约 2 GiB；普通管理员不能调用测试 API。
+- 测试客户端下载：私有 Token 位于路径中，Nginx 对 `/api/v1/desktop-updates/test/` 关闭 access log。
 - 客户端下载托管游戏：`GET|HEAD /api/v1/game-hosting/assets/...`，经 Nginx 转发并保留长超时与 Range。
 - 创作者上传托管游戏：`/api/portal/v1/game-hosting/...`，经 Nginx 转发，最大请求体 220 MiB。
 
@@ -752,8 +785,9 @@ Relay 内的 `GlobalBandwidthLimiter` 统一执行。若未来运行多个 Relay
 公网验证：
 
 ```bash
-curl -I http://39.106.221.85:38090/api/v1/releases/latest/download
-curl -H 'Range: bytes=0-1023' -o /dev/null -D - http://39.106.221.85:38090/api/v1/releases/latest/download
+SERVER_IP=replace-with-server-ip
+curl -I "http://${SERVER_IP}:38090/api/v1/releases/latest/download"
+curl -H 'Range: bytes=0-1023' -o /dev/null -D - "http://${SERVER_IP}:38090/api/v1/releases/latest/download"
 ```
 
 旧配置中的以下内容必须删除，而不是继续保留作兜底：

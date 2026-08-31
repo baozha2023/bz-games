@@ -9,9 +9,11 @@ fn compile_windows_icon() {
         .join("..")
         .join("resources")
         .join("icon.ico");
-    if !icon.is_file() {
-        panic!("Windows application icon is missing: {}", icon.display());
-    }
+    assert!(
+        icon.is_file(),
+        "Windows application icon is missing: {}",
+        icon.display()
+    );
     let mut resource = winres::WindowsResource::new();
     resource.set_icon(icon.to_str().expect("icon path is not valid UTF-8"));
     // native-windows-gui uses the Windows common-controls subclass helpers,
@@ -59,12 +61,11 @@ fn compile_windows_icon() {
             .parent()
             .expect("icon parent is unavailable")
             .join(layer);
-        if !layer_path.is_file() {
-            panic!(
-                "installer animation logo layer is missing: {}",
-                layer_path.display()
-            );
-        }
+        assert!(
+            layer_path.is_file(),
+            "installer animation logo layer is missing: {}",
+            layer_path.display()
+        );
         println!("cargo:rerun-if-changed={}", layer_path.display());
     }
 }

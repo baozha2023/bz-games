@@ -789,6 +789,7 @@ export default {
     updateViewReleaseNotes: "更新内容を表示",
     updateLater: "後で通知",
     updateNow: "今すぐ更新",
+    updateVerifying: "更新パッケージを検証して準備しています…",
     updateReady:
       "更新パッケージのダウンロードと検証が完了しました。再起動してインストールしてください。",
     updateRestartInstall: "再起動してインストール",
@@ -812,6 +813,7 @@ export default {
       unknown: "更新に失敗しました。ログを確認して再試行してください。",
     },
     currentVersion: "現在のバージョン: {version}",
+    testChannel: "テスト版",
     officialWebsite: "公式サイト",
     uninstallClient: "クライアントのアンインストール",
     uninstallClientDescription:

@@ -856,6 +856,7 @@ export default {
     updateViewReleaseNotes: "View Release Notes",
     updateLater: "Remind Me Later",
     updateNow: "Update Now",
+    updateVerifying: "Verifying and preparing the update package…",
     updateReady:
       "The update package was downloaded and verified. Confirm to restart and install.",
     updateRestartInstall: "Restart and Install",
@@ -877,6 +878,7 @@ export default {
       unknown: "The update failed. Check the logs and try again.",
     },
     currentVersion: "Current version: {version}",
+    testChannel: "Test release",
     officialWebsite: "Official Website",
     uninstallClient: "Uninstall Client",
     uninstallClientDescription:

@@ -37,8 +37,24 @@ export const config = {
   DESKTOP_RELEASE_STORAGE_DIR: (
     process.env.DESKTOP_RELEASE_STORAGE_DIR || "/var/lib/bz-games-releases"
   ).trim(),
+  TEST_DESKTOP_RELEASE_STORAGE_DIR: (
+    process.env.TEST_DESKTOP_RELEASE_STORAGE_DIR ||
+    "/var/lib/bz-games-test-updates"
+  ).trim(),
+  DESKTOP_UPDATE_TEST_TOKEN: (
+    process.env.DESKTOP_UPDATE_TEST_TOKEN || ""
+  ).trim(),
   MAX_DESKTOP_RELEASE_FILE_BYTES: Number(
     process.env.MAX_DESKTOP_RELEASE_FILE_BYTES || 512 * 1024 * 1024,
+  ),
+  MAX_DESKTOP_RELEASE_BUNDLE_BYTES: Number(
+    process.env.MAX_DESKTOP_RELEASE_BUNDLE_BYTES || 2 * 1024 * 1024 * 1024,
+  ),
+  MAX_DESKTOP_RELEASE_FEED_BYTES: Number(
+    process.env.MAX_DESKTOP_RELEASE_FEED_BYTES || 1024 * 1024,
+  ),
+  MAX_DESKTOP_RELEASE_ASSETS: Number(
+    process.env.MAX_DESKTOP_RELEASE_ASSETS || 16,
   ),
   DESKTOP_RELEASE_BANDWIDTH_BPS: Number(
     process.env.DESKTOP_RELEASE_BANDWIDTH_BPS || 100_000_000,

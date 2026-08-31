@@ -10,14 +10,23 @@ const temporaryRoot = await fs.mkdtemp(
   path.join(os.tmpdir(), "bz-games-v1-import-test-"),
 );
 const outputRoot = path.join(temporaryRoot, "converted");
-const archivePath = path.join(
-  repositoryRoot,
-  "docs",
-  "fixtures",
-  "BZ-Games-Migration-v1-sample.bzgames",
-);
+const archivePath = path.join(temporaryRoot, "migration-v1.bzgames");
 
 try {
+  const buildResult = spawnSync(
+    process.execPath,
+    [
+      path.join(repositoryRoot, "scripts", "build-migration-fixture.mjs"),
+      "--output",
+      archivePath,
+    ],
+    { cwd: repositoryRoot, encoding: "utf8" },
+  );
+  if (buildResult.status !== 0) {
+    process.stdout.write(buildResult.stdout || "");
+    process.stderr.write(buildResult.stderr || "");
+    throw new Error(`v1_fixture_build_failed:${buildResult.status}`);
+  }
   const result = spawnSync(
     process.execPath,
     [

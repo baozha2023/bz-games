@@ -802,6 +802,7 @@ export default {
     updateViewReleaseNotes: "Update-Hinweise anzeigen",
     updateLater: "Später erinnern",
     updateNow: "Jetzt aktualisieren",
+    updateVerifying: "Das Update-Paket wird geprüft und vorbereitet…",
     updateReady:
       "Das Update wurde heruntergeladen und geprüft. Bestätige den Neustart zur Installation.",
     updateRestartInstall: "Neu starten und installieren",
@@ -827,6 +828,7 @@ export default {
         "Das Update ist fehlgeschlagen. Prüfe die Protokolle und versuche es erneut.",
     },
     currentVersion: "Aktuelle Version: {version}",
+    testChannel: "Testversion",
     officialWebsite: "Offizielle Website",
     uninstallClient: "Client deinstallieren",
     uninstallClientDescription:

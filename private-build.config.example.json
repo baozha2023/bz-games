@@ -9,5 +9,7 @@
   "configEncryptionSeed": "replace-with-a-private-random-seed",
   "databaseEncryptionSeed": "replace-with-exactly-32-random-bytes-as-base64",
   "gameManifestEncryptionSeed": "replace-with-exactly-32-random-bytes-as-base64",
-  "oauthReturnUrl": ""
+  "oauthReturnUrl": "",
+  "updateFeedUrl": "",
+  "previousReleaseFeedUrl": ""
 }
